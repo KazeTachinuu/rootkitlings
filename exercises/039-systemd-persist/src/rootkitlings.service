@@ -1,0 +1,22 @@
+# TODO(rootkitlings): complete ce fichier systemd service.
+#
+# Il doit:
+# - se lancer apres le reseau (After=network.target)
+# - utiliser Type=oneshot (insmod fait son travail et retourne)
+# - ExecStart= charge le module avec insmod (chemin absolu vers le .ko)
+# - RemainAfterExit=yes pour que le service reste "active"
+# - s'installer dans multi-user.target (WantedBy=)
+#
+# 5 lignes a ecrire (les valeurs des champs).
+
+[Unit]
+Description=
+After=
+
+[Service]
+Type=
+ExecStart=
+RemainAfterExit=
+
+[Install]
+WantedBy=

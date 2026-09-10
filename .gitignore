@@ -1,0 +1,34 @@
+# Kernel module build artifacts
+*.o
+*.ko
+*.mod
+*.mod.c
+*.mod.o
+*.symvers
+*.order
+.*.cmd
+.tmp_versions/
+Module.symvers
+modules.order
+
+# Lab-generated
+lab/linux-*/
+lab/build/
+lab/*.img
+lab/*.qcow2
+
+# Editor/OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
+
+# Local solutions (never commit student answers)
+tps/*/solution/
+!tps/tp1-hello-lkm/solution/
+
+# Copyrighted PDFs / given files (books, slides from school)
+given_files/
+given_files_tar.bz2
+epirootkit-slides.pdf

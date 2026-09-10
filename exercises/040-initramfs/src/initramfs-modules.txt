@@ -1,0 +1,3 @@
+# TODO(rootkitlings): ecris le nom du module a inclure dans l'initramfs.
+# Ce fichier represente la ligne que tu ajoutes dans /etc/initramfs-tools/modules.
+# Meme format que l'exo 038: juste le nom, sans .ko.
