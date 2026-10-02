@@ -1,8 +1,8 @@
-# 19 - Waiting
+# 20 - Waiting
 
 ## Why this step
 
-In ling 18 the thread busy-polls with `ssleep`. That wastes CPU when
+In ling 19 the thread busy-polls with `ssleep`. That wastes CPU when
 there is nothing to do. A wait queue lets the thread sleep until an
 external event wakes it, using zero CPU in between.
 
@@ -28,7 +28,7 @@ commanded is harder to detect than one that loops.
 
 ## What you already know
 
-From ling 18: kthreads, `kthread_should_stop`. From ling 12: proc
+From ling 19: kthreads, `kthread_should_stop`. From ling 12: proc
 write handlers.
 
 ## New API
@@ -50,7 +50,7 @@ the thread is woken. If it is still false, the thread goes back to sleep.
 
 Create a module that:
 
-1. A kthread (from ling 18) waits on a wait queue for a flag to be set.
+1. A kthread (from ling 19) waits on a wait queue for a flag to be set.
 2. Writing `"wake"` to `/proc/rk_gate` sets the flag and calls `wake_up_interruptible`.
 3. The thread logs each wake event, resets the flag, and increments a counter.
 4. Reading `/proc/rk_gate` returns the wake count.
@@ -98,11 +98,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 17
+./rootkitlings check 20
 ```
 
 > **What a defender sees**: the thread sits idle in `wait_event`, consuming
 > zero CPU. It looks like any sleeping kthread, harder to spot than a
 > busy-polling loop.
 
-See also: [18 - Shared state](../18-shared-state/README.md).
+See also: [21 - Shared state](../21-shared-state/README.md).

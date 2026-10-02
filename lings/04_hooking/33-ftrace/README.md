@@ -1,4 +1,4 @@
-# 32 - Ftrace
+# 33 - Ftrace
 
 ## Why this step
 
@@ -9,7 +9,7 @@ implementation. This is what PUMAKIT, KoviD, and Syslogk use.
 
 ## What you already know
 
-From ling 28, you can resolve symbol addresses. From ling 29, you
+From ling 29, you can resolve symbol addresses. From ling 30, you
 hooked functions with kprobes. Ftrace is more powerful: it can redirect
 `regs->ip` to a replacement function, not just observe.
 
@@ -55,7 +55,7 @@ You need:
 
 Create a module that:
 
-1. Resolves `do_sys_openat2` via the kprobe lookup trick (ling 28).
+1. Resolves `do_sys_openat2` via the kprobe lookup trick (ling 29).
 2. Hooks it via ftrace with `ftrace_set_filter_ip` + `register_ftrace_function`.
 3. The callback increments a counter.
 4. `/proc/rk_ftrace` returns the count of intercepted opens.
@@ -110,11 +110,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 30
+./rootkitlings check 33
 ```
 
 > **What a defender sees**: `cat /sys/kernel/tracing/enabled_functions`
 > shows `do_sys_openat2` with your module listed. This is the most direct
 > detection method for ftrace hooks.
 
-See also: [31 - Hook lifecycle](../31-hook-lifecycle/README.md).
+See also: [34 - rmdir trigger](../34-rmdir-trigger/README.md).

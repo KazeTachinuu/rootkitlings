@@ -1,4 +1,4 @@
-# 43 - ICMP trigger
+# 45 - ICMP trigger
 
 ## What we are learning
 
@@ -12,7 +12,7 @@ anyone not inspecting raw headers.
 
 ## What we are doing
 
-Hook `NF_INET_PRE_ROUTING` (same pattern as ling 41), parse ICMP echo
+Hook `NF_INET_PRE_ROUTING` (same pattern as ling 43), parse ICMP echo
 requests, and trigger on packets whose echo ID matches `0x1337`. Count
 activations and expose state through `/proc/rk_trigger`.
 
@@ -51,7 +51,7 @@ Key types and functions:
 
 ## Build it
 
-1. Set up a netfilter hook at `PRE_ROUTING` (ling 41 pattern).
+1. Set up a netfilter hook at `PRE_ROUTING` (ling 43 pattern).
 2. In the callback, get the IP header with `ip_hdr(skb)`.
 3. Skip non-ICMP packets (`iph->protocol != IPPROTO_ICMP`).
 4. Locate the ICMP header. It starts right after the IP header.
@@ -90,7 +90,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 41
+./rootkitlings check 45
 ```
 
 The check sends normal pings (must NOT trigger), then sends ICMP echo
@@ -101,4 +101,4 @@ counter increments.
 > Unusual ICMP filtering logic in a loaded module is suspicious.
 > Network IDS can flag ICMP packets with non-standard echo IDs.
 
-See also: [42 - Raw socket](../42-raw-socket/README.md).
+See also: [46 - Raw socket](../46-raw-socket/README.md).

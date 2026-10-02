@@ -1,15 +1,15 @@
-# 21 - Mutex
+# 22 - Mutex
 
 ## Why this step
 
-Ling 18 showed lost updates. A mutex serializes access to shared state.
+Ling 19 showed lost updates. A mutex serializes access to shared state.
 Only one thread holds the lock at a time. The loser sleeps until the
 holder releases it.
 
 ## What you need
 
 You already know `kthread_run` and the shared counter pattern from
-ling 20. This ling adds a mutex to eliminate the race.
+ling 21. This ling adds a mutex to eliminate the race.
 
 New includes:
 
@@ -19,7 +19,7 @@ New includes:
 
 ## Build it
 
-Take ling 20's two-thread counter and add a mutex:
+Take ling 21's two-thread counter and add a mutex:
 
 1. Define `DEFINE_MUTEX(rk_lock)`.
 2. Each thread locks before incrementing and unlocks after.
@@ -45,7 +45,7 @@ mutex_lock(&name);          // acquire (sleeps if held)
 mutex_unlock(&name);        // release
 ```
 
-Take ling 20's `increment_fn` and wrap the shared access in
+Take ling 21's `increment_fn` and wrap the shared access in
 `mutex_lock`/`mutex_unlock`. Lock per iteration, not around the
 entire loop.
 
@@ -78,11 +78,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 19
+./rootkitlings check 22
 ```
 
 > **What a defender sees**: a mutex held for too long blocks the thread.
 > If a rootkit's mutex deadlocks, the module becomes unloadable, which
 > is visible as a stuck `rmmod` process.
 
-See also: [20 - Atomic](../20-atomic/README.md).
+See also: [23 - Atomic](../23-atomic/README.md).

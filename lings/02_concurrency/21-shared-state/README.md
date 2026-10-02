@@ -1,10 +1,10 @@
-# 20 - Shared state
+# 21 - Shared state
 
 ## Why this step
 
 Two threads writing to the same variable without synchronization.
 This ling deliberately demonstrates a data race so you can see lost
-updates before ling 21 shows how to fix them.
+updates before ling 22 shows how to fix them.
 
 ```
   thread A                thread B
@@ -21,7 +21,7 @@ On multiple CPUs, both threads run the read at the same instant.
 
 ## What you already know
 
-From ling 18: `kthread_run`, `kthread_should_stop`. This ling uses the
+From ling 19: `kthread_run`, `kthread_should_stop`. This ling uses the
 same thread creation pattern but spawns two threads that share a counter.
 
 ## Build it
@@ -69,11 +69,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 18
+./rootkitlings check 21
 ```
 
 > **What a defender sees**: nothing directly. But data races in rootkit
 > code cause intermittent crashes that leave debug traces. A stable
 > rootkit protects its shared state.
 
-See also: [19 - Mutex](../19-mutex/README.md).
+See also: [22 - Mutex](../22-mutex/README.md).

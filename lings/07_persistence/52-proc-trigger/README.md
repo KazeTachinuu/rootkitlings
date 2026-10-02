@@ -1,4 +1,4 @@
-# 50 - Proc trigger
+# 52 - Proc trigger
 
 ## What we are learning
 
@@ -10,7 +10,7 @@ This is how Diamorphine activates: write a magic string, get root.
 
 ## What we are doing
 
-Combine proc write (ling 12) with credential escalation (ling 25) into
+Combine proc write (ling 12) with credential escalation (ling 26) into
 a command interface:
 
 ```
@@ -35,7 +35,7 @@ You already have both pieces from earlier lings:
 
 - **Proc write callback** (ling 12): `copy_from_user` the input,
   null-terminate it, compare against the magic word.
-- **Credential escalation** (ling 25): `prepare_creds()`, set
+- **Credential escalation** (ling 26): `prepare_creds()`, set
   `uid`/`euid` to `GLOBAL_ROOT_UID`, `commit_creds()`.
 
 New considerations:
@@ -79,7 +79,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 48
+./rootkitlings check 52
 ```
 
 The check writes the magic word, verifies the trigger counter
@@ -89,4 +89,4 @@ incremented, then writes a wrong word and verifies it was rejected.
 > `ls -la /proc/rk_privesc` shows 0666 permissions. The magic word appears in
 > plaintext in the module binary (`strings hello.ko`).
 
-See also: [49 - Init hooks](../49-init-hooks/README.md).
+See also: [53 - Usermode helper](../53-init-hooks/README.md).

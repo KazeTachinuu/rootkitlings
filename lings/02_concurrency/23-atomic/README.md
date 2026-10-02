@@ -1,4 +1,4 @@
-# 22 - Atomic
+# 23 - Atomic
 
 ## Why this step
 
@@ -9,7 +9,7 @@ simpler, but limited to one variable at a time.
 ## The concept
 
 ```
-  Without atomic (the race from ling 20):
+  Without atomic (the race from ling 21):
 
   Thread A                Thread B
   read counter (500)      read counter (500)
@@ -59,7 +59,7 @@ atomic_read(&var);                // read current value
 atomic_set(&var, value);          // set to value
 ```
 
-Take ling 20's `increment_fn` and replace `counter++` with
+Take ling 21's `increment_fn` and replace `counter++` with
 `atomic_inc`. No mutex needed, no lock/unlock wrapper. Read
 the values in your proc callback with `atomic_read`.
 
@@ -90,7 +90,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 20
+./rootkitlings check 23
 ```
 
 > **What a defender sees**: atomic operations leave no lock contention

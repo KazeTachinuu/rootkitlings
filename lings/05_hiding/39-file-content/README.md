@@ -1,4 +1,4 @@
-# 37 - File content filtering
+# 39 - File content filtering
 
 ## Why this step
 
@@ -12,7 +12,7 @@ Diamorphine and Reptile use similar hooks to hide entries from
 
 ## What you already know
 
-From ling 36, you can hide files from directory listings. This ling
+From ling 38, you can hide files from directory listings. This ling
 takes a different approach: the file is visible, but its content is
 modified in transit.
 
@@ -43,7 +43,7 @@ The file on disk is untouched. Only the read path is filtered.
 
 ## Build it
 
-Hook `__x64_sys_read` using ftrace (same pattern as ling 32). The
+Hook `__x64_sys_read` using ftrace (same pattern as ling 33). The
 wrapper:
 
 1. Calls the original syscall first (fills the userspace buffer).
@@ -88,7 +88,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 35
+./rootkitlings check 39
 ```
 
 The check creates `/tmp/rk_target` containing "SECRET", reads it with
@@ -99,4 +99,4 @@ verifies "SECRET" was replaced with "XXXXXX".
 > byte count but with different content. Comparing a raw disk read with
 > userspace output exposes the tampering.
 
-See also: [36 - Log hiding](../36-log-hiding/README.md).
+See also: [40 - Log hiding](../40-log-hiding/README.md).

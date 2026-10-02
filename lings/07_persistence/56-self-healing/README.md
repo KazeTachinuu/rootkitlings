@@ -1,4 +1,4 @@
-# 54 - Self-healing
+# 56 - Self-healing
 
 ## What we are learning
 
@@ -24,7 +24,7 @@ itself.
 
 ## What you already know
 
-From ling 18: kthread loops with `kthread_should_stop`. From ling 12:
+From ling 19: kthread loops with `kthread_should_stop`. From ling 12:
 proc entry creation. This ling combines them into a self-repairing
 system.
 
@@ -75,7 +75,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 52
+./rootkitlings check 56
 ```
 
 The check writes "kill" to `/proc/rk_watchdog`, waits 2 seconds, and verifies
@@ -85,4 +85,4 @@ the watchdog recreated it with an incremented heal counter.
 > `ps`. The proc entry reappears after removal. The only fix is
 > unloading the module.
 
-See also: [53 - XOR obfuscation](../../08_crypto/53-xor-obfuscation/README.md).
+See also: [Crypto](../../08_crypto/README.md).

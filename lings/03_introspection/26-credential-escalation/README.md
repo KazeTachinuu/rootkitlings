@@ -1,4 +1,4 @@
-# 25 - Credential escalation
+# 26 - Credential escalation
 
 ## Why this step
 
@@ -36,12 +36,12 @@ and it all comes down to two kernel functions.
 
 ## What you already know
 
-From ling 24: `current_cred()`, `from_kuid`, reading the caller's UID.
+From ling 25: `current_cred()`, `from_kuid`, reading the caller's UID.
 From ling 12: writable proc entries with `copy_from_user`.
 
 ## New API
 
-Same headers as ling 24 (`linux/cred.h`, `linux/uidgid.h`):
+Same headers as ling 25 (`linux/cred.h`, `linux/uidgid.h`):
 
 | API | Purpose |
 |-----|---------|
@@ -63,7 +63,7 @@ Create a module that:
 
 1. Creates a writable `/proc/rk_escalate` (mode `0666`).
 2. Writing `"escalate"` gives the calling process root (UID 0).
-3. Reading returns the caller's current UID (reuse ling 24 pattern).
+3. Reading returns the caller's current UID (reuse ling 25 pattern).
 
 The write handler should parse the command (ling 12 pattern), and only
 escalate when the input starts with `"escalate"`. Log which PID was
@@ -97,11 +97,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 23
+./rootkitlings check 26
 ```
 
 > **What a defender sees**: `audit.log` records every UID 0 transition.
 > `ausearch -m USER_AUTH` finds it. The escalation itself is instant and
 > invisible to tools like `ps`, but the audit subsystem catches it.
 
-See also: [24 - Symbols](../24-symbols/README.md).
+See also: [27 - Symbols](../27-symbols/README.md).

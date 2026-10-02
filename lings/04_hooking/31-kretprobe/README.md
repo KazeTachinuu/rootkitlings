@@ -1,4 +1,4 @@
-# 30 - Kretprobe
+# 31 - Kretprobe
 
 ## Why this step
 
@@ -10,7 +10,7 @@ file return `-ENOENT` instead of success.
 ## The concept
 
 ```
-  kprobe (ling 29):              kretprobe (this ling):
+  kprobe (ling 30):              kretprobe (this ling):
 
   vfs_read() entry               vfs_read() entry
        |                              |
@@ -34,7 +34,7 @@ later, modify) the return value.
 
 ## What you already know
 
-From ling 29, you registered a kprobe on `do_sys_openat2`. This ling
+From ling 30, you registered a kprobe on `do_sys_openat2`. This ling
 hooks `vfs_read` at its return site instead, inspecting return values.
 
 ## Build it
@@ -92,11 +92,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 28
+./rootkitlings check 31
 ```
 
 > **What a defender sees**: same as kprobes. Visible in debugfs.
 > But return probes are more powerful: a rootkit can make `read()`
 > return zero bytes, silently suppressing file content.
 
-See also: [29 - Write protection](../29-write-protection/README.md).
+See also: [32 - Write-protection bypass](../32-write-protection/README.md).

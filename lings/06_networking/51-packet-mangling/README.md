@@ -1,4 +1,4 @@
-# 49 - Packet mangling
+# 51 - Packet mangling
 
 ## What we are learning
 
@@ -69,7 +69,7 @@ fields without recalculating. (TCP and IPv6 do not allow this.)
    outgoing packets from this host).
 2. In the callback, check `iph->protocol == IPPROTO_UDP`.
 3. Locate the UDP header after the IP header (same offset math as ling
-   41's ICMP parsing).
+   43's ICMP parsing).
 4. Before modifying, call `skb_ensure_writable` up to the end of the UDP
    header. Cloned skbs share data; writing without this can corrupt other
    users of the same buffer. Re-derive `iph` and `uh` after the call
@@ -108,7 +108,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 47
+./rootkitlings check 51
 ```
 
 The check starts a UDP listener on port 9999, sends data to port 7777,
@@ -119,4 +119,4 @@ and verifies the listener received it (proving the hook redirected it).
 > Network forensics (tcpdump on the host side) reveals the rewritten
 > destination port.
 
-See also: [48 - Proc trigger](../../07_persistence/48-proc-trigger/README.md).
+See also: [Persistence](../../07_persistence/README.md).

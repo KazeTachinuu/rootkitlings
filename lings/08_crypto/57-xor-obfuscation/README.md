@@ -1,4 +1,4 @@
-# 55 - XOR obfuscation
+# 57 - XOR obfuscation
 
 ## What we are learning
 
@@ -7,7 +7,7 @@ to avoid detection by static analysis tools. XOR is the simplest
 cipher: apply the same key byte to encrypt and decrypt. It is trivially
 breakable, but enough to defeat `strings` and basic signature scanning.
 
-This is the first step before real encryption (ling 56).
+This is the first step before real encryption (ling 58).
 
 ## The concept
 
@@ -102,7 +102,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 53
+./rootkitlings check 57
 ```
 
 The check verifies the round-trip: write a new plaintext, read it back,
@@ -112,4 +112,4 @@ confirm the decrypted text matches.
 > obfuscated data. But XOR with a fixed key is trivially reversible:
 > tools like `xortool` automate the attack.
 
-See also: [54 - AES encryption](../54-aes-encryption/README.md).
+See also: [58 - AES encryption](../58-aes-encryption/README.md).

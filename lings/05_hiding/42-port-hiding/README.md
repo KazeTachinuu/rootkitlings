@@ -1,4 +1,4 @@
-# 40 - Port hiding
+# 42 - Port hiding
 
 ## Why this step
 
@@ -10,7 +10,7 @@ This technique is used by Diamorphine, Reptile, and most LKM rootkits.
 
 ## What you already know
 
-From ling 36, you hooked getdents64. From ling 37, you filtered
+From ling 38, you hooked getdents64. From ling 39, you filtered
 content. This ling hooks the specific function that renders
 `/proc/net/tcp` entries.
 
@@ -33,7 +33,7 @@ content. This ling hooks the specific function that renders
   +---> otherwise?  let original render the line
 ```
 
-Unlike ling 36 (post-process a buffer), here you intercept BEFORE
+Unlike ling 38 (post-process a buffer), here you intercept BEFORE
 each line renders. Simpler: no buffer copying, no memmove.
 
 ## Build it
@@ -48,7 +48,7 @@ You need:
 ```
 
 Resolve `tcp4_seq_show` via kprobe, hook it with ftrace (same flags
-as ling 36). In the callback, check `inet_sk(v)->inet_sport`:
+as ling 38). In the callback, check `inet_sk(v)->inet_sport`:
 
 ```c
 if (inet_sk(v)->inet_sport == htons(HIDDEN_PORT))
@@ -90,7 +90,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 38
+./rootkitlings check 42
 ```
 
 The check starts a listener on port 8080, verifies it appears in
@@ -100,4 +100,4 @@ The check starts a listener on port 8080, verifies it appears in
 > not list. Comparing `nmap` output with `ss` output reveals the hidden
 > port.
 
-See also: [Capstone 3 - Dead drop](../../../capstones/3-dead-drop/README.md).
+See also: [Networking](../../06_networking/README.md).

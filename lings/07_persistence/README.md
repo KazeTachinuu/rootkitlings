@@ -22,4 +22,5 @@ Ling 55 teaches three boot persistence methods in order of stealth:
 
 If your rootkit needs to hide the persistence files, ling 38 (getdents64 hook) covers that.
 
-After ling 56: continue to crypto.
+After ling 56: continue with [Crypto](../08_crypto/README.md), then build
+[Capstone 5: Red vs blue](../../capstones/5-red-vs-blue/README.md).

@@ -1,4 +1,4 @@
-# 31 - Write-protection bypass
+# 32 - Write-protection bypass
 
 ## Why this step
 
@@ -33,7 +33,7 @@ approach manipulates individual page table entries instead.
 
 ## What you already know
 
-From ling 29, you used kprobes. This ling teaches you to bypass the
+From ling 30, you used kprobes. This ling teaches you to bypass the
 kernel's own memory protection on read-only pages.
 
 ## Build it
@@ -98,7 +98,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 29
+./rootkitlings check 32
 ```
 
 The check verifies the marker was 0xDEADBEEF before and 0xCAFEBABE
@@ -107,4 +107,4 @@ after, confirming the write-protection bypass worked.
 > **What a defender sees**: `set_memory_rw` calls are logged by some
 > integrity frameworks. W+X pages trigger alerts in lockdown mode.
 
-See also: [30 - Ftrace](../30-ftrace/README.md).
+See also: [33 - Ftrace](../33-ftrace/README.md).

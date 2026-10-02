@@ -1,4 +1,4 @@
-# 18 - Kernel thread
+# 19 - Kernel thread
 
 ## Why this step
 
@@ -24,7 +24,7 @@ in the process list as a bracketed kernel thread.
 
 ## What you already know
 
-From ling 10: proc entries. From ling 17: deferred kernel work.
+From ling 10: proc entries. From ling 18: deferred kernel work.
 
 ## New API
 
@@ -89,11 +89,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 16
+./rootkitlings check 19
 ```
 
 > **What a defender sees**: `ps aux` shows a kernel thread with your
 > module's name. Kernel threads show as `[bracketed]` names. A thread
 > named `[rk_thread]` is suspicious.
 
-See also: [17 - Waiting](../17-waiting/README.md).
+See also: [20 - Waiting](../20-waiting/README.md).

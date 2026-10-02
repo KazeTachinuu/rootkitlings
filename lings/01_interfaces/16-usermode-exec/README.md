@@ -1,4 +1,4 @@
-# Ling 16: Usermode exec
+# 16 - Usermode exec
 
 Kernel modules can execute userspace programs. `call_usermodehelper`
 spawns a process from kernel context, running as root with no terminal.

@@ -1,4 +1,4 @@
-# 34 - Module hiding
+# 36 - Module hiding
 
 ## Why this step
 
@@ -62,11 +62,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 32
+./rootkitlings check 36
 ```
 
 > **What a defender sees**: `lsmod` is clean, but `/sys/module/hello`
 > still exists. Cross-view diffing catches this: compare `lsmod` output
 > with `ls /sys/module/`. Any module in sysfs but not in lsmod is hidden.
 
-See also: [33 - Sysfs cleanup](../33-sysfs-cleanup/README.md).
+See also: [37 - Sysfs cleanup](../37-sysfs-cleanup/README.md).

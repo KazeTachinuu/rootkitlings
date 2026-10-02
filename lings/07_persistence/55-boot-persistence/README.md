@@ -1,4 +1,4 @@
-# 53 - Boot persistence
+# 55 - Boot persistence
 
 ## Why this step
 
@@ -25,7 +25,7 @@ config file from kernel space.
 
 ## What you need
 
-From ling 51 you know `call_usermodehelper`. This ling adds kernel-space
+From ling 16 you know `call_usermodehelper`. This ling adds kernel-space
 file I/O, the other half of persistence.
 
 ## New API
@@ -48,7 +48,7 @@ Use `O_WRONLY | O_CREAT | O_TRUNC` flags and `0644` mode.
 ## Build it
 
 1. In `init`, ensure the directory exists. Use `call_usermodehelper`
-   to run `mkdir -p /etc/modules-load.d` (ling 51 pattern).
+   to run `mkdir -p /etc/modules-load.d` (ling 16 pattern).
 2. Open `/etc/modules-load.d/hello.conf` from kernel space with
    `filp_open`.
 3. Write `"hello\n"` with `kernel_write`.
@@ -85,11 +85,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 51
+./rootkitlings check 55
 ```
 
 > **What a defender sees**: a new `.conf` file in `/etc/modules-load.d/`.
 > Comparing the directory contents against a known baseline catches this.
 > Advanced rootkits also modify the initramfs to load even earlier.
 
-See also: [52 - Self-healing](../52-self-healing/README.md).
+See also: [56 - Self-healing](../56-self-healing/README.md).

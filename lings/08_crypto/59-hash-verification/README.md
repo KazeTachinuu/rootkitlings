@@ -1,4 +1,4 @@
-# 57 - Hash verification
+# 59 - Hash verification
 
 ## What we are learning
 
@@ -15,12 +15,12 @@ in, always 32 bytes out, practically impossible to reverse.
   +-----------------+          64 hex characters
 ```
 
-This is the last ling in the crypto section. You now have XOR (ling 55),
-AES (ling 56), and SHA-256: obfuscation, encryption, and integrity.
+This is the last ling in the crypto section. You now have XOR (ling 57),
+AES (ling 58), and SHA-256: obfuscation, encryption, and integrity.
 
 ## What you already know
 
-From ling 56: the kernel crypto API pattern (allocate, configure, use,
+From ling 58: the kernel crypto API pattern (allocate, configure, use,
 free). SHA-256 uses the synchronous hash API instead of the symmetric
 cipher API, but the structure is the same.
 
@@ -78,7 +78,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 55
+./rootkitlings check 59
 ```
 
 The check verifies `status=ok` and that the hash is exactly 64

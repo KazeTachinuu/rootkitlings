@@ -1,4 +1,4 @@
-# 44 - Raw socket
+# 46 - Raw socket
 
 ## What we are learning
 
@@ -101,11 +101,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 42
+./rootkitlings check 46
 ```
 
 > **What a defender sees**: `dmesg` shows the socket creation message.
 > A kernel-owned raw socket is invisible to `ss -anp` and `netstat`.
 > Only inspecting loaded module code reveals its existence.
 
-See also: [43 - DNS spoof](../43-dns-spoof/README.md).
+See also: [47 - DNS spoof](../47-dns-spoof/README.md).

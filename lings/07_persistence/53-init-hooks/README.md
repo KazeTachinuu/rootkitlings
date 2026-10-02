@@ -1,4 +1,4 @@
-# 51 - Usermode helper
+# 53 - Usermode helper
 
 ## Why this step
 
@@ -66,7 +66,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 49
+./rootkitlings check 53
 ```
 
 > **What a defender sees**: the process is parented to kthreadd (PID 2),
@@ -74,4 +74,4 @@ The check script verifies:
 > `/proc` (briefly) and the command's side effects. Audit rules on
 > `execve` catch it.
 
-See also: [50 - File infection](../50-file-infection/README.md).
+See also: [54 - File infection](../54-file-infection/README.md).

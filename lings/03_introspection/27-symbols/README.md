@@ -1,4 +1,4 @@
-# 26 - Symbols
+# 27 - Symbols
 
 ## Why this step
 
@@ -99,11 +99,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 24
+./rootkitlings check 27
 ```
 
 > **What a defender sees**: the kprobe registration and unregistration
 > is logged briefly in debugfs. `ftrace` shows the transient probe.
 > A defender watching kprobe events in real time would catch this.
 
-See also: [25 - Kernel random](../25-kernel-random/README.md).
+See also: [28 - Kernel random](../28-kernel-random/README.md).

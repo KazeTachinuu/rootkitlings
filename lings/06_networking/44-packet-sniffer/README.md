@@ -1,4 +1,4 @@
-# 42 - Packet sniffer
+# 44 - Packet sniffer
 
 ## What we are learning
 
@@ -8,12 +8,12 @@ userspace tool like `tcpdump`.
 
 ## What we are doing
 
-Extend the netfilter hook from ling 41 to parse each packet's IP header
+Extend the netfilter hook from ling 43 to parse each packet's IP header
 and classify it by protocol, keeping separate counters for TCP and UDP.
 
 ## Includes you need
 
-Everything from ling 41, plus the IP header:
+Everything from ling 43, plus the IP header:
 
 ```c
 #include <linux/ip.h>
@@ -42,9 +42,9 @@ Protocol constants (`IPPROTO_TCP`, `IPPROTO_UDP`) come from `linux/in.h`.
 
 ## Build it
 
-Extend your netfilter hook from ling 41. In the callback, extract the
+Extend your netfilter hook from ling 43. In the callback, extract the
 IP header and classify each packet by protocol. Use `atomic_t` counters
-(ling 22) for safe concurrent updates.
+(ling 23) for safe concurrent updates.
 
 ## Output format
 
@@ -85,11 +85,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 40
+./rootkitlings check 44
 ```
 
 > **What a defender sees**: `dmesg` shows the sniffer activation.
 > A module counting packets by protocol is a strong indicator of
 > kernel-level traffic monitoring.
 
-See also: [41 - ICMP trigger](../41-icmp-trigger/README.md).
+See also: [45 - ICMP trigger](../45-icmp-trigger/README.md).

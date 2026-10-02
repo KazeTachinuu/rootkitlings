@@ -1,4 +1,4 @@
-# 33 - Hook lifecycle
+# 35 - Hook lifecycle
 
 ## Why this step
 
@@ -91,7 +91,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 31
+./rootkitlings check 35
 ```
 
 > **What a defender sees**: multiple hooks on different functions. Each

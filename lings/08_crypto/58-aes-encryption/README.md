@@ -1,4 +1,4 @@
-# 56 - AES encryption
+# 58 - AES encryption
 
 ## What we are learning
 
@@ -26,7 +26,7 @@ does not chain, which leaks patterns.
 
 ## What you already know
 
-From ling 55: XOR obfuscation, hex encoding for proc output.
+From ling 57: XOR obfuscation, hex encoding for proc output.
 
 ## New API
 
@@ -95,7 +95,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 54
+./rootkitlings check 58
 ```
 
 The check verifies `status=ok` and `match=yes` (round-trip success).
@@ -104,4 +104,4 @@ The check verifies `status=ok` and `match=yes` (round-trip success).
 > secrets if AES is used properly. But the key must be stored somewhere:
 > extracting it from kernel memory or the `.ko` file breaks the scheme.
 
-See also: [55 - Hash verification](../55-hash-verification/README.md).
+See also: [59 - Hash verification](../59-hash-verification/README.md).

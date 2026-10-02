@@ -1,4 +1,4 @@
-# 24 - Credentials
+# 25 - Credentials
 
 ## Why this step
 
@@ -8,7 +8,7 @@ these to decide whether to obey a command.
 
 ## What you need
 
-You already know `current` from ling 23. This ling reads the caller's
+You already know `current` from ling 24. This ling reads the caller's
 credentials using `current_cred()`.
 
 New includes:
@@ -52,7 +52,7 @@ callback:
 3. Returns the string with `seq_printf` via `proc_create_single`.
 
 `current_cred()` returns a `const` pointer. You cannot modify
-credentials through it. That comes in ling 25.
+credentials through it. That comes in ling 26.
 
 ## Try it
 
@@ -80,10 +80,10 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 22
+./rootkitlings check 25
 ```
 
 > **What a defender sees**: the module reads credentials but does not
-> change them. Reading is invisible. Changing them (ling 25) is not.
+> change them. Reading is invisible. Changing them (ling 26) is not.
 
-See also: [23 - Credential escalation](../23-credential-escalation/README.md).
+See also: [26 - Credential escalation](../26-credential-escalation/README.md).

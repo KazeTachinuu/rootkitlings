@@ -1,4 +1,4 @@
-# 52 - File infection
+# 54 - File infection
 
 ## Why this step
 
@@ -103,7 +103,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 50
+./rootkitlings check 54
 ```
 
 The check creates a victim script, loads the module, verifies the
@@ -114,4 +114,4 @@ after unload.
 > detects modified files. Comparing file hashes against known-good
 > baselines is the primary defense.
 
-See also: [51 - Boot persistence](../51-boot-persistence/README.md).
+See also: [55 - Boot persistence](../55-boot-persistence/README.md).

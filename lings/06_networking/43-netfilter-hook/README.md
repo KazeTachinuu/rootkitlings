@@ -1,4 +1,4 @@
-# 41 - Netfilter hook
+# 43 - Netfilter hook
 
 ## What we are learning
 
@@ -63,7 +63,7 @@ nf_unregister_net_hook(&init_net, &nf_ops);
 
 Use `atomic_t` for the counter. Hooks run in softirq context (no
 sleeping, concurrent execution on multiple CPUs). You already used
-atomics in ling 22.
+atomics in ling 23.
 
 Serve the count through `/proc/rk_nfhook` (ling 10 pattern).
 
@@ -97,7 +97,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 39
+./rootkitlings check 43
 ```
 
 The check brings up loopback, pings localhost, and verifies the counter
@@ -107,4 +107,4 @@ incremented.
 > `cat /proc/rk_nfhook` reveals the packet count. Netfilter hooks are visible
 > via `/proc/net/netfilter/` interfaces.
 
-See also: [40 - Packet sniffer](../40-packet-sniffer/README.md).
+See also: [44 - Packet sniffer](../44-packet-sniffer/README.md).

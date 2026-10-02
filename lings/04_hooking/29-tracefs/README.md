@@ -1,4 +1,4 @@
-# 28 - Debugfs interface
+# 29 - Debugfs interface
 
 ## Why this step
 
@@ -31,7 +31,7 @@ hides its state in a place defenders rarely inspect.
 
 ## What you already know
 
-From ling 26, you worked with kprobes. This ling uses debugfs, the
+From ling 27, you worked with kprobes. This ling uses debugfs, the
 filesystem behind `/sys/kernel/debug/`, to create custom entries.
 
 ## Build it
@@ -92,7 +92,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 26
+./rootkitlings check 29
 ```
 
 The check verifies the debugfs directory and state file exist,
@@ -101,4 +101,4 @@ the counter increments, and cleanup happens on unload.
 > **What a defender sees**: `ls /sys/kernel/debug/` shows the extra
 > directory. `mount -t debugfs` reveals it.
 
-See also: [27 - Kprobe](../27-kprobe/README.md).
+See also: [30 - Kprobe](../30-kprobe/README.md).

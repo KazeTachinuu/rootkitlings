@@ -1,4 +1,4 @@
-# Ling 34: rmdir trigger
+# 34 - rmdir trigger
 
 Pumakit controls its rootkit with `rmdir`. The operator types
 `rmdir("/tmp/zarya.0")` and the module intercepts it, parses the path

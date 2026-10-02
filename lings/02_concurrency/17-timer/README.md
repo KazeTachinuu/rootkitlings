@@ -1,4 +1,4 @@
-# 16 - Timer
+# 17 - Timer
 
 ## Why this step
 
@@ -89,11 +89,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 14
+./rootkitlings check 17
 ```
 
 > **What a defender sees**: the timer itself is invisible, but its effects
 > (procfs updates, dmesg entries) run on a regular schedule. Predictable
 > timing is a detection signal.
 
-See also: [15 - Workqueue](../15-workqueue/README.md).
+See also: [18 - Workqueue](../18-workqueue/README.md).

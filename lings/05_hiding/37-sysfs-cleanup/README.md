@@ -1,8 +1,8 @@
-# 35 - Sysfs cleanup
+# 37 - Sysfs cleanup
 
 ## Why this step
 
-Ling 32 hid the module from `lsmod`, but `/sys/module/hello` still
+Ling 33 hid the module from `lsmod`, but `/sys/module/hello` still
 exists. This ling removes that entry too, closing the cross-view gap.
 Diamorphine and Reptile both perform this step.
 
@@ -13,7 +13,7 @@ Diamorphine and Reptile both perform this step.
 
   1. Module list (THIS_MODULE->list)
      lsmod, /proc/modules
-     +-- hello  <-- list_del_init removes this (ling 34)
+     +-- hello  <-- list_del_init removes this (ling 36)
 
   2. Sysfs kobject (THIS_MODULE->mkobj.kobj)
      /sys/module/hello/
@@ -26,7 +26,7 @@ Diamorphine and Reptile both perform this step.
 
 ## What you already know
 
-From ling 34, you removed your module from the module list. This ling
+From ling 36, you removed your module from the module list. This ling
 adds kobject removal so both `lsmod` and `ls /sys/module/` are clean.
 
 ## Build it
@@ -41,7 +41,7 @@ You need:
 
 Create a module that:
 
-1. Hides from the module list (ling 34).
+1. Hides from the module list (ling 36).
 2. Removes its sysfs kobject.
 3. After both, `lsmod` and `ls /sys/module/` are clean.
 
@@ -76,11 +76,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 33
+./rootkitlings check 37
 ```
 
 > **What a defender sees**: both views are clean. But the module's
 > symbols may still appear in `/proc/kallsyms`, and the module's
 > memory is still mapped. `crash` or Volatility finds it.
 
-See also: [34 - Getdents64](../34-getdents64/README.md).
+See also: [38 - Getdents64 hiding](../38-getdents64/README.md).

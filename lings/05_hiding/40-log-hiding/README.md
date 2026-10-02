@@ -1,4 +1,4 @@
-# 38 - Log hiding
+# 40 - Log hiding
 
 ## Why this step
 
@@ -12,7 +12,7 @@ containing `rk:` from the output buffer.
 
 ## What you already know
 
-From ling 37, you filtered file content. This ling applies the same
+From ling 39, you filtered file content. This ling applies the same
 concept to the kernel log itself.
 
 ## Build it
@@ -26,7 +26,7 @@ You need:
 ```
 
 Use the kprobe trick to resolve `__x64_sys_syslog`, then hook it
-with ftrace (the same pattern from ling 32).
+with ftrace (the same pattern from ling 33).
 
 In the hook, call the original syscall. For `SYSLOG_ACTION_READ_ALL`
 (type 3) and `SYSLOG_ACTION_READ` (type 2), scan the returned buffer
@@ -75,7 +75,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 36
+./rootkitlings check 40
 ```
 
 The check loads the module and verifies that `dmesg` does NOT show
@@ -85,4 +85,4 @@ any `rk:` lines, even though the module logs them.
 > timestamps jump. A persistent syslog forwarding to a remote host
 > catches messages before they can be filtered.
 
-See also: [37 - Process hiding](../37-process-hiding/README.md).
+See also: [41 - Process hiding](../41-process-hiding/README.md).

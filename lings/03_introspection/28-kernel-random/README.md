@@ -1,4 +1,4 @@
-# 27 - Kernel random
+# 28 - Kernel random
 
 ## Why this step
 
@@ -70,7 +70,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 25
+./rootkitlings check 28
 ```
 
 > **What a defender sees**: the randomness makes each session unique.

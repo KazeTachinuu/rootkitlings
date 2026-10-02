@@ -1,4 +1,4 @@
-# 23 - Current task
+# 24 - Current task
 
 ## Why this step
 
@@ -70,10 +70,10 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 21
+./rootkitlings check 24
 ```
 
 > **What a defender sees**: nothing new. But the module now knows WHO is
 > asking. This is the prerequisite for caller filtering.
 
-See also: [22 - Credentials](../22-credentials/README.md).
+See also: [25 - Credentials](../25-credentials/README.md).

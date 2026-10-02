@@ -1,4 +1,4 @@
-# 45 - DNS spoof
+# 47 - DNS spoof
 
 ## What we are learning
 
@@ -100,7 +100,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 43
+./rootkitlings check 47
 ```
 
 The check starts a listener on port 5300, sends a UDP packet to port 53,
@@ -109,4 +109,4 @@ and verifies the packet was redirected to 5300.
 > **What a defender sees**: an `NF_INET_LOCAL_OUT` hook modifying UDP
 > packets is a strong indicator. `tcpdump` shows the rewritten port.
 
-See also: [44 - TCP backdoor](../44-tcp-backdoor/README.md).
+See also: [48 - TCP backdoor](../48-tcp-backdoor/README.md).

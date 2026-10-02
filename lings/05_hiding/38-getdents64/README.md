@@ -1,4 +1,4 @@
-# 36 - Getdents64 hiding
+# 38 - Getdents64 hiding
 
 ## Why this step
 
@@ -9,7 +9,7 @@ behind Diamorphine's file hiding.
 
 ## What you already know
 
-From ling 32, you can hook functions with ftrace. From ling 28, you
+From ling 33, you can hook functions with ftrace. From ling 29, you
 can resolve symbols. This ling combines both to hook the getdents64
 syscall handler.
 
@@ -90,7 +90,7 @@ via function pointer, subtract `ENDBR_SIZE`:
 
 ## Build it
 
-Hook `__x64_sys_getdents64` via ftrace (ling 32 pattern). Your wrapper:
+Hook `__x64_sys_getdents64` via ftrace (ling 33 pattern). Your wrapper:
 
 1. Calls the original syscall (let it fill the dirent buffer).
 2. Copies the buffer from userspace (`copy_from_user`).
@@ -133,11 +133,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 34
+./rootkitlings check 38
 ```
 
 > **What a defender sees**: direct path access works. `cat /proc/rk_dirfilter`
 > succeeds even though `ls /proc/ | grep rk_` shows nothing. A defender
 > who guesses the name finds it.
 
-See also: [35 - File content](../35-file-content/README.md).
+See also: [39 - File content filtering](../39-file-content/README.md).

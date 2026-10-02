@@ -1,4 +1,4 @@
-# 46 - TCP backdoor
+# 48 - TCP backdoor
 
 ## What we are learning
 
@@ -103,7 +103,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 44
+./rootkitlings check 48
 ```
 
 The check connects via `nc`, sends `id`, and verifies the output.
@@ -111,4 +111,4 @@ The check connects via `nc`, sends `id`, and verifies the output.
 > **What a defender sees**: `/proc/net/tcp` shows the listening port.
 > The kthread name appears in `ps`. `dmesg` logs connections.
 
-See also: [45 - Covert channel](../45-covert-channel/README.md).
+See also: [49 - Covert channel](../49-covert-channel/README.md).

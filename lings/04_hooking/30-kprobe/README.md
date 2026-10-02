@@ -1,4 +1,4 @@
-# 29 - Kprobe
+# 30 - Kprobe
 
 ## Why this step
 
@@ -26,12 +26,12 @@ syscall handlers.
   function runs normally
 ```
 
-Unlike ling 26 (where the kprobe was immediately unregistered), here
+Unlike ling 27 (where the kprobe was immediately unregistered), here
 the kprobe stays active and fires on every call to the target function.
 
 ## What you already know
 
-From ling 28, you can resolve any symbol to an address. This ling
+From ling 29, you can resolve any symbol to an address. This ling
 registers a persistent kprobe that stays active and counts calls.
 
 ## Build it
@@ -87,10 +87,10 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 27
+./rootkitlings check 30
 ```
 
 > **What a defender sees**: `cat /sys/kernel/debug/kprobes/list`
 > shows every registered kprobe. The function name and module are visible.
 
-See also: [28 - Kretprobe](../28-kretprobe/README.md).
+See also: [31 - Kretprobe](../31-kretprobe/README.md).

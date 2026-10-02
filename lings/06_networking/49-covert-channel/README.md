@@ -1,4 +1,4 @@
-# 47 - Covert channel
+# 49 - Covert channel
 
 ## What we are learning
 
@@ -11,7 +11,7 @@ This technique is used by Pingback (2021), Regin, and many APT tools.
 
 ## What we are doing
 
-Build on ling 43's ICMP trigger. Instead of just counting magic pings,
+Build on ling 45's ICMP trigger. Instead of just counting magic pings,
 extract the payload bytes after the ICMP header and store the message.
 
 ```
@@ -21,12 +21,12 @@ extract the payload bytes after the ICMP header and store the message.
   +--------+--------+---------+-----+---------+
                        ^               ^
                   magic trigger    covert message
-                  (ling 43)        (this ling)
+                  (ling 45)        (this ling)
 ```
 
 ## New concepts
 
-You already know how to find the ICMP header (ling 43). The payload
+You already know how to find the ICMP header (ling 45). The payload
 starts right after `sizeof(struct icmphdr)`. Its length is:
 
 ```
@@ -38,12 +38,12 @@ the IP header length. Both are values you have used before.
 
 **Concurrency**: the hook writes the message, the proc read serves it.
 These run in different contexts. Protect the shared buffer with
-`DEFINE_MUTEX()` and `mutex_lock`/`mutex_unlock` (ling 21 pattern).
+`DEFINE_MUTEX()` and `mutex_lock`/`mutex_unlock` (ling 22 pattern).
 
 ## Build it
 
-1. Hook `PRE_ROUTING` and parse ICMP (ling 43 pattern).
-2. Use magic ID `0xDEAD` (different from ling 43's `0x1337`).
+1. Hook `PRE_ROUTING` and parse ICMP (ling 45 pattern).
+2. Use magic ID `0xDEAD` (different from ling 45's `0x1337`).
 3. When triggered, copy the payload into a kernel buffer.
 4. Protect the buffer with a mutex.
 5. `/proc/rk_covert` serves the last received message (or `(none)` if
@@ -80,7 +80,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 45
+./rootkitlings check 49
 ```
 
 The check sends normal pings (must NOT trigger), then sends ICMP echo
@@ -91,4 +91,4 @@ verifies the message was extracted.
 > patterns are flagged by IDS. Deep packet inspection on ICMP reveals
 > embedded data.
 
-See also: [46 - Traffic counter](../46-traffic-counter/README.md).
+See also: [50 - Traffic counter](../50-traffic-counter/README.md).

@@ -1,4 +1,4 @@
-# 48 - Traffic counter
+# 50 - Traffic counter
 
 ## What we are learning
 
@@ -46,7 +46,7 @@ to 65535 bytes). Get the packet size with `ntohs(ip_hdr(skb)->tot_len)`.
    for `NF_INET_POST_ROUTING` (TX).
 2. Each callback increments a packet counter (`atomic_t`) and adds the
    packet length to a byte counter (`atomic64_t`).
-3. Register both in a `nf_hook_ops` array (ling 41 pattern, extended).
+3. Register both in a `nf_hook_ops` array (ling 43 pattern, extended).
 4. `/proc/rk_counter` serves all four counters.
 
 ## Try it
@@ -76,7 +76,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 46
+./rootkitlings check 50
 ```
 
 The check pings localhost and verifies all four counters incremented.
@@ -85,4 +85,4 @@ The check pings localhost and verifies all four counters incremented.
 > is monitoring all traffic directions. The counters reveal whether
 > traffic is flowing.
 
-See also: [47 - Packet mangling](../47-packet-mangling/README.md).
+See also: [51 - Packet mangling](../51-packet-mangling/README.md).

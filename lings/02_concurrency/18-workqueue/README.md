@@ -1,8 +1,8 @@
-# 17 - Workqueue
+# 18 - Workqueue
 
 ## Why this step
 
-Your ling 16 timer fires in softirq context: no sleeping, no blocking
+Your ling 17 timer fires in softirq context: no sleeping, no blocking
 allocations, no I/O. Real rootkit tasks (exfiltration, file writes,
 network calls) need process context. A workqueue bridges the gap.
 
@@ -19,12 +19,12 @@ The timer decides WHEN. The workqueue decides WHERE (in which context).
 
 ## What you already know
 
-From ling 16: `timer_setup`, `mod_timer`, timer callbacks. From ling 11:
+From ling 17: `timer_setup`, `mod_timer`, timer callbacks. From ling 11:
 proc entries with `proc_create_single` and `seq_file`.
 
 ## New API
 
-One new header on top of ling 16:
+One new header on top of ling 17:
 
 ```c
 #include <linux/workqueue.h>
@@ -49,7 +49,7 @@ static void my_work_fn(struct work_struct *work);
 
 Create a module that:
 
-1. Declares a `work_struct` and a `timer_list` (you did timers in ling 16).
+1. Declares a `work_struct` and a `timer_list` (you did timers in ling 17).
 2. The timer fires every second and calls `schedule_work` to queue the work.
 3. The work function increments a counter and logs it.
 4. `/proc/rk_worker` returns the counter (same pattern as ling 10).
@@ -88,11 +88,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 15
+./rootkitlings check 18
 ```
 
 > **What a defender sees**: workqueue threads appear in `ps` as
 > `kworker/` threads. Legitimate kernel subsystems use them too, so they
 > blend in better than a dedicated kthread.
 
-See also: [16 - Kernel thread](../16-kthread/README.md).
+See also: [19 - Kernel thread](../19-kthread/README.md).

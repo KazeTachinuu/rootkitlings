@@ -1,4 +1,4 @@
-# 39 - Process hiding
+# 41 - Process hiding
 
 ## Why this step
 
@@ -9,7 +9,7 @@ how Diamorphine and Reptile hide their backdoor processes.
 
 ## What you already know
 
-From ling 18, you created kthreads. From ling 36, you hooked
+From ling 19, you created kthreads. From ling 38, you hooked
 getdents64 to hide files. This ling combines both: spawn a thread,
 then hide its PID from the `/proc` listing.
 
@@ -39,15 +39,15 @@ then hide its PID from the `/proc` listing.
   but: kill -0 482 still returns 0 (process exists)
 ```
 
-The hook is identical to ling 36, but the filter checks numeric
+The hook is identical to ling 38, but the filter checks numeric
 `d_name` values against your hidden PID instead of a string prefix.
 
 ## Build it
 
 Create a module that:
 
-1. Spawns a kthread (from ling 18).
-2. Hooks `__x64_sys_getdents64` (same ftrace pattern as ling 36).
+1. Spawns a kthread (from ling 19).
+2. Hooks `__x64_sys_getdents64` (same ftrace pattern as ling 38).
 3. In the wrapper, only filter when listing `/proc` (check dentry name).
 4. Hide entries whose `d_name` matches your kthread's PID.
 5. Exposes the hidden PID via `/proc/rk_ghost`.
@@ -87,11 +87,11 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 37
+./rootkitlings check 41
 ```
 
 > **What a defender sees**: PID gaps in `/proc`. A `kill -0` sweep
 > on all PIDs up to `pid_max` finds running processes that `ps`
 > does not show.
 
-See also: [38 - Port hiding](../38-port-hiding/README.md).
+See also: [42 - Port hiding](../42-port-hiding/README.md).
