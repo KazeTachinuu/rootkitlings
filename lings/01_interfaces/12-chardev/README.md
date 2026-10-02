@@ -80,9 +80,9 @@ static int rk_release(struct inode *inode, struct file *file)
 Both return `0` on success. Log the caller's PID using `current->pid`.
 `current` is a macro that returns the `task_struct` of the calling process.
 
-**read** follows the same `simple_read_from_buffer` pattern from ling 08.
-The signature uses `struct file_operations` conventions (identical to what
-you already know).
+**read** uses the `single_open` + `seq_file` pattern. Your `open` callback
+calls `single_open(file, show_fn, NULL)`, and the `file_operations` uses
+`seq_read`, `seq_lseek`, and `single_release`.
 
 ## Registration
 

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 static struct proc_dir_entry *entry;
 static unsigned long open_count;
@@ -21,19 +21,11 @@ static struct kprobe kp = {
 	.pre_handler = handler_pre,
 };
 
-static ssize_t intercept_read(struct file *file, char __user *buffer,
-			       size_t count, loff_t *position)
+static int intercept_show(struct seq_file *m, void *v)
 {
-	char buf[32];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "%lu\n", open_count);
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "%lu\n", open_count);
+	return 0;
 }
-
-static const struct proc_ops intercept_ops = {
-	.proc_read = intercept_read,
-};
 
 static int __init probe_init(void)
 {
@@ -47,7 +39,7 @@ static int __init probe_init(void)
 
 	pr_info("rk: kprobe registered on %s\n", kp.symbol_name);
 
-	entry = proc_create("rk_probe", 0444, NULL, &intercept_ops);
+	entry = proc_create_single("rk_probe", 0444, NULL, intercept_show);
 	if (!entry) {
 		unregister_kprobe(&kp);
 		return -ENOMEM;

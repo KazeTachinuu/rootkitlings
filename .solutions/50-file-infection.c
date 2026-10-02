@@ -4,6 +4,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 #define TARGET_SCRIPT "/tmp/rk_victim.sh"
 #define PAYLOAD_LINE  "# rootkit was here\n"
@@ -84,26 +85,19 @@ static void disinfect(void)
 	}
 }
 
-static ssize_t proc_read(struct file *f, char __user *buf,
-			  size_t count, loff_t *pos)
+static int proc_read(struct seq_file *m, void *v)
 {
-	char tmp[128];
-	int len;
-
-	len = snprintf(tmp, sizeof(tmp), "target=%s\ninfected=%s\n",
-		       TARGET_SCRIPT, infected ? "yes" : "no");
-	return simple_read_from_buffer(buf, count, pos, tmp, len);
+	seq_printf(m, "target=%s\ninfected=%s\n",
+		   TARGET_SCRIPT, infected ? "yes" : "no");
+	return 0;
 }
 
-static const struct proc_ops infect_proc_ops = {
-	.proc_read = proc_read,
-};
 
 static int __init infect_init(void)
 {
 	infect();
 
-	proc_entry = proc_create("rk_infect", 0444, NULL, &infect_proc_ops);
+	proc_entry = proc_create_single("rk_infect", 0444, NULL, proc_read);
 	if (!proc_entry)
 		return -ENOMEM;
 

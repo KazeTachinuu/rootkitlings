@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/cred.h>
-#include <linux/fs.h>
 #include <linux/ftrace.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
@@ -9,6 +8,7 @@
 #include <linux/moduleparam.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
@@ -88,33 +88,18 @@ static void notrace trip_callback(unsigned long ip, unsigned long parent_ip,
 	}
 }
 
-static ssize_t trip_read(struct file *f, char __user *buf,
-			 size_t count, loff_t *pos)
+static int trip_read(struct seq_file *m, void *v)
 {
 	struct trip_entry *e;
-	char *page;
-	int len = 0;
-	ssize_t ret;
-
-	page = kmalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!page)
-		return -ENOMEM;
 
 	spin_lock(&trip_lock);
 	list_for_each_entry(e, &trip_log, node)
-		len += snprintf(page + len, PAGE_SIZE - len,
-				"[tripwire] uid=%u pid=%d %s\n",
-				e->uid, e->pid, e->path);
+		seq_printf(m, "[tripwire] uid=%u pid=%d %s\n",
+			   e->uid, e->pid, e->path);
 	spin_unlock(&trip_lock);
-
-	ret = simple_read_from_buffer(buf, count, pos, page, len);
-	kfree(page);
-	return ret;
+	return 0;
 }
 
-static const struct proc_ops trip_proc_ops = {
-	.proc_read = trip_read,
-};
 
 static int __init tripwire_init(void)
 {
@@ -137,7 +122,7 @@ static int __init tripwire_init(void)
 	if (err)
 		return err;
 
-	proc_entry = proc_create("rk_tripwire", 0444, NULL, &trip_proc_ops);
+	proc_entry = proc_create_single("rk_tripwire", 0444, NULL, trip_read);
 	if (!proc_entry) {
 		unregister_ftrace_function(&trip_ops);
 		return -ENOMEM;

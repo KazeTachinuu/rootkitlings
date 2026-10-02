@@ -1,1 +1,1 @@
-Use IS_ERR() to check if a pointer is an error, PTR_ERR() to extract the errno, and ERR_PTR() to encode one. These pack error codes into pointer values.
+IS_ERR, PTR_ERR, ERR_PTR. Error codes packed into pointers.

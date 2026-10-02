@@ -1,1 +1,1 @@
-timer_setup() initializes, mod_timer() arms it. The callback runs in softirq context (no sleeping). Re-arm inside the callback for periodic behavior.
+timer_setup + mod_timer. Re-arm inside the callback for periodic.

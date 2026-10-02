@@ -1,1 +1,1 @@
-proc_create() takes a name, permissions, parent (NULL for /proc root), and a pointer to your struct proc_ops. Call proc_remove() in exit.
+proc_create + proc_remove. struct proc_ops.

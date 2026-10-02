@@ -1,1 +1,1 @@
-module_param_cb() takes a kernel_param_ops struct with .set and .get function pointers. Your .set callback receives the new value; call param_set_charp() first, then react.
+module_param_cb with a kernel_param_ops. The .set fires on write.

@@ -1,1 +1,1 @@
-Hook devkmsg_read to filter dmesg output. Check each log line for your hide prefix and skip matching entries by advancing the iterator.
+Hook devkmsg_read. Skip lines matching your prefix.

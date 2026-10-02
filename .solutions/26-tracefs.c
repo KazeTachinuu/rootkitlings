@@ -1,47 +1,41 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/debugfs.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 static struct proc_dir_entry *proc_entry;
 static struct dentry *dbg_dir;
 static struct dentry *dbg_state;
 static atomic_t access_count = ATOMIC_INIT(0);
 
-static ssize_t tracer_show(struct file *file, char __user *buf,
-			   size_t count, loff_t *pos)
+static int tracer_show(struct seq_file *m, void *v)
 {
-	char tmp[64];
-	int len;
-
 	atomic_inc(&access_count);
-	len = snprintf(tmp, sizeof(tmp), "accesses=%d\n",
-		       atomic_read(&access_count));
-	return simple_read_from_buffer(buf, count, pos, tmp, len);
+	seq_printf(m, "accesses=%d\n", atomic_read(&access_count));
+	return 0;
+}
+
+static int tracer_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, tracer_show, NULL);
 }
 
 static const struct file_operations tracer_fops = {
-	.read = tracer_show,
+	.open    = tracer_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release,
 };
 
-static ssize_t status_show(struct file *file, char __user *buf,
-			   size_t count, loff_t *pos)
+static int status_show(struct seq_file *m, void *v)
 {
-	char tmp[128];
-	int len;
-
-	len = snprintf(tmp, sizeof(tmp),
-		       "debugfs_dir=rk_tracer\nstate_file=state\naccesses=%d\n",
-		       atomic_read(&access_count));
-	return simple_read_from_buffer(buf, count, pos, tmp, len);
+	seq_printf(m, "debugfs_dir=rk_tracer\nstate_file=state\naccesses=%d\n",
+		   atomic_read(&access_count));
+	return 0;
 }
-
-static const struct proc_ops status_ops = {
-	.proc_read = status_show,
-};
 
 static int setup_debugfs(void)
 {
@@ -66,7 +60,7 @@ static int __init tracer_init(void)
 	if (err)
 		return err;
 
-	proc_entry = proc_create("rk_tracer", 0444, NULL, &status_ops);
+	proc_entry = proc_create_single("rk_tracer", 0444, NULL, status_show);
 	if (!proc_entry) {
 		debugfs_remove_recursive(dbg_dir);
 		return -ENOMEM;

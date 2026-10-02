@@ -1,35 +1,28 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/cred.h>
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/uidgid.h>
 
 static struct proc_dir_entry *entry;
 
-static ssize_t cred_show(struct file *file, char __user *buffer,
-			 size_t count, loff_t *position)
+static int cred_show(struct seq_file *m, void *v)
 {
 	const struct cred *cred = current_cred();
-	char buf[64];
-	int len;
 
-	len = snprintf(buf, sizeof(buf), "uid=%u gid=%u\n",
-		       from_kuid(&init_user_ns, cred->uid),
-		       from_kgid(&init_user_ns, cred->gid));
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "uid=%u gid=%u\n",
+		   from_kuid(&init_user_ns, cred->uid),
+		   from_kgid(&init_user_ns, cred->gid));
+	return 0;
 }
-
-static const struct proc_ops cred_proc_ops = {
-	.proc_read = cred_show,
-};
 
 static int __init cred_reader_init(void)
 {
-	entry = proc_create("rk_creds", 0444, NULL, &cred_proc_ops);
+	entry = proc_create_single("rk_creds", 0444, NULL, cred_show);
 	if (!entry)
 		return -ENOMEM;
 

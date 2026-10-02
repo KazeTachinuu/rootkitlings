@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/in.h>
 #include <linux/module.h>
@@ -8,25 +7,19 @@
 #include <net/net_namespace.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/socket.h>
 
 static struct proc_dir_entry *entry;
 static struct socket *raw_sock;
 
-static ssize_t sock_read(struct file *file, char __user *buffer,
-			   size_t count, loff_t *position)
+static int sock_read(struct seq_file *m, void *v)
 {
-	char buf[64];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "socket=%s\ntype=RAW\nproto=ICMP\n",
-		       raw_sock ? "open" : "closed");
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "socket=%s\ntype=RAW\nproto=ICMP\n",
+		   raw_sock ? "open" : "closed");
+	return 0;
 }
 
-static const struct proc_ops sock_proc_ops = {
-	.proc_read = sock_read,
-};
 
 static int __init rawsock_init(void)
 {
@@ -39,7 +32,7 @@ static int __init rawsock_init(void)
 		return err;
 	}
 
-	entry = proc_create("rk_rawsock", 0444, NULL, &sock_proc_ops);
+	entry = proc_create_single("rk_rawsock", 0444, NULL, sock_read);
 	if (!entry) {
 		sock_release(raw_sock);
 		raw_sock = NULL;

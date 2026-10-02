@@ -1,1 +1,1 @@
-sock_create(AF_INET, SOCK_STREAM, ...) + kernel_bind() + kernel_listen(). Accept in a kthread loop with kernel_accept(). Read commands with kernel_recvmsg().
+sock_create + kernel_bind + kernel_listen. Accept loop in a kthread.

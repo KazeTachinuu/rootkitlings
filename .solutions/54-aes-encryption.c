@@ -7,6 +7,7 @@
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
 #include <linux/random.h>
+#include <linux/seq_file.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 
@@ -70,32 +71,22 @@ out_tfm:
 	return err;
 }
 
-static ssize_t aes_read(struct file *file, char __user *buffer,
-			   size_t count, loff_t *position)
+static int aes_show(struct seq_file *m, void *v)
 {
-	char buf[256];
-	int len, i, off;
+	int i;
 
-	off = snprintf(buf, sizeof(buf), "algo=aes-cbc\nstatus=%s\nplain=",
-		       crypto_ok ? "ok" : "failed");
+	seq_printf(m, "algo=aes-cbc\nstatus=%s\nplain=",
+		   crypto_ok ? "ok" : "failed");
 	for (i = 0; i < DATA_SIZE; i++)
-		off += snprintf(buf + off, sizeof(buf) - off, "%02x",
-				plaintext[i]);
-	off += snprintf(buf + off, sizeof(buf) - off, "\ncipher=");
+		seq_printf(m, "%02x", plaintext[i]);
+	seq_puts(m, "\ncipher=");
 	for (i = 0; i < DATA_SIZE; i++)
-		off += snprintf(buf + off, sizeof(buf) - off, "%02x",
-				ciphertext[i]);
-	off += snprintf(buf + off, sizeof(buf) - off, "\nmatch=%s\n",
-			memcmp(plaintext, decrypted_buf, DATA_SIZE) == 0 ?
-			"yes" : "no");
-	len = off;
-
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+		seq_printf(m, "%02x", ciphertext[i]);
+	seq_printf(m, "\nmatch=%s\n",
+		   memcmp(plaintext, decrypted_buf, DATA_SIZE) == 0 ?
+		   "yes" : "no");
+	return 0;
 }
-
-static const struct proc_ops aes_proc_ops = {
-	.proc_read = aes_read,
-};
 
 static int __init aes_demo_init(void)
 {
@@ -117,7 +108,7 @@ static int __init aes_demo_init(void)
 
 	crypto_ok = (memcmp(plaintext, decrypted_buf, DATA_SIZE) == 0);
 
-	proc_entry = proc_create("rk_aes", 0444, NULL, &aes_proc_ops);
+	proc_entry = proc_create_single("rk_aes", 0444, NULL, aes_show);
 	if (!proc_entry)
 		return -ENOMEM;
 

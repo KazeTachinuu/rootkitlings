@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 static struct proc_dir_entry *entry;
 static unsigned long read_count;
@@ -33,20 +33,13 @@ static struct kprobe kp_write = {
 	.pre_handler = write_handler,
 };
 
-static ssize_t lifecycle_read(struct file *file, char __user *buffer,
-			       size_t count, loff_t *position)
+static int lifecycle_read(struct seq_file *m, void *v)
 {
-	char buf[64];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "vfs_read=%lu vfs_write=%lu\n",
-		       read_count, write_count);
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "vfs_read=%lu vfs_write=%lu\n",
+		   read_count, write_count);
+	return 0;
 }
 
-static const struct proc_ops lifecycle_ops = {
-	.proc_read = lifecycle_read,
-};
 
 static int __init lifecycle_init(void)
 {
@@ -65,7 +58,7 @@ static int __init lifecycle_init(void)
 		return err;
 	}
 
-	entry = proc_create("rk_lifecycle", 0444, NULL, &lifecycle_ops);
+	entry = proc_create_single("rk_lifecycle", 0444, NULL, lifecycle_read);
 	if (!entry) {
 		unregister_kprobe(&kp_write);
 		unregister_kprobe(&kp_read);

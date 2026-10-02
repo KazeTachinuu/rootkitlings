@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/delay.h>
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 static struct task_struct *heartbeat_thread;
 static struct proc_dir_entry *entry;
@@ -25,23 +25,15 @@ static int heartbeat_loop(void *data)
 	return 0;
 }
 
-static ssize_t heartbeat_show(struct file *file, char __user *buffer,
-			      size_t count, loff_t *position)
+static int heartbeat_show(struct seq_file *m, void *v)
 {
-	char buf[32];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "%lu\n", heartbeat_count);
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "%lu\n", heartbeat_count);
+	return 0;
 }
-
-static const struct proc_ops heartbeat_proc_ops = {
-	.proc_read = heartbeat_show,
-};
 
 static int __init heartbeat_init(void)
 {
-	entry = proc_create("rk_thread", 0444, NULL, &heartbeat_proc_ops);
+	entry = proc_create_single("rk_thread", 0444, NULL, heartbeat_show);
 	if (!entry)
 		return -ENOMEM;
 

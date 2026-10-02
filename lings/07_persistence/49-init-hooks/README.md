@@ -12,7 +12,7 @@ Reptile uses it to launch reverse shells.
 
 ## What you need
 
-From ling 08 you know `proc_create` and `simple_read_from_buffer`.
+From ling 09 you know `proc_create_single` and `seq_file`.
 
 New include:
 

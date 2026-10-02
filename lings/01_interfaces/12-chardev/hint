@@ -1,1 +1,1 @@
-misc_register() with a struct miscdevice creates /dev/<name> automatically. Set .minor = MISC_DYNAMIC_MINOR and .fops to your file_operations.
+struct miscdevice + misc_register. MISC_DYNAMIC_MINOR.

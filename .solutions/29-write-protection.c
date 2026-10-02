@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 #include <linux/pgtable.h>
 
@@ -70,22 +70,13 @@ static int patch_rodata(void)
 	return 0;
 }
 
-static ssize_t wp_show(struct file *file, char __user *buffer,
-		       size_t count, loff_t *position)
+static int wp_show(struct seq_file *m, void *v)
 {
-	char buf[128];
-	int len;
-
-	len = snprintf(buf, sizeof(buf),
-		       "before=0x%lX\nafter=0x%lX\nmodified=%s\n",
-		       0xDEADBEEFUL, after_value,
-		       (after_value == 0xCAFEBABEUL) ? "yes" : "no");
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "before=0x%lX\nafter=0x%lX\nmodified=%s\n",
+		   0xDEADBEEFUL, after_value,
+		   (after_value == 0xCAFEBABEUL) ? "yes" : "no");
+	return 0;
 }
-
-static const struct proc_ops wp_ops = {
-	.proc_read = wp_show,
-};
 
 static int __init wp_bypass_init(void)
 {
@@ -100,7 +91,7 @@ static int __init wp_bypass_init(void)
 	pr_info("rk: marker after=0x%lX (wrote to rodata via PTE manipulation)\n",
 		after_value);
 
-	proc_entry = proc_create("rk_wrprot", 0444, NULL, &wp_ops);
+	proc_entry = proc_create_single("rk_wrprot", 0444, NULL, wp_show);
 	if (!proc_entry)
 		return -ENOMEM;
 

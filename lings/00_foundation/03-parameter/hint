@@ -1,1 +1,1 @@
-module_param(name, charp, 0644) wires a static variable to sysfs. The third argument controls the file permissions under /sys/module/hello/parameters/.
+module_param(name, charp, 0644). The third arg is sysfs permissions.

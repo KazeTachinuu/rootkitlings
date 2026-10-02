@@ -8,9 +8,9 @@ fires a function after a delay. The callback runs in softirq context
 
 ## What you need
 
-You already know how to create `/proc/rk_beacon` with `proc_create` and
-`simple_read_from_buffer` from ling 08. This ling adds a repeating
-timer that increments a counter readable from procfs.
+You already know how to create `/proc/rk_beacon` with `proc_create_single`
+and `seq_file` from ling 09. This ling adds a repeating timer that
+increments a counter readable from procfs.
 
 New includes (on top of ling 08):
 

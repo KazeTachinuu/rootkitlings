@@ -4,15 +4,26 @@ set -Eeuo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PROGRESS="$ROOT_DIR/.progress"
 
-# -- marker output --
+# -- color support --
 
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != dumb ]; then
-    B='\033[1;34m' G='\033[1;32m' Y='\033[1;33m' R='\033[31m' D='\033[2m' N='\033[0m'
+use_color()
+{
+    [ -t "$1" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != dumb ]
+}
+
+# stderr colors (for hdr/ok/warn/die)
+if use_color 2; then
+    B='\033[1;34m' G='\033[1;32m' Y='\033[1;33m' R='\033[1;31m'
+    C='\033[1;36m' W='\033[1;37m' D='\033[2m' N='\033[0m'
 else
-    B= G= Y= R= D= N=
+    B= G= Y= R= C= W= D= N=
 fi
-hdr()  { printf "${B}[*]${N} %s\n" "$1"; }
-ok()   { printf "${G}[+]${N} %s\n" "$1"; }
+
+# -- UI chrome (always stderr) --
+
+hdr()  { printf "${B}[*]${N} %s\n" "$1" >&2; }
+ok()   { printf "${G}[+]${N} %s\n" "$1" >&2; }
+info() { printf "${D}[.]${N} %s\n" "$1" >&2; }
 warn() { printf "${Y}[-]${N} %s\n" "$1" >&2; }
 die()  { printf "${R}[x]${N} %s\n" "$1" >&2; exit 1; }
 
@@ -27,11 +38,10 @@ resolve_ling()
 {
     local n
     [[ $1 =~ ^[0-9]+$ ]] || die "Invalid ling number: '$1'"
-    n=$(printf '%02d' "$1")
+    n=$(printf '%02d' "$((10#$1))")
     local match
     match=$(find "$ROOT_DIR/lings" -mindepth 2 -maxdepth 2 -type d -name "${n}-*" | head -1)
     [[ -n $match ]] || die "Ling $n not found"
-    # Return category/ling relative path
     local cat_dir ling_dir
     cat_dir=$(basename "$(dirname "$match")")
     ling_dir=$(basename "$match")
@@ -49,7 +59,6 @@ resolve_capstone()
 
 ling_name()
 {
-    # Extract just the ling directory name from category/ling path
     basename "$1"
 }
 
@@ -59,6 +68,19 @@ show_source()
         bat --style=plain --paging=never "$1"
     elif command -v batcat &>/dev/null; then
         batcat --style=plain --paging=never "$1"
+    else
+        cat "$1"
+    fi
+}
+
+show_markdown()
+{
+    if command -v glow &>/dev/null; then
+        glow -w 80 "$1"
+    elif command -v bat &>/dev/null; then
+        bat --style=plain --paging=never --language=markdown "$1"
+    elif command -v batcat &>/dev/null; then
+        batcat --style=plain --paging=never --language=markdown "$1"
     else
         cat "$1"
     fi
@@ -93,75 +115,56 @@ list_lings()
 cmd_check()
 {
     local num=${1:-$(current_ling)}
+    local label check_script
 
     if is_capstone "$num"; then
-        cmd_check_capstone "$num"
-        return
+        local cap_name
+        cap_name=$(resolve_capstone "$num")
+        label="capstone $cap_name"
+        check_script="$ROOT_DIR/capstones/$cap_name/check"
+    else
+        local ling
+        ling=$(resolve_ling "$num")
+        label=$(ling_name "$ling")
+        check_script="$ROOT_DIR/lings/$ling/check"
     fi
 
-    local ling
-    ling=$(resolve_ling "$num")
-    local name
-    name=$(ling_name "$ling")
+    [[ -f $check_script ]] || die "No check script for $label"
 
-    local check="$ROOT_DIR/lings/$ling/check"
-    [[ -f $check ]] || die "No check script for $name"
-
-    hdr "Checking $name"
+    hdr "Checking $label"
     make -C "$ROOT_DIR" --quiet
 
     local output
-    output=$("$ROOT_DIR/vm/boot" --check "$check" "$ROOT_DIR/module/hello.ko" 2>&1) || true
+    output=$("$ROOT_DIR/vm/boot" --check "$check_script" "$ROOT_DIR/module/hello.ko" 2>&1) || true
     printf '%s\n' "$output"
 
     case "$output" in
         *"[+] PASSED"*)
-            ok "$name passed"
-            local cur next
-            cur=$(current_ling)
-            next=$(( 10#${name%%-*} + 1 ))
-            if (( next > cur )); then
-                printf '%s' "$next" > "$PROGRESS"
-                printf "\n"
-                local next_ling
-                next_ling=$(resolve_ling "$next" 2>/dev/null) || true
-                if [[ -n $next_ling ]]; then
-                    hdr "Next: $(ling_name "$next_ling")"
-                    printf "  rootkitlings readme %s\n" "$next"
+            ok "$label passed"
+            if ! is_capstone "$num"; then
+                local cur next
+                cur=$(current_ling)
+                next=$(( 10#${label%%-*} + 1 ))
+                if (( next > cur )); then
+                    printf '%s' "$next" > "$PROGRESS"
+                    local next_ling
+                    next_ling=$(resolve_ling "$next" 2>/dev/null) || true
+                    if [[ -n $next_ling ]]; then
+                        printf '\n' >&2
+                        hdr "Next: $(ling_name "$next_ling")"
+                        info "rootkitlings readme $next"
+                    fi
                 fi
             fi
             ;;
         *)
-            printf "\n"
-            warn "Read the contract:  rootkitlings readme $num"
-            warn "Get a nudge:        rootkitlings hint $num"
-            warn "See the solution:   rootkitlings peek $num"
-            die "$name failed"
+            printf '\n' >&2
+            info "rootkitlings readme $num    Read the contract"
+            info "rootkitlings hint $num      Get a nudge"
+            info "rootkitlings peek $num      See the solution"
+            die "$label failed"
             ;;
     esac
-}
-
-cmd_check_capstone()
-{
-    local cap_name
-    cap_name=$(resolve_capstone "$1")
-
-    local check="$ROOT_DIR/capstones/$cap_name/check"
-    [[ -f $check ]] || die "No check script for capstone $cap_name"
-
-    hdr "Checking capstone: $cap_name"
-    make -C "$ROOT_DIR" --quiet
-
-    local output
-    output=$("$ROOT_DIR/vm/boot" --check "$check" "$ROOT_DIR/module/hello.ko" 2>&1) || true
-    printf '%s\n' "$output"
-
-    case "$output" in
-        *"[+] PASSED"*) ;;
-        *) die "capstone $cap_name failed" ;;
-    esac
-
-    ok "capstone $cap_name passed"
 }
 
 cmd_peek()
@@ -173,17 +176,17 @@ cmd_peek()
         cap_name=$(resolve_capstone "$num")
         local sol_dir="$ROOT_DIR/.solutions/capstone-${cap_name}"
         if [[ -d $sol_dir ]]; then
-            hdr "Reference solution: capstone $cap_name (multi-file)"
+            hdr "Reference: capstone $cap_name (multi-file)"
             for f in "$sol_dir"/*.h "$sol_dir"/*.c "$sol_dir"/Kbuild; do
                 [[ -f $f ]] || continue
-                printf "\n${D}--- %s ---${N}\n" "$(basename "$f")"
+                printf "\n${D}--- %s ---${N}\n" "$(basename "$f")" >&2
                 show_source "$f"
             done
             return
         fi
         local sol="$ROOT_DIR/.solutions/capstone-${cap_name}.c"
         [[ -f $sol ]] || die "No reference for capstone $cap_name"
-        hdr "Reference solution: capstone $cap_name"
+        hdr "Reference: capstone $cap_name"
         show_source "$sol"
         return
     fi
@@ -192,11 +195,10 @@ cmd_peek()
     ling=$(resolve_ling "$num")
     local name
     name=$(ling_name "$ling")
-
     local sol="$ROOT_DIR/.solutions/$name.c"
     [[ -f $sol ]] || die "No reference for $name"
 
-    hdr "Reference solution: $name"
+    hdr "Reference: $name"
     show_source "$sol"
 }
 
@@ -218,7 +220,6 @@ cmd_reset()
     ling=$(resolve_ling "$num")
     local name
     name=$(ling_name "$ling")
-
     local sol="$ROOT_DIR/.solutions/$name.c"
     [[ -f $sol ]] || die "No reference for $name"
 
@@ -241,15 +242,20 @@ cmd_readme()
         cap_name=$(resolve_capstone "$num")
         local readme="$ROOT_DIR/capstones/$cap_name/README.md"
         [[ -f $readme ]] || die "No README for capstone $cap_name"
-        cat "$readme"
+        hdr "capstone $cap_name"
+        show_markdown "$readme"
         return
     fi
 
     local ling
     ling=$(resolve_ling "$num")
+    local name
+    name=$(ling_name "$ling")
     local readme="$ROOT_DIR/lings/$ling/README.md"
-    [[ -f $readme ]] || die "No README for $(ling_name "$ling")"
-    cat "$readme"
+    [[ -f $readme ]] || die "No README for $name"
+
+    hdr "$name"
+    show_markdown "$readme"
 }
 
 cmd_hint()
@@ -263,12 +269,34 @@ cmd_hint()
     local hint="$ROOT_DIR/lings/$ling/hint"
 
     if [[ ! -f $hint ]]; then
-        warn "No hint for this ling. Read the README: rootkitlings readme $num"
+        warn "No hint for $name"
+        info "rootkitlings readme $num"
         return
     fi
 
-    hdr "Hint: $name"
+    printf "${C}[*]${N} ${C}Hint: %s${N}\n" "$name" >&2
     cat "$hint"
+}
+
+cmd_template()
+{
+    local num=${1:-$(current_ling)}
+
+    local ling
+    ling=$(resolve_ling "$num")
+    local name
+    name=$(ling_name "$ling")
+    local tmpl="$ROOT_DIR/lings/$ling/template.c"
+
+    if [[ ! -f $tmpl ]]; then
+        warn "No template for $name. It builds on the previous one, keep your code."
+        return
+    fi
+
+    cat "$tmpl"
+    printf '\n' >&2
+    hdr "Template: $name"
+    info "rootkitlings template $num > module/hello.c"
 }
 
 cmd_status()
@@ -281,14 +309,38 @@ cmd_status()
     ling=$(resolve_ling "$cur")
     name=$(ling_name "$ling")
 
-    printf "Progress: %s/%s lings completed\n" "$cur" "$total"
-    printf "Current:  %s\n" "$name"
+    local pct=$(( cur * 100 / total ))
+    local bar_len=30
+    local filled=$(( pct * bar_len / 100 ))
+    local empty=$(( bar_len - filled ))
+
+    # stdout colors
+    local b g y c d w n
+    if use_color 1; then
+        b='\033[1;34m' g='\033[1;32m' y='\033[1;33m'
+        c='\033[1;36m' d='\033[2m' w='\033[1;37m' n='\033[0m'
+    else
+        b= g= y= c= d= w= n=
+    fi
+
     printf "\n"
-    printf "  check     Build and verify current ling\n"
-    printf "  readme    Show the README for current ling\n"
-    printf "  hint      Get a nudge without seeing the solution\n"
-    printf "  peek      Compare your code against the reference\n"
-    printf "  run       Boot an interactive VM with your module\n"
+    printf "${w}  rootkitlings${n}\n"
+    printf "\n"
+    printf "  ${g}%s${n}/${d}%s${n} lings  " "$cur" "$total"
+    printf "${g}%s${d}%s${n} %d%%\n" \
+        "$(printf '%*s' "$filled" '' | tr ' ' '#')" \
+        "$(printf '%*s' "$empty" '' | tr ' ' '.')" \
+        "$pct"
+    printf "\n"
+    printf "  ${c}Current${n}  %s\n" "$name"
+    printf "\n"
+    printf "  ${w}check${n}      Build and verify       ${d}rootkitlings check${n}\n"
+    printf "  ${w}readme${n}     Read the exercise       ${d}rootkitlings readme${n}\n"
+    printf "  ${w}template${n}   Scaffold to stdout      ${d}rootkitlings template > module/hello.c${n}\n"
+    printf "  ${w}hint${n}       Nudge (not the answer)  ${d}rootkitlings hint${n}\n"
+    printf "  ${w}peek${n}       Reference solution      ${d}rootkitlings peek${n}\n"
+    printf "  ${w}run${n}        Interactive VM           ${d}rootkitlings run${n}\n"
+    printf "\n"
 }
 
 cmd_list()
@@ -296,6 +348,12 @@ cmd_list()
     local cur
     cur=$(current_ling)
     local prev_cat=""
+    local b g y d n
+    if use_color 1; then
+        b='\033[1;34m' g='\033[1;32m' y='\033[1;33m' d='\033[2m' n='\033[0m'
+    else
+        b= g= y= d= n=
+    fi
 
     while IFS= read -r path; do
         local cat_dir ling_dir num
@@ -305,48 +363,60 @@ cmd_list()
 
         if [[ $cat_dir != "$prev_cat" ]]; then
             [[ -n $prev_cat ]] && printf '\n'
-            printf "${B}%s${N}\n" "$cat_dir"
+            printf "\n  ${b}%s${n}\n" "$cat_dir"
             prev_cat=$cat_dir
         fi
 
         local check="$path/check"
         if (( num < cur )); then
-            printf "  ${G}[+]${N} %s\n" "$ling_dir"
+            printf "    ${g}+${n} %s\n" "$ling_dir"
+        elif (( num == cur )); then
+            printf "    ${y}>${n} %s  ${y}<< you are here${n}\n" "$ling_dir"
         elif [[ -f $check ]]; then
-            printf "  ${Y}[ ]${N} %s\n" "$ling_dir"
+            printf "    ${d}.${n} %s\n" "$ling_dir"
         else
-            printf "  ${D}[ ] %s${N}\n" "$ling_dir"
+            printf "    ${d}. %s${n}\n" "$ling_dir"
         fi
     done < <(list_lings)
+    printf '\n'
 }
 
 # -- dispatch --
 
 usage()
 {
-    cat <<'EOF'
-Usage: rootkitlings <command> [ling]
+    local b g y c d w n
+    if use_color 1; then
+        b='\033[1;34m' g='\033[1;32m' y='\033[1;33m'
+        c='\033[1;36m' d='\033[2m' w='\033[1;37m' n='\033[0m'
+    else
+        b= g= y= c= d= w= n=
+    fi
 
-Commands:
-  check  [N]  Build and verify ling N (default: current)
-  readme [N]  Show the README for ling N
-  hint   [N]  Get a nudge without seeing the solution
-  peek   [N]  Show the reference solution for ling N
-  reset  [N]  Restore hello.c to ling N reference
-  run         Build and boot interactive VM
-  list        Show all lings and progress
-  status      Show current progress and next steps
-
-Ling numbers: both 3 and 03 work.
-Capstones:    rootkitlings check capstone-0
-
-Workflow:
-  1. rootkitlings readme     Read the exercise
-  2. Edit module/hello.c     Write your solution
-  3. rootkitlings check      Test it in a VM
-  4. rootkitlings hint       Get a nudge (if stuck)
-  5. rootkitlings peek       See the reference solution (last resort)
-EOF
+    printf "\n"
+    printf "  ${w}rootkitlings${n} ${d}<command> [ling]${n}\n"
+    printf "\n"
+    printf "  ${w}check${n}    ${d}[N]${n}  Build and verify ling N\n"
+    printf "  ${w}readme${n}   ${d}[N]${n}  Show the README for ling N\n"
+    printf "  ${w}template${n} ${d}[N]${n}  Print boilerplate scaffold to stdout\n"
+    printf "  ${w}hint${n}     ${d}[N]${n}  Get a nudge without seeing the solution\n"
+    printf "  ${w}peek${n}     ${d}[N]${n}  Show the reference solution\n"
+    printf "  ${w}reset${n}    ${d}[N]${n}  Restore hello.c to ling N reference\n"
+    printf "  ${w}run${n}           Build and boot interactive VM\n"
+    printf "  ${w}list${n}          Show all lings and progress\n"
+    printf "  ${w}status${n}        Show current progress\n"
+    printf "\n"
+    printf "  ${d}Ling numbers: both 3 and 03 work.${n}\n"
+    printf "  ${d}Capstones:    rootkitlings check capstone-0${n}\n"
+    printf "\n"
+    printf "  ${c}Workflow${n}\n"
+    printf "    ${w}1.${n} rootkitlings readme              ${d}Read the exercise${n}\n"
+    printf "    ${w}2.${n} rootkitlings template > hello.c  ${d}Load scaffold${n}\n"
+    printf "    ${w}3.${n} \$EDITOR module/hello.c           ${d}Write your solution${n}\n"
+    printf "    ${w}4.${n} rootkitlings check               ${d}Test it in a VM${n}\n"
+    printf "    ${w}5.${n} rootkitlings hint                ${d}Nudge if stuck${n}\n"
+    printf "    ${w}6.${n} rootkitlings peek                ${d}Reference (last resort)${n}\n"
+    printf "\n"
 }
 
 if (( $# == 0 )); then
@@ -355,14 +425,15 @@ if (( $# == 0 )); then
 fi
 
 case $1 in
-    list)   cmd_list         ;;
-    check)  shift; cmd_check  "$@" ;;
-    hint)   shift; cmd_hint   "$@" ;;
-    peek)   shift; cmd_peek   "$@" ;;
-    reset)  shift; cmd_reset  "$@" ;;
-    readme) shift; cmd_readme "$@" ;;
-    status) cmd_status       ;;
-    run)    shift; cmd_run        ;;
-    -h|--help) usage              ;;
+    list)      cmd_list              ;;
+    check)     shift; cmd_check     "$@" ;;
+    template)  shift; cmd_template  "$@" ;;
+    hint)      shift; cmd_hint      "$@" ;;
+    peek)      shift; cmd_peek      "$@" ;;
+    reset)     shift; cmd_reset     "$@" ;;
+    readme)    shift; cmd_readme    "$@" ;;
+    status)    cmd_status                ;;
+    run)       shift; cmd_run            ;;
+    -h|--help) usage                     ;;
     *) die "Unknown command: $1. Run 'rootkitlings --help' for usage." ;;
 esac

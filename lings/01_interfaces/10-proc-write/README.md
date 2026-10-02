@@ -84,17 +84,31 @@ Your write callback must validate in this exact order:
 
 ## The read callback
 
-You wrote this in ling 08. Same `simple_read_from_buffer` pattern,
-but format the stored `message` with `snprintf` into a local buffer
+Use the `single_open` pattern: a `show` function writes to a
+`seq_file` with `seq_printf`. Format the stored `message`
 (add a trailing `\n`).
 
 ## Registration
 
-Register both callbacks in `struct proc_ops` (you know how from ling 08).
-Use mode `0666` (read and write for everyone) instead of `0444`.
+For a read+write proc entry with seq_file, your `proc_ops` needs:
 
-Init and exit follow the same `proc_create` / `proc_remove` pattern
-from ling 07.
+```c
+static int rk_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, rk_show, NULL);
+}
+
+static const struct proc_ops rk_ops = {
+	.proc_open    = rk_open,
+	.proc_read    = seq_read,
+	.proc_lseek   = seq_lseek,
+	.proc_release = single_release,
+	.proc_write   = rk_write,
+};
+```
+
+Use `proc_create("rk_store", 0666, NULL, &rk_ops)` with mode `0666`
+(read and write for everyone).
 
 ## Try it
 

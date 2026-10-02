@@ -1,1 +1,1 @@
-If a later step in init fails, undo everything the earlier steps set up, in reverse order. The goto-chain pattern (goto err_step2, goto err_step1) is idiomatic kernel style.
+Goto chain: undo earlier steps in reverse on failure.

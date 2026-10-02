@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/ip.h>
 #include <linux/module.h>
@@ -7,6 +6,7 @@
 #include <linux/netfilter_ipv4.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/skbuff.h>
 #include <linux/udp.h>
 
@@ -62,20 +62,13 @@ static struct nf_hook_ops nf_ops = {
 	.priority = NF_IP_PRI_FIRST,
 };
 
-static ssize_t proc_read(struct file *f, char __user *buf,
-			  size_t count, loff_t *pos)
+static int proc_read(struct seq_file *m, void *v)
 {
-	char tmp[64];
-	int len;
-
-	len = snprintf(tmp, sizeof(tmp), "spoofed=%d\nredirect_port=%d\n",
-		       atomic_read(&spoof_count), SPOOF_PORT);
-	return simple_read_from_buffer(buf, count, pos, tmp, len);
+	seq_printf(m, "spoofed=%d\nredirect_port=%d\n",
+		   atomic_read(&spoof_count), SPOOF_PORT);
+	return 0;
 }
 
-static const struct proc_ops dns_proc_ops = {
-	.proc_read = proc_read,
-};
 
 static int __init dns_spoof_init(void)
 {
@@ -85,7 +78,7 @@ static int __init dns_spoof_init(void)
 	if (err)
 		return err;
 
-	proc_entry = proc_create("rk_spoofer", 0444, NULL, &dns_proc_ops);
+	proc_entry = proc_create_single("rk_spoofer", 0444, NULL, proc_read);
 	if (!proc_entry) {
 		nf_unregister_net_hook(&init_net, &nf_ops);
 		return -ENOMEM;

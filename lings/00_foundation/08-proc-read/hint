@@ -1,1 +1,1 @@
-simple_read_from_buffer() handles position tracking and EOF for you. Your read callback returns the byte count or 0 for EOF.
+simple_read_from_buffer handles position and EOF.

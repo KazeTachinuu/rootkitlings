@@ -1,1 +1,1 @@
-INIT_WORK() binds a function to a work_struct. schedule_work() queues it. Work runs in process context (can sleep). Use a timer to schedule work periodically.
+INIT_WORK + schedule_work. Work runs in process context.

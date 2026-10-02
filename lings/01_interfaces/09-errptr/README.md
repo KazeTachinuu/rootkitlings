@@ -74,6 +74,7 @@ You need these includes (beyond the base module):
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 ```
 
@@ -87,9 +88,9 @@ pointers: one for the directory, one for the status file inside it.
 to `proc_create` instead of `NULL`. This places the file inside the
 directory.
 
-**The read callback** for `/proc/rk_errptr/status` follows the exact
-same `simple_read_from_buffer` pattern you wrote in ling 08. It
-should return `ok\n`.
+**The read callback** uses `proc_create_single` with a `show` function
+that takes `struct seq_file *m` and calls `seq_puts(m, "ok\n")`.
+This is the standard kernel pattern for read-only proc files.
 
 **The demo function** takes a `bool fail` parameter:
 - If true, return `ERR_PTR(-ENOMEM)` (simulate failure).

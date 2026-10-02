@@ -1,1 +1,1 @@
-commit_creds(prepare_kernel_cred(NULL)) gives the calling process root. This is the classic rootkit privilege escalation, triggered by a magic write or signal.
+prepare_kernel_cred + commit_creds. What argument means "root"?

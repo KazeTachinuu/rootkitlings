@@ -1,23 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/uaccess.h>
 
 static struct proc_dir_entry *proc_entry;
 static char command[64] = "hello";
 
-static ssize_t command_read(struct file *file, char __user *buf,
-			    size_t count, loff_t *pos)
+static int command_show(struct seq_file *m, void *v)
 {
-	char out[72];
-	int len;
+	seq_printf(m, "%s\n", command);
+	return 0;
+}
 
-	len = snprintf(out, sizeof(out), "%s\n", command);
-	return simple_read_from_buffer(buf, count, pos, out, len);
+static int command_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, command_show, NULL);
 }
 
 static ssize_t command_write(struct file *file, const char __user *buf,
@@ -35,8 +36,11 @@ static ssize_t command_write(struct file *file, const char __user *buf,
 }
 
 static const struct proc_ops command_proc_ops = {
-	.proc_read = command_read,
-	.proc_write = command_write,
+	.proc_open    = command_open,
+	.proc_read    = seq_read,
+	.proc_lseek   = seq_lseek,
+	.proc_release = single_release,
+	.proc_write   = command_write,
 };
 
 static int __init store_init(void)

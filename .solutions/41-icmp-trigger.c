@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/icmp.h>
 #include <linux/init.h>
 #include <linux/ip.h>
@@ -9,6 +8,7 @@
 #include <linux/netfilter_ipv4.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 #define MAGIC_ID 0x1337
 
@@ -46,20 +46,13 @@ static struct nf_hook_ops nf_ops = {
 	.priority = NF_IP_PRI_FIRST,
 };
 
-static ssize_t trigger_read(struct file *file, char __user *buffer,
-			   size_t count, loff_t *position)
+static int trigger_read(struct seq_file *m, void *v)
 {
-	char buf[64];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "triggers=%d\nmagic=0x%x\n",
-		       atomic_read(&trigger_count), MAGIC_ID);
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "triggers=%d\nmagic=0x%x\n",
+		   atomic_read(&trigger_count), MAGIC_ID);
+	return 0;
 }
 
-static const struct proc_ops trigger_proc_ops = {
-	.proc_read = trigger_read,
-};
 
 static int __init icmp_trigger_init(void)
 {
@@ -69,7 +62,7 @@ static int __init icmp_trigger_init(void)
 	if (err)
 		return err;
 
-	entry = proc_create("rk_trigger", 0444, NULL, &trigger_proc_ops);
+	entry = proc_create_single("rk_trigger", 0444, NULL, trigger_read);
 	if (!entry) {
 		nf_unregister_net_hook(&init_net, &nf_ops);
 		return -ENOMEM;

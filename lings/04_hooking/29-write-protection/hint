@@ -1,1 +1,1 @@
-CR0 bit 16 (X86_CR0_WP) controls write protection. Clear it with write_cr0(read_cr0() & ~X86_CR0_WP), modify the table, then restore it.
+CR0 bit 16 (WP). Clear it, write, restore it.

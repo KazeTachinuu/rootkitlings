@@ -1,1 +1,1 @@
-INIT_LIST_HEAD() initializes, list_add_tail() appends, list_for_each_entry() iterates. Embed struct list_head inside your data struct, not the other way around.
+struct list_head embedded in your struct. list_add_tail, list_for_each_entry.

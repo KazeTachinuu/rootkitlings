@@ -1,1 +1,1 @@
-Add .proc_write to your proc_ops. Use copy_from_user() to safely read the userspace buffer. Return the number of bytes consumed.
+.proc_write callback. copy_from_user. Return bytes consumed.

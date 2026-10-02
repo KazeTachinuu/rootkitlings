@@ -1,1 +1,1 @@
-Return a negative errno (like -ENOMEM) from init to make the module fail to load. The kernel will NOT call your exit function if init fails.
+Return a negative errno from init. Exit won't run.

@@ -1,1 +1,1 @@
-current_uid() and current_euid() return kuid_t structs. Use .val or from_kuid() to get the numeric UID. Include <linux/cred.h>.
+current_uid(), current_euid(). The .val field gives the number.

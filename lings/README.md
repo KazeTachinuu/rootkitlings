@@ -155,6 +155,7 @@ Course design informed by analysis of:
 
 ## Upstream references
 
+- [Linux Kernel Module Programming Guide](https://github.com/sysprog21/lkmpg) (community-maintained, covers module basics through chardev)
 - [External modules](https://docs.kernel.org/kbuild/modules.html)
 - [Module parameters](https://docs.kernel.org/admin-guide/kernel-parameters.html)
 - [Memory allocation](https://docs.kernel.org/core-api/mm-api.html)

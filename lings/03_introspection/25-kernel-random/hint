@@ -1,1 +1,1 @@
-get_random_bytes() fills a buffer with kernel-quality randomness. get_random_u32() returns a single random 32-bit value. Include <linux/random.h>.
+get_random_bytes fills a buffer. get_random_u32 returns one value.

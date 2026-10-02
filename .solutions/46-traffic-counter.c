@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/ip.h>
 #include <linux/module.h>
@@ -8,6 +7,7 @@
 #include <linux/netfilter_ipv4.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 static struct proc_dir_entry *entry;
 static atomic64_t bytes_in = ATOMIC64_INIT(0);
@@ -50,23 +50,15 @@ static struct nf_hook_ops nf_ops[] = {
 	},
 };
 
-static ssize_t counter_read(struct file *file, char __user *buffer,
-			   size_t count, loff_t *position)
+static int counter_read(struct seq_file *m, void *v)
 {
-	char buf[128];
-	int len;
-
-	len = snprintf(buf, sizeof(buf),
-		       "rx_packets=%d\nrx_bytes=%lld\n"
+	seq_printf(m, "rx_packets=%d\nrx_bytes=%lld\n"
 		       "tx_packets=%d\ntx_bytes=%lld\n",
-		       atomic_read(&pkts_in), atomic64_read(&bytes_in),
+		   atomic_read(&pkts_in), atomic64_read(&bytes_in),
 		       atomic_read(&pkts_out), atomic64_read(&bytes_out));
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	return 0;
 }
 
-static const struct proc_ops counter_proc_ops = {
-	.proc_read = counter_read,
-};
 
 static int __init counter_init(void)
 {
@@ -76,7 +68,7 @@ static int __init counter_init(void)
 	if (err)
 		return err;
 
-	entry = proc_create("rk_counter", 0444, NULL, &counter_proc_ops);
+	entry = proc_create_single("rk_counter", 0444, NULL, counter_read);
 	if (!entry) {
 		nf_unregister_net_hooks(&init_net, nf_ops, ARRAY_SIZE(nf_ops));
 		return -ENOMEM;

@@ -1,1 +1,1 @@
-Your module needs module_init() and module_exit() macros pointing to your init and exit functions. Both functions use pr_info() from <linux/printk.h>.
+module_init, module_exit, pr_info.

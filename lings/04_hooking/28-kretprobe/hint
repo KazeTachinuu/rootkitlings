@@ -1,1 +1,1 @@
-Fill a struct kretprobe with .handler (return handler), .entry_handler (optional), and .kp.symbol_name. register_kretprobe() attaches it.
+struct kretprobe: .handler + .kp.symbol_name. register_kretprobe.

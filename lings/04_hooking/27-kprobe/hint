@@ -1,1 +1,1 @@
-Fill a struct kprobe with .symbol_name and .pre_handler. register_kprobe() attaches it. The handler runs before the target function executes.
+struct kprobe: .symbol_name + .pre_handler. register_kprobe.

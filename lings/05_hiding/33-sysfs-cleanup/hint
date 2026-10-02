@@ -1,1 +1,1 @@
-The module's kobject lives at THIS_MODULE->mkobj.kobj. kobject_del() removes the /sys/module/<name> entry. Call kobject_del() after list_del().
+kobject_del on THIS_MODULE->mkobj.kobj. After list_del.

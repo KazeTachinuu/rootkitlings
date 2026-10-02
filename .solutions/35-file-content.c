@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
@@ -140,20 +141,11 @@ static void remove_hook(void)
 	ftrace_set_filter_ip(&read_ops, sys_read_addr, 1, 0);
 }
 
-static ssize_t stats_show(struct file *file, char __user *buf,
-			  size_t count, loff_t *pos)
+static int stats_show(struct seq_file *m, void *v)
 {
-	char tmp[64];
-	int len;
-
-	len = snprintf(tmp, sizeof(tmp), "redactions=%d\n",
-		       atomic_read(&redact_count));
-	return simple_read_from_buffer(buf, count, pos, tmp, len);
+	seq_printf(m, "redactions=%d\n", atomic_read(&redact_count));
+	return 0;
 }
-
-static const struct proc_ops stats_ops = {
-	.proc_read = stats_show,
-};
 
 static int __init redactor_init(void)
 {
@@ -165,7 +157,7 @@ static int __init redactor_init(void)
 		return err;
 	}
 
-	proc_entry = proc_create("rk_content", 0444, NULL, &stats_ops);
+	proc_entry = proc_create_single("rk_content", 0444, NULL, stats_show);
 	if (!proc_entry) {
 		remove_hook();
 		return -ENOMEM;

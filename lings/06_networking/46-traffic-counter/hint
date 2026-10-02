@@ -1,1 +1,1 @@
-Hook NF_INET_PRE_ROUTING and NF_INET_LOCAL_OUT. Increment atomic counters for packets and bytes. Expose totals via /proc. Always return NF_ACCEPT.
+Two netfilter hooks (PRE_ROUTING + LOCAL_OUT). Atomic counters for packets and bytes.

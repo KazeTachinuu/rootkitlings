@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 #include <linux/uidgid.h>
@@ -47,21 +48,25 @@ static ssize_t trigger_write(struct file *file, const char __user *buffer,
 	return count;
 }
 
-static ssize_t trigger_read(struct file *file, char __user *buffer,
-			   size_t count, loff_t *position)
+static int trigger_read(struct seq_file *m, void *v)
 {
-	char buf[64];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "triggers=%d\nuid=%u\n",
-		       atomic_read(&trigger_count),
+	seq_printf(m, "triggers=%d\nuid=%u\n",
+		   atomic_read(&trigger_count),
 		       from_kuid(&init_user_ns, current_uid()));
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	return 0;
+}
+
+static int trigger_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, trigger_read, NULL);
 }
 
 static const struct proc_ops trigger_proc_ops = {
-	.proc_read  = trigger_read,
-	.proc_write = trigger_write,
+	.proc_open    = trigger_open,
+	.proc_read    = seq_read,
+	.proc_lseek   = seq_lseek,
+	.proc_release = single_release,
+	.proc_write   = trigger_write,
 };
 
 static int __init privesc_init(void)

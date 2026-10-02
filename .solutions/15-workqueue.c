@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/timer.h>
 #include <linux/workqueue.h>
 
@@ -26,23 +26,15 @@ static void schedule_exfil(struct timer_list *t)
 	mod_timer(&schedule_timer, jiffies + HZ);
 }
 
-static ssize_t exfil_count_show(struct file *file, char __user *buffer,
-				size_t count, loff_t *position)
+static int exfil_show(struct seq_file *m, void *v)
 {
-	char buf[32];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "%lu\n", exfil_count);
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "%lu\n", exfil_count);
+	return 0;
 }
-
-static const struct proc_ops exfil_proc_ops = {
-	.proc_read = exfil_count_show,
-};
 
 static int __init exfil_init(void)
 {
-	entry = proc_create("rk_worker", 0444, NULL, &exfil_proc_ops);
+	entry = proc_create_single("rk_worker", 0444, NULL, exfil_show);
 	if (!entry)
 		return -ENOMEM;
 

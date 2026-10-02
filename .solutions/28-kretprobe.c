@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/err.h>
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 static struct proc_dir_entry *proc_entry;
 static unsigned long success_count;
@@ -30,20 +30,11 @@ static struct kretprobe krp = {
 	.kp.symbol_name = "vfs_read",
 };
 
-static ssize_t stats_show(struct file *file, char __user *buffer,
-			   size_t count, loff_t *position)
+static int stats_show(struct seq_file *m, void *v)
 {
-	char buf[64];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "success=%lu failed=%lu\n",
-		       success_count, fail_count);
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "success=%lu failed=%lu\n", success_count, fail_count);
+	return 0;
 }
-
-static const struct proc_ops stats_ops = {
-	.proc_read = stats_show,
-};
 
 static int __init retprobe_init(void)
 {
@@ -57,7 +48,7 @@ static int __init retprobe_init(void)
 
 	pr_info("rk: kretprobe registered on %s\n", krp.kp.symbol_name);
 
-	proc_entry = proc_create("rk_retprobe", 0444, NULL, &stats_ops);
+	proc_entry = proc_create_single("rk_retprobe", 0444, NULL, stats_show);
 	if (!proc_entry) {
 		unregister_kretprobe(&krp);
 		return -ENOMEM;

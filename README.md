@@ -122,6 +122,15 @@ All module execution happens in the disposable [QEMU VM](vm/README.md).
 Ling 02 teaches debugging: dmesg, printk levels, reading a kernel oops,
 and common mistakes. Read it before your first real bug.
 
+## Beyond rootkits
+
+Every technique here is a kernel module primitive. The same mechanisms
+power legitimate software: device drivers (procfs, chardev, ioctl),
+monitoring tools (kprobes, ftrace), security modules (credential hooks,
+netfilter), and filesystem features (VFS callbacks). Understanding how
+rootkits abuse these interfaces is exactly what makes you effective at
+defending them.
+
 ## Multi-file modules
 
 Ling 01 teaches multi-file builds: `hello-y` in Kbuild, shared headers,

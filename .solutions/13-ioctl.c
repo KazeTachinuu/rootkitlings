@@ -6,6 +6,7 @@
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/printk.h>
+#include <linux/seq_file.h>
 #include <linux/uaccess.h>
 
 #define CMD_SET_MSG _IOW('H', 1, char[64])
@@ -13,14 +14,15 @@
 
 static char command[64] = "hello";
 
-static ssize_t command_read(struct file *file, char __user *buf,
-			    size_t count, loff_t *pos)
+static int command_show(struct seq_file *m, void *v)
 {
-	char out[72];
-	int len;
+	seq_printf(m, "%s\n", command);
+	return 0;
+}
 
-	len = snprintf(out, sizeof(out), "%s\n", command);
-	return simple_read_from_buffer(buf, count, pos, out, len);
+static int command_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, command_show, NULL);
 }
 
 static ssize_t command_write(struct file *file, const char __user *buf,
@@ -63,7 +65,10 @@ static long command_ioctl(struct file *file, unsigned int cmd,
 
 static const struct file_operations command_fops = {
 	.owner          = THIS_MODULE,
-	.read           = command_read,
+	.open           = command_open,
+	.read           = seq_read,
+	.llseek         = seq_lseek,
+	.release        = single_release,
 	.write          = command_write,
 	.unlocked_ioctl = command_ioctl,
 };

@@ -1,1 +1,1 @@
-Write a script or modify an init file using kernel_write(). The module recreates itself on boot by having the init system load it.
+kernel_write to an init script. The module reloads itself on boot.

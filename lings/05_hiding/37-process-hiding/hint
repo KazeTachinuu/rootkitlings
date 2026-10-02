@@ -1,1 +1,1 @@
-Processes appear in /proc as numbered directories. Hook getdents64 on /proc and filter entries whose d_name matches the PID you want to hide.
+Hook getdents64 on /proc. Filter entries matching the target PID.

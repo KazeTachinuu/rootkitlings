@@ -1,1 +1,1 @@
-Use crypto_alloc_sync_skcipher() for AES. Set the key with crypto_sync_skcipher_setkey(). Build a SYNC_SKCIPHER_REQUEST and call crypto_sync_skcipher_encrypt().
+crypto_alloc_sync_skcipher("cbc(aes)"). Set key, build request, encrypt.

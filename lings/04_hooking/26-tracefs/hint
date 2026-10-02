@@ -1,1 +1,1 @@
-tracefs is mounted at /sys/kernel/tracing (or /sys/kernel/debug/tracing). Use tracefs_create_file() for custom entries. Include <linux/tracefs.h>.
+tracefs_create_file. Mounted at /sys/kernel/tracing.

@@ -1,1 +1,1 @@
-Ports appear in /proc/net/tcp and /proc/net/tcp6. Hook the seq_show function for these files and skip lines containing your hidden port number.
+Hook seq_show for /proc/net/tcp. Skip lines with your port.

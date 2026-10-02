@@ -1,1 +1,1 @@
-Use skb_ensure_writable() before modifying any skb data. After changing IP/TCP/UDP fields, recompute checksums with ip_send_check() and recalculate transport checksums.
+skb_ensure_writable before touching packet data. Recompute checksums after.

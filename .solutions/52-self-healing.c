@@ -5,21 +5,23 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 static struct proc_dir_entry *entry;
 static struct task_struct *watchdog;
 static atomic_t heal_count = ATOMIC_INIT(0);
 static atomic_t kill_requested = ATOMIC_INIT(0);
 
-static ssize_t heal_read(struct file *file, char __user *buffer,
-			 size_t count, loff_t *position)
+static int heal_show(struct seq_file *m, void *v)
 {
-	char buf[64];
-	int len;
+	seq_printf(m, "heals=%d\nwatchdog=active\n",
+		   atomic_read(&heal_count));
+	return 0;
+}
 
-	len = snprintf(buf, sizeof(buf), "heals=%d\nwatchdog=active\n",
-		       atomic_read(&heal_count));
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+static int heal_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, heal_show, NULL);
 }
 
 static ssize_t heal_write(struct file *f, const char __user *buf,
@@ -43,8 +45,11 @@ static ssize_t heal_write(struct file *f, const char __user *buf,
 }
 
 static const struct proc_ops heal_proc_ops = {
-	.proc_read  = heal_read,
-	.proc_write = heal_write,
+	.proc_open    = heal_open,
+	.proc_read    = seq_read,
+	.proc_lseek   = seq_lseek,
+	.proc_release = single_release,
+	.proc_write   = heal_write,
 };
 
 static int watchdog_fn(void *data)

@@ -1,1 +1,1 @@
-kallsyms_lookup_name is unexported since 5.7. Use the kprobe trick: register a kprobe on the symbol name, read kp.addr, unregister immediately.
+The kprobe trick: register on the name, read kp.addr, unregister.

@@ -130,6 +130,11 @@ The check script verifies:
 > write interface, no authentication, and the entry is visible in a directory listing.
 > Category 01 (interfaces) adds input. Category 05 (hiding) removes the visibility.
 
+This ling teaches the raw VFS callback so you understand what happens
+under the hood. From ling 09 onward, use `proc_create_single` with
+`seq_file` instead: it handles position tracking, buffer management,
+and multi-read automatically.
+
 Foundation complete. Next: [Capstone 0: Message board](../../../capstones/0-message-board/README.md).
 Then continue from the [roadmap](../../README.md).
 

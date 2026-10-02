@@ -1,1 +1,1 @@
-Use a kthread or timer to periodically check if the module's backing file still exists. If deleted, recreate it from the in-memory module image.
+Periodic kthread or timer. Check if backing file exists, recreate if not.

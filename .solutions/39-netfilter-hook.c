@@ -8,6 +8,7 @@
 #include <linux/netfilter_ipv4.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 static struct proc_dir_entry *entry;
 static atomic_t pkt_count = ATOMIC_INIT(0);
@@ -26,19 +27,11 @@ static struct nf_hook_ops nf_ops = {
 	.priority = NF_IP_PRI_FIRST,
 };
 
-static ssize_t nf_proc_read(struct file *file, char __user *buffer,
-			    size_t count, loff_t *position)
+static int nf_proc_show(struct seq_file *m, void *v)
 {
-	char buf[32];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "%d\n", atomic_read(&pkt_count));
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "%d\n", atomic_read(&pkt_count));
+	return 0;
 }
-
-static const struct proc_ops nf_proc_ops = {
-	.proc_read = nf_proc_read,
-};
 
 static int __init nfhook_init(void)
 {
@@ -48,7 +41,7 @@ static int __init nfhook_init(void)
 	if (err)
 		return err;
 
-	entry = proc_create("rk_nfhook", 0444, NULL, &nf_proc_ops);
+	entry = proc_create_single("rk_nfhook", 0444, NULL, nf_proc_show);
 	if (!entry) {
 		nf_unregister_net_hook(&init_net, &nf_ops);
 		return -ENOMEM;

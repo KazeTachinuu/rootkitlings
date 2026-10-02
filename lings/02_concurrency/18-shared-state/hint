@@ -1,1 +1,1 @@
-Two kthreads incrementing a shared counter without locking will lose updates. This ling demonstrates the race; ling 19 fixes it.
+Two kthreads, shared counter, no lock. Watch it lose updates.

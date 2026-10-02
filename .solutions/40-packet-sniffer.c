@@ -9,6 +9,7 @@
 #include <linux/netfilter_ipv4.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/tcp.h>
 
 static struct proc_dir_entry *entry;
@@ -42,20 +43,12 @@ static struct nf_hook_ops nf_ops = {
 	.priority = NF_IP_PRI_FIRST,
 };
 
-static ssize_t sniff_read(struct file *file, char __user *buffer,
-			   size_t count, loff_t *position)
+static int sniff_show(struct seq_file *m, void *v)
 {
-	char buf[64];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "tcp=%d\nudp=%d\n",
-		       atomic_read(&tcp_count), atomic_read(&udp_count));
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "tcp=%d\nudp=%d\n",
+		   atomic_read(&tcp_count), atomic_read(&udp_count));
+	return 0;
 }
-
-static const struct proc_ops sniff_proc_ops = {
-	.proc_read = sniff_read,
-};
 
 static int __init sniffer_init(void)
 {
@@ -65,7 +58,7 @@ static int __init sniffer_init(void)
 	if (err)
 		return err;
 
-	entry = proc_create("rk_sniffer", 0444, NULL, &sniff_proc_ops);
+	entry = proc_create_single("rk_sniffer", 0444, NULL, sniff_show);
 	if (!entry) {
 		nf_unregister_net_hook(&init_net, &nf_ops);
 		return -ENOMEM;

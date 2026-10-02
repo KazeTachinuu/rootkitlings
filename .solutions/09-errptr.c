@@ -1,28 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/err.h>
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 
 static struct proc_dir_entry *dir;
 static struct proc_dir_entry *status_entry;
 
-static ssize_t status_proc_read(struct file *file, char __user *buf,
-				size_t count, loff_t *pos)
+static int status_show(struct seq_file *m, void *v)
 {
-	static const char msg[] = "ok\n";
-
-	return simple_read_from_buffer(buf, count, pos,
-				       msg, sizeof(msg) - 1);
+	seq_puts(m, "ok\n");
+	return 0;
 }
-
-static const struct proc_ops status_proc_ops = {
-	.proc_read = status_proc_read,
-};
 
 static void *try_alloc(bool fail)
 {
@@ -39,7 +32,7 @@ static int __init errptr_init(void)
 	if (!dir)
 		return -ENOMEM;
 
-	status_entry = proc_create("status", 0444, dir, &status_proc_ops);
+	status_entry = proc_create_single("status", 0444, dir, status_show);
 	if (!status_entry) {
 		proc_remove(dir);
 		return -ENOMEM;

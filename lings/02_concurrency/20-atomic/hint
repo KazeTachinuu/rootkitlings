@@ -1,1 +1,1 @@
-atomic_set() initializes, atomic_inc() increments, atomic_read() reads. No lock needed because the CPU guarantees atomicity for these operations.
+atomic_inc, atomic_read. No lock needed.

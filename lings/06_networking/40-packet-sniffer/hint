@@ -1,1 +1,1 @@
-Use a netfilter hook at NF_INET_PRE_ROUTING. Extract the IP header with ip_hdr(skb), then check protocol and parse TCP/UDP headers for port info.
+NF_INET_PRE_ROUTING hook. ip_hdr(skb) for the IP header.

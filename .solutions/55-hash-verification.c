@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <crypto/hash.h>
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 #define SHA256_DIGEST_SIZE 32
 
@@ -38,26 +38,13 @@ static int compute_sha256(const void *data, unsigned int len, u8 *out)
 	return err;
 }
 
-static ssize_t hash_read(struct file *file, char __user *buffer,
-			   size_t count, loff_t *position)
+static int hash_read(struct seq_file *m, void *v)
 {
-	char buf[128];
-	int len, i, off;
-
-	off = snprintf(buf, sizeof(buf), "algo=sha256\nstatus=%s\nhash=",
-		       hash_ok ? "ok" : "failed");
-	for (i = 0; i < SHA256_DIGEST_SIZE; i++)
-		off += snprintf(buf + off, sizeof(buf) - off, "%02x",
-				digest[i]);
-	off += snprintf(buf + off, sizeof(buf) - off, "\n");
-	len = off;
-
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "algo=sha256\nstatus=%s\nhash=",
+		   hash_ok ? "ok" : "failed");
+	return 0;
 }
 
-static const struct proc_ops hash_proc_ops = {
-	.proc_read = hash_read,
-};
 
 static int __init hashverify_init(void)
 {
@@ -66,7 +53,7 @@ static int __init hashverify_init(void)
 	err = compute_sha256(test_data, sizeof(test_data) - 1, digest);
 	hash_ok = (err == 0);
 
-	entry = proc_create("rk_hash", 0444, NULL, &hash_proc_ops);
+	entry = proc_create_single("rk_hash", 0444, NULL, hash_read);
 	if (!entry)
 		return -ENOMEM;
 

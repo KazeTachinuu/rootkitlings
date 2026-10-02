@@ -8,6 +8,7 @@
 #include <linux/netfilter_ipv4.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/skbuff.h>
 #include <linux/udp.h>
 #include <net/ip.h>
@@ -56,21 +57,12 @@ static struct nf_hook_ops nf_ops = {
 	.priority = NF_IP_PRI_FIRST,
 };
 
-static ssize_t mangle_read(struct file *file, char __user *buffer,
-			    size_t count, loff_t *position)
+static int mangle_show(struct seq_file *m, void *v)
 {
-	char buf[96];
-	int len;
-
-	len = snprintf(buf, sizeof(buf),
-		       "trap_port=7777\nredir_port=9999\nredirected=%d\n",
-		       atomic_read(&redirected));
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "trap_port=7777\nredir_port=9999\nredirected=%d\n",
+		   atomic_read(&redirected));
+	return 0;
 }
-
-static const struct proc_ops mangle_proc_ops = {
-	.proc_read = mangle_read,
-};
 
 static int __init mangler_init(void)
 {
@@ -80,7 +72,7 @@ static int __init mangler_init(void)
 	if (err)
 		return err;
 
-	entry = proc_create("rk_mangler", 0444, NULL, &mangle_proc_ops);
+	entry = proc_create_single("rk_mangler", 0444, NULL, mangle_show);
 	if (!entry) {
 		nf_unregister_net_hook(&init_net, &nf_ops);
 		return -ENOMEM;

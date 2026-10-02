@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
@@ -17,17 +17,18 @@ struct log_entry {
 static LIST_HEAD(entries);
 static struct proc_dir_entry *proc_entry;
 
-static ssize_t entries_read(struct file *file, char __user *buf,
-			    size_t count, loff_t *pos)
+static int entries_show(struct seq_file *m, void *v)
 {
 	struct log_entry *e;
-	char out[512];
-	int len = 0;
 
 	list_for_each_entry(e, &entries, node)
-		len += snprintf(out + len, sizeof(out) - len, "%s\n", e->text);
+		seq_printf(m, "%s\n", e->text);
+	return 0;
+}
 
-	return simple_read_from_buffer(buf, count, pos, out, len);
+static int entries_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, entries_show, NULL);
 }
 
 static ssize_t entries_write(struct file *file, const char __user *buf,
@@ -56,8 +57,11 @@ static ssize_t entries_write(struct file *file, const char __user *buf,
 }
 
 static const struct proc_ops entries_proc_ops = {
-	.proc_read = entries_read,
-	.proc_write = entries_write,
+	.proc_open    = entries_open,
+	.proc_read    = seq_read,
+	.proc_lseek   = seq_lseek,
+	.proc_release = single_release,
+	.proc_write   = entries_write,
 };
 
 static void purge_entries(void)

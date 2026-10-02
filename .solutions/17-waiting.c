@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/uaccess.h>
 #include <linux/wait.h>
 
@@ -33,14 +33,15 @@ static int waiter_loop(void *data)
 	return 0;
 }
 
-static ssize_t trigger_count_show(struct file *file, char __user *buffer,
-				  size_t count, loff_t *position)
+static int trigger_show(struct seq_file *m, void *v)
 {
-	char buf[32];
-	int len;
+	seq_printf(m, "%lu\n", trigger_count);
+	return 0;
+}
 
-	len = snprintf(buf, sizeof(buf), "%lu\n", trigger_count);
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+static int trigger_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, trigger_show, NULL);
 }
 
 static ssize_t trigger_signal(struct file *file, const char __user *buffer,
@@ -62,8 +63,11 @@ static ssize_t trigger_signal(struct file *file, const char __user *buffer,
 }
 
 static const struct proc_ops trigger_proc_ops = {
-	.proc_read = trigger_count_show,
-	.proc_write = trigger_signal,
+	.proc_open    = trigger_open,
+	.proc_read    = seq_read,
+	.proc_lseek   = seq_lseek,
+	.proc_release = single_release,
+	.proc_write   = trigger_signal,
 };
 
 static int __init trigger_init(void)

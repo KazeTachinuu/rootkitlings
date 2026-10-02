@@ -1,1 +1,1 @@
-Fill a struct nf_hook_ops with .hook, .pf = NFPROTO_IPV4, .hooknum, .priority. Call nf_register_net_hook(&init_net, &ops). Return NF_ACCEPT or NF_DROP.
+struct nf_hook_ops + nf_register_net_hook. Return NF_ACCEPT or NF_DROP.

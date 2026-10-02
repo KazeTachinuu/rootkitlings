@@ -1,1 +1,1 @@
-sock_create(AF_INET, SOCK_RAW, IPPROTO_RAW, &sock) creates a raw socket. Build the IP+payload manually. Use kernel_sendmsg() to send.
+sock_create with SOCK_RAW + IPPROTO_RAW. Build headers manually.

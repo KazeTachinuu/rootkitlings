@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/atomic.h>
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 #define ITERATIONS 10000
 
@@ -30,24 +30,16 @@ static int atomic_increment(void *data)
 	return 0;
 }
 
-static ssize_t counter_show(struct file *file, char __user *buffer,
-			    size_t count, loff_t *position)
+static int counter_show(struct seq_file *m, void *v)
 {
-	char buf[64];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "count=%d running=%d\n",
-		       atomic_read(&ops_counter), atomic_read(&active));
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "count=%d running=%d\n",
+		   atomic_read(&ops_counter), atomic_read(&active));
+	return 0;
 }
-
-static const struct proc_ops atomic_proc_ops = {
-	.proc_read = counter_show,
-};
 
 static int __init atomic_init(void)
 {
-	entry = proc_create("rk_atomic", 0444, NULL, &atomic_proc_ops);
+	entry = proc_create_single("rk_atomic", 0444, NULL, counter_show);
 	if (!entry)
 		return -ENOMEM;
 

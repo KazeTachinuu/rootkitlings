@@ -98,8 +98,8 @@ Walk the list, formatting each entry into a buffer:
 
 Use `list_for_each_entry(e, &entries, node)` to iterate. The third
 argument is the field name of the `list_head` inside your struct.
-Format each entry with `snprintf` into a buffer, then use
-`simple_read_from_buffer` as in ling 08.
+Format each entry with `seq_printf` inside the `show` function,
+using the `single_open` pattern from ling 10.
 
 ## Cleanup: the safe iterator
 

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/timer.h>
 
 static struct timer_list beacon_timer;
@@ -19,23 +19,15 @@ static void beacon_fire(struct timer_list *t)
 	mod_timer(&beacon_timer, jiffies + HZ);
 }
 
-static ssize_t beacon_count_show(struct file *file, char __user *buffer,
-				 size_t count, loff_t *position)
+static int beacon_show(struct seq_file *m, void *v)
 {
-	char buf[32];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "%lu\n", beacon_count);
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "%lu\n", beacon_count);
+	return 0;
 }
-
-static const struct proc_ops beacon_proc_ops = {
-	.proc_read = beacon_count_show,
-};
 
 static int __init beacon_init(void)
 {
-	entry = proc_create("rk_beacon", 0444, NULL, &beacon_proc_ops);
+	entry = proc_create_single("rk_beacon", 0444, NULL, beacon_show);
 	if (!entry)
 		return -ENOMEM;
 

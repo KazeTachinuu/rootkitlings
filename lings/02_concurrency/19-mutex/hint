@@ -1,1 +1,1 @@
-mutex_init() once in init, then mutex_lock()/mutex_unlock() around the critical section in each kthread. The counter should reach exactly 20000.
+mutex_lock/mutex_unlock around the critical section. Counter hits 20000.

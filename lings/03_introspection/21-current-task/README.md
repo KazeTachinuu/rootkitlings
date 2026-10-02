@@ -8,8 +8,8 @@ process. A rootkit uses this to filter: only respond to the right caller.
 
 ## What you need
 
-You already know `proc_create` and `simple_read_from_buffer` from
-ling 08. This ling reads process information from `current`.
+You already know `proc_create_single` and `seq_file` from
+ling 09. This ling reads process information from `current`.
 
 New includes:
 

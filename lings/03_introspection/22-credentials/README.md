@@ -49,7 +49,7 @@ callback:
 
 1. Calls `current_cred()` to get the caller's credentials.
 2. Formats `uid=N gid=N` using `from_kuid` and `from_kgid`.
-3. Returns the string with `simple_read_from_buffer`.
+3. Returns the string with `seq_printf` via `proc_create_single`.
 
 `current_cred()` returns a `const` pointer. You cannot modify
 credentials through it. That comes in ling 23.

@@ -4,22 +4,20 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/umh.h>
 
 #define PERSIST_PATH "/etc/modules-load.d/hello.conf"
 
 static struct proc_dir_entry *proc_entry;
 
-static ssize_t persist_read(struct file *file, char __user *buf,
-			    size_t count, loff_t *pos)
+static int persist_read(struct seq_file *m, void *v)
 {
-	char out[128];
-	int len = snprintf(out, sizeof(out),
-			   "path=%s\ncontent=hello\n", PERSIST_PATH);
-	return simple_read_from_buffer(buf, count, pos, out, len);
+	seq_printf(m, "path=%s\ncontent=hello\n",
+		   PERSIST_PATH);
+	return 0;
 }
 
-static const struct proc_ops persist_ops = { .proc_read = persist_read };
 
 static int __init persist_init(void)
 {
@@ -36,7 +34,7 @@ static int __init persist_init(void)
 	kernel_write(f, "hello\n", 6, &off);
 	filp_close(f, NULL);
 
-	proc_entry = proc_create("rk_boot", 0444, NULL, &persist_ops);
+	proc_entry = proc_create_single("rk_boot", 0444, NULL, persist_read);
 	if (!proc_entry)
 		return -ENOMEM;
 

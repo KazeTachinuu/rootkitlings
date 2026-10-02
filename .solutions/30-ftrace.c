@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/ftrace.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 static struct proc_dir_entry *proc_entry;
 static unsigned long open_count;
@@ -64,19 +64,13 @@ static void remove_hook(void)
 	ftrace_set_filter_ip(&hook_ops, target_addr, 1, 0);
 }
 
-static ssize_t counter_show(struct file *file, char __user *buffer,
-			    size_t count, loff_t *position)
+static int counter_show(struct seq_file *m, void *v)
 {
-	char buf[32];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "%lu\n", open_count);
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "%lu\n",
+		   open_count);
+	return 0;
 }
 
-static const struct proc_ops counter_ops = {
-	.proc_read = counter_show,
-};
 
 static int __init ftrace_hook_init(void)
 {
@@ -86,7 +80,7 @@ static int __init ftrace_hook_init(void)
 	if (err)
 		return err;
 
-	proc_entry = proc_create("rk_ftrace", 0444, NULL, &counter_ops);
+	proc_entry = proc_create_single("rk_ftrace", 0444, NULL, counter_show);
 	if (!proc_entry) {
 		remove_hook();
 		return -ENOMEM;

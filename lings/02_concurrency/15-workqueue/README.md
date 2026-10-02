@@ -19,8 +19,8 @@ The timer decides WHEN. The workqueue decides WHERE (in which context).
 
 ## What you already know
 
-From ling 14: `timer_setup`, `mod_timer`, timer callbacks. From ling 08:
-proc entries and `simple_read_from_buffer`.
+From ling 14: `timer_setup`, `mod_timer`, timer callbacks. From ling 09:
+proc entries with `proc_create_single` and `seq_file`.
 
 ## New API
 

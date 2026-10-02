@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/cred.h>
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/uaccess.h>
 #include <linux/uidgid.h>
 
@@ -33,16 +33,17 @@ static int escalate_to_root(void)
 	return 0;
 }
 
-static ssize_t uid_show(struct file *file, char __user *buffer,
-			size_t count, loff_t *position)
+static int uid_show(struct seq_file *m, void *v)
 {
 	const struct cred *cred = current_cred();
-	char buf[32];
-	int len;
 
-	len = snprintf(buf, sizeof(buf), "uid=%u\n",
-		       from_kuid(&init_user_ns, cred->uid));
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "uid=%u\n", from_kuid(&init_user_ns, cred->uid));
+	return 0;
+}
+
+static int uid_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, uid_show, NULL);
 }
 
 static ssize_t escalation_trigger(struct file *file, const char __user *buffer,
@@ -66,8 +67,11 @@ static ssize_t escalation_trigger(struct file *file, const char __user *buffer,
 }
 
 static const struct proc_ops escalation_proc_ops = {
-	.proc_read = uid_show,
-	.proc_write = escalation_trigger,
+	.proc_open    = uid_open,
+	.proc_read    = seq_read,
+	.proc_lseek   = seq_lseek,
+	.proc_release = single_release,
+	.proc_write   = escalation_trigger,
 };
 
 static int __init escalation_init(void)

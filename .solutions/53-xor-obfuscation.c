@@ -5,6 +5,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/uaccess.h>
 
 #define XOR_KEY 0x42
@@ -23,25 +24,16 @@ static void xor_encrypt(const char *in, char *out, int len, u8 key)
 		out[i] = in[i] ^ key;
 }
 
-static ssize_t obfusc_read(struct file *file, char __user *buffer,
-			   size_t count, loff_t *position)
+static int obfusc_read(struct seq_file *m, void *v)
 {
-	char buf[BUF_SIZE * 3 + 64];
-	char decrypted[BUF_SIZE];
-	int len, i, off;
+	seq_printf(m, "plain=%s\ncipher=",
+		   plaintext);
+	return 0;
+}
 
-	xor_encrypt(plaintext, ciphertext, data_len, XOR_KEY);
-	xor_encrypt(ciphertext, decrypted, data_len, XOR_KEY);
-
-	off = snprintf(buf, sizeof(buf), "plain=%s\ncipher=", plaintext);
-	for (i = 0; i < data_len; i++)
-		off += snprintf(buf + off, sizeof(buf) - off, "%02x",
-				(u8)ciphertext[i]);
-	off += snprintf(buf + off, sizeof(buf) - off, "\ndecrypt=%s\n",
-			decrypted);
-	len = off;
-
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+static int obfusc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, obfusc_read, NULL);
 }
 
 static ssize_t obfusc_write(struct file *file, const char __user *buffer,
@@ -61,8 +53,11 @@ static ssize_t obfusc_write(struct file *file, const char __user *buffer,
 }
 
 static const struct proc_ops obfusc_proc_ops = {
-	.proc_read  = obfusc_read,
-	.proc_write = obfusc_write,
+	.proc_open    = obfusc_open,
+	.proc_read    = seq_read,
+	.proc_lseek   = seq_lseek,
+	.proc_release = single_release,
+	.proc_write   = obfusc_write,
 };
 
 static int __init xor_init(void)

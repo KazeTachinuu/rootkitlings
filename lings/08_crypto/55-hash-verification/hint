@@ -1,1 +1,1 @@
-Use crypto_alloc_shash() with "sha256". Init with crypto_shash_init(), feed data with crypto_shash_update(), finalize with crypto_shash_final(). Result is 32 bytes.
+crypto_alloc_shash("sha256"). Init, update, final. Result is 32 bytes.

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
@@ -39,25 +39,13 @@ static const struct kernel_param_ops name_ops = {
 module_param_cb(name, &name_ops, &name, 0644);
 MODULE_PARM_DESC(name, "Name used by the greeting");
 
-static ssize_t board_read(struct file *file, char __user *buffer,
-			   size_t count, loff_t *position)
+static int board_read(struct seq_file *m, void *v)
 {
-	char buf[96];
-	int len;
-
-	// Only count the first read of each open (position == 0)
-	if (*position == 0)
-		state->reads++;
-
-	len = snprintf(buf, sizeof(buf), "%s (%lu reads)\n",
-		       state->message, state->reads);
-
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "%s (%lu reads)\n",
+		   state->message, state->reads);
+	return 0;
 }
 
-static const struct proc_ops board_ops = {
-	.proc_read = board_read,
-};
 
 static int __init board_init(void)
 {
@@ -68,7 +56,7 @@ static int __init board_init(void)
 	snprintf(state->message, sizeof(state->message), "hello %s", name);
 	state->reads = 0;
 
-	entry = proc_create("rk_board", 0444, NULL, &board_ops);
+	entry = proc_create_single("rk_board", 0444, NULL, board_read);
 	if (!entry) {
 		kfree(state);
 		state = NULL;

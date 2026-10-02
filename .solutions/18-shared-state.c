@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/completion.h>
 #include <linux/errno.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
 #include <linux/sched.h>
+#include <linux/seq_file.h>
 
 #define ITERATIONS 10000
 
@@ -39,23 +39,15 @@ static int race_increment(void *data)
 	return 0;
 }
 
-static ssize_t counter_show(struct file *file, char __user *buffer,
-			    size_t count, loff_t *position)
+static int counter_show(struct seq_file *m, void *v)
 {
-	char buf[32];
-	int len;
-
-	len = snprintf(buf, sizeof(buf), "%lu\n", shared_counter);
-	return simple_read_from_buffer(buffer, count, position, buf, len);
+	seq_printf(m, "%lu\n", shared_counter);
+	return 0;
 }
-
-static const struct proc_ops race_proc_ops = {
-	.proc_read = counter_show,
-};
 
 static int __init race_init(void)
 {
-	entry = proc_create("rk_race", 0444, NULL, &race_proc_ops);
+	entry = proc_create_single("rk_race", 0444, NULL, counter_show);
 	if (!entry)
 		return -ENOMEM;
 
