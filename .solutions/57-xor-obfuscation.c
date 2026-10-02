@@ -14,9 +14,10 @@
 static struct proc_dir_entry *entry;
 static char plaintext[BUF_SIZE] = "rootkit secret data";
 static char ciphertext[BUF_SIZE];
+static char decrypted[BUF_SIZE];
 static int data_len;
 
-static void xor_encrypt(const char *in, char *out, int len, u8 key)
+static void xor_buf(const char *in, char *out, int len, u8 key)
 {
 	int i;
 
@@ -24,10 +25,21 @@ static void xor_encrypt(const char *in, char *out, int len, u8 key)
 		out[i] = in[i] ^ key;
 }
 
+static void do_xor_roundtrip(void)
+{
+	xor_buf(plaintext, ciphertext, data_len, XOR_KEY);
+	xor_buf(ciphertext, decrypted, data_len, XOR_KEY);
+	decrypted[data_len] = '\0';
+}
+
 static int obfusc_read(struct seq_file *m, void *v)
 {
-	seq_printf(m, "plain=%s\ncipher=",
-		   plaintext);
+	int i;
+
+	seq_printf(m, "plain=%s\ncipher=", plaintext);
+	for (i = 0; i < data_len; i++)
+		seq_printf(m, "%02x", (u8)ciphertext[i]);
+	seq_printf(m, "\ndecrypt=%s\n", decrypted);
 	return 0;
 }
 
@@ -48,6 +60,7 @@ static ssize_t obfusc_write(struct file *file, const char __user *buffer,
 		len--;
 	plaintext[len] = '\0';
 	data_len = len;
+	do_xor_roundtrip();
 
 	return count;
 }
@@ -63,6 +76,7 @@ static const struct proc_ops obfusc_proc_ops = {
 static int __init xor_init(void)
 {
 	data_len = strlen(plaintext);
+	do_xor_roundtrip();
 
 	entry = proc_create("rk_xor", 0666, NULL, &obfusc_proc_ops);
 	if (!entry)
