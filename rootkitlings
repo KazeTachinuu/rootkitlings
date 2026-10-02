@@ -13,14 +13,14 @@ if _use_color 2; then
     B='\033[1;34m' G='\033[1;32m' Y='\033[1;33m' R='\033[1;31m'
     C='\033[1;36m' W='\033[1;37m' D='\033[2m' N='\033[0m'
 else
-    B= G= Y= R= C= W= D= N=
+    B='' G='' Y='' R='' C='' D='' N=''
 fi
 
 if _use_color 1; then
     OB='\033[1;34m' OG='\033[1;32m' OY='\033[1;33m'
     OC='\033[1;36m' OW='\033[1;37m' OD='\033[2m' ON='\033[0m'
 else
-    OB= OG= OY= OC= OW= OD= ON=
+    OB='' OG='' OY='' OC='' OW='' OD='' ON=''
 fi
 
 hdr()  { printf "${B}[*]${N} %s\n" "$1" >&2; }
@@ -36,6 +36,8 @@ while IFS= read -r _line; do
     [[ -z $_line || $_line == \#* ]] && continue
     ORDER_LIST+=("$_line")
 done < "$ORDER"
+
+(( ${#ORDER_LIST[@]} > 0 )) || die "No exercises found in $ORDER"
 
 order_count() { printf '%s' "${#ORDER_LIST[@]}"; }
 entry_at()    { printf '%s' "${ORDER_LIST[$1]}"; }
@@ -80,14 +82,23 @@ sol_path()
 current_pos()
 {
     local p=0
-    [[ -f $PROGRESS ]] && p=$(cat "$PROGRESS")
-    local max
-    max=$(( $(order_count) - 1 ))
-    (( p > max )) && p=$max
+    if [[ -f $PROGRESS ]]; then
+        IFS= read -r p < "$PROGRESS" || true
+        [[ $p =~ ^[0-9]+$ ]] || die "Invalid progress in $PROGRESS; expected a number"
+    fi
+    local total
+    total=$(order_count)
+    (( p > total )) && p=$total
     printf '%s' "$p"
 }
 
-current_entry() { entry_at "$(current_pos)"; }
+current_entry()
+{
+    local pos
+    pos=$(current_pos)
+    (( pos < $(order_count) )) || die "All exercises complete; specify one by number"
+    entry_at "$pos"
+}
 
 # -- argument resolution --
 
@@ -101,10 +112,19 @@ resolve_arg()
         done
         die "Unknown: $arg"
     elif [[ $arg =~ ^[0-9]+$ ]]; then
-        local n
-        n=$(printf '%02d' "$((10#$arg))")
+        local n=$arg
+        while [[ $n == 0* && ${#n} -gt 1 ]]; do
+            n=${n#0}
+        done
         for e in "${ORDER_LIST[@]}"; do
-            [[ $e == */${n}-* ]] && printf '%s' "$e" && return
+            [[ $e == lings/* ]] || continue
+            local entry_num
+            entry_num=$(entry_name "$e")
+            entry_num=${entry_num%%-*}
+            while [[ $entry_num == 0* && ${#entry_num} -gt 1 ]]; do
+                entry_num=${entry_num#0}
+            done
+            [[ $entry_num == "$n" ]] && printf '%s' "$e" && return
         done
         die "Ling $arg not found"
     else
@@ -174,13 +194,13 @@ cmd_check()
             local idx
             idx=$(index_of "$entry") || return
             local next=$(( idx + 1 ))
+            if (( next > $(current_pos) )); then
+                printf '%s\n' "$next" > "$PROGRESS"
+            fi
             if (( next >= $(order_count) )); then
                 printf '\n' >&2
                 ok "All done."
                 return
-            fi
-            if (( next > $(current_pos) )); then
-                printf '%s' "$next" > "$PROGRESS"
             fi
             local next_entry
             next_entry=$(entry_at "$next")
@@ -290,12 +310,13 @@ cmd_status()
 {
     local pos
     pos=$(current_pos)
-    local entry
-    entry=$(current_entry)
-    local name
-    name=$(entry_name "$entry")
     local total
     total=$(order_count)
+    local entry='' name='All exercises complete'
+    if (( pos < total )); then
+        entry=$(entry_at "$pos")
+        name=$(entry_name "$entry")
+    fi
     local pct=$(( pos * 100 / total ))
     local bar_len=30
     local filled=$(( pct * bar_len / 100 ))
@@ -311,7 +332,7 @@ cmd_status()
         "$pct"
     printf "\n"
     printf "  ${OC}Current${ON}  %s\n" "$name"
-    if is_capstone "$entry"; then
+    if [[ -n $entry ]] && is_capstone "$entry"; then
         printf "  ${OC}Edit${ON}     %s/hello.c\n" "$entry"
         printf "           ${OD}Complete the capstone to continue${ON}\n"
     fi
@@ -397,14 +418,21 @@ if (( $# == 0 )); then
 fi
 
 case $1 in
-    check)     shift; cmd_check  "${1:-}" ;;
-    readme)    shift; cmd_readme "${1:-}" ;;
-    hint)      shift; cmd_hint   "${1:-}" ;;
-    peek)      shift; cmd_peek   "${1:-}" ;;
-    run)       cmd_run       ;;
-    gdb)       cmd_gdb       ;;
-    list)      cmd_list      ;;
-    status)    cmd_status    ;;
-    -h|--help) usage         ;;
+    check|readme|hint|peek)
+        command=$1
+        shift
+        (( $# <= 1 )) || die "Usage: rootkitlings $command [ling]"
+        "cmd_$command" "${1:-}"
+        ;;
+    run|gdb|list|status)
+        command=$1
+        shift
+        (( $# == 0 )) || die "Usage: rootkitlings $command"
+        "cmd_$command"
+        ;;
+    -h|--help)
+        (( $# == 1 )) || die "Usage: rootkitlings --help"
+        usage
+        ;;
     *) die "Unknown command: $1. Run 'rootkitlings --help' for usage." ;;
 esac

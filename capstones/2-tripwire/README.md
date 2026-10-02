@@ -7,17 +7,17 @@ before you learn to go dark.
 ```
   any process           VFS layer              your module
   +-----------+         +-----------+          +-------------------+
-  |           | open()  |           | ftrace   |                   |
-  |  cat      |-------->| do_filp   |--------->| hook_open()       |
-  |  /etc/    |         | _open()   |          |   |               |
+  |           | open()  |           | kprobe   |                   |
+  |  cat      |-------->| do_sys_   |--------->| pre_handler()     |
+  |  /etc/    |         | openat2() |          |   |               |
   |  shadow   |         |           |          |   v               |
   +-----------+         +-----------+          | is target path?   |
                               |                |   |yes       |no  |
                               |                |   v          v    |
-                              |<---------------| pr_warn()  pass   |
-                              |  call original |   "uid 1000       |
-                              |                |    opened          |
-                              v                |    /etc/shadow"   |
+                              |<---------------| log entry  pass   |
+                              |  continue      |   uid, pid,       |
+                              |                |   path             |
+                              v                |                   |
                          normal open           +-------------------+
 
   /proc/rk_tripwire shows the access log:
@@ -35,10 +35,10 @@ Lings 00 through 35 (foundation + interfaces + concurrency + introspection + hoo
 
 ## What you are building
 
-A kernel-level file access monitor. Hook `do_filp_open` with a kprobe,
+A kernel-level file access monitor. Hook `do_sys_openat2` with a kprobe,
 check if the path matches a watchlist, log the access with uid/pid/path.
 
-- A kprobe on `do_filp_open` intercepts file opens.
+- A kprobe on `do_sys_openat2` intercepts file opens.
 - A static watchlist of paths to monitor (e.g., `/etc/shadow`, `/etc/passwd`).
 - Each hit is stored in a list entry (uid, pid, path, timestamp).
 - `/proc/rk_tripwire` dumps the access log as a formatted table.
@@ -62,7 +62,7 @@ Everything. This is the good-guy version, fully visible on purpose.
 
 ```
 lsmod                                        hello is listed
-cat /sys/kernel/debug/kprobes/list            do_filp_open is hooked
+cat /sys/kernel/debug/kprobes/list            do_sys_openat2 is hooked
 cat /proc/rk_tripwire                              access log is readable
 dmesg                                        load message present
 ```

@@ -9,6 +9,7 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/uaccess.h>
 
 static bool armed = true;
 module_param(armed, bool, 0644);
@@ -32,22 +33,24 @@ static LIST_HEAD(trip_log);
 static DEFINE_SPINLOCK(trip_lock);
 static struct proc_dir_entry *proc_entry;
 
-static int pre_filp_open(struct kprobe *p, struct pt_regs *regs)
+// do_sys_openat2(int dfd, const char __user *filename, struct open_how *how)
+static int pre_do_sys_open(struct kprobe *p, struct pt_regs *regs)
 {
-	struct filename *fname = (struct filename *)regs->si;
+	const char __user *uname = (const char __user *)regs->si;
 	struct trip_entry *e;
-	const char *name;
+	char buf[64];
+	long len;
 	int i;
 
-	if (!armed || !fname)
+	if (!armed || !uname)
 		return 0;
 
-	name = fname->name;
-	if (!name)
+	len = strncpy_from_user(buf, uname, sizeof(buf));
+	if (len <= 0)
 		return 0;
 
 	for (i = 0; i < WATCH_COUNT; i++) {
-		if (strcmp(name, watchlist[i]) != 0)
+		if (strcmp(buf, watchlist[i]) != 0)
 			continue;
 
 		e = kmalloc(sizeof(*e), GFP_ATOMIC);
@@ -55,7 +58,7 @@ static int pre_filp_open(struct kprobe *p, struct pt_regs *regs)
 			return 0;
 		e->uid = current_uid().val;
 		e->pid = current->pid;
-		strscpy(e->path, name, sizeof(e->path));
+		strscpy(e->path, buf, sizeof(e->path));
 		spin_lock(&trip_lock);
 		list_add_tail(&e->node, &trip_log);
 		spin_unlock(&trip_lock);
@@ -66,8 +69,8 @@ static int pre_filp_open(struct kprobe *p, struct pt_regs *regs)
 }
 
 static struct kprobe kp = {
-	.symbol_name = "do_filp_open",
-	.pre_handler = pre_filp_open,
+	.symbol_name = "do_sys_openat2",
+	.pre_handler = pre_do_sys_open,
 };
 
 static int trip_show(struct seq_file *m, void *v)
@@ -117,4 +120,4 @@ module_init(tripwire_init);
 module_exit(tripwire_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Capstone 2: file access monitor via do_filp_open hook");
+MODULE_DESCRIPTION("Capstone 2: file access monitor via do_sys_openat2 hook");

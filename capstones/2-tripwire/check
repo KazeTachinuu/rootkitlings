@@ -4,8 +4,9 @@
 begin "capstone-2: tripwire"
 
 # Ensure watched files exist in the initramfs
-printf 'root:x:0:0:root:/root:/bin/sh\n' > /etc/passwd 2>/dev/null
-printf 'root:!:0:::::\n' > /etc/shadow 2>/dev/null
+mkdir -p /etc
+printf 'root:x:0:0:root:/root:/bin/sh\n' > /etc/passwd
+printf 'root:!:0:::::\n' > /etc/shadow
 
 load hello.ko
 assert_loaded hello

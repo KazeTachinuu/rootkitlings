@@ -80,7 +80,8 @@ static int ret_getdents64(struct kretprobe_instance *ri,
 		off += cur->d_reclen;
 	}
 
-	copy_to_user(ctx->dirent, buf, ret);
+	if (copy_to_user(ctx->dirent, buf, ret))
+		ret = -EFAULT;
 	regs_set_return_value(regs, ret);
 	kvfree(buf);
 	return 0;

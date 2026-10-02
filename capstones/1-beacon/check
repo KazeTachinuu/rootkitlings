@@ -26,15 +26,15 @@ fi
 write_param hello interval 2
 assert_contains /proc/rk_beacon "interval: 2"
 
-# Wait and verify faster tick rate
+# Wait and verify faster tick rate (allow up to 5s for old sleep to finish)
 before=$(cat /proc/rk_beacon | sed -n 's/^ticks: *\([0-9]*\)$/\1/p')
-sleep 5
+sleep 10
 after=$(cat /proc/rk_beacon | sed -n 's/^ticks: *\([0-9]*\)$/\1/p')
 diff=$(( after - before ))
-if [ "$diff" -ge 2 ] 2>/dev/null; then
-    _ok "faster tick rate after interval change ($diff ticks in 5s)"
+if [ "$diff" -ge 3 ] 2>/dev/null; then
+    _ok "faster tick rate after interval change ($diff ticks in 10s)"
 else
-    _fail "expected >= 2 ticks in 5s at interval=2, got $diff"
+    _fail "expected >= 3 ticks in 10s at interval=2, got $diff"
 fi
 
 # Uptime should be non-zero
