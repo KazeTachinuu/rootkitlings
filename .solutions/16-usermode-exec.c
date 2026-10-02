@@ -49,6 +49,7 @@ static int __init exec_init(void)
 		return output_len;
 	output[output_len] = '\0';
 
+	// BusyBox /bin/rm alone fails via call_usermodehelper; sh -c works
 	{
 		char *rm_argv[] = { "/bin/sh", "-c",
 				    "rm -f " TMP_PATH, NULL };
