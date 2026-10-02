@@ -1,19 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/cred.h>
-#include <linux/ftrace.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
-#include <linux/printk.h>
 #include <linux/proc_fs.h>
-#include <linux/seq_file.h>
 #include <linux/sched.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
-#include <linux/string.h>
-#include <linux/uaccess.h>
 
 static bool armed = true;
 module_param(armed, bool, 0644);
@@ -24,7 +19,7 @@ static const char *watchlist[] = {
 	"/etc/passwd",
 };
 
-#define WATCH_COUNT (sizeof(watchlist) / sizeof(watchlist[0]))
+#define WATCH_COUNT ARRAY_SIZE(watchlist)
 
 struct trip_entry {
 	uid_t uid;
@@ -37,58 +32,45 @@ static LIST_HEAD(trip_log);
 static DEFINE_SPINLOCK(trip_lock);
 static struct proc_dir_entry *proc_entry;
 
-static unsigned long kaddr(const char *name)
+static int pre_filp_open(struct kprobe *p, struct pt_regs *regs)
 {
-	struct kprobe kp = { .symbol_name = name };
-	unsigned long addr;
-
-	if (register_kprobe(&kp))
-		return 0;
-	addr = (unsigned long)kp.addr;
-	unregister_kprobe(&kp);
-	return addr;
-}
-
-static struct ftrace_ops trip_ops;
-
-// do_sys_openat2(int dfd, const char __user *filename, struct open_how *how)
-static void notrace trip_callback(unsigned long ip, unsigned long parent_ip,
-				  struct ftrace_ops *ops,
-				  struct ftrace_regs *fregs)
-{
-	struct pt_regs *regs = ftrace_get_regs(fregs);
-	char path[64];
+	struct filename *fname = (struct filename *)regs->si;
 	struct trip_entry *e;
-	long len;
+	const char *name;
 	int i;
 
-	if (!armed || !regs)
-		return;
+	if (!armed || !fname)
+		return 0;
 
-	len = strncpy_from_user(path, (const char __user *)regs->si,
-				sizeof(path));
-	if (len <= 0)
-		return;
+	name = fname->name;
+	if (!name)
+		return 0;
 
 	for (i = 0; i < WATCH_COUNT; i++) {
-		if (strcmp(path, watchlist[i]) == 0) {
-			e = kmalloc(sizeof(*e), GFP_ATOMIC);
-			if (!e)
-				return;
-			e->uid = current_uid().val;
-			e->pid = current->pid;
-			strscpy(e->path, path, sizeof(e->path));
-			spin_lock(&trip_lock);
-			list_add_tail(&e->node, &trip_log);
-			spin_unlock(&trip_lock);
-			pr_warn("rk: exec [tripwire] uid=%u pid=%d %s\n",
-				e->uid, e->pid, e->path);
-			return;
-		}
+		if (strcmp(name, watchlist[i]) != 0)
+			continue;
+
+		e = kmalloc(sizeof(*e), GFP_ATOMIC);
+		if (!e)
+			return 0;
+		e->uid = current_uid().val;
+		e->pid = current->pid;
+		strscpy(e->path, name, sizeof(e->path));
+		spin_lock(&trip_lock);
+		list_add_tail(&e->node, &trip_log);
+		spin_unlock(&trip_lock);
+		return 0;
 	}
+
+	return 0;
 }
 
-static int trip_read(struct seq_file *m, void *v)
+static struct kprobe kp = {
+	.symbol_name = "do_filp_open",
+	.pre_handler = pre_filp_open,
+};
+
+static int trip_show(struct seq_file *m, void *v)
 {
 	struct trip_entry *e;
 
@@ -100,31 +82,17 @@ static int trip_read(struct seq_file *m, void *v)
 	return 0;
 }
 
-
 static int __init tripwire_init(void)
 {
-	unsigned long addr;
 	int err;
 
-	addr = kaddr("do_sys_openat2");
-	if (!addr) {
-		pr_err("rk: do_sys_openat2 not found\n");
-		return -ENOENT;
-	}
-
-	trip_ops.func = trip_callback;
-	trip_ops.flags = FTRACE_OPS_FL_SAVE_REGS;
-
-	err = ftrace_set_filter_ip(&trip_ops, addr, 0, 0);
-	if (err)
-		return err;
-	err = register_ftrace_function(&trip_ops);
+	err = register_kprobe(&kp);
 	if (err)
 		return err;
 
-	proc_entry = proc_create_single("rk_tripwire", 0444, NULL, trip_read);
+	proc_entry = proc_create_single("rk_tripwire", 0444, NULL, trip_show);
 	if (!proc_entry) {
-		unregister_ftrace_function(&trip_ops);
+		unregister_kprobe(&kp);
 		return -ENOMEM;
 	}
 
@@ -137,17 +105,16 @@ static void __exit tripwire_exit(void)
 	struct trip_entry *e, *tmp;
 
 	proc_remove(proc_entry);
-	unregister_ftrace_function(&trip_ops);
+	unregister_kprobe(&kp);
 
 	list_for_each_entry_safe(e, tmp, &trip_log, node) {
 		list_del(&e->node);
 		kfree(e);
 	}
-	pr_info("rk: tripwire removed\n");
 }
 
 module_init(tripwire_init);
 module_exit(tripwire_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Capstone 2: ftrace-based file access monitor");
+MODULE_DESCRIPTION("Capstone 2: file access monitor via do_filp_open hook");
