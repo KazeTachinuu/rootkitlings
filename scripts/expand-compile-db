@@ -8,7 +8,7 @@ base = db[0]
 
 existing = {e["file"] for e in db}
 
-for f in sorted(glob.glob(".solutions/*.c")):
+for f in sorted(glob.glob(".solutions/*.c") + glob.glob(".solutions/**/*.c")):
     abspath = os.path.abspath(f)
     if abspath in existing:
         continue

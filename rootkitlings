@@ -29,19 +29,23 @@ info() { printf "${D}[.]${N} %s\n" "$1" >&2; }
 warn() { printf "${Y}[-]${N} %s\n" "$1" >&2; }
 die()  { printf "${R}[x]${N} %s\n" "$1" >&2; exit 1; }
 
-# -- .order lookups --
+# -- .order (loaded once) --
 
-order_entries() { grep -v '^#' "$ORDER" | grep -v '^$'; }
-order_count()   { order_entries | wc -l; }
-entry_at()      { order_entries | sed -n "$(($1 + 1))p"; }
+ORDER_LIST=()
+while IFS= read -r _line; do
+    [[ -z $_line || $_line == \#* ]] && continue
+    ORDER_LIST+=("$_line")
+done < "$ORDER"
+
+order_count() { printf '%s' "${#ORDER_LIST[@]}"; }
+entry_at()    { printf '%s' "${ORDER_LIST[$1]}"; }
 
 index_of()
 {
-    local target=$1 i=0
-    while IFS= read -r e; do
-        [[ $e == "$target" ]] && printf '%s' "$i" && return
-        i=$((i + 1))
-    done < <(order_entries)
+    local target=$1 i
+    for i in "${!ORDER_LIST[@]}"; do
+        [[ ${ORDER_LIST[$i]} == "$target" ]] && printf '%s' "$i" && return
+    done
     return 1
 }
 
@@ -89,20 +93,23 @@ current_entry() { entry_at "$(current_pos)"; }
 
 resolve_arg()
 {
-    local arg=$1 match
+    local arg=$1 e
     if [[ $arg == capstone-* ]]; then
         local id=${arg#capstone-}
-        match=$(order_entries | grep "^capstones/${id}-" | head -1) || true
-        [[ -n $match ]] || die "Unknown: $arg"
+        for e in "${ORDER_LIST[@]}"; do
+            [[ $e == capstones/${id}-* ]] && printf '%s' "$e" && return
+        done
+        die "Unknown: $arg"
     elif [[ $arg =~ ^[0-9]+$ ]]; then
         local n
         n=$(printf '%02d' "$((10#$arg))")
-        match=$(order_entries | grep "/${n}-" | head -1) || true
-        [[ -n $match ]] || die "Ling $arg not found"
+        for e in "${ORDER_LIST[@]}"; do
+            [[ $e == */${n}-* ]] && printf '%s' "$e" && return
+        done
+        die "Ling $arg not found"
     else
         die "Invalid argument: '$arg'"
     fi
-    printf '%s' "$match"
 }
 
 resolve_entry()
@@ -274,22 +281,20 @@ cmd_reset()
     local sol
     sol=$(sol_path "$entry") || die "No reference for $name"
 
+    # remove previous source files (keep build artifacts for kbuild)
+    find "$bdir" -maxdepth 1 -name '*.c' -o -name '*.h' -o -name 'Kbuild' \
+        | xargs rm -f
+
     if [[ -d $sol ]]; then
-        rm -f "$bdir"/*.h "$bdir"/calc.c "$bdir"/main.c
         for f in "$sol"/*; do
             [[ -f $f ]] || continue
             cp "$f" "$bdir/$(basename "$f")"
         done
-        ok "Restored $name reference (multi-file)"
+        ok "Restored $name (multi-file)"
     else
         cp "$sol" "$bdir/hello.c"
-        if ! is_capstone "$entry"; then
-            rm -f "$bdir"/*.h "$bdir"/calc.c "$bdir"/main.c
-            cat > "$bdir/Kbuild" << 'KBUILD'
-obj-m += hello.o
-KBUILD
-        fi
-        ok "Restored $name reference"
+        printf 'obj-m += hello.o\n' > "$bdir/Kbuild"
+        ok "Restored $name"
     fi
 }
 
@@ -353,7 +358,7 @@ cmd_list()
     pos=$(current_pos)
     local i=0 prev_cat=""
 
-    while IFS= read -r entry; do
+    for entry in "${ORDER_LIST[@]}"; do
         local name
         name=$(entry_name "$entry")
 
@@ -382,7 +387,7 @@ cmd_list()
             fi
         fi
         i=$(( i + 1 ))
-    done < <(order_entries)
+    done
     printf '\n'
 }
 
