@@ -1,1 +1,1 @@
-sock_create with SOCK_RAW + IPPROTO_RAW. Build headers manually.
+sock_create_kern with AF_INET, SOCK_RAW, IPPROTO_ICMP. Report socket state via /proc.

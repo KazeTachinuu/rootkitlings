@@ -1,1 +1,1 @@
-Two netfilter hooks (PRE_ROUTING + LOCAL_OUT). Atomic counters for packets and bytes.
+Two netfilter hooks (PRE_ROUTING + POST_ROUTING). Atomic counters for packets and bytes.
