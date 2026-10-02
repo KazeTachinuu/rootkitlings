@@ -32,7 +32,7 @@ through a channel that nobody else can see. Not even the sysadmin.
 
 ## Prerequisites
 
-Lings 00 through 38 (foundation through hiding).
+Lings 00 through 40 (foundation through hiding).
 
 ## What you are building
 

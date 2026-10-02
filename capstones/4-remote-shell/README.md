@@ -35,7 +35,7 @@ You are playing operator.
 
 ## Prerequisites
 
-Lings 00 through 47 (foundation through networking).
+Lings 00 through 49 (foundation through networking).
 
 ## What you are building
 

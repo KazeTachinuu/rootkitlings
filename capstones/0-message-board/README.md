@@ -22,7 +22,7 @@ Build a module that serves a configurable message through `/proc/rk_board`.
 
 ## Prerequisites
 
-Lings 00 through 08 (all of foundation).
+Lings 00 through 10 (all of foundation).
 
 ## What you are building
 

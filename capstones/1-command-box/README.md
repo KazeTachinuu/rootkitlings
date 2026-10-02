@@ -26,7 +26,7 @@ via `call_usermodehelper`, and shows the output in `/proc/rk_cmdbox`.
 
 ## Prerequisites
 
-Lings 00 through 13 (foundation + interfaces).
+Lings 00 through 15 (foundation + interfaces).
 
 ## Structure
 

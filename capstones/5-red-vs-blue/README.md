@@ -21,7 +21,7 @@ switch hats and try to break every hiding layer.
 
 ## Prerequisites
 
-All lings (00 through 55).
+All lings (00 through 57).
 
 ## What you are building
 
