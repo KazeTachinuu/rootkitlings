@@ -1,0 +1,64 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "34-rmdir-trigger"
+
+load hello.ko
+assert_loaded hello
+
+# Test 1: rmdir /tmp/.rk-ping prints "pong"
+dmesg -C
+rmdir /tmp/.rk-ping 2>/dev/null
+if dmesg | tail -5 | grep -q "pong"; then
+    _ok "rmdir /tmp/.rk-ping -> pong"
+else
+    _fail "rmdir /tmp/.rk-ping did not produce 'pong' in dmesg"
+fi
+
+# Test 2: rmdir /tmp/.rk-id prints uid=0
+dmesg -C
+rmdir /tmp/.rk-id 2>/dev/null
+if dmesg | tail -5 | grep -q "uid=0"; then
+    _ok "rmdir /tmp/.rk-id -> uid=0"
+else
+    _fail "rmdir /tmp/.rk-id did not produce 'uid=0' in dmesg"
+fi
+
+# Test 3: rmdir /tmp/.rk-count increments 1, 2, 3
+dmesg -C
+rmdir /tmp/.rk-count 2>/dev/null
+rmdir /tmp/.rk-count 2>/dev/null
+rmdir /tmp/.rk-count 2>/dev/null
+ok=true
+for n in 1 2 3; do
+    if ! dmesg | grep -q "$n"; then
+        ok=false
+    fi
+done
+if $ok; then
+    _ok "rmdir /tmp/.rk-count increments 1, 2, 3"
+else
+    _fail "rmdir /tmp/.rk-count did not produce counts 1, 2, 3"
+fi
+
+# Test 4: normal rmdir still works
+dmesg -C
+mkdir -p /tmp/test-real-rmdir
+rmdir /tmp/test-real-rmdir
+if [ ! -d /tmp/test-real-rmdir ]; then
+    _ok "normal rmdir still removes directories"
+else
+    _fail "normal rmdir did not remove /tmp/test-real-rmdir"
+fi
+
+# Test 5: after unload, rmdir behaves normally
+unload hello
+dmesg -C
+rmdir /tmp/.rk-ping 2>/dev/null
+if dmesg | tail -5 | grep -q "pong"; then
+    _fail "hook still active after unload"
+else
+    _ok "hook inactive after unload"
+fi
+
+summary

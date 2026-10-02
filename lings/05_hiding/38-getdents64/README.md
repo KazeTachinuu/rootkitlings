@@ -9,7 +9,7 @@ behind Diamorphine's file hiding.
 
 ## What you already know
 
-From ling 33, you can hook functions with ftrace. From ling 29, you
+From ling 33, you can hook functions with ftrace. From ling 27, you
 can resolve symbols. This ling combines both to hook the getdents64
 syscall handler.
 

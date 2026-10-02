@@ -122,6 +122,6 @@ rmmod hello
 ./rootkitlings check 4
 ```
 > **What a defender sees**: anyone with write access to the sysfs file triggers the callback.
-> There is no authentication, no caller check, no rate limit. Ling 21 introduces `current`.
+> There is no authentication, no caller check, no rate limit. Ling 24 introduces `current`.
 
 See also: [05 - Allocation](../05-allocation/README.md).

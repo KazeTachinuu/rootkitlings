@@ -1,0 +1,1 @@
+ftrace_get_regs for pt_regs. regs->di is the userspace path. strncpy_from_user to copy it.

@@ -9,7 +9,7 @@ implementation. This is what PUMAKIT, KoviD, and Syslogk use.
 
 ## What you already know
 
-From ling 29, you can resolve symbol addresses. From ling 30, you
+From ling 27, you can resolve symbol addresses. From ling 30, you
 hooked functions with kprobes. Ftrace is more powerful: it can redirect
 `regs->ip` to a replacement function, not just observe.
 
@@ -55,7 +55,7 @@ You need:
 
 Create a module that:
 
-1. Resolves `do_sys_openat2` via the kprobe lookup trick (ling 29).
+1. Resolves `do_sys_openat2` via the kprobe lookup trick (ling 27).
 2. Hooks it via ftrace with `ftrace_set_filter_ip` + `register_ftrace_function`.
 3. The callback increments a counter.
 4. `/proc/rk_ftrace` returns the count of intercepted opens.

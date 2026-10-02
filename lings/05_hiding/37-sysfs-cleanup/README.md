@@ -2,7 +2,7 @@
 
 ## Why this step
 
-Ling 33 hid the module from `lsmod`, but `/sys/module/hello` still
+Ling 36 hid the module from `lsmod`, but `/sys/module/hello` still
 exists. This ling removes that entry too, closing the cross-view gap.
 Diamorphine and Reptile both perform this step.
 

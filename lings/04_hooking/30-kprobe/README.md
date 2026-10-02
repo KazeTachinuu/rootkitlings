@@ -31,7 +31,7 @@ the kprobe stays active and fires on every call to the target function.
 
 ## What you already know
 
-From ling 29, you can resolve any symbol to an address. This ling
+From ling 27, you can resolve any symbol to an address. This ling
 registers a persistent kprobe that stays active and counts calls.
 
 ## Build it

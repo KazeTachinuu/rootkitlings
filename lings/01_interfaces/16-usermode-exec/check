@@ -1,0 +1,22 @@
+#!/bin/sh
+. /lib/check.sh
+begin "16-usermode-exec"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_exec
+
+# read the captured kernel version
+got=$(cat /proc/rk_exec)
+expected=$(uname -r)
+if [ "$got" = "$expected" ]; then
+    _ok "cat /proc/rk_exec returns $expected"
+else
+    _fail "cat /proc/rk_exec returned '$got', expected '$expected'"
+fi
+
+unload hello
+assert_absent /proc/rk_exec
+assert_absent /tmp/.rk_out
+
+summary
