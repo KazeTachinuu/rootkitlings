@@ -3,7 +3,7 @@
 Lings teach one concept. Capstones say: stop learning, start building.
 
 Each capstone combines everything you learned into something you can run,
-break, and brag about in the sm14. No new concepts, just assembly.
+break, and show off. No new concepts, just assembly.
 
 ```
   lings 00-08         lings 09-13         lings 14-31
