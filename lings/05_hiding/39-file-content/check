@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "35-file-content"
+begin "39-file-content"
 
 # Create a target file with known content
 printf 'This has SECRET data and another SECRET here\n' > /tmp/rk_target

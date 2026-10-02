@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "55-hash-verification"
+begin "59-hash-verification"
 
 load hello.ko
 assert_loaded hello

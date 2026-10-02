@@ -1,11 +1,11 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "06-rollback failure path"
+begin "08-rollback"
 
 load_fail hello.ko fail_second=1
 
-begin "06-rollback success path"
+begin "08-rollback success path"
 
 load hello.ko
 assert_loaded hello

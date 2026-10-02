@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "17-waiting"
+begin "20-waiting"
 
 load hello.ko
 assert_loaded hello

@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "03-parameter"
+begin "05-parameter"
 
 load hello.ko
 assert_loaded hello
@@ -9,7 +9,7 @@ assert_param hello name "world"
 assert_log "name=world"
 unload hello
 
-begin "03-parameter load-time arg"
+begin "05-parameter load-time arg"
 
 load hello.ko name=phantom
 assert_loaded hello

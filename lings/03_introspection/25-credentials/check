@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "22-credentials"
+begin "25-credentials"
 
 load hello.ko
 assert_loaded hello

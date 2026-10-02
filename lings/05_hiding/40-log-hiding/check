@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "36-log-hiding"
+begin "40-log-hiding"
 
 # Log a marker BEFORE module load
 dmesg -c > /dev/null 2>&1

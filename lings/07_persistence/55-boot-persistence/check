@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "51-boot-persistence"
+begin "55-boot-persistence"
 
 # File must not exist before load
 rm -f /etc/modules-load.d/hello.conf

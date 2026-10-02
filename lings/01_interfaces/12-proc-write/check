@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "10-proc-write"
+begin "12-proc-write"
 
 load hello.ko
 assert_loaded hello

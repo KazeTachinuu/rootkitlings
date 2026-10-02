@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "18-shared-state"
+begin "21-shared-state"
 
 load hello.ko
 assert_loaded hello

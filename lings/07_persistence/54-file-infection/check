@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "50-file-infection"
+begin "54-file-infection"
 
 # Create a victim script
 printf '#!/bin/sh\necho clean\n' > /tmp/rk_victim.sh

@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "05-allocation"
+begin "07-allocation"
 
 load hello.ko
 assert_loaded hello
@@ -10,7 +10,7 @@ assert_log "42"
 unload hello
 assert_absent /sys/module/hello
 
-begin "05-allocation reload (no leak)"
+begin "07-allocation reload (no leak)"
 
 load hello.ko
 assert_loaded hello

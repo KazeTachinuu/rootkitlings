@@ -1,12 +1,12 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "04-parameter-callback"
+begin "06-parameter-callback"
 
 load hello.ko name=phantom
 assert_loaded hello
 
-begin "04-parameter-callback sysfs write"
+begin "06-parameter-callback sysfs write"
 
 write_param hello name "specter"
 assert_param hello name "specter"

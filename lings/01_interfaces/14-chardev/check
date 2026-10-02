@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "12-chardev"
+begin "14-chardev"
 
 load hello.ko
 assert_loaded hello

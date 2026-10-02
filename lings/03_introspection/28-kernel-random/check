@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "25-kernel-random"
+begin "28-kernel-random"
 
 load hello.ko
 assert_loaded hello

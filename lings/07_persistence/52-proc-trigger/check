@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "48-proc-trigger"
+begin "52-proc-trigger"
 
 load hello.ko
 assert_loaded hello

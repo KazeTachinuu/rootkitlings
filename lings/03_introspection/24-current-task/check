@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "21-current-task"
+begin "24-current-task"
 
 load hello.ko
 assert_loaded hello

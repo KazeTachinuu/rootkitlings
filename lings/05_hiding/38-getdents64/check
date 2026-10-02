@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "34-getdents64"
+begin "38-getdents64"
 
 load hello.ko
 assert_exists /proc/rk_dirfilter

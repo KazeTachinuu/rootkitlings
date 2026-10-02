@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "20-atomic"
+begin "23-atomic"
 
 load hello.ko
 assert_loaded hello

@@ -1,7 +1,7 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "02-init-failure"
+begin "04-init-failure"
 
 # Init runs but returns an error, so insmod must fail
 load_fail hello.ko
