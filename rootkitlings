@@ -270,34 +270,6 @@ cmd_peek()
     fi
 }
 
-cmd_reset()
-{
-    local entry
-    entry=$(resolve_entry "${1:-}")
-    local name
-    name=$(entry_name "$entry")
-    local bdir
-    bdir=$(build_dir "$entry")
-    local sol
-    sol=$(sol_path "$entry") || die "No reference for $name"
-
-    # remove previous source files (keep build artifacts for kbuild)
-    find "$bdir" -maxdepth 1 -name '*.c' -o -name '*.h' -o -name 'Kbuild' \
-        | xargs rm -f
-
-    if [[ -d $sol ]]; then
-        for f in "$sol"/*; do
-            [[ -f $f ]] || continue
-            cp "$f" "$bdir/$(basename "$f")"
-        done
-        ok "Restored $name (multi-file)"
-    else
-        cp "$sol" "$bdir/hello.c"
-        printf 'obj-m += hello.o\n' > "$bdir/Kbuild"
-        ok "Restored $name"
-    fi
-}
-
 cmd_run()
 {
     local bdir
@@ -402,7 +374,6 @@ usage()
     printf "  ${OW}readme${ON}   ${OD}[N]${ON}  Show the README for ling N\n"
     printf "  ${OW}hint${ON}     ${OD}[N]${ON}  Get a nudge without seeing the solution\n"
     printf "  ${OW}peek${ON}     ${OD}[N]${ON}  Show the reference solution\n"
-    printf "  ${OW}reset${ON}    ${OD}[N]${ON}  Restore hello.c to ling N reference\n"
     printf "  ${OW}run${ON}           Build and boot interactive VM\n"
     printf "  ${OW}gdb${ON}           Boot VM paused, waiting for GDB on :1234\n"
     printf "  ${OW}list${ON}          Show all lings and progress\n"
@@ -430,7 +401,6 @@ case $1 in
     readme)    shift; cmd_readme "${1:-}" ;;
     hint)      shift; cmd_hint   "${1:-}" ;;
     peek)      shift; cmd_peek   "${1:-}" ;;
-    reset)     shift; cmd_reset  "${1:-}" ;;
     run)       cmd_run       ;;
     gdb)       cmd_gdb       ;;
     list)      cmd_list      ;;
