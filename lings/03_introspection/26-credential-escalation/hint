@@ -1,1 +1,1 @@
-prepare_kernel_cred + commit_creds. What argument means "root"?
+prepare_creds(), zero all uid/gid fields with GLOBAL_ROOT_UID, commit_creds().

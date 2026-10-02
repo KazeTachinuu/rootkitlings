@@ -1,1 +1,1 @@
-tracefs_create_file. Mounted at /sys/kernel/tracing.
+debugfs_create_dir + debugfs_create_file. Check /sys/kernel/debug after insmod.

