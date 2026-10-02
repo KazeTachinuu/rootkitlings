@@ -7,7 +7,7 @@ a typed command interface: distinct operations identified by number, each
 with a defined argument type. This is the control channel every C2 implant
 uses before networking, and every hardware driver uses to configure its device.
 
-Ling 12 registered a miscdevice with open, release, and read.
+Ling 14 registered a miscdevice with open, release, and read.
 This ling adds `unlocked_ioctl` and defines two command numbers.
 
 ## Reset the experiment
@@ -133,7 +133,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 13
+./rootkitlings check 15
 ```
 
 The check also tests that `/dev/rk_ioctl` is a character device and verifies
@@ -141,7 +141,7 @@ single-character edge cases.
 > **What a defender sees**: `strace` reveals every ioctl call, including
 > the command number and argument address. No obfuscation, no authentication.
 
-Interfaces complete. Next: [Capstone 1 - Command box](../../../capstones/1-command-box/README.md).
+Interfaces complete. Next: [Capstone 1 - Beacon](../../../capstones/1-beacon/README.md).
 Then continue from the [roadmap](../../README.md).
 
-See also: [14 - Timer](../../02_concurrency/14-timer/README.md).
+See also: [17 - Timer](../../02_concurrency/17-timer/README.md).

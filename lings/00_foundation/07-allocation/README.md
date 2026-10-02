@@ -19,7 +19,7 @@ git restore module/hello.c
 ```
 
 `git restore` replaces the working copy of this one file with its committed
-version. It deliberately discards the parameter edits from lings 03 and 04.
+version. It deliberately discards the parameter edits from lings 05 and 06.
 
 ## Add one owned object
 
@@ -113,11 +113,11 @@ dmesg | tail
 ## Verify
 
 ```bash
-./rootkitlings check 5
+./rootkitlings check 7
 ```
 
 The check also reloads the module to verify no resource leak from the first run.
 > **What a defender sees**: if init returns an error after `kmalloc`, exit never runs.
 > The allocated memory leaks permanently. The kernel has no garbage collector.
 
-See also: [06 - Rollback](../06-rollback/README.md).
+See also: [08 - Rollback](../08-rollback/README.md).

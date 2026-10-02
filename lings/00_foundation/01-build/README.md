@@ -144,4 +144,4 @@ The check script verifies:
 > **What a defender sees**: `file` identifies the format, `modinfo` reads the metadata,
 > and `strings` reveals every printable constant. The `.ko` hides nothing.
 
-See also: [02 - Init failure](../02-init-failure/README.md).
+See also: [04 - Init failure](../04-init-failure/README.md).

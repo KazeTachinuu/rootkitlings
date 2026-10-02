@@ -2,7 +2,7 @@
 
 ## Why this step
 
-Ling 08 made `/proc/rk_store` readable: the kernel copied data to userspace.
+Ling 10 made `/proc/rk_reader` readable: the kernel copied data to userspace.
 This ling makes it writable: userspace sends data into the kernel.
 
 Accepting userspace input is the first trust boundary crossing where
@@ -145,9 +145,9 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 10
+./rootkitlings check 12
 ```
 > **What a defender sees**: `/proc/rk_store` is world-writable. Any user on
 > the system can change the stored message. No authentication, no audit trail.
 
-See also: [11 - Lists](../11-lists/README.md).
+See also: [13 - Lists](../13-lists/README.md).

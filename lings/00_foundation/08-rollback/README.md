@@ -2,7 +2,7 @@
 
 ## Why this step
 
-Ling 05 handled complete success: init allocated one object and exit freed it.
+Ling 07 handled complete success: init allocated one object and exit freed it.
 But initialization usually has several steps. If step one succeeds and step two
 fails, exit will not run because the module never finished loading.
 
@@ -97,9 +97,9 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 6
+./rootkitlings check 8
 ```
 > **What a defender sees**: the module owns its memory safely, but userspace has no way
 > to interact with it beyond sysfs parameters. It needs a real interface.
 
-See also: [07 - Procfs entry](../07-proc-entry/README.md).
+See also: [09 - Procfs entry](../09-proc-entry/README.md).

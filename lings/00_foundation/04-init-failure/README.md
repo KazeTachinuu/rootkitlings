@@ -181,9 +181,9 @@ include, then `./rootkitlings run` and load again. Loading should succeed.
 ## Verify
 
 ```bash
-./rootkitlings check 2
+./rootkitlings check 4
 ```
 > **What a defender sees**: the failed load still wrote to `dmesg`. The kernel log
 > records every `insmod` attempt, successful or not. A defender sees both.
 
-See also: [03 - Parameters](../03-parameter/README.md).
+See also: [05 - Parameters](../05-parameter/README.md).

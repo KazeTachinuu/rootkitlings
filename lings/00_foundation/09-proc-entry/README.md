@@ -124,9 +124,9 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 7
+./rootkitlings check 9
 ```
 > **What a defender sees**: `/proc/rk_entry` is visible to every user with `ls /proc`.
 > It has no read operation, so it's useless. And its mere presence is suspicious.
 
-See also: [08 - Procfs read](../08-proc-read/README.md).
+See also: [10 - Procfs read](../10-proc-read/README.md).

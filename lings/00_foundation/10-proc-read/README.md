@@ -1,7 +1,7 @@
 # 10 - A procfs read crosses the userspace boundary
 ## Why this step
 
-Ling 07 made `/proc/rk_reader` visible, but `cat` failed because procfs had no read
+Ling 09 made `/proc/rk_reader` visible, but `cat` failed because procfs had no read
 function to call. The interface exists, but it cannot return data.
 
 The VFS routes a read to the callback responsible for that open file.
@@ -123,7 +123,7 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 8
+./rootkitlings check 10
 ```
 
 > **What a defender sees**: anyone can `cat /proc/rk_reader` and read the data. There is no
@@ -135,7 +135,7 @@ under the hood. From ling 11 onward, use `proc_create_single` with
 `seq_file` instead: it handles position tracking, buffer management,
 and multi-read automatically.
 
-Foundation complete. Next: [Capstone 0: Message board](../../../capstones/0-message-board/README.md).
+Foundation complete. Next: [Capstone 0: Config store](../../../capstones/0-config-store/README.md).
 Then continue from the [roadmap](../../README.md).
 
-See also: [09 - Error pointers](../../01_interfaces/09-errptr/README.md).
+See also: [11 - Error pointers](../../01_interfaces/11-errptr/README.md).

@@ -7,7 +7,7 @@ Other kernel functions return `ERR_PTR(-ECODE)`: a pointer that encodes
 an error in the last page of virtual memory. Dereferencing it crashes
 exactly like dereferencing `NULL`, but it carries the reason.
 
-Ling 07 used `proc_create`, which returns `NULL` on failure.
+Ling 09 used `proc_create`, which returns `NULL` on failure.
 This ling introduces `proc_mkdir` and teaches the three-way distinction
 every kernel caller must know: `NULL`, `ERR_PTR`, or valid pointer.
 
@@ -153,10 +153,10 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 9
+./rootkitlings check 11
 ```
 > **What a defender sees**: `/proc/rk_errptr/` is a visible directory.
 > `ls /proc/` shows it. A subdirectory makes the module's presence
 > more obvious than a single flat entry.
 
-See also: [10 - Procfs write](../10-proc-write/README.md).
+See also: [12 - Procfs write](../12-proc-write/README.md).

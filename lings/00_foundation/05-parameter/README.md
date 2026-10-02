@@ -89,7 +89,7 @@ dmesg | tail
 ## Verify
 
 ```bash
-./rootkitlings check 3
+./rootkitlings check 5
 ```
 
 The check loads with no arg (default `world`), then with `name=phantom`,
@@ -98,4 +98,4 @@ and checks that exit prints the last written value.
 > **What a defender sees**: parameters are world-readable in `/sys/module/hello/parameters/`.
 > Anyone on the system can read them. And writing triggers no module code at all.
 
-See also: [04 - Parameter callback](../04-parameter-callback/README.md).
+See also: [06 - Parameter callback](../06-parameter-callback/README.md).

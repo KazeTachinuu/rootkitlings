@@ -2,7 +2,7 @@
 
 ## Why this step
 
-Ling 10 stored a single message. Real modules manage collections:
+Ling 12 stored a single message. Real modules manage collections:
 task queues, connection tables, cached entries.
 
 The kernel uses intrusive linked lists: the list node lives inside your
@@ -154,9 +154,9 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 11
+./rootkitlings check 13
 ```
 > **What a defender sees**: the list is unbounded. An attacker (or a bug)
 > writing in a loop exhausts kernel memory. No size limit, no cleanup on full.
 
-See also: [12 - Char device](../12-chardev/README.md).
+See also: [14 - Char device](../14-chardev/README.md).

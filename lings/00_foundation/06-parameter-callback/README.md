@@ -1,7 +1,7 @@
 # 06 - A callback reacts to parameter writes
 ## Why this step
 
-Ling 03 proved that a sysfs write changes `name`, but no module code ran at the
+Ling 05 proved that a sysfs write changes `name`, but no module code ran at the
 moment of that change. Init cannot react because init has already finished.
 
 A setter function runs
@@ -119,9 +119,9 @@ rmmod hello
 ## Verify
 
 ```bash
-./rootkitlings check 4
+./rootkitlings check 6
 ```
 > **What a defender sees**: anyone with write access to the sysfs file triggers the callback.
 > There is no authentication, no caller check, no rate limit. Ling 24 introduces `current`.
 
-See also: [05 - Allocation](../05-allocation/README.md).
+See also: [07 - Allocation](../07-allocation/README.md).

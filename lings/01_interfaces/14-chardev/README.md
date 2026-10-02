@@ -12,7 +12,7 @@ device. It handles major/minor number allocation automatically.
 ## The new API surface
 
 ```
-  /proc/rk_* (lings 07-11)          /dev/rk_chardev (this ling)
+  /proc/rk_* (lings 09-12)          /dev/rk_chardev (this ling)
   +--------------------------+       +---------------------------+
   | struct proc_ops          |       | struct file_operations    |
   |   .proc_read             |       |   .owner = THIS_MODULE   |
@@ -123,9 +123,9 @@ The check script verifies:
 ## Verify
 
 ```bash
-./rootkitlings check 12
+./rootkitlings check 14
 ```
 > **What a defender sees**: `ls /dev/` shows the device. `lsmod` shows
 > the module. The device node is the most visible control surface so far.
 
-See also: [13 - Ioctl](../13-ioctl/README.md).
+See also: [15 - Ioctl](../15-ioctl/README.md).
