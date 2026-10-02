@@ -6,15 +6,15 @@ Each ling teaches one networking concept. Combine what your design needs.
 
 | # | Ling | Teaches | Weakness exposed |
 |--:|------|---------|-----------------|
-| 39 | Kernel socket | `sock_create`, `kernel_connect`, `kernel_sendmsg`. | Connection is plaintext. Visible in `ss` and `tcpdump`. |
-| 40 | Stream I/O | Handle partial send/recv, `EINTR`, EOF. | Naive single-recv drops data. Partial reads corrupt framing. |
-| 41 | Framing | Length-prefix each message for bounded parsing. | Fixed framing is fingerprintable. Protocol looks unlike normal traffic. |
-| 42 | Netfilter hook | `nf_register_net_hook`, inspect/drop/accept packets. | Magic packet trigger (Reptile/Syslogk pattern). Static magic bytes are signature-matchable. |
-| 43 | Beacon naive | Kthread sends checkin with system metadata, pulls tasks. | **Periodic 60s pattern visible in netflow.** IDS flags regular intervals. |
-| 44 | Beacon jitter | `get_random_u32() % jitter` added to sleep interval. | Timing is now irregular. But volume and destination are still constant. |
-| 45 | Task queue | `list_head` task queue with mutex, dequeue/execute/report. | Core C2 loop. Without a task queue, the beacon can only check in, not receive work. |
-| 46 | Reconnect | Bounded exponential backoff with jitter on failure. | Without cap, backoff grows to hours. Without jitter, retries synchronize. |
-| 47 | Covert channel | ICMP-based C2 via netfilter, magic value in ID field. | No listening port. ICMP payload entropy analysis detects non-standard payloads. |
+| 41 | Kernel socket | `sock_create`, `kernel_connect`, `kernel_sendmsg`. | Connection is plaintext. Visible in `ss` and `tcpdump`. |
+| 42 | Stream I/O | Handle partial send/recv, `EINTR`, EOF. | Naive single-recv drops data. Partial reads corrupt framing. |
+| 43 | Framing | Length-prefix each message for bounded parsing. | Fixed framing is fingerprintable. Protocol looks unlike normal traffic. |
+| 44 | Netfilter hook | `nf_register_net_hook`, inspect/drop/accept packets. | Magic packet trigger (Reptile/Syslogk pattern). Static magic bytes are signature-matchable. |
+| 45 | Beacon naive | Kthread sends checkin with system metadata, pulls tasks. | **Periodic 60s pattern visible in netflow.** IDS flags regular intervals. |
+| 46 | Beacon jitter | `get_random_u32() % jitter` added to sleep interval. | Timing is now irregular. But volume and destination are still constant. |
+| 47 | Task queue | `list_head` task queue with mutex, dequeue/execute/report. | Core C2 loop. Without a task queue, the beacon can only check in, not receive work. |
+| 48 | Reconnect | Bounded exponential backoff with jitter on failure. | Without cap, backoff grows to hours. Without jitter, retries synchronize. |
+| 49 | Covert channel | ICMP-based C2 via netfilter, magic value in ID field. | No listening port. ICMP payload entropy analysis detects non-standard payloads. |
 
 Ling 43 is the key teaching moment: run the naive beacon, capture with `tcpdump`,
 plot the timestamps, see the perfect 60-second intervals. Ling 44 shows how jitter

@@ -6,7 +6,7 @@ Each capstone combines everything you learned into something you can run,
 break, and show off. No new concepts, just assembly.
 
 ```
-  lings 00-08         lings 09-13         lings 14-31
+  lings 00-10         lings 11-15         lings 16-33
   foundation          interfaces          concurrency + introspection + hooking
        |                   |                   |
        v                   v                   v
@@ -18,7 +18,7 @@ break, and show off. No new concepts, just assembly.
        visible             control             audit
        data                surface             tool
 
-  lings 32-38         lings 39-47         lings 48-55
+  lings 34-40         lings 41-49         lings 50-57
   hiding              networking          persistence + crypto
        |                   |                   |
        v                   v                   v

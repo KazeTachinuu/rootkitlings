@@ -2,7 +2,7 @@
 
 Learn Linux kernel rootkit development one mechanism at a time.
 
-56 lings across 9 categories. 6 [capstones](capstones/README.md) where you
+58 lings across 9 categories. 6 [capstones](capstones/README.md) where you
 stop learning and start building. One evolving source file. One disposable VM.
 
 ## Teaching pattern
@@ -55,15 +55,15 @@ $EDITOR module/hello.c
 
 | # | Category | Lings | Teaches |
 |--:|----------|------:|---------|
-| 00 | [Foundation](lings/00_foundation/README.md) | 00-08 | Module lifecycle, build, params, alloc, procfs |
-| 01 | [Interfaces](lings/01_interfaces/README.md) | 09-13 | Error pointers, proc write, lists, char device, ioctl |
-| 02 | [Concurrency](lings/02_concurrency/README.md) | 14-20 | Timer, workqueue, kthread, waiting, mutex, atomics |
-| 03 | [Introspection](lings/03_introspection/README.md) | 21-25 | Task, credentials, escalation, symbols, randomness |
-| 04 | [Hooking](lings/04_hooking/README.md) | 26-31 | Tracefs, kprobe, kretprobe, write protection, ftrace, lifecycle |
-| 05 | [Hiding](lings/05_hiding/README.md) | 32-38 | Module, sysfs, getdents64, file content, log, process, port |
-| 06 | [Networking](lings/06_networking/README.md) | 39-47 | Netfilter, packet sniffing, ICMP trigger, raw socket, DNS spoof, TCP backdoor, covert channel, traffic counter, packet mangling |
-| 07 | [Persistence](lings/07_persistence/README.md) | 48-52 | Proc trigger, init hooks, file infection, boot persistence, self-healing |
-| 08 | [Crypto](lings/08_crypto/README.md) | 53-55 | XOR obfuscation, AES encryption, hash verification |
+| 00 | [Foundation](lings/00_foundation/README.md) | 00-10 | Module lifecycle, build, multi-file, debugging, params, alloc, procfs |
+| 01 | [Interfaces](lings/01_interfaces/README.md) | 11-15 | Error pointers, proc write, lists, char device, ioctl |
+| 02 | [Concurrency](lings/02_concurrency/README.md) | 16-22 | Timer, workqueue, kthread, waiting, mutex, atomics |
+| 03 | [Introspection](lings/03_introspection/README.md) | 23-27 | Task, credentials, escalation, symbols, randomness |
+| 04 | [Hooking](lings/04_hooking/README.md) | 28-33 | Tracefs, kprobe, kretprobe, write protection, ftrace, lifecycle |
+| 05 | [Hiding](lings/05_hiding/README.md) | 34-40 | Module, sysfs, getdents64, file content, log, process, port |
+| 06 | [Networking](lings/06_networking/README.md) | 41-49 | Netfilter, packet sniffing, ICMP trigger, raw socket, DNS spoof, TCP backdoor, covert channel, traffic counter, packet mangling |
+| 07 | [Persistence](lings/07_persistence/README.md) | 50-54 | Proc trigger, init hooks, file infection, boot persistence, self-healing |
+| 08 | [Crypto](lings/08_crypto/README.md) | 55-57 | XOR obfuscation, AES encryption, hash verification |
 
 See the complete [roadmap](lings/README.md).
 
@@ -74,12 +74,12 @@ something you can run, break, and show off. No new concepts, just assembly.
 
 | # | Capstone | After | Builds |
 |--:|----------|------:|--------|
-| 0 | Message board | 08 | sysfs + procfs + heap state |
-| 1 | Command box | 13 | ioctl + list + miscdevice |
-| 2 | Tripwire | 31 | ftrace hook + access log |
-| 3 | Dead drop | 38 | hidden /proc + signal handler |
-| 4 | Remote shell | 47 | kernel C2 + beacon loop |
-| 5 | Red vs blue | 55 | full rootkit + detection game |
+| 0 | Message board | 10 | sysfs + procfs + heap state |
+| 1 | Command box | 15 | ioctl + list + miscdevice |
+| 2 | Tripwire | 33 | ftrace hook + access log |
+| 3 | Dead drop | 40 | hidden /proc + signal handler |
+| 4 | Remote shell | 49 | kernel C2 + beacon loop |
+| 5 | Red vs blue | 57 | full rootkit + detection game |
 
 ## Tools
 
@@ -119,8 +119,8 @@ All module execution happens in the disposable [QEMU VM](vm/README.md).
 
 ## When things break
 
-Ling 02 teaches debugging: dmesg, printk levels, reading a kernel oops,
-and common mistakes. Read it before your first real bug.
+Ling 03 teaches GDB debugging, and ling 04 covers init failure handling.
+Read them before your first real bug.
 
 ## Beyond rootkits
 
@@ -133,7 +133,7 @@ defending them.
 
 ## Multi-file modules
 
-Ling 01 teaches multi-file builds: `hello-y` in Kbuild, shared headers,
+Ling 02 teaches multi-file builds: `hello-y` in Kbuild, shared headers,
 when to split. Capstone 1's reference solution demonstrates the pattern.
 
 ## Editor support

@@ -40,9 +40,11 @@ find_kernel()
 
 MODULE=
 CHECK=
+GDB=
 while (( $# )); do
     case $1 in
         --check) CHECK=${2:?--check requires an argument}; shift 2 ;;
+        --gdb)   GDB=1; shift ;;
         -*)      die "Unknown option: $1" ;;
         *)       MODULE=$1; shift ;;
     esac
@@ -58,7 +60,7 @@ INITRAMFS="$WORK/initramfs.gz"
 KERNEL=$(find_kernel)
 BUSYBOX=$(command -v busybox || true)
 
-readonly VM_DIR ROOT_DIR RELEASE KERNEL BUSYBOX WORK ROOTFS INITRAMFS MODULE CHECK
+readonly VM_DIR ROOT_DIR RELEASE KERNEL BUSYBOX WORK ROOTFS INITRAMFS MODULE CHECK GDB
 
 # -- prerequisites --
 
@@ -141,6 +143,11 @@ run_vm()
 
     if [[ -n $CHECK ]]; then
         cmdline+=' rootkitlings=check'
+    fi
+
+    if [[ -n $GDB ]]; then
+        qemu_args+=(-s -S)
+        ok "GDB server on localhost:1234, VM paused waiting for debugger"
     fi
 
     qemu_args+=(

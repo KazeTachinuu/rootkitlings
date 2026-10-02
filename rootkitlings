@@ -195,6 +195,18 @@ cmd_peek()
     ling=$(resolve_ling "$num")
     local name
     name=$(ling_name "$ling")
+
+    local sol_dir="$ROOT_DIR/.solutions/$name"
+    if [[ -d $sol_dir ]]; then
+        hdr "Reference: $name (multi-file)"
+        for f in "$sol_dir"/*.h "$sol_dir"/*.c "$sol_dir"/Kbuild; do
+            [[ -f $f ]] || continue
+            printf "\n${D}--- %s ---${N}\n" "$(basename "$f")" >&2
+            show_source "$f"
+        done
+        return
+    fi
+
     local sol="$ROOT_DIR/.solutions/$name.c"
     [[ -f $sol ]] || die "No reference for $name"
 
@@ -220,10 +232,26 @@ cmd_reset()
     ling=$(resolve_ling "$num")
     local name
     name=$(ling_name "$ling")
+
+    local sol_dir="$ROOT_DIR/.solutions/$name"
+    if [[ -d $sol_dir ]]; then
+        rm -f "$ROOT_DIR/module"/*.h "$ROOT_DIR/module/calc.c" "$ROOT_DIR/module/main.c"
+        for f in "$sol_dir"/*; do
+            [[ -f $f ]] || continue
+            cp "$f" "$ROOT_DIR/module/$(basename "$f")"
+        done
+        ok "Restored module/ to $name reference (multi-file)"
+        return
+    fi
+
     local sol="$ROOT_DIR/.solutions/$name.c"
     [[ -f $sol ]] || die "No reference for $name"
 
     cp "$sol" "$ROOT_DIR/module/hello.c"
+    rm -f "$ROOT_DIR/module"/*.h "$ROOT_DIR/module/calc.c" "$ROOT_DIR/module/main.c"
+    cat > "$ROOT_DIR/module/Kbuild" << 'KBUILD'
+obj-m += hello.o
+KBUILD
     ok "Restored hello.c to $name reference"
 }
 
@@ -231,6 +259,12 @@ cmd_run()
 {
     make -C "$ROOT_DIR" --quiet
     "$ROOT_DIR/vm/boot" "$ROOT_DIR/module/hello.ko"
+}
+
+cmd_gdb()
+{
+    make -C "$ROOT_DIR" --quiet
+    "$ROOT_DIR/vm/boot" --gdb "$ROOT_DIR/module/hello.ko"
 }
 
 cmd_readme()
@@ -403,6 +437,7 @@ usage()
     printf "  ${w}peek${n}     ${d}[N]${n}  Show the reference solution\n"
     printf "  ${w}reset${n}    ${d}[N]${n}  Restore hello.c to ling N reference\n"
     printf "  ${w}run${n}           Build and boot interactive VM\n"
+    printf "  ${w}gdb${n}           Boot VM paused, waiting for GDB on :1234\n"
     printf "  ${w}list${n}          Show all lings and progress\n"
     printf "  ${w}status${n}        Show current progress\n"
     printf "\n"
@@ -434,6 +469,7 @@ case $1 in
     readme)    shift; cmd_readme    "$@" ;;
     status)    cmd_status                ;;
     run)       shift; cmd_run            ;;
+    gdb)       shift; cmd_gdb           ;;
     -h|--help) usage                     ;;
     *) die "Unknown command: $1. Run 'rootkitlings --help' for usage." ;;
 esac

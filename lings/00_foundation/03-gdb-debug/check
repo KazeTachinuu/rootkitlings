@@ -1,0 +1,12 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "rk_debug proc entry exists"
+test -f /proc/rk_debug
+pass
+
+begin "rk_debug returns result=42"
+got=$(cat /proc/rk_debug)
+expect "result=42"
+[ "$got" = "$expect" ]
+pass

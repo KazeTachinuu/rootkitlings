@@ -29,12 +29,12 @@ A full rootkit assembled from every concept in the course. Then you
 reboot, put on the blue hat, and systematically attack every hiding layer.
 
 Your rootkit must combine:
-- Module hiding (ling 32) and sysfs cleanup (ling 33)
-- Procfs entry hidden from getdents64 (ling 34)
-- Credential escalation via signal (ling 23)
+- Module hiding (ling 34) and sysfs cleanup (ling 35)
+- Procfs entry hidden from getdents64 (ling 36)
+- Credential escalation via signal (ling 25)
 - Encrypted C2 over TCP (lings 43-46 + 53-55)
-- Boot persistence (ling 50)
-- Log scrubbing (ling 36)
+- Boot persistence (ling 52)
+- Log scrubbing (ling 38)
 
 ## Phase 1: Red hat
 

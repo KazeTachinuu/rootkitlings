@@ -1,0 +1,12 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "rk_calc proc entry exists"
+test -f /proc/rk_calc
+pass
+
+begin "rk_calc returns correct values"
+got=$(cat /proc/rk_calc)
+expect "add=7 mul=12"
+[ "$got" = "$expect" ]
+pass

@@ -5,12 +5,12 @@ Hooking is the mechanism behind hiding (category 05): if your rootkit hides anyt
 
 | # | Ling | Teaches | Weakness exposed |
 |--:|------|---------|-----------------|
-| 26 | Tracefs | Read `/sys/kernel/tracing` to observe a function call path. | Tracefs reveals every hookable function. Defenders use it too. |
-| 27 | Kprobe | `register_kprobe` on a function entry. | Kprobes are visible in `/sys/kernel/debug/kprobes/list`. |
-| 28 | Kretprobe | Observe (and modify) a function's return value. | Return value hooks are powerful but stack-limited and visible. |
-| 29 | Write protection | Bypass read-only page protection to patch kernel memory. | Direct CR0 manipulation may be blocked by hardware. Shadow mapping (`virt_to_phys` + `ioremap`) is portable. |
-| 30 | Ftrace | `register_ftrace_function` with `SAVE_REGS`, `IPMODIFY`, `RECURSION`. | Ftrace hooks appear in `/sys/kernel/tracing/enabled_functions`. Volatility `linux_check_fops` detects hooked ops tables. |
-| 31 | Hook lifecycle | Install multiple hooks, roll back on partial failure. | Forgetting one hook on unload leaves a dangling callback: instant crash. |
+| 28 | Tracefs | Read `/sys/kernel/tracing` to observe a function call path. | Tracefs reveals every hookable function. Defenders use it too. |
+| 29 | Kprobe | `register_kprobe` on a function entry. | Kprobes are visible in `/sys/kernel/debug/kprobes/list`. |
+| 30 | Kretprobe | Observe (and modify) a function's return value. | Return value hooks are powerful but stack-limited and visible. |
+| 31 | Write protection | Bypass read-only page protection to patch kernel memory. | Direct CR0 manipulation may be blocked by hardware. Shadow mapping (`virt_to_phys` + `ioremap`) is portable. |
+| 32 | Ftrace | `register_ftrace_function` with `SAVE_REGS`, `IPMODIFY`, `RECURSION`. | Ftrace hooks appear in `/sys/kernel/tracing/enabled_functions`. Volatility `linux_check_fops` detects hooked ops tables. |
+| 33 | Hook lifecycle | Install multiple hooks, roll back on partial failure. | Forgetting one hook on unload leaves a dangling callback: instant crash. |
 
 Ling 29 teaches the concept of write-protected kernel memory and two approaches to bypass it:
 1. **CR0.WP clearing**: toggle the write-protect bit in the control register. Simple,
