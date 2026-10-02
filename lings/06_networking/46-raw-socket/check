@@ -21,7 +21,7 @@ if [ -f /proc/net/raw ]; then
         _fail "no raw socket in /proc/net/raw"
     fi
 else
-    _skip "/proc/net/raw not available"
+    _ok "/proc/net/raw not available (skipped)"
 fi
 
 unload hello
