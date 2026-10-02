@@ -1,94 +1,89 @@
-# Capstone 1: Command box
+# Capstone 1: Beacon
 
-Build a module that accepts commands through proc and ioctl, executes them
-via `call_usermodehelper`, and shows the output in `/proc/rk_cmdbox`.
+Build a module that runs a background heartbeat. Every C2 implant has
+a beacon loop: wake up, check in, go back to sleep. This is yours.
 
 ```
-  userspace                              kernel module
-  +-------------------+                  +-----------------------------+
-  |                   |  write to proc   |                             |
-  |  echo "add:id"    |----------------->|  proc_write()               |
-  |   > /proc/rk_cmdbox   |                  |    |                        |
-  +-------------------+                  |    v                        |
-                                         |  +-----------------------+  |
-  +-------------------+                  |  |  struct cmd_entry     |  |
-  |                   |  read proc       |  |    char text[64]      |  |
-  |  cat /proc/rk_cmdbox  |<----------------|  |    char output[256]   |->...
-  |                   |                  |  +-----------------------+  |
-  +-------------------+                  +-----------------------------+
-
-  echo "add:id"    > /proc/rk_cmdbox  -> queues command
-  echo "add:whoami" > /proc/rk_cmdbox -> queues another
-  echo "exec"      > /proc/rk_cmdbox  -> runs all, captures output
-  echo "clear"     > /proc/rk_cmdbox  -> frees all entries
-  cat /proc/rk_cmdbox                 -> shows command + output pairs
+  module load
+       |
+       v
+  kthread_run("rk_beacon")
+       |
+       v
+  +---------------------------+
+  |  beacon loop              |      /proc/rk_beacon
+  |                           |      +------------------+
+  |  while (!should_stop) {   |      | uptime: 45s      |
+  |    mutex_lock(&state)     |----->| ticks: 9         |
+  |    ticks++                |      | interval: 5      |
+  |    mutex_unlock(&state)   |      | status: running  |
+  |    ssleep(interval)       |      +------------------+
+  |  }                        |
+  +---------------------------+      /sys/.../interval
+                                     echo 10 > interval
+                                     (callback updates interval)
 ```
 
 ## Prerequisites
 
-Lings 00 through 15 (foundation + interfaces).
-
-## Structure
-
-This is your first module that outgrows a single file. Split it:
-
-```
-  module/
-  +-- Kbuild          hello-y := main.o cmds.o
-  +-- main.c          init/exit, proc setup, miscdevice
-  +-- cmds.c          command list, add/exec/clear logic
-  +-- cmds.h          struct cmd_entry, function prototypes
-```
-
-See "Multi-file modules" in the main README for the Kbuild syntax.
+Lings 00 through 23 (foundation + interfaces + concurrency).
 
 ## What you are building
 
-A control surface with no network. This is the shape of every C2 implant
-before the socket gets wired in.
+A kernel thread that wakes up every N seconds, increments a counter,
+and reports its state through `/proc/rk_beacon`.
 
-- A miscdevice at `/dev/rk_cmdbox` accepts ioctl commands (CMD_ADD, CMD_CLEAR, CMD_EXEC).
-- `/proc/rk_cmdbox` accepts writes: `add:CMD`, `exec`, `clear`.
-- `exec` runs each queued command via `call_usermodehelper`, captures stdout
-  to a temp file, reads it back with `kernel_read`.
-- `cat /proc/rk_cmdbox` prints each command and its captured output.
-- Exit clears the list, removes procfs, and deregisters the device.
+- A kthread runs the beacon loop.
+- A sysfs parameter `interval` controls the sleep duration (default 5s).
+- A parameter callback validates the new interval (must be 1-300).
+- A mutex protects the shared state (tick count, interval, start time).
+- `/proc/rk_beacon` reports: uptime, tick count, interval, status.
+- On unload, the thread stops cleanly via `kthread_stop`.
 
 ## What "done" looks like
 
 ```sh
 insmod hello.ko
-echo "add:id" > /proc/rk_cmdbox
-echo "add:uname -r" > /proc/rk_cmdbox
-cat /proc/rk_cmdbox
-# [pending] id
-# [pending] uname -r
-echo "exec" > /proc/rk_cmdbox
-cat /proc/rk_cmdbox
-# $ id
-# uid=0(root) gid=0(root)
-# $ uname -r
-# 7.2.5-4-omarchy
-echo "clear" > /proc/rk_cmdbox
+sleep 12
+cat /proc/rk_beacon
+# uptime: 12s
+# ticks: 2
+# interval: 5
+# status: running
+echo 2 > /sys/module/hello/parameters/interval
+sleep 5
+cat /proc/rk_beacon
+# uptime: 17s
+# ticks: 4
+# interval: 2
+# status: running
 rmmod hello
 ```
 
 ## What a defender sees
 
-`/dev/rk_cmdbox` appears in the device list. `/proc/rk_cmdbox` is world-readable.
-`strace` shows the ioctl numbers in plain sight. No obfuscation yet.
+The kthread shows up in `ps`:
+
+```
+ps aux | grep rk_beacon
+root     [rk_beacon]
+```
+
+Defenders grep for suspicious kernel threads. A name like `rk_beacon`
+is obvious. Real rootkits name their threads after legitimate kernel
+workers (`kworker/0:1`, `migration/0`). Stealth naming comes later.
 
 ## Contract
 
 The check script verifies:
 
-- `/proc/rk_cmdbox` and `/dev/rk_cmdbox` exist after loading.
-- Queue is empty on start.
-- `add:COMMAND` queues a command (shown as `[pending]`).
-- `exec` runs all queued commands (no more `[pending]`, output captured).
-- Command output is accurate (`id` shows `uid=0`, `uname -r` matches).
-- `clear` empties the queue.
-- Both entries disappear after unload.
+- `/proc/rk_beacon` exists after loading.
+- `ticks` increments over time (at least 2 ticks in 12 seconds at default interval).
+- `interval` defaults to 5.
+- Changing `interval` via sysfs changes the tick rate.
+- `status` is `running` while loaded.
+- `/proc/rk_beacon` disappears after unload.
+- No kernel warnings or hung thread on unload.
 
 ## Verify
 
@@ -98,3 +93,4 @@ The check script verifies:
 
 ## Hints
 
+Only if stuck. Try without them first.

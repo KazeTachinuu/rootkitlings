@@ -21,7 +21,7 @@ switch hats and try to break every hiding layer.
 
 ## Prerequisites
 
-All lings (00 through 57).
+All lings (00 through 59).
 
 ## What you are building
 
@@ -29,12 +29,12 @@ A full rootkit assembled from every concept in the course. Then you
 reboot, put on the blue hat, and systematically attack every hiding layer.
 
 Your rootkit must combine:
-- Module hiding (ling 34) and sysfs cleanup (ling 35)
-- Procfs entry hidden from getdents64 (ling 36)
-- Credential escalation via signal (ling 25)
-- Encrypted C2 over TCP (lings 43-46 + 53-55)
-- Boot persistence (ling 52)
-- Log scrubbing (ling 38)
+- Module hiding (ling 36) and sysfs cleanup (ling 37)
+- Procfs entry hidden from getdents64 (ling 38)
+- Credential escalation via rmdir trigger (ling 34)
+- Encrypted C2 over TCP (lings 45-48 + 57-59)
+- Boot persistence (ling 55)
+- Log scrubbing (ling 40)
 
 ## Phase 1: Red hat
 
@@ -98,7 +98,7 @@ The kernel exposes its own hook state. Check it.
 [ ] cat /sys/kernel/tracing/enabled_functions
 ```
 
-If `do_filp_open`, `__x64_sys_getdents64`, or `__x64_sys_kill` appears
+If `do_filp_open`, `__x64_sys_getdents64`, or `__x64_sys_rmdir` appears
 here, something is hooking it. This is the most direct way to find
 ftrace-based rootkits.
 
@@ -238,7 +238,7 @@ The check script verifies:
 - Module is hidden from `lsmod` and `/sys/module/`.
 - `/proc/.rk` is hidden from `ls /proc/` but accessible by direct path.
 - `/proc/.rk` contains `hidden=yes`, `persistence=`, and `escalation=`.
-- `kill -63` is intercepted (signal hook, returns success).
+- `rmdir /tmp/.rk-escalate` triggers credential escalation (rmdir hook).
 - `/etc/modules-load.d/hello.conf` exists with `hello` (boot persistence).
 - Blue team check: `stat /proc/.rk` reveals metadata even when hidden.
 

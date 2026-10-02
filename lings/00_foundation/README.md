@@ -22,5 +22,4 @@ After each group, we reset the module so one mechanism remains visible.
 At ling 10: the entry exists while loaded, dispatches reads, reaches EOF, disappears on unload.
 Foundation is the only sequential category.
 
-After ling 10: build [Capstone 0: Message board](../../capstones/0-message-board/README.md),
-then pick any category that interests you.
+After ling 10: continue with [Interfaces](../01_interfaces/README.md).

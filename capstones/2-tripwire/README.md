@@ -31,7 +31,7 @@ before you learn to go dark.
 
 ## Prerequisites
 
-Lings 00 through 33 (foundation + interfaces + concurrency + introspection + hooking).
+Lings 00 through 35 (foundation + interfaces + concurrency + introspection + hooking).
 
 ## What you are building
 

