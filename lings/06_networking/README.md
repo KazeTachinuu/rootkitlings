@@ -27,3 +27,5 @@ Cobalt Strike all use the same pull-based pattern.
 
 Ling 47 (covert channel) teaches the Reptile/BPFDoor/VoidLink pattern: embed
 commands in ICMP echo payloads. No TCP socket, no listening port, invisible to `ss`.
+
+After ling 49: build [Capstone 4: Remote shell](../../capstones/4-remote-shell/README.md).

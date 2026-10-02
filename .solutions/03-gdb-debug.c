@@ -3,24 +3,30 @@
 #include <linux/seq_file.h>
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("GDB debugging exercise");
 
-static int compute(int base, int factor, int offset)
+static const unsigned char tag[] = { 'r', 'o', 'o', 't' };
+
+static noinline __attribute__((noclone))
+int checksum(const unsigned char *data, int len)
 {
-	return base * factor + offset;
+	int sum = 0;
+	int i;
+
+	for (i = 0; i < len; i++)
+		sum += data[i];
+
+	return sum;
 }
 
-static int rk_buggy_show(struct seq_file *m, void *v)
+static int rk_show(struct seq_file *m, void *v)
 {
-	int result = compute(8, 5, 2);
-
-	seq_printf(m, "result=%d\n", result);
+	seq_printf(m, "result=%d\n", checksum(tag, sizeof(tag)));
 	return 0;
 }
 
 static int __init rk_init(void)
 {
-	proc_create_single("rk_debug", 0444, NULL, rk_buggy_show);
+	proc_create_single("rk_debug", 0444, NULL, rk_show);
 	return 0;
 }
 

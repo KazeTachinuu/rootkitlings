@@ -38,3 +38,5 @@ But it's visible in tracefs. If that matters for your rootkit, module hiding (li
 Note: eBPF (`fentry/fexit`, TC hooks, XDP) is the other major hooking mechanism,
 used by BPFDoor and VoidLink. It needs no kernel module. This course focuses on
 LKM techniques, which is what most real-world rootkits use.
+
+After ling 33: build [Capstone 2: Tripwire](../../capstones/2-tripwire/README.md).

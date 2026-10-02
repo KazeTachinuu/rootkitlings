@@ -13,3 +13,5 @@ Build a proper control surface for the module.
 Procfs is convenient but world-visible. A char device with ioctl gives a typed, permission-controlled
 interface, which is what a rootkit control channel needs. But even ioctl has no authentication:
 anyone with device access can send commands. That gap is closed in crypto (password/key derivation).
+
+After ling 15: build [Capstone 1: Command box](../../capstones/1-command-box/README.md).

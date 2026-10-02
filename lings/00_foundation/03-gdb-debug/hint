@@ -1,1 +1,1 @@
-Break on rk_buggy_show, step into compute(), print result. 8*5+2=42, not 8*5-2.
+Break on checksum, step through the loop, print sum after each iteration. It wraps past 255 on the third addition. What type can hold 452?

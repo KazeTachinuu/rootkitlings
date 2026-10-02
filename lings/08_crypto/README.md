@@ -18,3 +18,5 @@ password at load time. The password never lives in the binary.
 Ling 54 requires `MODULE_SOFTDEP("pre: aes gcm ghash_generic")` to ensure the
 kernel crypto modules are loaded. Without it, `crypto_alloc_aead("gcm(aes)")`
 fails silently on minimal kernel configs.
+
+After ling 57: build [Capstone 5: Red vs blue](../../capstones/5-red-vs-blue/README.md).

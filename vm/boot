@@ -146,8 +146,10 @@ run_vm()
     fi
 
     if [[ -n $GDB ]]; then
+        cmdline+=' nokaslr'
         qemu_args+=(-s -S)
         ok "GDB server on localhost:1234, VM paused waiting for debugger"
+        ok "KASLR disabled for stable symbol addresses"
     fi
 
     qemu_args+=(

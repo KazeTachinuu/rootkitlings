@@ -1,12 +1,11 @@
 #!/bin/sh
 . /lib/check.sh
 
-begin "rk_debug proc entry exists"
-test -f /proc/rk_debug
-pass
+begin "03-gdb-debug"
 
-begin "rk_debug returns result=42"
-got=$(cat /proc/rk_debug)
-expect "result=42"
-[ "$got" = "$expect" ]
-pass
+load hello.ko
+assert_exists /proc/rk_debug
+assert_read /proc/rk_debug "result=452"
+unload hello
+
+summary

@@ -1,4 +1,4 @@
-# Multi-file modules
+# 02 - Multi-file modules
 
 A single `hello.c` works for small experiments. Real kernel modules split
 logic across multiple files with shared headers.

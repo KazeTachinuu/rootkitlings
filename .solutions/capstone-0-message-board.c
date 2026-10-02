@@ -41,6 +41,7 @@ MODULE_PARM_DESC(name, "Name used by the greeting");
 
 static int board_read(struct seq_file *m, void *v)
 {
+	state->reads++;
 	seq_printf(m, "%s (%lu reads)\n",
 		   state->message, state->reads);
 	return 0;

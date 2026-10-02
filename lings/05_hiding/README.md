@@ -21,3 +21,5 @@ If your rootkit uses lings 32-35, the dmesg trace still remains.
 Ling 36 hooks `do_syslog()` via ftrace (ling 30) to filter `printk` evidence of loading.
 
 Every hiding technique has a bypass. Stack what your threat model requires.
+
+After ling 40: build [Capstone 3: Dead drop](../../capstones/3-dead-drop/README.md).
