@@ -1,0 +1,27 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "20-atomic"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_atomic
+
+# Wait for both threads to complete
+sleep 2
+
+# Verify exact count: 2 threads * 10000 iterations = 20000
+count=$(cat /proc/rk_atomic | sed -n 's/^count=\([0-9]*\).*/\1/p')
+if [ "$count" -eq 20000 ] 2>/dev/null; then
+    _ok "atomic count = $count (exact)"
+else
+    _fail "expected count=20000, got $count"
+fi
+
+# Threads should have finished (running=0)
+assert_contains /proc/rk_atomic "running=0"
+
+unload hello
+assert_absent /proc/rk_atomic
+
+summary

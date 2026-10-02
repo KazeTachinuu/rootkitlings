@@ -1,0 +1,62 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "47-packet-mangling"
+
+ifconfig lo 127.0.0.1 up 2>/dev/null
+
+# Start a UDP listener on port 9999
+nc -l -u -p 9999 -s 127.0.0.1 > /tmp/rk_mitm_out 2>&1 &
+listener_pid=$!
+sleep 1
+
+# Without the module, sending to port 7777 goes nowhere
+echo "before_hook" | nc -u -w 1 127.0.0.1 7777 2>/dev/null || true
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_mangler
+
+assert_contains /proc/rk_mangler "trap_port=7777"
+assert_contains /proc/rk_mangler "redir_port=9999"
+
+# Kill old listener, start fresh one
+kill $listener_pid 2>/dev/null; wait $listener_pid 2>/dev/null
+nc -l -u -p 9999 -s 127.0.0.1 > /tmp/rk_mitm_out 2>&1 &
+listener_pid=$!
+sleep 1
+
+# Send to port 7777: the hook should redirect to 9999
+echo "mitm_proof" | nc -u -w 1 127.0.0.1 7777 2>/dev/null || true
+sleep 1
+
+# Kill listener to flush output
+kill $listener_pid 2>/dev/null; wait $listener_pid 2>/dev/null
+
+# The listener on 9999 should have received data sent to 7777
+if [ -f /tmp/rk_mitm_out ]; then
+    out=$(cat /tmp/rk_mitm_out)
+    case "$out" in
+        *mitm_proof*)
+            _ok "data sent to :7777 arrived at :9999 (MITM redirect)"
+            ;;
+        *)
+            _fail "listener on :9999 did not receive data from :7777 (got: '$out')"
+            ;;
+    esac
+else
+    _fail "no output captured from listener"
+fi
+
+# Verify redirect counter
+count=$(cat /proc/rk_mangler | sed -n 's/^redirected=\([0-9]*\)/\1/p')
+if [ -n "$count" ] && [ "$count" -gt 0 ]; then
+    _ok "redirected=$count packets"
+else
+    _fail "redirect counter not incremented (got: $count)"
+fi
+
+unload hello
+assert_absent /proc/rk_mangler
+
+summary

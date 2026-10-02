@@ -1,0 +1,30 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "18-shared-state"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_race
+
+sleep 2
+
+# Counter must be positive (threads ran)
+assert_gt /proc/rk_race 0
+
+# Race loses updates: count should be < 20000 on multi-CPU.
+# On single-vCPU the scheduler may serialize threads, so accept
+# either outcome but note it.
+count=$(cat /proc/rk_race | tr -dc '0-9')
+if [ "$count" -lt 20000 ]; then
+    _ok "race detected: count=$count < 20000"
+elif [ "$count" -eq 20000 ]; then
+    _ok "count=$count (no race on single CPU, expected)"
+else
+    _fail "count=$count exceeds 20000"
+fi
+
+unload hello
+assert_absent /proc/rk_race
+
+summary

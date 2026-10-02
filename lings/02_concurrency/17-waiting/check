@@ -1,0 +1,23 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "17-waiting"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_gate
+
+assert_read /proc/rk_gate "0"
+
+printf '%s' "wake" > /proc/rk_gate
+sleep 1
+assert_read /proc/rk_gate "1"
+
+printf '%s' "wake" > /proc/rk_gate
+sleep 1
+assert_read /proc/rk_gate "2"
+
+unload hello
+assert_absent /proc/rk_gate
+
+summary

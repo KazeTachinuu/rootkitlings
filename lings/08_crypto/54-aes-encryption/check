@@ -1,0 +1,29 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "54-aes-encryption"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_aes
+
+assert_contains /proc/rk_aes "algo=aes-cbc"
+assert_contains /proc/rk_aes "status=ok"
+
+# Verify encryption actually transformed data (ciphertext != plaintext)
+proc_data=$(cat /proc/rk_aes)
+plain=$(printf '%s\n' "$proc_data" | sed -n 's/^plain=//p')
+cipher=$(printf '%s\n' "$proc_data" | sed -n 's/^cipher=//p')
+if [ -n "$plain" ] && [ -n "$cipher" ] && [ "$plain" != "$cipher" ]; then
+    _ok "ciphertext differs from plaintext"
+else
+    _fail "ciphertext should differ from plaintext"
+fi
+
+# Verify round-trip: decrypt(encrypt(plain)) == plain
+assert_contains /proc/rk_aes "match=yes"
+
+unload hello
+assert_absent /proc/rk_aes
+
+summary

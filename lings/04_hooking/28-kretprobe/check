@@ -1,0 +1,29 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "28-kretprobe"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_retprobe
+
+# Trigger some opens (successful and failed)
+cat /proc/rk_retprobe > /dev/null
+cat /proc/rk_retprobe > /dev/null
+cat /nonexistent 2>/dev/null
+
+assert_contains /proc/rk_retprobe "success="
+assert_contains /proc/rk_retprobe "failed="
+
+# Verify success count increased after triggering opens
+success=$(cat /proc/rk_retprobe | sed -n 's/.*success=\([0-9]*\).*/\1/p')
+if [ "$success" -gt 0 ] 2>/dev/null; then
+    _ok "success count > 0 ($success)"
+else
+    _fail "success count should be > 0"
+fi
+
+unload hello
+assert_absent /proc/rk_retprobe
+
+summary

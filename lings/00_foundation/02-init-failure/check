@@ -1,0 +1,24 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "02-init-failure"
+
+# Init runs but returns an error, so insmod must fail
+load_fail hello.ko
+assert_log "hello: loaded"
+
+# Module should NOT be in lsmod after failed init
+if lsmod | grep -q hello; then
+    _fail "module loaded despite init failure"
+else
+    _ok "module rejected (not in lsmod)"
+fi
+
+# Exit should NOT have been called
+if dmesg | grep -q "hello: unloaded"; then
+    _fail "exit was called (should not be after failed init)"
+else
+    _ok "exit was not called"
+fi
+
+summary

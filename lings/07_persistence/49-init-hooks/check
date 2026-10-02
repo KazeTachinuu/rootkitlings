@@ -1,0 +1,27 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "49-init-hooks"
+
+rm -f /tmp/rootkit_was_here
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_persist
+
+# call_usermodehelper must have created the file
+if [ -f /tmp/rootkit_was_here ]; then
+    _ok "/tmp/rootkit_was_here created by kernel"
+else
+    _fail "call_usermodehelper did not execute"
+fi
+
+assert_contains /proc/rk_persist "cmd=touch /tmp/rootkit_was_here"
+assert_contains /proc/rk_persist "exit=0"
+
+rm -f /tmp/rootkit_was_here
+
+unload hello
+assert_absent /proc/rk_persist
+
+summary

@@ -1,0 +1,20 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "29-write-protection"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_wrprot
+
+# Must show before/after values
+assert_contains /proc/rk_wrprot "before=0xDEADBEEF"
+assert_contains /proc/rk_wrprot "after=0xCAFEBABE"
+
+# The marker must have been actually modified
+assert_contains /proc/rk_wrprot "modified=yes"
+
+unload hello
+assert_absent /sys/module/hello
+
+summary

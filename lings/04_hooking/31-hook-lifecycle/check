@@ -1,0 +1,35 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "31-hook-lifecycle"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_lifecycle
+
+# Trigger vfs_read (cat) and vfs_write (echo to file)
+cat /proc/rk_lifecycle > /dev/null
+cat /proc/rk_lifecycle > /dev/null
+echo test > /tmp/rk_lifecycle_test
+
+assert_contains /proc/rk_lifecycle "vfs_read="
+assert_contains /proc/rk_lifecycle "vfs_write="
+
+# Verify both counters increased
+vr=$(cat /proc/rk_lifecycle | sed -n 's/.*vfs_read=\([0-9]*\).*/\1/p')
+vw=$(cat /proc/rk_lifecycle | sed -n 's/.*vfs_write=\([0-9]*\).*/\1/p')
+if [ "$vr" -gt 0 ] 2>/dev/null; then
+    _ok "vfs_read count > 0 ($vr)"
+else
+    _fail "vfs_read count should be > 0"
+fi
+if [ "$vw" -gt 0 ] 2>/dev/null; then
+    _ok "vfs_write count > 0 ($vw)"
+else
+    _fail "vfs_write count should be > 0"
+fi
+
+unload hello
+assert_absent /proc/rk_lifecycle
+
+summary

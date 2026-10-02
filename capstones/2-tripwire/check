@@ -1,0 +1,61 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "capstone-2: tripwire"
+
+# Ensure watched files exist in the initramfs
+printf 'root:x:0:0:root:/root:/bin/sh\n' > /etc/passwd 2>/dev/null
+printf 'root:!:0:::::\n' > /etc/shadow 2>/dev/null
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_tripwire
+
+# Log should be empty before any watched access
+before=$(cat /proc/rk_tripwire)
+if [ -z "$before" ]; then
+    _ok "log empty on start"
+else
+    _fail "log should be empty, got '$before'"
+fi
+
+# Touch a watched file
+cat /etc/shadow > /dev/null 2>&1
+
+# Check log entry appeared
+assert_contains /proc/rk_tripwire "[tripwire]"
+assert_contains /proc/rk_tripwire "/etc/shadow"
+
+# Touch another watched file
+cat /etc/passwd > /dev/null 2>&1
+assert_contains /proc/rk_tripwire "/etc/passwd"
+
+# Log should have uid and pid
+assert_contains /proc/rk_tripwire "uid="
+assert_contains /proc/rk_tripwire "pid="
+
+# Disarm and verify no new entries
+entry_count=$(cat /proc/rk_tripwire | wc -l)
+write_param hello armed 0
+cat /etc/shadow > /dev/null 2>&1
+after_count=$(cat /proc/rk_tripwire | wc -l)
+if [ "$after_count" -eq "$entry_count" ]; then
+    _ok "no new entries while disarmed"
+else
+    _fail "logged while disarmed: $entry_count -> $after_count"
+fi
+
+# Re-arm and verify it works again
+write_param hello armed 1
+cat /etc/shadow > /dev/null 2>&1
+rearm_count=$(cat /proc/rk_tripwire | wc -l)
+if [ "$rearm_count" -gt "$after_count" ]; then
+    _ok "logging resumed after re-arm"
+else
+    _fail "no new entries after re-arm"
+fi
+
+unload hello
+assert_absent /proc/rk_tripwire
+
+summary

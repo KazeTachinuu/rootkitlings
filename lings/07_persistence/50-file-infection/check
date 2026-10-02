@@ -1,0 +1,65 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "50-file-infection"
+
+# Create a victim script
+printf '#!/bin/sh\necho clean\n' > /tmp/rk_victim.sh
+chmod 755 /tmp/rk_victim.sh
+
+# Verify it runs clean
+clean=$(/tmp/rk_victim.sh)
+if [ "$clean" = "clean" ]; then
+    _ok "victim script runs clean"
+else
+    _fail "victim script broken before infection"
+fi
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_infect
+
+# Module should have injected payload into the victim
+content=$(cat /tmp/rk_victim.sh)
+case "$content" in
+    *"rootkit was here"*)
+        _ok "payload injected into victim"
+        ;;
+    *)
+        _fail "payload not found in victim: $content"
+        ;;
+esac
+
+# Original content must still be present (prepend, not replace)
+case "$content" in
+    *"echo clean"*)
+        _ok "original content preserved"
+        ;;
+    *)
+        _fail "original content lost"
+        ;;
+esac
+
+assert_contains /proc/rk_infect "infected=yes"
+assert_contains /proc/rk_infect "target=/tmp/rk_victim.sh"
+
+unload hello
+assert_absent /proc/rk_infect
+
+# After unload, module should restore the original file
+restored=$(cat /tmp/rk_victim.sh)
+case "$restored" in
+    *"rootkit was here"*)
+        _fail "payload still present after unload"
+        ;;
+    *"echo clean"*)
+        _ok "original content restored after unload"
+        ;;
+    *)
+        _fail "unexpected content after unload: $restored"
+        ;;
+esac
+
+rm -f /tmp/rk_victim.sh
+
+summary

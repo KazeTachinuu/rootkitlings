@@ -1,0 +1,38 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "23-credential-escalation"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_escalate
+
+# Module must be writable (mode 0666)
+if ! printf '%s' "test" > /proc/rk_escalate 2>/dev/null; then
+    _fail "/proc/rk_escalate not writable"
+else
+    _ok "/proc/rk_escalate is writable"
+fi
+
+# Read uid before escalation
+before=$(cat /proc/rk_escalate)
+assert_contains /proc/rk_escalate "uid="
+
+# Trigger escalation by writing a string starting with 'e'
+printf '%s' "escalate" > /proc/rk_escalate
+
+# After escalation, uid should be 0
+after=$(cat /proc/rk_escalate)
+case "$after" in
+    *"uid=0"*)
+        _ok "escalated to uid=0"
+        ;;
+    *)
+        _fail "expected uid=0 after escalation, got: $after"
+        ;;
+esac
+
+unload hello
+assert_absent /proc/rk_escalate
+
+summary

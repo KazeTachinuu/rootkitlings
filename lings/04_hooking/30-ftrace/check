@@ -1,0 +1,41 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "30-ftrace"
+
+mount -t tracefs tracefs /sys/kernel/tracing 2>/dev/null
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_ftrace
+
+# Snapshot counter, trigger opens, verify it grew
+before=$(cat /proc/rk_ftrace | tr -dc '0-9')
+
+cat /dev/null > /dev/null
+cat /dev/null > /dev/null
+cat /dev/null > /dev/null
+
+after=$(cat /proc/rk_ftrace | tr -dc '0-9')
+if [ "$after" -gt "$before" ]; then
+    _ok "ftrace hook fires on open: $before -> $after"
+else
+    _fail "counter did not increase: $before -> $after"
+fi
+
+# Verify the hook is registered in the tracing subsystem
+mount -t tracefs tracefs /sys/kernel/tracing 2>/dev/null
+enabled=$(cat /sys/kernel/tracing/enabled_functions 2>/dev/null)
+case "$enabled" in
+    *hook_callback*|*rk_ftrace*)
+        _ok "ftrace function registered in tracing subsystem"
+        ;;
+    *)
+        _ok "ftrace hook active (counter proves it)"
+        ;;
+esac
+
+unload hello
+assert_absent /proc/rk_ftrace
+
+summary

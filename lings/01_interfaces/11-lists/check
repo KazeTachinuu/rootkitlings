@@ -1,0 +1,23 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "11-lists"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_registry
+
+assert_read /proc/rk_registry ""
+
+printf '%s' "first" > /proc/rk_registry
+printf '%s' "second" > /proc/rk_registry
+printf '%s' "third" > /proc/rk_registry
+
+assert_contains /proc/rk_registry "first"
+assert_contains /proc/rk_registry "second"
+assert_contains /proc/rk_registry "third"
+
+unload hello
+assert_absent /proc/rk_registry
+
+summary

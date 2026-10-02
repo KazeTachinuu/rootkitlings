@@ -1,0 +1,16 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "06-rollback failure path"
+
+load_fail hello.ko fail_second=1
+
+begin "06-rollback success path"
+
+load hello.ko
+assert_loaded hello
+
+unload hello
+assert_absent /sys/module/hello
+
+summary

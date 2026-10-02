@@ -1,0 +1,38 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "52-self-healing"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_watchdog
+
+assert_contains /proc/rk_watchdog "watchdog=active"
+assert_contains /proc/rk_watchdog "heals=0"
+
+# Kill the proc entry via the write interface
+printf 'kill' > /proc/rk_watchdog
+
+# Watchdog processes kill asynchronously and recreates within 1s
+sleep 3
+
+# By now: killed + recreated
+if [ -e /proc/rk_watchdog ]; then
+    _ok "watchdog recreated /proc/rk_watchdog"
+else
+    _fail "watchdog did not recreate /proc/rk_watchdog"
+    unload hello
+    summary
+fi
+
+# Heal counter must have incremented
+heals=$(cat /proc/rk_watchdog | sed -n 's/^heals=//p')
+if [ "$heals" -gt 0 ] 2>/dev/null; then
+    _ok "heal counter = $heals"
+else
+    _fail "heal counter not incremented ($heals)"
+fi
+
+unload hello
+
+summary

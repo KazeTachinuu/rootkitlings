@@ -1,0 +1,44 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "51-boot-persistence"
+
+# File must not exist before load
+rm -f /etc/modules-load.d/hello.conf
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_boot
+
+# filp_open + kernel_write must have created the file
+if [ -f /etc/modules-load.d/hello.conf ]; then
+    _ok "persistence file created"
+else
+    _fail "/etc/modules-load.d/hello.conf not created"
+fi
+
+# File content must be the module name
+content=$(cat /etc/modules-load.d/hello.conf)
+case "$content" in
+    hello*)
+        _ok "file contains module name"
+        ;;
+    *)
+        _fail "expected 'hello', got '$content'"
+        ;;
+esac
+
+# Proc output reflects what was written
+assert_contains /proc/rk_boot "path=/etc/modules-load.d/hello.conf"
+assert_contains /proc/rk_boot "content=hello"
+
+unload hello
+
+# Cleanup: file must be removed on unload
+if [ -f /etc/modules-load.d/hello.conf ]; then
+    _fail "persistence file not cleaned up on unload"
+else
+    _ok "persistence file removed on unload"
+fi
+
+summary

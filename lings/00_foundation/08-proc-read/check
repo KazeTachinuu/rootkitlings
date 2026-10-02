@@ -1,0 +1,36 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "08-proc-read"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_reader
+
+# Read returns non-empty content
+content=$(cat /proc/rk_reader)
+if [ -n "$content" ]; then
+    _ok "proc read returned content"
+else
+    _fail "proc read returned empty"
+fi
+
+# Second read returns the same content (position resets between opens)
+content2=$(cat /proc/rk_reader)
+if [ "$content" = "$content2" ]; then
+    _ok "second read matches first (position resets)"
+else
+    _fail "reads differ: '$content' vs '$content2'"
+fi
+
+# Verify it's read-only (write should fail)
+if printf 'x' > /proc/rk_reader 2>/dev/null; then
+    _fail "/proc/rk_reader is writable (should be 0444)"
+else
+    _ok "/proc/rk_reader is read-only"
+fi
+
+unload hello
+assert_absent /proc/rk_reader
+
+summary

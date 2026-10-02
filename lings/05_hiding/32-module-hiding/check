@@ -1,0 +1,25 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "32-module-hiding"
+
+load hello.ko
+assert_exists /proc/rk_cloak
+
+# Module should be hidden from lsmod
+if lsmod | grep -q hello; then
+    _fail "module visible in lsmod (should be hidden)"
+else
+    _ok "module hidden from lsmod"
+fi
+
+# But still visible in sysfs (that's the weakness this ling teaches)
+assert_exists /sys/module/hello
+
+# Procfs still works
+assert_read /proc/rk_cloak "hidden"
+
+# Hidden modules cannot be rmmod'd by name in busybox
+# That's expected: the module list entry is gone
+
+summary

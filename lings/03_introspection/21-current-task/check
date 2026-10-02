@@ -1,0 +1,28 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "21-current-task"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_task
+
+# Must show the calling process's PID and name
+content=$(cat /proc/rk_task)
+if echo "$content" | grep -q "$$\|pid\|PID"; then
+    _ok "shows process info: $content"
+else
+    _fail "no process info found: $content"
+fi
+
+# Must identify the reader (cat is what reads /proc/rk_task)
+if echo "$content" | grep -q "cat"; then
+    _ok "identifies calling process (cat)"
+else
+    _fail "does not identify calling process: $content"
+fi
+
+unload hello
+assert_absent /proc/rk_task
+
+summary

@@ -10,12 +10,7 @@
 .tmp_versions/
 Module.symvers
 modules.order
-
-# Lab-generated
-lab/linux-*/
-lab/build/
-lab/*.img
-lab/*.qcow2
+compile_commands.json
 
 # Editor/OS
 .DS_Store
@@ -24,11 +19,11 @@ lab/*.qcow2
 *.swp
 *~
 
-# Local solutions (never commit student answers)
-tps/*/solution/
-!tps/tp1-hello-lkm/solution/
-
 # Copyrighted PDFs / given files (books, slides from school)
 given_files/
 given_files_tar.bz2
 epirootkit-slides.pdf
+
+# Rootkitlings
+.progress
+tools/icmp_send

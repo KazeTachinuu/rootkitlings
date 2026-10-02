@@ -1,0 +1,29 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "10-proc-write"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_store
+
+# Read the initial value (whatever it is)
+initial=$(cat /proc/rk_store)
+if [ -n "$initial" ]; then
+    _ok "initial read returned: $initial"
+else
+    _ok "initial read returned empty (valid default)"
+fi
+
+# Write a value, read it back
+printf '%s' "phantom" > /proc/rk_store
+assert_read /proc/rk_store "phantom"
+
+# Overwrite with another value
+printf '%s' "specter" > /proc/rk_store
+assert_read /proc/rk_store "specter"
+
+unload hello
+assert_absent /proc/rk_store
+
+summary

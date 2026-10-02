@@ -1,0 +1,82 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "capstone-5: red vs blue"
+
+load hello.ko
+# Module hides itself, so assert_loaded will FAIL (that's the point)
+
+# Layer 1: module hidden from lsmod
+if lsmod | grep -q hello; then
+    _fail "module visible in lsmod"
+else
+    _ok "module hidden from lsmod"
+fi
+
+# Layer 2: module hidden from sysfs
+if [ -d /sys/module/hello ]; then
+    _fail "module visible in /sys/module/"
+else
+    _ok "module hidden from /sys/module/"
+fi
+
+# Layer 3: proc entry hidden from listing
+hidden=$(ls /proc/ | grep -c "\.rk")
+if [ "$hidden" -eq 0 ]; then
+    _ok "proc entry hidden from ls"
+else
+    _fail "proc entry visible in ls /proc/"
+fi
+
+# Layer 3b: but accessible by direct path
+if cat /proc/.rk > /dev/null 2>&1; then
+    _ok "proc entry accessible by direct path"
+else
+    _fail "proc entry not accessible at /proc/.rk"
+fi
+
+assert_contains /proc/.rk "hidden=yes"
+assert_contains /proc/.rk "persistence="
+assert_contains /proc/.rk "escalation="
+
+# Layer 4: kill hook intercepts signal 63 (returns 0 instead of delivering)
+kill -63 $$ 2>/dev/null
+if [ $? -eq 0 ]; then
+    _ok "signal 63 intercepted by hook"
+else
+    _fail "signal 63 not intercepted"
+fi
+
+# Layer 5: boot persistence file exists
+if [ -f /etc/modules-load.d/hello.conf ]; then
+    content=$(cat /etc/modules-load.d/hello.conf)
+    case "$content" in
+        hello*)
+            _ok "persistence file installed"
+            ;;
+        *)
+            _fail "persistence file has wrong content: '$content'"
+            ;;
+    esac
+else
+    _fail "persistence file not found at /etc/modules-load.d/hello.conf"
+fi
+
+# Blue team detection: direct path works even when hidden
+_hdr "blue team checks"
+if stat /proc/.rk > /dev/null 2>&1; then
+    _ok "stat /proc/.rk reveals metadata (detection vector)"
+else
+    _skip "stat failed"
+fi
+
+# Unload (module is hidden, need to find it)
+# Since the module removed itself from the list, rmmod by name may fail
+# but the check proves all layers work
+if rmmod hello 2>/dev/null; then
+    _ok "unloaded hello"
+else
+    _skip "rmmod hello failed (module hidden from kernel list)"
+fi
+
+summary

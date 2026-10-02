@@ -1,0 +1,30 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "42-raw-socket"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_rawsock
+
+# Socket should be open after init
+assert_contains /proc/rk_rawsock "socket=open"
+assert_contains /proc/rk_rawsock "type=RAW"
+assert_contains /proc/rk_rawsock "proto=ICMP"
+
+# Verify the raw socket actually exists in the kernel network stack
+if [ -f /proc/net/raw ]; then
+    raw_count=$(cat /proc/net/raw | wc -l)
+    if [ "$raw_count" -gt 1 ]; then
+        _ok "raw socket visible in /proc/net/raw"
+    else
+        _fail "no raw socket in /proc/net/raw"
+    fi
+else
+    _skip "/proc/net/raw not available"
+fi
+
+unload hello
+assert_absent /proc/rk_rawsock
+
+summary

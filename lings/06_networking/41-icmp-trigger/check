@@ -1,0 +1,43 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "41-icmp-trigger"
+
+ifconfig lo 127.0.0.1 up 2>/dev/null
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_trigger
+
+assert_contains /proc/rk_trigger "magic=0x1337"
+assert_contains /proc/rk_trigger "triggers=0"
+
+# Normal ping should NOT trigger (wrong echo ID)
+ping -c 2 127.0.0.1 >/dev/null 2>&1
+assert_contains /proc/rk_trigger "triggers=0"
+
+# Send ICMP echo with the magic ID 0x1337
+icmp_send 127.0.0.1 1337
+sleep 1
+
+count=$(cat /proc/rk_trigger | sed -n 's/^triggers=//p')
+if [ "$count" -gt 0 ] 2>/dev/null; then
+    _ok "magic ICMP triggered: triggers=$count"
+else
+    _fail "magic ICMP did not trigger (triggers=$count)"
+fi
+
+# Send another to verify counter keeps going
+icmp_send 127.0.0.1 1337
+sleep 1
+count2=$(cat /proc/rk_trigger | sed -n 's/^triggers=//p')
+if [ "$count2" -gt "$count" ] 2>/dev/null; then
+    _ok "counter increments: $count -> $count2"
+else
+    _fail "counter stuck: $count -> $count2"
+fi
+
+unload hello
+assert_absent /proc/rk_trigger
+
+summary

@@ -1,55 +1,140 @@
-# EpiRootkit, projet SYS2 WLKOM
+# Rootkitlings
 
-Cours EPITA APPING SYS2. Support de dev + docs pour le projet Wild Linux Kernel Object Module.
+Learn Linux kernel rootkit development one mechanism at a time.
 
-## Structure du depot
+56 lings across 9 categories. 6 [capstones](capstones/README.md) where you
+stop learning and start building. One evolving source file. One disposable VM.
+
+## Teaching pattern
+
+Every ling follows the same rhythm:
 
 ```
-docs/    Cours, comprehension profonde, methodologie de recherche, grille d'eval
-lab/     Env de dev kernel (QEMU + Debian jetable, ou virtme-ng pour Rootkit 101)
-tps/     TPs incrementaux qui preparent au projet WLKOM
+  read the concept
+       |
+       v
+  predict what will happen
+       |
+       v
+  implement it yourself      (one file: module/hello.c)
+       |
+       v
+  check it in a VM           (rootkitlings check N)
+       |
+       v
+  understand the defense     ("What a defender sees")
 ```
 
-## Par ou commencer
+Each ling teaches one concept visually, gives you the API, and lets you
+write the code. Later lings build on earlier ones: if you wrote a proc
+read callback in ling 08, ling 21 tells you to reuse that pattern, not
+copy new code. Hints are available when you get stuck.
 
-Prof: lire docs/00-cours.md, provisionner le lab (lab/README.md), distribuer.
+Each ling is self-contained: pick the concepts your rootkit needs, skip the rest.
+The [simplest rootkit](lings/README.md#minimal-rootkit-5-lings) is 5 lings.
+Everything else is optional hardening.
 
-Etudiant: suivre lab/README.md pour installer, puis faire les TPs dans l'ordre.
+## Quick start
 
-## Prerequis
+```bash
+# Check host prerequisites
+command -v make git file modinfo python3 bear busybox cpio gzip qemu-system-x86_64
+test -d "/lib/modules/$(uname -r)/build"
 
-Machine Arch Linux (les etudiants EPITA en ont une). Connaissance C systeme (pointeurs, structures, syscalls). Bases GDB. 20 GB dispo (sources kernel + build).
+# Read the first exercise
+./rootkitlings readme 0
 
-## Environnement
+# Edit your solution
+$EDITOR module/hello.c
 
-Hote: Arch Linux avec GNOME.
-Cible: kernel Linux dans QEMU (Debian minimal jetable) ou virtme-ng pour iteration rapide.
-Kernel: 6.x sur Arch.
+# Test it in a disposable VM
+./rootkitlings check 0
 
-## Le projet WLKOM
+# See all lings and progress
+./rootkitlings list
+```
 
-Le projet final est WLKOM (voir given_files/epirootkit-subject.pdf). Ce depot fournit les TPs qui preparent aux features requises:
+## Categories
 
-- Compile
-- Connection persistante avec alerte visuelle
-- Persistence apres reboot
-- Executing commands avec retour stdout/stderr/exit
-- Password
-- Upload/download
-- Hide (module list, ligne dans fichier, dir/files)
-- Crypto
+| # | Category | Lings | Teaches |
+|--:|----------|------:|---------|
+| 00 | [Foundation](lings/00_foundation/README.md) | 00-08 | Module lifecycle, build, params, alloc, procfs |
+| 01 | [Interfaces](lings/01_interfaces/README.md) | 09-13 | Error pointers, proc write, lists, char device, ioctl |
+| 02 | [Concurrency](lings/02_concurrency/README.md) | 14-20 | Timer, workqueue, kthread, waiting, mutex, atomics |
+| 03 | [Introspection](lings/03_introspection/README.md) | 21-25 | Task, credentials, escalation, symbols, randomness |
+| 04 | [Hooking](lings/04_hooking/README.md) | 26-31 | Tracefs, kprobe, kretprobe, write protection, ftrace, lifecycle |
+| 05 | [Hiding](lings/05_hiding/README.md) | 32-38 | Module, sysfs, getdents64, file content, log, process, port |
+| 06 | [Networking](lings/06_networking/README.md) | 39-47 | Netfilter, packet sniffing, ICMP trigger, raw socket, DNS spoof, TCP backdoor, covert channel, traffic counter, packet mangling |
+| 07 | [Persistence](lings/07_persistence/README.md) | 48-52 | Proc trigger, init hooks, file infection, boot persistence, self-healing |
+| 08 | [Crypto](lings/08_crypto/README.md) | 53-55 | XOR obfuscation, AES encryption, hash verification |
 
-Les features sont notees dans le sujet WLKOM.
+See the complete [roadmap](lings/README.md).
 
-## Ressources externes
+## Capstones
 
-- TheXcellerator, serie 11 posts, reference ftrace hooking
-- Diamorphine (m0nad), rootkit historique magic signals 31/63/64
-- KoviD (carloslack), le plus complet actuellement, hooks filldir
-- Elastic Security Labs "Hooked on Linux" (mars 2026), taxonomie
-- LKRG, cote defensif
-- linux-insides gitbook, kernel deep dive
+Every ~10 lings, a [capstone](capstones/README.md) assembles what you learned into
+something you can run, break, and show off. No new concepts, just assembly.
 
-## Licence
+| # | Capstone | After | Builds |
+|--:|----------|------:|--------|
+| 0 | Message board | 08 | sysfs + procfs + heap state |
+| 1 | Command box | 13 | ioctl + list + miscdevice |
+| 2 | Tripwire | 31 | ftrace hook + access log |
+| 3 | Dead drop | 38 | hidden /proc + signal handler |
+| 4 | Remote shell | 47 | kernel C2 + beacon loop |
+| 5 | Red vs blue | 55 | full rootkit + detection game |
 
-Materiel pedagogique EPITA APPING SYS2. Usage academique.
+## Tools
+
+Build the current module:
+
+```bash
+make
+```
+
+Prepare clangd (requires `bear`):
+
+```bash
+make editor
+```
+
+Remove generated files:
+
+```bash
+make clean
+```
+
+## CLI
+
+```bash
+./rootkitlings readme [N]        # Read the exercise
+./rootkitlings check  [N]        # Build and verify in a VM
+./rootkitlings peek   [N]        # Show the reference solution
+./rootkitlings reset  [N]        # Restore hello.c to the reference
+./rootkitlings status            # Show progress and next steps
+./rootkitlings list              # Show all lings
+./rootkitlings run               # Boot interactive VM
+./rootkitlings check capstone-N  # Verify capstone N
+```
+
+All module execution happens in the disposable [QEMU VM](vm/README.md).
+
+## When things break
+
+Ling 02 teaches debugging: dmesg, printk levels, reading a kernel oops,
+and common mistakes. Read it before your first real bug.
+
+## Multi-file modules
+
+Ling 01 teaches multi-file builds: `hello-y` in Kbuild, shared headers,
+when to split. Capstone 1's reference solution demonstrates the pattern.
+
+## Editor support
+
+| Editor | Config |
+|--------|--------|
+| clangd (any editor) | `.clangd` strips kernel-specific GCC flags |
+| clang-format | `.clang-format` uses kernel coding style |
+| All editors | `.editorconfig` sets tabs/indent per file type |
+
+Run `make editor` after any build to regenerate `compile_commands.json`.

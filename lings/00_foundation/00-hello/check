@@ -1,0 +1,14 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "00-hello"
+
+load hello.ko
+assert_loaded hello
+assert_log "hello: loaded"
+
+unload hello
+assert_absent /sys/module/hello
+assert_log "hello: unloaded"
+
+summary

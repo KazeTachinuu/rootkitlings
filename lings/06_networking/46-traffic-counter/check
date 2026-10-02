@@ -1,0 +1,29 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "46-traffic-counter"
+
+ifconfig lo 127.0.0.1 up 2>/dev/null
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_counter
+
+# Generate bidirectional traffic
+ping -c 3 127.0.0.1 >/dev/null 2>&1
+
+# Extract and verify each counter incremented
+proc_data=$(cat /proc/rk_counter)
+for field in rx_packets tx_packets rx_bytes tx_bytes; do
+    val=$(printf '%s\n' "$proc_data" | sed -n "s/^${field}=\([0-9]*\)$/\1/p")
+    if [ -n "$val" ] && [ "$val" -gt 0 ]; then
+        _ok "$field=$val (> 0)"
+    else
+        _fail "$field not incremented (got: $val)"
+    fi
+done
+
+unload hello
+assert_absent /proc/rk_counter
+
+summary

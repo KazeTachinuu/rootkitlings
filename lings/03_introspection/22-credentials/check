@@ -1,0 +1,30 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "22-credentials"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_creds
+
+# Output must contain uid= and gid= from current_cred()
+assert_contains /proc/rk_creds "uid="
+assert_contains /proc/rk_creds "gid="
+
+# We run as root in the VM, so values must be 0
+assert_contains /proc/rk_creds "uid=0"
+assert_contains /proc/rk_creds "gid=0"
+
+# Two reads should return the same caller identity (stable)
+first=$(cat /proc/rk_creds)
+second=$(cat /proc/rk_creds)
+if [ "$first" = "$second" ]; then
+    _ok "consistent across reads"
+else
+    _fail "output changed between reads"
+fi
+
+unload hello
+assert_absent /proc/rk_creds
+
+summary

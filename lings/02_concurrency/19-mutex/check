@@ -1,0 +1,18 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "19-mutex"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_mutex
+
+# Wait for both threads to finish
+sleep 2
+
+assert_read /proc/rk_mutex "20000"
+
+unload hello
+assert_absent /proc/rk_mutex
+
+summary

@@ -1,0 +1,37 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "36-log-hiding"
+
+# Log a marker BEFORE module load
+dmesg -c > /dev/null 2>&1
+echo "This marker should survive" > /dev/kmsg 2>/dev/null || true
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_logfilter
+
+# The module logs "rk:" lines. dmesg should NOT show them
+# because the module hooks syslog to filter them out.
+log=$(dmesg)
+case "$log" in
+    *"rk:"*)
+        _fail "rk: lines visible in dmesg (hook not working)"
+        ;;
+    *)
+        _ok "rk: lines hidden from dmesg"
+        ;;
+esac
+
+# Hidden counter should be > 0
+count=$(cat /proc/rk_logfilter | sed -n 's/^hidden=//p')
+if [ "$count" -gt 0 ] 2>/dev/null; then
+    _ok "hidden counter = $count"
+else
+    _fail "hidden counter not incremented ($count)"
+fi
+
+unload hello
+assert_absent /proc/rk_logfilter
+
+summary

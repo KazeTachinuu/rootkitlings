@@ -1,0 +1,33 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "24-symbols"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_symbols
+
+# Must resolve commit_creds (the symbol name appears in output)
+assert_contains /proc/rk_symbols "commit_creds="
+
+# Address must be non-zero (resolution succeeded)
+addr=$(cat /proc/rk_symbols | sed -n 's/.*=\(0x[0-9a-f]*\).*/\1/p')
+if [ "$addr" = "0x0" ] || [ -z "$addr" ]; then
+    _fail "resolved address is zero or missing"
+else
+    _ok "resolved address: $addr"
+fi
+
+# Two reads must return the same address (stable)
+first=$(cat /proc/rk_symbols)
+second=$(cat /proc/rk_symbols)
+if [ "$first" = "$second" ]; then
+    _ok "address stable across reads"
+else
+    _fail "address changed between reads"
+fi
+
+unload hello
+assert_absent /proc/rk_symbols
+
+summary

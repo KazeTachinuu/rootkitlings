@@ -1,0 +1,67 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "capstone-1: command box"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_cmdbox
+assert_exists /dev/rk_cmdbox
+
+# Queue is empty at start
+empty=$(cat /proc/rk_cmdbox)
+if [ -z "$empty" ]; then
+    _ok "queue empty on start"
+else
+    _fail "queue should be empty, got '$empty'"
+fi
+
+# Add commands
+echo "add:id" > /proc/rk_cmdbox
+echo "add:uname -r" > /proc/rk_cmdbox
+
+# Verify commands are pending
+assert_contains /proc/rk_cmdbox "pending"
+assert_contains /proc/rk_cmdbox "id"
+assert_contains /proc/rk_cmdbox "uname"
+
+# Execute all queued commands
+echo "exec" > /proc/rk_cmdbox
+
+# Verify execution happened (no more "pending")
+output=$(cat /proc/rk_cmdbox)
+case "$output" in
+    *"pending"*)
+        _fail "commands still pending after exec"
+        ;;
+    *)
+        _ok "all commands executed"
+        ;;
+esac
+
+# Verify output is captured (id should show uid=0)
+assert_contains /proc/rk_cmdbox "uid=0"
+
+# Verify uname output is present
+assert_contains /proc/rk_cmdbox "$(uname -r)"
+
+# Test a command that produces specific output
+echo "clear" > /proc/rk_cmdbox
+echo "add:echo rootkit_marker_42" > /proc/rk_cmdbox
+echo "exec" > /proc/rk_cmdbox
+assert_contains /proc/rk_cmdbox "rootkit_marker_42"
+
+# Clear and verify empty
+echo "clear" > /proc/rk_cmdbox
+after=$(cat /proc/rk_cmdbox)
+if [ -z "$after" ]; then
+    _ok "queue empty after clear"
+else
+    _fail "queue should be empty after clear"
+fi
+
+unload hello
+assert_absent /proc/rk_cmdbox
+assert_absent /dev/rk_cmdbox
+
+summary

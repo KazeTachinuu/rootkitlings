@@ -1,0 +1,27 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "48-proc-trigger"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_privesc
+
+# Before trigger
+assert_contains /proc/rk_privesc "triggers=0"
+assert_contains /proc/rk_privesc "uid=0"
+
+# Write the magic word
+printf '%s' "r00tme" > /proc/rk_privesc
+
+# After trigger
+assert_contains /proc/rk_privesc "triggers=1"
+
+# Wrong magic word should not trigger
+printf '%s' "wrong" > /proc/rk_privesc
+assert_contains /proc/rk_privesc "triggers=1"
+
+unload hello
+assert_absent /proc/rk_privesc
+
+summary
