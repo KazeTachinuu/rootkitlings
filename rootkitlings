@@ -97,6 +97,18 @@ current_entry()
     order_entry_at "$(current_pos)"
 }
 
+build_dir()
+{
+    local entry=${1:-$(current_entry)}
+    if is_capstone "$entry"; then
+        local cap_name
+        cap_name=$(resolve_capstone "$entry")
+        printf '%s' "$ROOT_DIR/capstones/$cap_name"
+    else
+        printf '%s' "$ROOT_DIR/module"
+    fi
+}
+
 resolve_ling()
 {
     local n
@@ -190,11 +202,14 @@ cmd_check()
 
     [[ -f $check_script ]] || die "No check script for $label"
 
+    local bdir
+    bdir=$(build_dir "$entry")
+
     hdr "Checking $label"
-    make -C "$ROOT_DIR" --quiet
+    make -C "$ROOT_DIR" MODULE_DIR="$bdir" --quiet
 
     local output
-    output=$("$ROOT_DIR/vm/boot" --check "$check_script" "$ROOT_DIR/module/hello.ko" 2>&1) || true
+    output=$("$ROOT_DIR/vm/boot" --check "$check_script" "$bdir/hello.ko" 2>&1) || true
     printf '%s\n' "$output"
 
     case "$output" in
@@ -214,7 +229,10 @@ cmd_check()
             next_entry=$(order_entry_at "$next_idx")
             printf '\n' >&2
             if is_capstone "$next_entry"; then
+                local next_bdir
+                next_bdir=$(build_dir "$next_entry")
                 hdr "Capstone time: $next_entry"
+                info "Edit: ${next_bdir#$ROOT_DIR/}/hello.c"
                 info "rootkitlings readme $next_entry"
             else
                 hdr "Next: $(entry_label "$next_entry")"
@@ -305,8 +323,10 @@ cmd_reset()
         cap_name=$(resolve_capstone "$entry")
         local sol="$ROOT_DIR/.solutions/capstone-${cap_name}.c"
         [[ -f $sol ]] || die "No reference for capstone $cap_name"
-        cp "$sol" "$ROOT_DIR/module/hello.c"
-        ok "Restored hello.c to capstone $cap_name reference"
+        local bdir
+        bdir=$(build_dir "$entry")
+        cp "$sol" "$bdir/hello.c"
+        ok "Restored $bdir/hello.c to capstone $cap_name reference"
         return
     fi
 
@@ -340,14 +360,18 @@ KBUILD
 
 cmd_run()
 {
-    make -C "$ROOT_DIR" --quiet
-    "$ROOT_DIR/vm/boot" "$ROOT_DIR/module/hello.ko"
+    local bdir
+    bdir=$(build_dir)
+    make -C "$ROOT_DIR" MODULE_DIR="$bdir" --quiet
+    "$ROOT_DIR/vm/boot" "$bdir/hello.ko"
 }
 
 cmd_gdb()
 {
-    make -C "$ROOT_DIR" --quiet
-    "$ROOT_DIR/vm/boot" --gdb "$ROOT_DIR/module/hello.ko"
+    local bdir
+    bdir=$(build_dir)
+    make -C "$ROOT_DIR" MODULE_DIR="$bdir" --quiet
+    "$ROOT_DIR/vm/boot" --gdb "$bdir/hello.ko"
 }
 
 cmd_readme()
@@ -451,6 +475,9 @@ cmd_status()
     printf "\n"
     printf "  ${c}Current${n}  %s\n" "$(entry_label "$entry")"
     if is_capstone "$entry"; then
+        local bdir
+        bdir=$(build_dir "$entry")
+        printf "  ${c}Edit${n}     %s\n" "${bdir#$ROOT_DIR/}/hello.c"
         printf "           ${d}Complete the capstone to continue${n}\n"
     fi
     printf "\n"
