@@ -1,41 +1,40 @@
 # 34 - rmdir trigger
 
 Pumakit controls its rootkit with `rmdir`. The operator types
-`rmdir("/tmp/zarya.0")` and the module intercepts it, parses the path
-as a command, and acts. The directory is never removed. Defenders
-watch `kill` signals (Diamorphine made that famous). Nobody watches
-`rmdir`.
+`rmdir /tmp/zarya.0` and the module intercepts it, parses the path
+as a command, and acts. Defenders watch `kill` signals (Diamorphine
+made that famous). Nobody watches `rmdir`.
 
 ## The pattern
 
-Hook `__x64_sys_rmdir` with ftrace (same pattern as ling 33). Extract
-the path argument from the register state. If it starts with your
-prefix, parse the command and return success without calling the
-original. If not, pass through.
+Hook `__x64_sys_rmdir` with a kprobe (same mechanism as ling 30).
+In the pre_handler, extract the userspace path from the register state.
+If it starts with your prefix, parse the command and dispatch.
+
+The syscall wrapper takes a single `struct pt_regs *` in rdi. That
+inner pt_regs holds the actual syscall arguments:
 
 ```c
-// inside the hook:
-const char *path = /* extracted from regs */;
-if (strncmp(path, PREFIX, sizeof(PREFIX) - 1) == 0) {
-    const char *cmd = path + sizeof(PREFIX) - 1;
-    dispatch(cmd);
-    regs_set_return_value(regs, 0);
-    return;
+static int pre_rmdir(struct kprobe *p, struct pt_regs *regs)
+{
+    // regs->di is a pointer to the syscall's pt_regs
+    struct pt_regs *uregs = (struct pt_regs *)regs->di;
+    // uregs->di is the userspace pathname
+    const char __user *upath = (const char __user *)uregs->di;
+    ...
 }
-orig_rmdir(regs);
 ```
 
 ## Getting the path from userspace
 
-The path argument to rmdir is a userspace pointer. Use `strncpy_from_user`
-to copy it into a kernel buffer before comparing:
+The path is a userspace pointer. Use `strncpy_from_user` to copy it
+into a kernel buffer before comparing:
 
 ```c
 char kpath[128];
-const char __user *upath = (const char __user *)regs->di;
 long len = strncpy_from_user(kpath, upath, sizeof(kpath));
 if (len <= 0)
-    return orig_rmdir(regs);
+    return 0;
 ```
 
 ## What to build
@@ -43,9 +42,9 @@ if (len <= 0)
 Hook `__x64_sys_rmdir`. Recognize three commands:
 
 ```
-rmdir /tmp/.rk-ping     → pr_info("pong\n")
-rmdir /tmp/.rk-id       → pr_info the uid of the calling process
-rmdir /tmp/.rk-count    → pr_info a counter that increments each call
+rmdir /tmp/.rk-ping     -> pr_info("pong\n")
+rmdir /tmp/.rk-id       -> pr_info the uid of the calling process
+rmdir /tmp/.rk-count    -> pr_info a counter that increments each call
 ```
 
 Any other path passes through to the real rmdir.

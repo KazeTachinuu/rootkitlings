@@ -49,6 +49,13 @@ static int __init exec_init(void)
 		return output_len;
 	output[output_len] = '\0';
 
+	{
+		char *rm_argv[] = { "/bin/sh", "-c",
+				    "rm -f " TMP_PATH, NULL };
+		call_usermodehelper(rm_argv[0], rm_argv, envp,
+				    UMH_WAIT_PROC);
+	}
+
 	proc_entry = proc_create("rk_exec", 0444, NULL, &exec_ops);
 	if (!proc_entry)
 		return -ENOMEM;
@@ -59,21 +66,7 @@ static int __init exec_init(void)
 
 static void __exit exec_exit(void)
 {
-	struct file *f;
-	struct inode *dir;
-
 	proc_remove(proc_entry);
-
-	f = filp_open(TMP_PATH, O_RDONLY, 0);
-	if (!IS_ERR(f)) {
-		dir = d_inode(f->f_path.dentry->d_parent);
-		inode_lock(dir);
-		vfs_unlink(&nop_mnt_idmap, dir,
-			   f->f_path.dentry, NULL);
-		inode_unlock(dir);
-		filp_close(f, NULL);
-	}
-
 	pr_info("rk: cleaned up\n");
 }
 
