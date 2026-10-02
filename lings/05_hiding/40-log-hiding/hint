@@ -1,1 +1,1 @@
-Hook devkmsg_read. Skip lines matching your prefix.
+kretprobe on __x64_sys_syslog. entry_handler: double indirection to capture type (uregs->di) and ubuf (uregs->si). return handler: only filter type 2 or 3, copy_from_user, strip lines containing HIDE_PREFIX, copy_to_user and fix return value.

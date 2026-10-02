@@ -9,9 +9,10 @@ behind Diamorphine's file hiding.
 
 ## What you already know
 
-From ling 33, you can hook functions with ftrace. From ling 27, you
-can resolve symbols. This ling combines both to hook the getdents64
-syscall handler.
+From ling 31, you used kretprobes to intercept function returns. From
+ling 34, you hooked a syscall wrapper with double indirection. This
+ling combines both: a kretprobe on the syscall, with an entry handler
+to capture the arguments.
 
 ## The concept
 
@@ -46,60 +47,87 @@ then splices out entries you want to hide:
            shifted forward to fill the gap
 ```
 
-## The redirect
+## The kretprobe entry+return pattern
 
-This is the first ling where you redirect `regs->ip`. The ftrace
-callback replaces the CPU's next instruction with your wrapper:
+This is the first ling where you use a kretprobe with an entry handler.
+The problem: you need the syscall arguments (the dirent buffer pointer)
+to filter the output, but by the time the return handler fires, the
+original `pt_regs` argument is gone. The solution:
 
 ```
-  __x64_sys_getdents64  called
+  __x64_sys_getdents64 called
        |
        v
-  ftrace trampoline
+  entry_handler(ri, regs)
+       |
+       +---> regs->di is a pt_regs* (syscall wrapper, ling 34)
+       +---> uregs = (struct pt_regs *)regs->di
+       +---> save uregs->si (dirent pointer) into ri->data
        |
        v
-  your_callback(ip, parent_ip, ops, fregs)
-       |
-       +---> is caller our module?
-       |     (within_module check)
-       |         |
-       |        yes --> return (let original run)
-       |         |
-       |        no  --> regs->ip = hooked_getdents64
+  original function runs, fills userspace buffer
        |
        v
-  hooked_getdents64(regs)
+  ret_handler(ri, regs)
        |
-       +---> orig_getdents64(regs)   // call original first
-       +---> copy_from_user          // get dirent buffer
-       +---> filter entries          // remove hidden names
-       +---> copy_to_user            // send filtered result back
+       +---> read ri->data to get saved dirent pointer
+       +---> copy_from_user the filled buffer
+       +---> filter entries, memmove to close gaps
+       +---> copy_to_user the filtered buffer
+       +---> regs_set_return_value to update byte count
 ```
 
-**IBT note**: on CET/IBT kernels (like ours), kprobe resolves to the
-address AFTER the 4-byte `ENDBR64` instruction. To call the original
-via function pointer, subtract `ENDBR_SIZE`:
-
-```
-  kprobe addr:     [ENDBR64] [prologue...]
-                    ^         ^
-                    |         +-- kprobe lands here
-                    +-- indirect call needs this address
-  orig_fn = (type)(addr - 4)
-```
+The `ri->data` field is per-instance private storage, sized by
+`.data_size` in the kretprobe struct. Define a context struct for
+the data you need to pass from entry to return.
 
 ## Build it
 
-Hook `__x64_sys_getdents64` via ftrace (ling 33 pattern). Your wrapper:
+You need:
 
-1. Calls the original syscall (let it fill the dirent buffer).
-2. Copies the buffer from userspace (`copy_from_user`).
+```c
+#include <linux/types.h>    // must come before dirent.h
+#include <linux/dirent.h>
+#include <linux/kprobes.h>
+#include <linux/slab.h>
+#include <linux/uaccess.h>
+```
+
+Note: `linux/dirent.h` uses `u64`/`s64` without including their
+definitions. Include `linux/types.h` first or the build fails.
+
+Register a kretprobe on `__x64_sys_getdents64` with both handlers:
+
+```c
+struct getdents_ctx {
+    struct linux_dirent64 __user *dirent;
+};
+
+static struct kretprobe krp = {
+    .kp.symbol_name = "__x64_sys_getdents64",
+    .entry_handler  = entry_getdents64,
+    .handler        = ret_getdents64,
+    .data_size      = sizeof(struct getdents_ctx),
+    .maxactive      = 20,
+};
+```
+
+The entry handler captures the dirent pointer using double indirection
+(ling 34 pattern): `regs->di` is a `pt_regs*`, and the second argument
+(`si`) of that inner regs is the userspace dirent buffer.
+
+The return handler:
+
+1. Gets the return value with `regs_return_value(regs)` (byte count).
+2. Allocates a kernel buffer (`kvmalloc`) and copies the dirent data
+   from userspace (`copy_from_user`).
 3. Walks entries using `d_reclen` to find each `d_name`.
-4. Splices out entries whose name starts with your prefix.
-5. Copies the filtered buffer back (`copy_to_user`) and returns the new total.
+4. Splices out entries whose name starts with your prefix (`memmove`
+   to close the gap, subtract `d_reclen` from total).
+5. Copies the filtered buffer back (`copy_to_user`) and updates the
+   return value with `regs_set_return_value`.
 
-You need `linux/dirent.h` for `struct linux_dirent64`, and
-`linux/uaccess.h` for the copy functions.
+Also create `/proc/rk_dirfilter` that returns `hidden`.
 
 ## Hints
 

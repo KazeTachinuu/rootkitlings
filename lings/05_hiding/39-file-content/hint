@@ -1,1 +1,1 @@
-Hook the read path. Check the file, filter matching lines.
+kretprobe on __x64_sys_read. entry_handler: double indirection to capture fd (uregs->di) and ubuf (uregs->si). return handler: fdget to check filename, copy_from_user, replace REDACT_FROM with REDACT_TO, copy_to_user.

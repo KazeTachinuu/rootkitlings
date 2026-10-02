@@ -3,7 +3,7 @@
 ## Why this step
 
 Rootkits tamper with what userspace reads from files. This ling hooks
-`__x64_sys_read` via ftrace to intercept reads on a target file and
+`__x64_sys_read` via kretprobe to intercept reads on a target file and
 replace sensitive patterns in the output buffer before it reaches
 userspace.
 
@@ -12,9 +12,9 @@ Diamorphine and Reptile use similar hooks to hide entries from
 
 ## What you already know
 
-From ling 38, you can hide files from directory listings. This ling
-takes a different approach: the file is visible, but its content is
-modified in transit.
+From ling 38, you used a kretprobe with entry+return handlers to
+capture syscall arguments and modify output. This ling applies the
+same pattern to the read syscall.
 
 ## The concept
 
@@ -24,13 +24,15 @@ modified in transit.
     v
   __x64_sys_read(fd, buf, count)
     |
-    v  (your hook intercepts here)
+    v  (kretprobe intercepts)
     |
-    +---> call original sys_read
-    |         |
-    |         v
-    |     buf = "data SECRET data"    (in userspace)
+    entry_handler:
+    +---> save fd (uregs->di) and buf (uregs->si) into ri->data
     |
+    original sys_read runs, fills buf
+    |
+    ret_handler:
+    +---> check if fd points to target file
     +---> copy_from_user into kbuf
     +---> strstr(kbuf, "SECRET") -> replace with "XXXXXX"
     +---> copy_to_user back
@@ -43,20 +45,25 @@ The file on disk is untouched. Only the read path is filtered.
 
 ## Build it
 
-Hook `__x64_sys_read` using ftrace (same pattern as ling 33). The
-wrapper:
+Hook `__x64_sys_read` with a kretprobe (same entry+return pattern as
+ling 38). Your context struct stores `fd` and `ubuf` from the entry
+handler.
 
-1. Calls the original syscall first (fills the userspace buffer).
-2. Gets the filename from the fd using `fdget()` and the dentry name.
-3. If the file matches your target, copies the buffer into kernel
-   space, replaces `SECRET` with `XXXXXX` (same length), and copies back.
-4. Tracks the number of redactions performed.
+The return handler:
 
-You need `linux/file.h` for `fdget`/`fdput` (new to this ling).
+1. Checks if the fd matches your target file. Use `fdget()` to get
+   the `struct file`, then compare
+   `fd_file(f)->f_path.dentry->d_name.name` against your target name.
+   Call `fdput()` when done.
+2. If it matches, copies the buffer from userspace, replaces `SECRET`
+   with `XXXXXX` (same length, so byte count stays the same), and
+   copies back.
+3. Tracks the number of redactions performed.
 
-On IBT kernels, the original callable address from kprobe is offset
-by `ENDBR_SIZE` (4 bytes). Also create `/proc/rk_content` that reports
-the redaction count.
+You need `linux/file.h` for `fdget`/`fdput` (new to this ling) and
+`linux/fdtable.h` for `fd_file()`.
+
+Also create `/proc/rk_content` that reports `redactions=N`.
 
 ## Hints
 

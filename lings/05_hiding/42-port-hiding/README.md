@@ -3,18 +3,24 @@
 ## Why this step
 
 `netstat` and `ss` read `/proc/net/tcp` to list open ports. A rootkit
-hooks `tcp4_seq_show` (the function that renders each line) and skips
+hooks `tcp4_seq_show` (the function that renders each line) and hides
 entries whose source port matches the hidden port.
 
 This technique is used by Diamorphine, Reptile, and most LKM rootkits.
 
 ## What you already know
 
-From ling 38, you hooked getdents64. From ling 39, you filtered
-content. This ling hooks the specific function that renders
-`/proc/net/tcp` entries.
+From ling 38, you hooked getdents64 with a kretprobe. From ling 39,
+you filtered content. This ling hooks the specific function that
+renders `/proc/net/tcp` entries.
 
 ## The concept
+
+`/proc/net/tcp` is a seq_file. The kernel calls `tcp4_seq_show(seq, v)`
+once per entry. Each call appends one line to `seq->buf` by advancing
+`seq->count`. Your kretprobe uses the "count rewind" trick: save
+`seq->count` before the call, and if the entry should be hidden,
+restore the saved count after, effectively "unwriting" that line.
 
 ```
   cat /proc/net/tcp
@@ -22,41 +28,61 @@ content. This ling hooks the specific function that renders
        v
   seq_file iterator calls tcp4_seq_show() once per line:
 
-  tcp4_seq_show(seq, SEQ_START_TOKEN)  -->  "  sl  local_address ..."
-  tcp4_seq_show(seq, sock_A)           -->  "  0: 0100007F:0050 ..."
-  tcp4_seq_show(seq, sock_B)           -->  (port 8080? skip!)
-  tcp4_seq_show(seq, sock_C)           -->  "  2: 00000000:0016 ..."
-
-  Your hook:
-  +---> v == SEQ_START_TOKEN?  pass through (header row)
-  +---> inet_sk(v)->inet_sport == hidden?  redirect to skip_entry()
-  +---> otherwise?  let original render the line
+  tcp4_seq_show(seq, sock_A)
+       entry_handler:
+       +---> save seq->count
+       +---> check inet_sk(sock_A)->inet_sport
+       +---> port matches? set hide = true
+       |
+       original tcp4_seq_show runs, appends line to seq->buf
+       |
+       ret_handler:
+       +---> if hide: seq->count = saved_count (line erased)
+       +---> otherwise: line stays in output
 ```
 
-Unlike ling 38 (post-process a buffer), here you intercept BEFORE
-each line renders. Simpler: no buffer copying, no memmove.
+Unlike lings 38-40 (post-process a userspace buffer), here you
+intercept a kernel-internal seq_file writer. No `copy_from_user` or
+`copy_to_user` needed.
+
+**Important**: `tcp4_seq_show` is a normal kernel function, not a
+syscall wrapper. So `regs->di` IS the first argument (`seq_file*`)
+directly, not a pointer to another `pt_regs`. No double indirection.
 
 ## Build it
 
 You need:
 
 ```c
-#include <linux/ftrace.h>
 #include <linux/kprobes.h>
+#include <linux/seq_file.h>
 #include <net/inet_sock.h>
 #include <net/tcp.h>
 ```
 
-Resolve `tcp4_seq_show` via kprobe, hook it with ftrace (same flags
-as ling 38). In the callback, check `inet_sk(v)->inet_sport`:
+Your context struct stores three things:
 
 ```c
-if (inet_sk(v)->inet_sport == htons(HIDDEN_PORT))
-    regs->ip = (unsigned long)skip_entry;  // redirect to no-op
+struct tcp_ctx {
+    struct seq_file *seq;
+    size_t saved_count;
+    bool hide;
+};
 ```
 
-`skip_entry` just returns 0 (renders nothing). Also create
-`/proc/rk_portcloak` with port number and hidden count.
+Register a kretprobe on `tcp4_seq_show`. The entry handler:
+
+1. Gets `seq` from `regs->di` and `v` from `regs->si` (direct args,
+   no double indirection).
+2. Saves `seq->count` (current write position in seq buffer).
+3. If `v == SEQ_START_TOKEN`, returns 0 (header row, pass through).
+4. Otherwise, checks `inet_sk((struct sock *)v)->inet_sport` against
+   `htons(HIDDEN_PORT)`. Sets `hide = true` if it matches.
+
+The return handler: if `hide` is true, restores `seq->count` to the
+saved value (erasing the line just written) and increments a counter.
+
+Also create `/proc/rk_portcloak` with `port=8080` and `hidden=N`.
 
 ## Hints
 

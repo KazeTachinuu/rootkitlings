@@ -6,39 +6,65 @@ Rootkits log messages with `pr_info`. Defenders read `dmesg`. A real
 rootkit hooks the syslog syscall to filter its own messages from
 `dmesg` output, so defenders never see them.
 
-Reptile hooks `devkmsg_read` to filter lines. This ling hooks
-`__x64_sys_syslog` (what busybox `dmesg` calls) and removes any line
-containing `rk:` from the output buffer.
-
 ## What you already know
 
-From ling 39, you filtered file content. This ling applies the same
-concept to the kernel log itself.
+From ling 39, you filtered file content via a kretprobe on sys_read.
+This ling applies the same pattern to the kernel log: hook the syslog
+syscall and strip lines containing your prefix from the output buffer.
+
+## The concept
+
+BusyBox `dmesg` calls the syslog syscall with type 3
+(`SYSLOG_ACTION_READ_ALL`) or type 2 (`SYSLOG_ACTION_READ`). The
+kernel fills a userspace buffer with log lines. Your kretprobe lets
+the original syscall fill the buffer, then removes matching lines:
+
+```
+  dmesg
+    |
+    v
+  __x64_sys_syslog(type=3, buf, len)
+    |
+    entry_handler:
+    +---> save type (uregs->di) and buf (uregs->si)
+    |
+    original syslog runs, fills buf with log lines
+    |
+    ret_handler:
+    +---> only act on type 2 or 3
+    +---> copy_from_user
+    +---> walk line by line (split on '\n')
+    +---> memmove to remove lines containing "rk:"
+    +---> copy_to_user, update return value
+    |
+    v
+  dmesg output: no "rk:" lines visible
+```
 
 ## Build it
 
 You need:
 
 ```c
-#include <linux/ftrace.h>
 #include <linux/kprobes.h>
+#include <linux/slab.h>
 #include <linux/uaccess.h>
 ```
 
-Use the kprobe trick to resolve `__x64_sys_syslog`, then hook it
-with ftrace (the same pattern from ling 33).
+Register a kretprobe on `__x64_sys_syslog`. The context struct stores
+the syslog `type` and the userspace buffer pointer, captured via
+double indirection in the entry handler (same pattern as ling 38).
 
-In the hook, call the original syscall. For `SYSLOG_ACTION_READ_ALL`
-(type 3) and `SYSLOG_ACTION_READ` (type 2), scan the returned buffer
-line by line. Remove any line containing `HIDE_PREFIX` by shifting
-subsequent lines forward.
+The return handler:
 
-```c
-// After original returns, copy buffer from user, remove matching lines,
-// copy back, adjust return value
-```
+1. Checks type is 2 or 3, and return value is positive.
+2. Copies the log buffer from userspace, null-terminates it.
+3. Walks the buffer line by line (look for `'\n'` with `memchr`).
+4. For each line containing `HIDE_PREFIX` (use `strnstr`), skips it
+   by not copying it forward. Otherwise, `memmove` to close gaps.
+5. Updates the return value to the new (shorter) length.
 
-Also create `/proc/rk_logfilter` that reports how many lines were hidden.
+Also create `/proc/rk_logfilter` that reports `hidden=N`.
 
 ## Hints
 

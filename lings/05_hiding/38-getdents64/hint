@@ -1,1 +1,1 @@
-Hook __x64_sys_getdents64. Call original first, then filter the dirent buffer.
+kretprobe on __x64_sys_getdents64. entry_handler: double indirection (uregs->si) to capture dirent pointer. return handler: copy_from_user the buffer, strip entries with HIDDEN_PREFIX, copy_to_user and fix return value.

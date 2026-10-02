@@ -10,8 +10,8 @@ how Diamorphine and Reptile hide their backdoor processes.
 ## What you already know
 
 From ling 19, you created kthreads. From ling 38, you hooked
-getdents64 to hide files. This ling combines both: spawn a thread,
-then hide its PID from the `/proc` listing.
+getdents64 with a kretprobe to hide files. This ling combines both:
+spawn a thread, then hide its PID from the `/proc` listing.
 
 ## The concept
 
@@ -28,7 +28,7 @@ then hide its PID from the `/proc` listing.
                    ^
                    hidden PID = 482
        |
-       v  (your hook filters here)
+       v  (your kretprobe filters here)
 
   +------+------+------+------+
   |  1   | 127  | 513  | 901  |           <-- PID 482 removed
@@ -46,14 +46,16 @@ The hook is identical to ling 38, but the filter checks numeric
 
 Create a module that:
 
-1. Spawns a kthread (from ling 19).
-2. Hooks `__x64_sys_getdents64` (same ftrace pattern as ling 38).
-3. In the wrapper, only filter when listing `/proc` (check dentry name).
-4. Hide entries whose `d_name` matches your kthread's PID.
-5. Exposes the hidden PID via `/proc/rk_ghost`.
+1. Spawns a kthread named `"khidden"` (from ling 19).
+2. Stores its PID as a string (`snprintf` into a char array).
+3. Registers a kretprobe on `__x64_sys_getdents64` (same entry+return
+   pattern as ling 38).
+4. In the return handler, filters entries whose `d_name` matches the
+   PID string exactly (`strcmp` instead of `strncmp`).
+5. Exposes the hidden PID via `/proc/rk_ghost` as a plain number.
 
-The filter logic: for entries under `/proc`, check if the name is
-numeric and matches your hidden PID. Skip matching entries.
+You need the same includes as ling 38: `linux/types.h` before
+`linux/dirent.h`, plus `linux/kthread.h` for the thread.
 
 ## Hints
 
