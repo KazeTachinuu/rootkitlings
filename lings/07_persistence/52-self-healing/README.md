@@ -44,13 +44,6 @@ Use `schedule_timeout_interruptible(HZ)` for the one-second sleep
 **Concurrency note**: the write handler and watchdog both access the
 entry pointer. Protect it with a spinlock or use careful ordering.
 
-## Predict
-
-- What happens if you write "kill" to `/proc/rk_watchdog`?
-- Why use `schedule_timeout_interruptible` instead of `ssleep`?
-- How would a defender permanently remove the proc entry?
-
-
 ## Try it
 
 ```bash

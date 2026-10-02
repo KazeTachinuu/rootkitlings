@@ -58,51 +58,7 @@ On IBT kernels, the original callable address from kprobe is offset
 by `ENDBR_SIZE` (4 bytes). Also create `/proc/rk_content` that reports
 the redaction count.
 
-## Predict
-
-- Why hook `__x64_sys_read` instead of `vfs_read`? (hint: IBT, sendfile)
-- What happens if the pattern spans two consecutive reads?
-- Why use `within_module` to prevent recursion?
-
-
 ## Hints
-
-<details>
-<summary>Hint 1: why within_module for recursion</summary>
-
-Your hook replaces `regs->ip` so the CPU jumps to your wrapper. The
-wrapper calls `orig_sys_read(regs)`, which re-enters `__x64_sys_read`.
-Ftrace fires again. Check `within_module(parent_ip, THIS_MODULE)`: if
-the caller is your own module, return without redirecting. This lets
-the original run unhooked.
-
-</details>
-
-<details>
-<summary>Hint 2: getting the filename from a file descriptor</summary>
-
-The first syscall argument (the fd) is in `regs->di`. After the
-original returns, use `fdget()` to get a `struct fd`, then check:
-
-```c
-struct fd f = fdget((unsigned int)regs->di);
-const char *name = fd_file(f)->f_path.dentry->d_name.name;
-```
-
-Compare `name` against your target filename. Call `fdput(f)` when done.
-
-</details>
-
-<details>
-<summary>Hint 3: the replace pattern</summary>
-
-After `orig_sys_read` returns, the data is in the userspace buffer at
-`regs->si`. Copy it to a kernel buffer with `copy_from_user`, scan
-with `strstr`, replace the matched bytes with `XXXXXX` (same length),
-then `copy_to_user` back. The replacement must be the same length as
-the original so the buffer layout is preserved.
-
-</details>
 
 ## Try it
 

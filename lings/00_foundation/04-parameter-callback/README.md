@@ -90,13 +90,6 @@ your init()        --> pr_info("loaded name=phantom")
 module is loaded, sysfs file appears
 ```
 
-## Predict
-
-- Which runs first with `name=phantom`: the setter or init?
-- Will reading the sysfs file call the getter or setter?
-- Will writing `specter` call init again?
-
-
 ## Contract
 
 The check script verifies:
@@ -128,23 +121,6 @@ rmmod hello
 ```bash
 ./rootkitlings check 4
 ```
-
-<details>
-<summary>Explain the result</summary>
-
-The table stores addresses of compatible functions.
-The parameter subsystem chooses and calls one later for each operation.
-
-`param_set_charp` preserves the standard string parsing and storage behavior.
-The custom setter reacts only after that operation succeeds.
-Returning its error unchanged makes a storage failure visible to the writer.
-
-During `insmod`, arguments are parsed before init.
-A later sysfs write calls the setter again but does not reload the module.
-
-</details>
-
-
 > **What a defender sees**: anyone with write access to the sysfs file triggers the callback.
 > There is no authentication, no caller check, no rate limit. Ling 21 introduces `current`.
 

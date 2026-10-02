@@ -33,44 +33,7 @@ list_del_init(&THIS_MODULE->list);
 Save `THIS_MODULE->list.prev` before deleting, in case you want to
 re-insert later (toggle visibility).
 
-## Predict
-
-- Can you still `rmmod` a hidden module?
-- Is the module still in `/sys/module/`?
-- What about `/proc/modules`?
-
-
 ## Hints
-
-<details>
-<summary>Hint 1: what list_del_init actually does</summary>
-
-`list_del_init` unlinks the node from its doubly-linked list and
-re-initializes it to point to itself. After this call,
-`list_for_each_entry` over the module list skips your module entirely.
-`lsmod` and `/proc/modules` both walk this list.
-
-</details>
-
-<details>
-<summary>Hint 2: why sysfs still shows the module</summary>
-
-The module list (`THIS_MODULE->list`) and the sysfs kobject
-(`THIS_MODULE->mkobj`) are separate data structures. Removing from
-one does not affect the other. That is the weakness this ling teaches,
-and ling 33 fixes it.
-
-</details>
-
-<details>
-<summary>Hint 3: rmmod after hiding</summary>
-
-In BusyBox, `rmmod` looks up the module by name in the kernel's module
-list. If you removed yourself from that list, `rmmod hello` will fail
-with "not found." You can still unload via `rmmod` if you re-insert
-into the list first (toggle pattern).
-
-</details>
 
 ## Try it
 

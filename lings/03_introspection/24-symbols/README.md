@@ -73,12 +73,6 @@ Why not just call `kallsyms_lookup_name` directly? Since kernel 5.7,
 it is no longer exported to modules. The kprobe trick is the standard
 workaround used by every modern rootkit.
 
-## Predict
-
-- Does the kprobe actually fire?
-- Is this visible in `/sys/kernel/debug/kprobes/list`?
-- Why not just use `kallsyms_lookup_name` directly?
-
 ## Try it
 
 ```bash
@@ -93,7 +87,6 @@ cat /proc/rk_symbols       # shows hex addresses like 0xffffffff...
 dmesg | tail
 rmmod hello
 ```
-
 
 ## Contract
 

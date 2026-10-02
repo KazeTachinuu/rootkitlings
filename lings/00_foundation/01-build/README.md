@@ -105,12 +105,6 @@ When a ling introduces a new function or struct, you can look it up:
 Every include like `#include <linux/module.h>` maps to a file in that
 headers directory. You can read it.
 
-## Predict
-
-- Which artifact is human-readable C?
-- Which contains machine code but is not the final module?
-- Which artifact does `insmod` accept?
-
 ## Try it
 
 ```bash
@@ -147,21 +141,6 @@ The check script verifies:
 ```bash
 ./rootkitlings check 1
 ```
-
-<details>
-<summary>Explain the result</summary>
-
-`hello.c` and `Kbuild` are maintained inputs.
-`hello.o` is an intermediate object and `hello.ko` is the loadable result.
-Kbuild also creates bookkeeping files; you do not edit them.
-
-`file` calls both compiled artifacts "relocatable."
-That detail matters later when we study runtime addresses.
-For now, the practical distinction is that `insmod` loads `hello.ko`, not
-`hello.o`.
-
-</details>
-
 > **What a defender sees**: `file` identifies the format, `modinfo` reads the metadata,
 > and `strings` reveals every printable constant. The `.ko` hides nothing.
 

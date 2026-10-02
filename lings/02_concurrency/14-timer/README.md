@@ -60,12 +60,6 @@ static void beacon_callback(struct timer_list *t)
 permanently disables the timer. Call it in your exit function before
 `proc_remove`. The older `del_timer_sync` was removed in kernel 6.15.
 
-## Predict
-
-- What happens if you `rmmod` while the timer callback is running?
-- Can the callback sleep or call `kmalloc(GFP_KERNEL)`?
-- Why `timer_shutdown_sync` instead of plain `timer_delete_sync`?
-
 ## Try it
 
 ```bash
@@ -82,7 +76,6 @@ cat /proc/rk_beacon       # should print 2 or 3
 dmesg | tail
 rmmod hello
 ```
-
 
 ## Contract
 

@@ -60,14 +60,6 @@ Key types and functions:
 6. If both match, increment an atomic counter.
 7. Expose `triggers=N` and `magic=0x1337` via `/proc/rk_trigger`.
 
-## Predict
-
-- Why `ntohs` on the echo ID? (Network byte order is big-endian.)
-- A normal `ping` command uses the process PID as echo ID. What ID
-  would you need to trigger this?
-- How would a defender detect magic-ping triggers?
-
-
 ## Try it
 
 ```bash

@@ -76,13 +76,6 @@ port=31337
 commands=N
 ```
 
-## Predict
-
-- Why bind to `INADDR_LOOPBACK` instead of `INADDR_ANY`?
-- How does the kthread exit cleanly on module unload?
-- What would a defender see in `ss -tlnp` or `/proc/net/tcp`?
-
-
 ## Try it
 
 ```bash

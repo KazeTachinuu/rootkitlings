@@ -1,0 +1,1 @@
+Hook at NF_INET_LOCAL_OUT or NF_INET_POST_ROUTING. Check for UDP port 53 (DNS). Parse the DNS response and replace the answer section's IP address. Recompute UDP and IP checksums.

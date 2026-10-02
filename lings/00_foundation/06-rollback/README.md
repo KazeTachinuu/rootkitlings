@@ -67,12 +67,6 @@ In your init function:
 
 In your exit function, free both in reverse order (second, then state).
 
-## Predict
-
-- Does exit run when `fail_second=1`?
-- Which path frees `state` after that failure?
-- Which path owns both objects after init returns `0`?
-
 ## Try it
 
 ```bash
@@ -105,24 +99,6 @@ The check script verifies:
 ```bash
 ./rootkitlings check 6
 ```
-
-<details>
-<summary>Explain the result</summary>
-
-Before the first allocation, init owns nothing.
-After it succeeds, every later error path owns and must free `state`.
-After both allocations succeed and init returns zero, the loaded module owns
-both and exit inherits both cleanup obligations.
-
-Cleanup normally runs in reverse acquisition order because later resources may
-depend on earlier ones. One label also keeps all paths consistent as the
-function grows.
-
-A direct `return error` after acquiring `state` would leak it because failed
-init has no later exit callback.
-
-</details>
-
 > **What a defender sees**: the module owns its memory safely, but userspace has no way
 > to interact with it beyond sysfs parameters. It needs a real interface.
 

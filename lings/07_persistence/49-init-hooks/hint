@@ -1,0 +1,1 @@
+call_usermodehelper() runs a userspace binary from kernel context. Build argv[] and envp[] arrays. The first envp entry should include PATH.

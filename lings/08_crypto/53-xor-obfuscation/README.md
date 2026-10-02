@@ -73,49 +73,7 @@ decrypt=rootkit secret data
 
 The cipher line shows the XOR-encrypted bytes in hexadecimal.
 
-## Predict
-
-- What happens if you XOR the ciphertext with the same key?
-- Why is single-byte XOR trivially breakable? (Frequency analysis.)
-- How would you detect XOR-encoded strings in a binary?
-- What is the next step up from XOR? (AES, ling 54.)
-
-
 ## Hints
-
-<details>
-<summary>Hint 1: XOR is its own inverse</summary>
-
-Encryption and decryption are the same operation: `out[i] = in[i] ^ key`.
-Applying XOR with the same key twice recovers the original. You only need
-one function for both directions.
-
-</details>
-
-<details>
-<summary>Hint 2: hex encoding for proc output</summary>
-
-To display binary cipher bytes as hex, loop over the buffer and format
-each byte with `%02x`:
-
-```c
-for (i = 0; i < len; i++)
-    off += snprintf(buf + off, remaining, "%02x", cipher[i]);
-```
-
-This produces a string like `30272D2B...` with no spaces or separators.
-
-</details>
-
-<details>
-<summary>Hint 3: handle the write handler for new plaintext</summary>
-
-Use `copy_from_user` (ling 10 pattern) to read the new plaintext from
-userspace. Strip the trailing newline if present. Then re-run XOR to
-update the cipher buffer. Protect the shared buffers with a mutex if
-reads and writes can race (ling 19).
-
-</details>
 
 ## Try it
 

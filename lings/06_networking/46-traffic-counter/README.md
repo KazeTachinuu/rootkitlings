@@ -49,13 +49,6 @@ to 65535 bytes). Get the packet size with `ntohs(ip_hdr(skb)->tot_len)`.
 3. Register both in a `nf_hook_ops` array (ling 39 pattern, extended).
 4. `/proc/rk_counter` serves all four counters.
 
-## Predict
-
-- Why use `atomic64_t` for bytes but `atomic_t` for packets?
-- On loopback, a single ping generates both RX and TX. Why?
-- What is `ARRAY_SIZE` and why is it better than hardcoding `2`?
-
-
 ## Try it
 
 ```bash

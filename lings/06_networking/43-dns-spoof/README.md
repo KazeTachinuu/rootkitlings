@@ -69,43 +69,7 @@ spoofed=N
 redirect_port=5300
 ```
 
-## Predict
-
-- Why call `skb_ensure_writable` before modifying the packet?
-- Why zero the UDP checksum instead of recalculating it?
-- How would you modify the DNS answer section instead of the port?
-
-
 ## Hints
-
-<details>
-<summary>Hint 1: match UDP port 53 in network byte order</summary>
-
-Compare `udph->dest` against `htons(53)`, not the literal `53`. Network
-headers store values in big-endian (network byte order). Comparing
-against a plain integer silently fails on little-endian x86.
-
-</details>
-
-<details>
-<summary>Hint 2: skb_ensure_writable before modifying</summary>
-
-Socket buffers may share their data with other references. Call
-`skb_ensure_writable(skb, total_header_len)` before modifying any
-field. After this call, re-acquire all header pointers (`ip_hdr`, UDP
-header offset) because the underlying buffer may have been reallocated.
-
-</details>
-
-<details>
-<summary>Hint 3: use NF_INET_LOCAL_OUT, not PRE_ROUTING</summary>
-
-You are modifying outgoing packets from this host. `NF_INET_LOCAL_OUT`
-catches packets after the local application sends them but before they
-hit the wire. `NF_INET_PRE_ROUTING` catches incoming packets, which is
-not what you want here.
-
-</details>
 
 ## Try it
 

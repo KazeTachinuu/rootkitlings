@@ -54,12 +54,6 @@ callback:
 `current_cred()` returns a `const` pointer. You cannot modify
 credentials through it. That comes in ling 23.
 
-## Predict
-
-- What UID does root have?
-- Are credentials mutable through `current_cred()`?
-- What is the difference between real, effective, and saved UID?
-
 ## Try it
 
 ```bash
@@ -72,7 +66,6 @@ Inside the VM:
 insmod hello.ko
 cat /proc/rk_creds       # uid=0 gid=0 (running as root)
 ```
-
 
 ## Contract
 

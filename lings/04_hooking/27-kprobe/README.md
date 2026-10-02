@@ -57,13 +57,6 @@ static struct kprobe kp = {
 };
 ```
 
-## Predict
-
-- Is the kprobe visible somewhere in `/sys`?
-- Does the kprobe slow down every `open` call?
-- Can you modify function arguments from a kprobe handler?
-
-
 ## Try it
 
 ```bash

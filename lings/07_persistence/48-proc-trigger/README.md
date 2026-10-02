@@ -50,14 +50,6 @@ New considerations:
 handles that. The check writes the exact string `r00tme` without a
 trailing newline.
 
-## Predict
-
-- What happens if you write `"r00tme\n"` (with newline)?
-- Why `prepare_creds` + `commit_creds` instead of directly modifying
-  `current->cred`?
-- How would a defender detect this trigger?
-
-
 ## Try it
 
 ```bash

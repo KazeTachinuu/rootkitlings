@@ -74,13 +74,6 @@ type=RAW
 proto=ICMP
 ```
 
-## Predict
-
-- Why does `sock_create_kern` take `&init_net`?
-- What would happen if you forgot `sock_release` in exit?
-- Could you use `SOCK_DGRAM` + `IPPROTO_UDP` to send UDP?
-
-
 ## Try it
 
 ```bash

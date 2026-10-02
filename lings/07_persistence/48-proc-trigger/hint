@@ -1,0 +1,1 @@
+Create a writable /proc entry. When a magic string is written, execute a command using call_usermodehelper(). Set UMH_WAIT_EXEC or UMH_WAIT_PROC.

@@ -10,10 +10,7 @@ stop learning and start building. One evolving source file. One disposable VM.
 Every ling follows the same rhythm:
 
 ```
-  read the concept
-       |
-       v
-  predict what will happen
+  read the concept           (rootkitlings readme N)
        |
        v
   implement it yourself      (one file: module/hello.c)
@@ -25,10 +22,10 @@ Every ling follows the same rhythm:
   understand the defense     ("What a defender sees")
 ```
 
-Each ling teaches one concept visually, gives you the API, and lets you
-write the code. Later lings build on earlier ones: if you wrote a proc
-read callback in ling 08, ling 21 tells you to reuse that pattern, not
-copy new code. Hints are available when you get stuck.
+Each ling teaches one concept, gives you the API, and lets you write the
+code. The check tells you exactly what passed and what failed. If you are
+stuck, `rootkitlings hint N` points you in the right direction without
+giving the answer.
 
 Each ling is self-contained: pick the concepts your rootkit needs, skip the rest.
 The [simplest rootkit](lings/README.md#minimal-rootkit-5-lings) is 5 lings.
@@ -109,6 +106,7 @@ make clean
 ```bash
 ./rootkitlings readme [N]        # Read the exercise
 ./rootkitlings check  [N]        # Build and verify in a VM
+./rootkitlings hint   [N]        # Get a nudge (not the answer)
 ./rootkitlings peek   [N]        # Show the reference solution
 ./rootkitlings reset  [N]        # Restore hello.c to the reference
 ./rootkitlings status            # Show progress and next steps

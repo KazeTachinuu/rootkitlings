@@ -96,12 +96,6 @@ Use mode `0666` (read and write for everyone) instead of `0444`.
 Init and exit follow the same `proc_create` / `proc_remove` pattern
 from ling 07.
 
-## Predict
-
-- What happens if `copy_from_user` fails?
-- What if count exceeds the buffer size?
-- Why strip the trailing newline?
-
 ## Try it
 
 ```bash
@@ -139,22 +133,6 @@ The check script verifies:
 ```bash
 ./rootkitlings check 10
 ```
-
-<details>
-<summary>Explain the result</summary>
-
-`copy_from_user` is the kernel's checked copy from userspace memory.
-It verifies the address range belongs to the calling process and handles
-page faults safely. If the address is invalid, it returns non-zero and
-the write fails with `-EFAULT` instead of crashing.
-
-The length check before the copy prevents buffer overflow.
-Without it, a large write would overwrite kernel memory past the end
-of `message[]`. This is the exact class of vulnerability that leads to
-privilege escalation in real kernel bugs.
-
-</details>
-
 > **What a defender sees**: `/proc/rk_store` is world-writable. Any user on
 > the system can change the stored message. No authentication, no audit trail.
 

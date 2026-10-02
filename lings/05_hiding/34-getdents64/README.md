@@ -101,60 +101,7 @@ Hook `__x64_sys_getdents64` via ftrace (ling 30 pattern). Your wrapper:
 You need `linux/dirent.h` for `struct linux_dirent64`, and
 `linux/uaccess.h` for the copy functions.
 
-## Predict
-
-- Can you hide `/proc/rk_dirfilter` from `ls /proc/`?
-- Does `stat /proc/rk_dirfilter` still work?
-- What about `find /proc -name "rk_*"`?
-
-
 ## Hints
-
-<details>
-<summary>Hint 1: the dirent buffer layout</summary>
-
-`getdents64` writes a packed array of `struct linux_dirent64` into a
-userspace buffer. Each entry has a different size. Walk them using
-`d_reclen`:
-
-```c
-struct linux_dirent64 *d = buf;
-while (offset < total) {
-    d = (struct linux_dirent64 *)(buf + offset);
-    // d->d_name is the filename
-    offset += d->d_reclen;
-}
-```
-
-</details>
-
-<details>
-<summary>Hint 2: the hook pattern (call original first)</summary>
-
-Your ftrace callback should redirect `regs->ip` to a wrapper function.
-The wrapper calls the original syscall first (to fill the dirent buffer),
-then filters the result. Use `within_module(parent_ip, THIS_MODULE)` as
-a recursion guard so the wrapper's own syscall does not re-enter.
-
-</details>
-
-<details>
-<summary>Hint 3: splicing out an entry</summary>
-
-To remove entry `d` at offset `off`, shift all bytes after it forward:
-
-```c
-int reclen = d->d_reclen;
-int remaining = total - off - reclen;
-memmove(buf + off, buf + off + reclen, remaining);
-total -= reclen;
-// do NOT advance offset (the next entry is now at the same position)
-```
-
-Copy the buffer from userspace with `copy_from_user`, filter it in
-kernel space, then `copy_to_user` the result and return the new total.
-
-</details>
 
 ## Try it
 

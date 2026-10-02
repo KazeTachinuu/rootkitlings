@@ -55,43 +55,7 @@ Create a module that:
 The filter logic: for entries under `/proc`, check if the name is
 numeric and matches your hidden PID. Skip matching entries.
 
-## Predict
-
-- Does `kill -0 <pid>` still work on a hidden process?
-- Can you hide arbitrary user processes, not just kthreads?
-- What about `/proc/[pid]/` subdirectories?
-
-
 ## Hints
-
-<details>
-<summary>Hint 1: reuse the getdents64 hook from ling 34</summary>
-
-The hook structure is identical to ling 34. The only change is the
-filter condition: instead of matching a filename prefix, convert each
-`d_name` to a number with `kstrtoint` and compare against your hidden
-PID.
-
-</details>
-
-<details>
-<summary>Hint 2: which directory to filter</summary>
-
-You only want to filter entries when `getdents64` is listing `/proc`,
-not arbitrary directories. Check the file descriptor's path: if
-it points to `/proc` (its dentry name is `"proc"`), apply the filter.
-Otherwise, pass through.
-
-</details>
-
-<details>
-<summary>Hint 3: getting your kthread's PID</summary>
-
-`kthread_run` returns a `struct task_struct *`. The PID is
-`task->pid`. Store it globally so the getdents64 hook can compare
-against it, and so `/proc/rk_ghost` can report it.
-
-</details>
 
 ## Try it
 

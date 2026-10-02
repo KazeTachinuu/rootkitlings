@@ -69,13 +69,6 @@ kernel_write(f, original, orig_len, &pos);
 filp_close(f, NULL);
 ```
 
-## Predict
-
-- Why prepend instead of append?
-- What happens if the victim file is larger than your buffer?
-- What integrity tools detect modified files? (AIDE, Tripwire)
-
-
 ## Try it
 
 ```bash

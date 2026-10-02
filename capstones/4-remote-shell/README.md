@@ -90,7 +90,6 @@ hooks `tcp4_seq_show` to hide from `/proc/net/tcp` but forgets netlink
 The killer move: capture traffic on the HOST side, outside the VM.
 No kernel rootkit can touch packets after they leave the guest NIC.
 
-
 ## Contract
 
 The check script verifies:
@@ -109,34 +108,3 @@ The check script verifies:
 
 ## Hints
 
-<details>
-<summary>Hint 1: kernel TCP socket</summary>
-
-```c
-sock_create(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sock);
-kernel_connect(sock, (struct sockaddr *)&addr, sizeof(addr), 0);
-```
-
-</details>
-
-<details>
-<summary>Hint 2: sending/receiving with kvec</summary>
-
-```c
-struct kvec vec = { .iov_base = buf, .iov_len = len };
-struct msghdr msg = { 0 };
-kernel_sendmsg(sock, &msg, &vec, 1, len);
-kernel_recvmsg(sock, &msg, &vec, 1, len, 0);
-```
-
-</details>
-
-<details>
-<summary>Hint 3: clean shutdown</summary>
-
-Store the active socket globally. In module exit, shut it down with
-`kernel_sock_shutdown(sock, SHUT_RDWR)` before calling `kthread_stop()`.
-Without this, `kthread_stop` hangs because the thread is blocked in
-`kernel_recvmsg`.
-
-</details>

@@ -1,0 +1,1 @@
+Use a netfilter hook to intercept ICMP packets with a magic echo ID. Extract the payload after the ICMP header. Store it in a buffer readable via /proc.

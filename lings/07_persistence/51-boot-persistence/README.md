@@ -57,13 +57,6 @@ Use `O_WRONLY | O_CREAT | O_TRUNC` flags and `0644` mode.
 6. In `exit`, clean up with `call_usermodehelper` running `rm -f` on
    the config file. (A real rootkit would NOT clean up.)
 
-## Predict
-
-- Why use `filp_open` instead of `call_usermodehelper("echo hello > file")`?
-- What happens if `/etc/modules-load.d/` does not exist?
-- How would a defender detect this persistence method?
-
-
 ## Try it
 
 ```bash

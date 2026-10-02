@@ -44,12 +44,6 @@ static string, format `pid=N comm=NAME` using `current->pid` and
 
 You need `linux/sched.h` for the `current` macro and `task_struct`.
 
-## Predict
-
-- What is `current->comm` when you `cat /proc/rk_task`?
-- Does `current` change between two reads in the same `cat`?
-- What is `current` inside a timer callback?
-
 ## Try it
 
 ```bash
@@ -62,7 +56,6 @@ Inside the VM:
 insmod hello.ko
 cat /proc/rk_task       # pid=<N> comm=cat
 ```
-
 
 ## Contract
 

@@ -52,13 +52,6 @@ Create a module that:
 The expected hash is `5a3faae9795848835c7647c58a9843cf424811d37712aa6340e48e35c28d6dec`.
 You can verify this on the host: `echo -n "rootkitlings verification data" | sha256sum`.
 
-## Predict
-
-- What is the hash of an empty string? (The example in the diagram is NOT it.)
-- Why 64 hex characters? (32 bytes, 2 hex chars per byte.)
-- How would a rootkit use SHA-256 to authenticate C2 commands?
-
-
 ## Try it
 
 ```bash

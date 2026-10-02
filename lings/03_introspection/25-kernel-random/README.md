@@ -37,12 +37,6 @@ Generate both at init time (module globals). In the read callback,
 format them as hex: `%08x` for the session ID, `%02x` per byte for
 the token. Use the snprintf pattern from ling 08.
 
-## Predict
-
-- Is `get_random_bytes` safe in interrupt context?
-- Can two calls ever return the same value?
-- Where does the entropy come from?
-
 ## Try it
 
 ```bash
@@ -59,7 +53,6 @@ insmod hello.ko
 cat /proc/rk_entropy       # different values
 rmmod hello
 ```
-
 
 ## Contract
 

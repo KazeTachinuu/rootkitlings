@@ -1,0 +1,1 @@
+init_waitqueue_head() sets up the queue. wait_event() sleeps until a condition is true. wake_up() signals from the write callback.

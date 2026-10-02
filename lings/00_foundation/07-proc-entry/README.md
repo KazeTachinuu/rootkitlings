@@ -93,13 +93,6 @@ static void __exit entry_exit(void)
 }
 ```
 
-## Predict
-
-- Does `/proc/rk_entry` exist before loading?
-- At which exact point does it become reachable?
-- Which module object must remain alive while it exists?
-- When must it disappear?
-
 ## Try it
 
 ```bash
@@ -133,23 +126,6 @@ The check script verifies:
 ```bash
 ./rootkitlings check 7
 ```
-
-<details>
-<summary>Explain the result</summary>
-
-`/proc/rk_entry` looks like a file path, but this module did not create stored file
-contents. Procfs publishes a live kernel interface under `/proc`.
-
-Procfs retains the address of `rk_ops` and may later follow callback pointers
-stored inside it. The table and those functions must therefore outlive every
-reachable entry using them.
-
-If publication fails, init returns a negative errno and rolls back anything it
-acquired earlier. On successful load, exit calls `proc_remove` before module
-memory can disappear.
-
-</details>
-
 > **What a defender sees**: `/proc/rk_entry` is visible to every user with `ls /proc`.
 > It has no read operation, so it's useless. And its mere presence is suspicious.
 

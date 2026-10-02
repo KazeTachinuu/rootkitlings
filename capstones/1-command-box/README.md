@@ -78,7 +78,6 @@ rmmod hello
 `/dev/rk_cmdbox` appears in the device list. `/proc/rk_cmdbox` is world-readable.
 `strace` shows the ioctl numbers in plain sight. No obfuscation yet.
 
-
 ## Contract
 
 The check script verifies:
@@ -99,39 +98,3 @@ The check script verifies:
 
 ## Hints
 
-<details>
-<summary>Hint 1: ioctl number convention</summary>
-
-```c
-#define CMD_ADD   _IOW('H', 1, char[64])
-#define CMD_CLEAR _IO('H', 2)
-#define CMD_EXEC  _IO('H', 3)
-```
-
-</details>
-
-<details>
-<summary>Hint 2: output capture pattern</summary>
-
-```c
-// redirect stdout to a temp file, then read it back
-snprintf(cmdline, sizeof(cmdline), "%s > /tmp/.rk_cmd_out 2>&1", cmd);
-call_usermodehelper("/bin/sh", argv, envp, UMH_WAIT_PROC);
-f = filp_open("/tmp/.rk_cmd_out", O_RDONLY, 0);
-kernel_read(f, output_buf, sizeof(output_buf) - 1, &pos);
-```
-
-</details>
-
-<details>
-<summary>Hint 3: cleanup walks the list with the safe variant</summary>
-
-```c
-struct cmd_entry *entry, *tmp;
-list_for_each_entry_safe(entry, tmp, &cmd_list, node) {
-    list_del(&entry->node);
-    kfree(entry);
-}
-```
-
-</details>

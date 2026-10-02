@@ -1,0 +1,1 @@
+Hook __x64_sys_getdents64 via ftrace. Your wrapper calls the original, then filters the returned dirent buffer. Use copy_from_user/copy_to_user to manipulate the userspace buffer.

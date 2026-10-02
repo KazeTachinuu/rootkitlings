@@ -79,13 +79,6 @@ fields without recalculating. (TCP and IPv6 do not allow this.)
 6. Count redirections with an atomic counter.
 7. `/proc/rk_mangler` serves the trap port, redirect port, and counter.
 
-## Predict
-
-- Why can you zero the UDP checksum but not the TCP checksum?
-- What happens if a TCP SYN to port 7777 hits this hook?
-- How would a defender detect port-level MITM?
-- Could you redirect to a different IP, not just a different port?
-
 ## Try it
 
 ```bash

@@ -64,13 +64,6 @@ static struct kretprobe krp = {
 
 In the handler, check if `regs_return_value(regs)` is negative.
 
-## Predict
-
-- Can you change the return value from the handler?
-- How does kretprobe know when the function returns?
-- What limits the number of simultaneous probed calls (`maxactive`)?
-
-
 ## Try it
 
 ```bash

@@ -1,0 +1,1 @@
+Use kernel_read() and kernel_write() (not vfs_read/vfs_write) for file I/O from kernel space. Open files with filp_open(), close with filp_close().

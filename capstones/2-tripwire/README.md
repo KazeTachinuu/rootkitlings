@@ -71,7 +71,6 @@ The hook shows in tracefs because ftrace is the kernel's own tracing
 framework. It was designed to be inspectable. In capstone 3, you will
 learn to hide. Here, visibility is the feature.
 
-
 ## Contract
 
 The check script verifies:
@@ -91,31 +90,3 @@ The check script verifies:
 
 ## Hints
 
-<details>
-<summary>Hint 1: ftrace hook target</summary>
-
-The function to hook is `do_filp_open`. Its signature is:
-```c
-struct file *do_filp_open(int dfd, struct filename *pathname,
-                          const struct open_flags *op);
-```
-
-Extract the path string from `pathname->name`.
-
-</details>
-
-<details>
-<summary>Hint 2: check the watchlist</summary>
-
-A simple `strncmp` loop over a static array of paths. No need for
-a hash table or trie at this scale.
-
-</details>
-
-<details>
-<summary>Hint 3: the log list needs a lock</summary>
-
-Multiple processes can trigger the hook concurrently. Protect the
-log list with a spinlock (not a mutex, you are in atomic context).
-
-</details>

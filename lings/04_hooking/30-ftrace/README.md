@@ -80,42 +80,7 @@ static struct ftrace_ops ops = {
 };
 ```
 
-## Predict
-
-- What happens without `FTRACE_OPS_FL_IPMODIFY`?
-- Where does the hook appear in tracefs?
-- Can you hide the hook from tracefs?
-
-
 ## Hints
-
-<details>
-<summary>Hint 1: the RECURSION flag is misleading</summary>
-
-In kernel 5.11+, `FTRACE_OPS_FL_RECURSION` **disables** the built-in
-recursion protection. The name suggests the opposite. Without it, the
-kernel's own recursion guard may interfere with your hook. Include it
-so ftrace does not silently block your callback.
-
-</details>
-
-<details>
-<summary>Hint 2: cleanup order matters</summary>
-
-In your exit function, call `unregister_ftrace_function` **before**
-`ftrace_set_filter_ip(..., 1)` (the remove flag). Clearing the filter
-while the callback is still registered can race with in-flight hooks.
-
-</details>
-
-<details>
-<summary>Hint 3: the callback only needs to count</summary>
-
-For this ling, the callback does not need to redirect `regs->ip`. Just
-increment an `atomic_t` counter inside the callback. Redirection comes
-in later lings (34, 35, 36).
-
-</details>
 
 ## Try it
 

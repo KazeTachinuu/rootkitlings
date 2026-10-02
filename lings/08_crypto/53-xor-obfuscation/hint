@@ -1,0 +1,1 @@
+XOR each byte of plaintext with a key byte. XOR is its own inverse: encrypt and decrypt are the same operation. Cycle the key with key[i % keylen].

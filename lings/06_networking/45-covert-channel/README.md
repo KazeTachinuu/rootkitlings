@@ -49,13 +49,6 @@ These run in different contexts. Protect the shared buffer with
 5. `/proc/rk_covert` serves the last received message (or `(none)` if
    nothing was received yet).
 
-## Predict
-
-- Why use a mutex instead of a spinlock for the message buffer?
-- How much payload data fits in a single ICMP echo request?
-- How would a defender detect covert ICMP channels?
-
-
 ## Try it
 
 ```bash

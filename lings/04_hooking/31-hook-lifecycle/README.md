@@ -64,13 +64,6 @@ static struct kprobe kp_write = {
 
 The cleanup pattern: unregister in reverse order of registration.
 
-## Predict
-
-- What is the correct cleanup order?
-- What happens if you unregister in the wrong order?
-- How do you test the rollback path?
-
-
 ## Try it
 
 ```bash

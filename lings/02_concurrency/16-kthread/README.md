@@ -62,12 +62,6 @@ Create a module that:
 `kthread_create` returns a `struct task_struct *` (or an `ERR_PTR` on
 failure, handle it the way you did in ling 09).
 
-## Predict
-
-- What happens if exit forgets `kthread_stop`?
-- Can the thread call `kthread_stop` on itself?
-- What does `kthread_should_stop` check?
-
 ## Try it
 
 ```bash
@@ -83,7 +77,6 @@ cat /proc/rk_thread       # should be 2 or 3
 ps | grep rk       # shows [rk_thread] kernel thread
 rmmod hello
 ```
-
 
 ## Contract
 

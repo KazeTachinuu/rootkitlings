@@ -63,12 +63,6 @@ Take ling 18's `increment_fn` and replace `counter++` with
 `atomic_inc`. No mutex needed, no lock/unlock wrapper. Read
 the values in your proc callback with `atomic_read`.
 
-## Predict
-
-- Can `atomic_inc` be called from interrupt context?
-- If you need to update two atomics together, is that safe?
-- When would you use `atomic_t` vs a mutex?
-
 ## Try it
 
 ```bash
@@ -83,7 +77,6 @@ sleep 2
 cat /proc/rk_atomic       # count=20000 running=1
 rmmod hello
 ```
-
 
 ## Contract
 

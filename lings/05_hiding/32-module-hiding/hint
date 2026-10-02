@@ -1,0 +1,1 @@
+list_del() on THIS_MODULE->list removes the module from /proc/modules. Save the list pointers first so you can re-add in exit for clean unload.

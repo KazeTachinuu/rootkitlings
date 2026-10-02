@@ -49,12 +49,6 @@ Take ling 18's `increment_fn` and wrap the shared access in
 `mutex_lock`/`mutex_unlock`. Lock per iteration, not around the
 entire loop.
 
-## Predict
-
-- What happens if `mutex_lock` is called from a timer callback?
-- Can a thread re-acquire a mutex it already holds?
-- What is the performance cost of locking?
-
 ## Try it
 
 ```bash
@@ -71,34 +65,7 @@ dmesg | tail
 rmmod hello
 ```
 
-
 ## Hints
-
-<details>
-<summary>Hint 1: DEFINE_MUTEX is a static initializer</summary>
-
-`DEFINE_MUTEX(rk_lock)` declares and initializes the mutex at file
-scope. You do not need to call any init function. Place it next to
-your globals, not inside a function.
-
-</details>
-
-<details>
-<summary>Hint 2: lock granularity</summary>
-
-Lock only around the shared access, not the entire loop. Holding the
-lock for 10000 iterations defeats the purpose (no concurrency). Lock
-per iteration:
-
-```c
-for (i = 0; i < ITERATIONS; i++) {
-    mutex_lock(&rk_lock);
-    counter++;
-    mutex_unlock(&rk_lock);
-}
-```
-
-</details>
 
 ## Contract
 

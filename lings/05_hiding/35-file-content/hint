@@ -1,0 +1,1 @@
+Hook the read path (vfs_read or the specific file's read handler). Check the file path in your hook and filter lines containing the hidden pattern.

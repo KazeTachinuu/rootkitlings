@@ -92,12 +92,6 @@ three callbacks. Then `misc_register` in init, `misc_deregister` in exit.
 `misc_register` returns an error code (not a pointer), so check with
 the `if (err)` pattern, not `IS_ERR`.
 
-## Predict
-
-- Is `/dev/rk_chardev` visible to all users by default?
-- What controls who can open the device?
-- Can two processes open it simultaneously?
-
 ## Try it
 
 ```bash
@@ -131,24 +125,6 @@ The check script verifies:
 ```bash
 ./rootkitlings check 12
 ```
-
-<details>
-<summary>Explain the result</summary>
-
-`misc_register` creates a character device node under `/dev` with major 10
-(the misc major) and a dynamically assigned minor. The kernel creates the
-device node automatically; no `mknod` is needed.
-
-The VFS dispatches `open`, `read`, and `release` through `rk_fops`.
-Each callback runs in the context of the calling process, so `current->pid`
-reports the actual caller.
-
-`misc_deregister` removes the device node and unregisters the callbacks.
-If a process has the device open at that point, existing file descriptors
-continue to work until closed.
-
-</details>
-
 > **What a defender sees**: `ls /dev/` shows the device. `lsmod` shows
 > the module. The device node is the most visible control surface so far.
 

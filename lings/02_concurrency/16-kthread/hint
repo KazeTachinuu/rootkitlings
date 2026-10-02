@@ -1,0 +1,1 @@
+kthread_create() + wake_up_process() starts it. Check kthread_should_stop() in the loop. kthread_stop() in exit waits for it to finish.

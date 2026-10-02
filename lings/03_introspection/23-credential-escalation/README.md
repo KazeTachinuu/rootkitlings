@@ -69,12 +69,6 @@ The write handler should parse the command (ling 10 pattern), and only
 escalate when the input starts with `"escalate"`. Log which PID was
 escalated.
 
-## Predict
-
-- Does `commit_creds` affect other processes?
-- Can you undo an escalation?
-- What audit trail does this leave?
-
 ## Try it
 
 ```bash
@@ -90,7 +84,6 @@ printf 'escalate' > /proc/rk_escalate
 dmesg | tail
 rmmod hello
 ```
-
 
 ## Contract
 

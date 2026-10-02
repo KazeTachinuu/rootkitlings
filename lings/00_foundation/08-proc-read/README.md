@@ -89,32 +89,6 @@ cat /proc/rk_reader
   -> rk_read(file, buffer, count, position)
 ```
 
-## Predict four short reads
-
-The message contains six bytes: `h`, `e`, `l`, `l`, `o`, and newline.
-
-```
-message[]  = "hello\n"    (6 bytes, no trailing \0 sent)
-
-position:    0   1   2   3   4   5   6
-             |   |   |   |   |   |   |
-             h   e   l   l   o  \n  EOF
-             |       |       |       |
-read 1:      [--2--]                      -> return 2, pos = 2
-read 2:              [--2--]              -> return 2, pos = 4
-read 3:                      [--2--]      -> return 2, pos = 6
-read 4:                              []   -> return 0  (EOF)
-```
-
-Predict each result when `count` is two:
-
-| Read | Start | Bytes | Return | Next position |
-|---:|---:|---|---:|---:|
-| 1 | `0` | ? | ? | ? |
-| 2 | ? | ? | ? | ? |
-| 3 | ? | ? | ? | ? |
-| 4 | ? | ? | ? | ? |
-
 ## Try it
 
 ```bash
@@ -151,32 +125,6 @@ The check script verifies:
 ```bash
 ./rootkitlings check 8
 ```
-
-<details>
-<summary>Check the short-read prediction</summary>
-
-| Read | Start | Bytes | Return | Next position |
-|---:|---:|---|---:|---:|
-| 1 | `0` | `he` | `2` | `2` |
-| 2 | `2` | `ll` | `2` | `4` |
-| 3 | `4` | `o\n` | `2` | `6` |
-| 4 | `6` | none | `0` | `6` |
-
-</details>
-
-<details>
-<summary>Explain the result</summary>
-
-The process calls `read`; the VFS finds the procfs entry and dispatches through
-`.proc_read`. The callback runs in the reading process's context.
-
-The return value describes this operation, while `position` preserves progress
-for later reads on the same open file. Returning zero signals EOF.
-
-A second `cat` opens a new file instance with a fresh position of zero.
-It does not rerun module init and it does not reset global module state.
-
-</details>
 
 > **What a defender sees**: anyone can `cat /proc/rk_reader` and read the data. There is no
 > write interface, no authentication, and the entry is visible in a directory listing.

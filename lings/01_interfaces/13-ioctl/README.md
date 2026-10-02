@@ -101,12 +101,6 @@ To test ioctl commands, you need a userspace program that calls
 `ioctl(2)`. The provided `cmdtool` does this. It must define the
 same `_IOW`/`_IOR` constants to generate matching command numbers.
 
-## Predict
-
-- Can any user call ioctl on `/dev/rk_ioctl`?
-- What prevents a caller from using an invalid command number?
-- What does `strace cat /dev/rk_ioctl` show?
-
 ## Try it
 
 ```bash
@@ -144,23 +138,6 @@ The check script verifies:
 
 The check also tests that `/dev/rk_ioctl` is a character device and verifies
 single-character edge cases.
-
-<details>
-<summary>Explain the result</summary>
-
-Ioctl bypasses the read/write path entirely. The VFS dispatches it through
-`.unlocked_ioctl` with the command number and a single `unsigned long`
-argument, which is typically a pointer to a userspace buffer.
-
-The command number encodes direction (read/write/both), a type byte, a
-sequence number, and the argument size. The kernel does not enforce this
-encoding; it is a convention that tools like `strace` use to decode the call.
-
-`copy_from_user` and `copy_to_user` handle the boundary crossing, just as
-they did in ling 10 with procfs writes.
-
-</details>
-
 > **What a defender sees**: `strace` reveals every ioctl call, including
 > the command number and argument address. No obfuscation, no authentication.
 

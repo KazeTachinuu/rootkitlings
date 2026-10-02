@@ -64,12 +64,6 @@ Two things to get right:
 
 Create `/proc/rk_gate` with mode `0666` (readable and writable).
 
-## Predict
-
-- What happens if `wake_up` is called before `wait_event`?
-- Can `wait_event_interruptible` return early?
-- What is the "thundering herd" problem?
-
 ## Try it
 
 ```bash
@@ -88,47 +82,7 @@ cat /proc/rk_gate                  # 2
 rmmod hello
 ```
 
-
 ## Hints
-
-<details>
-<summary>Hint 1: the condition must include kthread_should_stop</summary>
-
-`wait_event_interruptible` blocks until its condition is true. If your
-condition is just `flag`, the thread cannot be woken for cleanup.
-Combine them:
-
-```c
-wait_event_interruptible(wq, flag || kthread_should_stop());
-```
-
-After waking, check `kthread_should_stop()` first. If true, break out
-of the loop.
-
-</details>
-
-<details>
-<summary>Hint 2: wake the thread before stopping it</summary>
-
-`kthread_stop` waits for the thread to exit. If the thread is sleeping
-in `wait_event_interruptible`, it will never wake up and `kthread_stop`
-deadlocks. In your exit function:
-
-1. Set the flag to true.
-2. Call `wake_up_interruptible(&wq)`.
-3. Then call `kthread_stop(task)`.
-
-</details>
-
-<details>
-<summary>Hint 3: reset the flag after processing</summary>
-
-The thread loop should: wake up, check `kthread_should_stop`, increment
-the counter, reset the flag to false, then loop back to
-`wait_event_interruptible`. If you forget to reset the flag, the thread
-will never sleep again (the condition stays true).
-
-</details>
 
 ## Contract
 

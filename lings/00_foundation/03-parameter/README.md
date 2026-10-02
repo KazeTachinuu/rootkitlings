@@ -55,14 +55,6 @@ one backing store, two access paths
 Use the parameter in your init and exit log calls so you can see
 the value changing.
 
-## Predict
-
-- What will init print with no argument?
-- What will init print after `insmod hello.ko name=phantom`?
-- Will a sysfs write call init again?
-- Which value will exit print after that write?
-
-
 ## Contract
 
 The check script verifies:
@@ -103,23 +95,6 @@ dmesg | tail
 The check loads with no arg (default `world`), then with `name=phantom`,
 then writes `specter` via sysfs. It verifies the parameter value at each step
 and checks that exit prints the last written value.
-
-<details>
-<summary>Explain the result</summary>
-
-`module_param` connects the variable, a parser, and sysfs permissions.
-It does not create a second copy of the value.
-
-The loader parses `name=phantom` before init.
-A later sysfs write updates the already loaded module's variable.
-Init is a load callback, not a change callback, so it does not run again.
-
-With mode `0444`, sysfs would expose the value as read-only.
-The default and load-time argument would still work.
-
-</details>
-
-
 > **What a defender sees**: parameters are world-readable in `/sys/module/hello/parameters/`.
 > Anyone on the system can read them. And writing triggers no module code at all.
 

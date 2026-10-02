@@ -40,12 +40,6 @@ int ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
 - `UMH_WAIT_EXEC`: return after exec, don't wait for exit
 - `UMH_NO_WAIT`: fire and forget
 
-## Predict
-
-- What user does the command run as?
-- Does it appear in shell history?
-- What is the spawned process's parent PID?
-
 ## Try it
 
 ```bash
@@ -60,7 +54,6 @@ ls /tmp/rootkit_was_here    # exists
 cat /proc/rk_persist             # cmd=..., exit=0
 rmmod hello
 ```
-
 
 ## Contract
 

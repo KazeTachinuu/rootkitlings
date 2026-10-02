@@ -1,0 +1,1 @@
+Track hook state with an atomic flag. Install in init, remove in exit. Verify the hook is active via a proc counter that the callback increments.

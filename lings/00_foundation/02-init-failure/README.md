@@ -45,13 +45,6 @@ return -EINVAL;
 `EINVAL` means "invalid argument."
 Kernel functions report failures with negative errno values.
 
-## Predict
-
-- Will `hello: loaded` still reach the log?
-- Will `insmod` succeed?
-- Will `hello` remain visible in `lsmod`?
-- Will the kernel call `hello_exit`?
-
 ## Your debugging toolkit
 
 These tools work in every ling. Learn them now.
@@ -190,19 +183,6 @@ include, then `./rootkitlings run` and load again. Loading should succeed.
 ```bash
 ./rootkitlings check 2
 ```
-
-<details>
-<summary>Explain the result</summary>
-
-A negative init result rejects the load.
-Earlier side effects, including a log write, do not reverse automatically.
-
-Exit belongs to a successfully loaded module.
-Because failed init never reaches that state, the kernel does not call exit.
-Init remains responsible for any earlier work when it returns an error.
-
-</details>
-
 > **What a defender sees**: the failed load still wrote to `dmesg`. The kernel log
 > records every `insmod` attempt, successful or not. A defender sees both.
 

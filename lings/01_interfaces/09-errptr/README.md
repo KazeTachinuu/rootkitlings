@@ -123,12 +123,6 @@ directory before returning an error.
 **Exit cleanup**: remove child before parent (`proc_remove` each in
 reverse order).
 
-## Predict
-
-- What does `IS_ERR(NULL)` return?
-- What does `PTR_ERR(ERR_PTR(-ENOMEM))` return?
-- If you pass an `ERR_PTR` to `kfree`, what happens?
-
 ## Try it
 
 ```bash
@@ -160,25 +154,6 @@ The check script verifies:
 ```bash
 ./rootkitlings check 9
 ```
-
-<details>
-<summary>Explain the result</summary>
-
-`proc_mkdir` creates a directory entry under `/proc`. Like `proc_create`, it
-returns `NULL` on failure, not `ERR_PTR`. The distinction matters because
-`IS_ERR(NULL)` is false: testing only `IS_ERR` on a `NULL` return silently
-treats failure as success.
-
-`ERR_PTR` encodes a negative errno in a pointer. `PTR_ERR` decodes it back.
-`IS_ERR` checks whether a pointer falls in the error range. These three macros
-are used together whenever a function returns an error-or-pointer value.
-
-Functions that return `NULL` on failure and functions that return `ERR_PTR` on
-failure are both common in the kernel. The documentation (or the source) tells
-you which convention a function uses. Getting it wrong crashes the kernel.
-
-</details>
-
 > **What a defender sees**: `/proc/rk_errptr/` is a visible directory.
 > `ls /proc/` shows it. A subdirectory makes the module's presence
 > more obvious than a single flat entry.

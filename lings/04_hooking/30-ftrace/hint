@@ -1,0 +1,1 @@
+ftrace_ops needs flags FTRACE_OPS_FL_SAVE_REGS | FTRACE_OPS_FL_IPMODIFY | FTRACE_OPS_FL_RECURSION. Use ftrace_set_filter_ip() then register_ftrace_function(). Cleanup order: unregister before clearing filter.

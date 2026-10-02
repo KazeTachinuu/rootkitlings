@@ -1,0 +1,1 @@
+Define ioctl numbers with _IOW/_IOR/_IOWR macros. Your .unlocked_ioctl callback dispatches on cmd with a switch. Use copy_from_user/copy_to_user for the arg.

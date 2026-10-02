@@ -87,14 +87,6 @@ Log that state was freed.
 | Local variables | Init stack | One function call |
 | Init function code | Module memory | Load to unload |
 
-## Predict
-
-- Does the object exist before `kmalloc` succeeds?
-- What survives after init returns?
-- Who must release the object after successful init?
-- Does `state = NULL` free memory?
-
-
 ## Contract
 
 The check script verifies:
@@ -125,21 +117,6 @@ dmesg | tail
 ```
 
 The check also reloads the module to verify no resource leak from the first run.
-
-<details>
-<summary>Explain the result</summary>
-
-After successful allocation, init stores the pointer in module state.
-Successful init transfers the cleanup duty to exit.
-
-`kfree` ends the allocation's lifetime. It does not clear pointer aliases,
-so assigning `NULL` afterward makes the global pointer report it owns nothing.
-
-A global pointer cannot extend another object's lifetime. Storing the
-address of an init local would leave a dangling pointer after init returns.
-
-</details>
-
 > **What a defender sees**: if init returns an error after `kmalloc`, exit never runs.
 > The allocated memory leaks permanently. The kernel has no garbage collector.
 

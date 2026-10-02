@@ -80,7 +80,6 @@ The fundamental problem: you hid from one view (directory listing) but
 not from direct access, tracing, or memory inspection. Each layer you
 add in later lings closes one more gap. Capstone 5 tests them all.
 
-
 ## Contract
 
 The check script verifies:
@@ -100,38 +99,3 @@ The check script verifies:
 
 ## Hints
 
-<details>
-<summary>Hint 1: hiding from getdents64</summary>
-
-Hook `getdents64` with ftrace. In the hook, call the original, then
-walk the returned entries. When you find one named `.drop`, splice it
-out by shifting the remaining entries forward.
-
-</details>
-
-<details>
-<summary>Hint 2: signal interception</summary>
-
-Hook `kill` (or the underlying `__kill_pgrp_info`). Check if the signal
-number is 63 or 64 and the target is the calling process. Consume the
-signal (return success without forwarding).
-
-</details>
-
-<details>
-<summary>Hint 3: proc write callback</summary>
-
-```c
-static ssize_t drop_write(struct file *f, const char __user *buf,
-                           size_t count, loff_t *pos)
-{
-    if (count > sizeof(state->message) - 1)
-        return -EINVAL;
-    if (copy_from_user(state->message, buf, count))
-        return -EFAULT;
-    state->message[count] = '\0';
-    return count;
-}
-```
-
-</details>

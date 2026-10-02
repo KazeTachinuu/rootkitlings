@@ -51,12 +51,6 @@ module_exit(hello_exit);
 `module_exit` identifies the function used when it unloads.
 Their `pr_info` calls write evidence to the kernel log.
 
-## Predict
-
-- Which function will `insmod` trigger?
-- When will `lsmod` show `hello`?
-- Which function will `rmmod` trigger?
-
 ## Try it
 
 ```bash
@@ -97,19 +91,6 @@ The check script verifies:
 ```bash
 ./rootkitlings check 0
 ```
-
-<details>
-<summary>Why does this work?</summary>
-
-The kernel loader reads `hello.ko` and calls the init entry point exposed by
-`module_init`. Init returns `0`, so the module remains loaded.
-
-On removal, the kernel calls the exit entry point before releasing the module's
-code and state. A module needs no `main` because the kernel controls this
-lifecycle.
-
-</details>
-
 > **What a defender sees**: the module is visible in `lsmod` and its messages appear in `dmesg`.
 > Every user on the system can see both.
 

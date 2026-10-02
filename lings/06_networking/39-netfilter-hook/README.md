@@ -67,45 +67,7 @@ atomics in ling 20.
 
 Serve the count through `/proc/rk_nfhook` (ling 08 pattern).
 
-## Predict
-
-- What happens if you return `NF_DROP` instead of `NF_ACCEPT`?
-- Can you filter by source IP using `ip_hdr(skb)->saddr`?
-- Why is `atomic_t` needed instead of a plain `int`?
-
-
 ## Hints
-
-<details>
-<summary>Hint 1: the hook callback signature</summary>
-
-```c
-static unsigned int hook_fn(void *priv, struct sk_buff *skb,
-                            const struct nf_hook_state *state)
-```
-
-Return `NF_ACCEPT` to let the packet through. The `skb` is the packet.
-You do not need to inspect its contents for this ling, just count it.
-
-</details>
-
-<details>
-<summary>Hint 2: use init_net for the network namespace</summary>
-
-`nf_register_net_hook` and `nf_unregister_net_hook` take a network
-namespace as their first argument. Use `&init_net` (the default
-namespace). You need `#include <net/net_namespace.h>` for this.
-
-</details>
-
-<details>
-<summary>Hint 3: bring up loopback to see packets</summary>
-
-In the QEMU VM, loopback may not be up by default. The check script
-runs `ifconfig lo up` before pinging. If you test manually, do the
-same: `ifconfig lo up` then `ping -c 1 127.0.0.1`.
-
-</details>
 
 ## Try it
 

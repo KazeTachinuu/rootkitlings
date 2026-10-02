@@ -54,7 +54,6 @@ The module is visible in `lsmod`, the parameter is world-readable in sysfs,
 `/proc/rk_board` is visible to every user, and `dmesg` records every load.
 Everything is exposed. Hiding comes later.
 
-
 ## Contract
 
 The check script verifies:
@@ -73,31 +72,3 @@ The check script verifies:
 
 Only if stuck. Try without them first.
 
-<details>
-<summary>Hint 1: struct layout</summary>
-
-```c
-struct board_state {
-	char message[64];
-	unsigned long reads;
-};
-```
-
-</details>
-
-<details>
-<summary>Hint 2: read callback format</summary>
-
-Build the output string with `snprintf` into a local buffer,
-then serve it with `simple_read_from_buffer`.
-
-</details>
-
-<details>
-<summary>Hint 3: rollback order</summary>
-
-Init acquires two resources: kmalloc then proc_create.
-If proc_create fails, free the struct before returning.
-Exit removes proc first, then frees the struct (reverse order).
-
-</details>

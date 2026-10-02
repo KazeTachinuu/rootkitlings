@@ -58,47 +58,7 @@ if (inet_sk(v)->inet_sport == htons(HIDDEN_PORT))
 `skip_entry` just returns 0 (renders nothing). Also create
 `/proc/rk_portcloak` with port number and hidden count.
 
-## Predict
-
-- Why check for `SEQ_START_TOKEN`?
-- Does this also hide the port from `ss -tlnp`?
-- What about `/proc/net/tcp6`?
-
-
 ## Hints
-
-<details>
-<summary>Hint 1: what tcp4_seq_show does</summary>
-
-The kernel calls `tcp4_seq_show` once per line when a process reads
-`/proc/net/tcp`. The `v` argument is either `SEQ_START_TOKEN` (the
-header row) or a `struct sock *`. For the header, pass through so
-the column names appear. For sockets, check the port and decide
-whether to render or skip.
-
-</details>
-
-<details>
-<summary>Hint 2: the hook wrapper pattern</summary>
-
-Unlike getdents64 filtering (post-process the buffer), here you
-intercept BEFORE rendering. Your ftrace callback checks the port:
-if it matches, redirect `regs->ip` to a no-op that returns 0
-(renders nothing). Otherwise, don't touch `regs->ip` and the
-original `tcp4_seq_show` runs normally. Simpler than buffer
-manipulation.
-
-</details>
-
-<details>
-<summary>Hint 3: IBT and the callable address</summary>
-
-Unlike lings 34-37, this hook does not call the original through a
-function pointer. If the port matches, redirect `regs->ip` to your
-`skip_entry`. Otherwise, return without modifying `regs->ip` and the
-original runs naturally. No ENDBR subtraction needed here.
-
-</details>
 
 ## Try it
 

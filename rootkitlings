@@ -133,7 +133,8 @@ cmd_check()
             ;;
         *)
             printf "\n"
-            warn "Read the contract: rootkitlings readme $num"
+            warn "Read the contract:  rootkitlings readme $num"
+            warn "Get a nudge:        rootkitlings hint $num"
             warn "See the solution:   rootkitlings peek $num"
             die "$name failed"
             ;;
@@ -251,6 +252,25 @@ cmd_readme()
     cat "$readme"
 }
 
+cmd_hint()
+{
+    local num=${1:-$(current_ling)}
+
+    local ling
+    ling=$(resolve_ling "$num")
+    local name
+    name=$(ling_name "$ling")
+    local hint="$ROOT_DIR/lings/$ling/hint"
+
+    if [[ ! -f $hint ]]; then
+        warn "No hint for this ling. Read the README: rootkitlings readme $num"
+        return
+    fi
+
+    hdr "Hint: $name"
+    cat "$hint"
+}
+
 cmd_status()
 {
     local cur
@@ -266,6 +286,7 @@ cmd_status()
     printf "\n"
     printf "  check     Build and verify current ling\n"
     printf "  readme    Show the README for current ling\n"
+    printf "  hint      Get a nudge without seeing the solution\n"
     printf "  peek      Compare your code against the reference\n"
     printf "  run       Boot an interactive VM with your module\n"
 }
@@ -309,6 +330,7 @@ Usage: rootkitlings <command> [ling]
 Commands:
   check  [N]  Build and verify ling N (default: current)
   readme [N]  Show the README for ling N
+  hint   [N]  Get a nudge without seeing the solution
   peek   [N]  Show the reference solution for ling N
   reset  [N]  Restore hello.c to ling N reference
   run         Build and boot interactive VM
@@ -322,7 +344,8 @@ Workflow:
   1. rootkitlings readme     Read the exercise
   2. Edit module/hello.c     Write your solution
   3. rootkitlings check      Test it in a VM
-  4. rootkitlings peek       See the reference solution (if stuck)
+  4. rootkitlings hint       Get a nudge (if stuck)
+  5. rootkitlings peek       See the reference solution (last resort)
 EOF
 }
 
@@ -334,6 +357,7 @@ fi
 case $1 in
     list)   cmd_list         ;;
     check)  shift; cmd_check  "$@" ;;
+    hint)   shift; cmd_hint   "$@" ;;
     peek)   shift; cmd_peek   "$@" ;;
     reset)  shift; cmd_reset  "$@" ;;
     readme) shift; cmd_readme "$@" ;;

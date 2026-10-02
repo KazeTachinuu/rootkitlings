@@ -72,53 +72,7 @@ after=0xCAFEBABE
 modified=yes
 ```
 
-## Predict
-
-- Why does the variable need page alignment?
-- Why use `invlpg` after modifying the PTE?
-- Why can't rootkits clear CR0.WP anymore (CR pinning)?
-
-
 ## Hints
-
-<details>
-<summary>Hint 1: walking the page table</summary>
-
-To find the PTE for your marker's address, walk the four-level page
-table from the kernel's PGD (init_mm.pgd):
-
-```c
-pgd -> p4d -> pud -> pmd -> pte
-```
-
-Each level has a lookup function (`pgd_offset`, `p4d_offset`,
-`pud_offset`, `pmd_offset`, `pte_offset_kernel`). Check for "none" or
-"bad" entries at each level.
-
-</details>
-
-<details>
-<summary>Hint 2: flush the TLB after modifying the PTE</summary>
-
-After changing the PTE with `set_pte`, the CPU may still cache the old
-mapping. Use `invlpg` to flush that one TLB entry:
-
-```c
-asm volatile("invlpg (%0)" : : "r"(addr) : "memory");
-```
-
-Without this, the write may still fault despite the PTE change.
-
-</details>
-
-<details>
-<summary>Hint 3: restore the original PTE</summary>
-
-Save the original PTE before modifying it. After your write, restore it
-with `set_pte(ptep, orig_pte)` and flush the TLB again. Leaving pages
-writable is a security hole and a detection signal.
-
-</details>
 
 ## Try it
 

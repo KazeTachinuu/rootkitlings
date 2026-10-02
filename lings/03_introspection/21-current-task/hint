@@ -1,0 +1,1 @@
+The current macro gives you the task_struct of the calling process. Read current->pid and current->comm. Include <linux/sched.h>.

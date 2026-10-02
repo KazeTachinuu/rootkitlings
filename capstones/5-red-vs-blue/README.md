@@ -231,7 +231,6 @@ perfect teaching environment. You ARE the hypervisor.
                           Score:    /8
 ```
 
-
 ## Contract
 
 The check script verifies:

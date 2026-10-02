@@ -40,12 +40,6 @@ each thread increments a `done_count` when it finishes its loop. When
 The threads run a tight loop (no sleeping), so they complete quickly.
 Read `/proc/rk_race` after a short delay.
 
-## Predict
-
-- Will the final count always be exactly the same on repeated runs?
-- Is the race guaranteed to happen?
-- What determines how many updates are lost?
-
 ## Try it
 
 ```bash
@@ -61,7 +55,6 @@ cat /proc/rk_race       # likely less than 20000
 dmesg | tail
 rmmod hello
 ```
-
 
 ## Contract
 

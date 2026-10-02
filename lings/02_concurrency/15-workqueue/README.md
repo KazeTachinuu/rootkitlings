@@ -59,12 +59,6 @@ Think about cleanup order: if you cancel the work first, the timer could
 schedule new work between your cancel and timer stop. Stop the source
 (timer) before draining the sink (work).
 
-## Predict
-
-- What is the difference between `schedule_work` and `queue_work`?
-- Why cancel the timer before the work, not the other way around?
-- Can two instances of the same work item run concurrently?
-
 ## Try it
 
 ```bash
@@ -81,48 +75,7 @@ dmesg | tail
 rmmod hello
 ```
 
-
 ## Hints
-
-<details>
-<summary>Hint 1: the work callback signature</summary>
-
-The work function receives a pointer to the `work_struct` itself, not
-custom data. Declare the counter as a module-level global, not as
-something passed to the work function.
-
-```c
-static void my_work_fn(struct work_struct *work)
-{
-    // access global counter directly
-}
-```
-
-</details>
-
-<details>
-<summary>Hint 2: INIT_WORK goes in your init function</summary>
-
-`INIT_WORK(&work, my_work_fn)` binds the callback to the work item.
-Call it once in init, before arming the timer. The timer callback then
-calls `schedule_work(&work)` each time it fires.
-
-</details>
-
-<details>
-<summary>Hint 3: cleanup order matters</summary>
-
-Stop the timer first, then cancel the work:
-
-```c
-timer_shutdown_sync(&beacon_timer);   // stop the source
-cancel_work_sync(&work);             // drain the sink
-```
-
-If you cancel work first, the timer could schedule new work between
-your cancel and your timer stop.
-
-</details>
 
 ## Contract
 

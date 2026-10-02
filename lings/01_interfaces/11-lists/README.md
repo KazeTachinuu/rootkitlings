@@ -122,12 +122,6 @@ next pointer before the loop body runs:
 Write a `free_entries()` helper. Call it from exit before
 `proc_remove`.
 
-## Predict
-
-- What happens if you `kfree` an entry without `list_del` first?
-- Why use `list_for_each_entry_safe` in cleanup instead of `list_for_each_entry`?
-- What does an empty list read return?
-
 ## Try it
 
 ```bash
@@ -162,25 +156,6 @@ The check script verifies:
 ```bash
 ./rootkitlings check 11
 ```
-
-<details>
-<summary>Explain the result</summary>
-
-The kernel list is circular and doubly linked. `LIST_HEAD` initializes an
-empty list where both pointers reference the head itself. `list_add_tail`
-inserts before the head, which appends to the end of the sequence.
-
-`list_for_each_entry` uses `container_of` to recover each `rk_entry`
-from its embedded `node` field. This avoids separate allocation for list
-nodes and their payloads, saving memory and cache lines.
-
-The read callback iterates the entire list every time. With many entries,
-the 512-byte buffer would truncate. A real implementation would use
-`seq_file` (introduced in the concurrency category) for arbitrary-length
-output.
-
-</details>
-
 > **What a defender sees**: the list is unbounded. An attacker (or a bug)
 > writing in a loop exhausts kernel memory. No size limit, no cleanup on full.
 

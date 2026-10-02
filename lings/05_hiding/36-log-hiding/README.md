@@ -40,44 +40,7 @@ subsequent lines forward.
 
 Also create `/proc/rk_logfilter` that reports how many lines were hidden.
 
-## Predict
-
-- Why hook `syslog` instead of `devkmsg_read`?
-- What happens to `journalctl -k` (uses a different path)?
-- How does a remote syslog server defeat this technique?
-
-
 ## Hints
-
-<details>
-<summary>Hint 1: which syscall to hook</summary>
-
-BusyBox `dmesg` calls `syslog(2)` with type 3 (`SYSLOG_ACTION_READ_ALL`).
-The kernel entry point is `__x64_sys_syslog`. The syslog arguments
-are: type in `regs->di`, buffer pointer in `regs->si`, length in
-`regs->dx`.
-
-</details>
-
-<details>
-<summary>Hint 2: line-by-line filtering</summary>
-
-After the original returns, copy the buffer from userspace. Walk it
-line by line (split on `\n`). For each line, check if it contains
-your prefix. Build a new buffer with only the lines that pass. Copy
-back to userspace and return the new (shorter) length.
-
-</details>
-
-<details>
-<summary>Hint 3: adjusting the return value</summary>
-
-`syslog` returns the number of bytes read. After filtering, the byte
-count shrinks. Update `regs->ax` (the return value register) to match
-the filtered buffer length, otherwise userspace reads garbage past
-the real data.
-
-</details>
 
 ## Try it
 

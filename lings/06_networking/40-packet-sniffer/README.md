@@ -55,14 +55,6 @@ tcp=N
 udp=N
 ```
 
-## Predict
-
-- If you ping localhost, which counter increments? (Neither: ICMP is
-  not TCP or UDP.)
-- Where in the IP header is the protocol field?
-- Could you add ICMP counting using `IPPROTO_ICMP`?
-
-
 ## Try it
 
 ```bash

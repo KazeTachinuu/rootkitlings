@@ -61,33 +61,7 @@ Also create `/proc/rk_tracer` that reports the debugfs path.
 
 Clean up in `tracer_exit` with `debugfs_remove_recursive()`.
 
-## Predict
-
-- Where does the `rk_tracer/` directory appear in the filesystem?
-- Why use `file_operations` instead of `proc_ops`?
-- Would a defender see these entries in normal debug output?
-
-
 ## Hints
-
-<details>
-<summary>Hint 1: debugfs_create_file uses file_operations, not proc_ops</summary>
-
-Debugfs files use `struct file_operations` (the same type as char
-devices in ling 12), not `struct proc_ops`. The read callback has the
-standard VFS signature. You can still use `simple_read_from_buffer` to
-serve the formatted string.
-
-</details>
-
-<details>
-<summary>Hint 2: cleanup with one call</summary>
-
-`debugfs_remove_recursive(dbg_dir)` removes the directory and all files
-inside it. Call it in `tracer_exit` before `proc_remove`. You do not need
-to remove individual files.
-
-</details>
 
 ## Try it
 

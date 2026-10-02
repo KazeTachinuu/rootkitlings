@@ -50,13 +50,6 @@ list_del_init(&THIS_MODULE->list);
 kobject_del(&THIS_MODULE->mkobj.kobj);
 ```
 
-## Predict
-
-- Can you still `rmmod hello` after removing the kobject?
-- Is `/proc/modules` consistent with `/sys/module/`?
-- What about `cat /proc/kallsyms | grep hello`?
-
-
 ## Try it
 
 ```bash
