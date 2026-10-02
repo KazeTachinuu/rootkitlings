@@ -1,27 +1,26 @@
 # Persistence
 
-Survive a reboot. Execute commands. Transfer files. Clean up on command.
+Survive a reboot. Execute commands. Transfer files. Repair damage automatically.
 
 | # | Ling | Teaches | Weakness exposed |
 |--:|------|---------|-----------------|
-| 50 | Kernel file I/O | `filp_open`, `kernel_read`, `kernel_write`. | File operations from kernel context bypass permission checks silently. |
-| 51 | Command execution | `call_usermodehelper` with stdout/stderr capture. | Spawned process is visible in `ps`. Arguments visible in `/proc/pid/cmdline`. |
-| 52 | Boot persistence | `modules-load.d`, `modprobe.d` install hijacking, DKMS. | Persistence file is on disk. Defenders check `/etc/modules-load.d/`, `modprobe.d install`, `dkms status`. |
-| 53 | Kill date | Timer self-destruct + dead-man switch on lost C2 contact. | Crash during self-destruct leaves dump. Filesystem journal reveals overwritten files. |
-| 54 | Clean exit | Undo all hooks, free memory, remove persistence, unload. | A crash during cleanup leaves partial state. Rollback order matters. |
+| 50 | Proc trigger | Writable `/proc` entry accepts a magic word to activate features. | The proc entry is visible. Defenders grep `/proc` for unexpected writable entries. |
+| 51 | Usermode helper | `call_usermodehelper` spawns root processes from kernel space. | Spawned process is visible in `ps`. Arguments visible in `/proc/pid/cmdline`. |
+| 52 | File infection | `filp_open`, `kernel_read`, `kernel_write` modify files from kernel. | File operations from kernel context bypass permission checks silently. Modified files leave filesystem journal traces. |
+| 53 | Boot persistence | `modules-load.d` config written from kernel space for auto-load at boot. | Persistence file is on disk. Defenders check `/etc/modules-load.d/` and `modprobe.d install`. |
+| 54 | Self-healing | Watchdog timer detects and repairs removed proc entries, killed threads. | Watchdog itself is visible. Crash during repair leaves partial state. |
 
-A production rootkit needs persistence, command execution, and file transfer.
+Ling 50 is where rootkitlings meets real-world persistence. The operator
+needs a way to activate features (escalate privileges, toggle hiding) without
+leaving shell history. A writable proc entry with a magic word is the simplest trigger.
 
-Ling 50 is where rootkitlings meets real-world persistence. It teaches three methods
-in order of stealth:
+Ling 53 teaches three boot persistence methods in order of stealth:
 
 1. `/etc/modules-load.d/hello.conf` (obvious, easy to find)
 2. `modprobe.d` install directive (piggybacks on a legitimate module)
 3. DKMS (survives kernel upgrades)
 
-If your rootkit needs to hide the persistence files, ling 34 (getdents64 hook) covers that.
+If your rootkit needs to hide the persistence files, ling 36 (getdents64 hook) covers that.
 Cross-category combinations like this are where the modular design pays off.
 
-Clean exit (ling 52) undoes whatever your rootkit uses, in reverse order.
-Only the mechanisms you included need cleanup. One forgotten hook, one leaked
-timer, one uncancelled workqueue item, and the kernel crashes on unload.
+After ling 54: build [Capstone 5: Red vs blue](../../capstones/5-red-vs-blue/README.md) (together with crypto).
