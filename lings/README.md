@@ -77,6 +77,23 @@ The direct path is `00` through `59`. Once the fundamentals are comfortable, the
 category boundaries make it easy to revisit a specific mechanism without
 replaying the entire course.
 
+## Minimal rootkit (5 lings)
+
+The shortest path to a working rootkit that hides itself and intercepts files:
+
+| Ling | What it gives you |
+|-----:|-------------------|
+| 00 | Module lifecycle (load, unload, dmesg) |
+| 30 | Kprobe hooking |
+| 31 | Kretprobe (intercept return values) |
+| 36 | Module hiding (disappear from lsmod) |
+| 38 | Directory listing filter (hide files/procs) |
+
+After these five you can build a module that loads, hooks a syscall, hides
+entries from directory listings, and removes itself from the module list.
+Everything else (networking, persistence, crypto, proc interfaces) is
+optional hardening.
+
 ## Rules for reference code
 
 - Target the current course kernel, not a maze of historical version branches.

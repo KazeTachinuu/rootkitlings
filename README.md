@@ -189,6 +189,15 @@ make test-references
 
 All module execution happens in the disposable [QEMU VM](vm/README.md).
 
+The CLI tracks progress and wraps the VM, but it is optional. Each ling is a
+self-contained directory under [`lings/`](lings/) with its own README, check
+script, and hint. Browse them directly, run checks with `vm/boot`, or use any
+workflow that fits.
+
+Progress is stored in `.progress` (a single number: the index into `.order`).
+It advances when a check passes. Delete it to start over, edit it to jump
+ahead. It is gitignored.
+
 ## When things break
 
 Ling 03 teaches GDB debugging, and ling 04 covers init failure handling.
