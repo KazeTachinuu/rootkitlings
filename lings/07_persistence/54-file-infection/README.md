@@ -2,13 +2,13 @@
 
 ## Why this step
 
-Rootkits persist by injecting code into existing files. `filp_open` +
-`kernel_write` can modify any file from kernel space. This is how a
-rootkit injects a loader line into a shell script, patches a binary,
-or adds an SSH key.
+Kernel code can open and modify a file with `filp_open()` and
+`kernel_write()`. This lesson performs a reversible edit on a disposable file
+to teach kernel file I/O, exact-length checks, and restoration.
 
-Reptile uses this to drop a loader script. This ling injects a payload
-line into an existing script, preserving the original content.
+Real rootkit installers commonly create persistence artifacts from userspace;
+being able to write a file from a module does not make that the cleanest or
+least observable design.
 
 ## The concept
 
@@ -32,6 +32,11 @@ line into an existing script, preserving the original content.
 The module reads the file, saves the original, then writes the payload
 line followed by the original content. On unload, it restores the saved
 original.
+
+Bound the operation explicitly. Read one byte beyond the supported maximum and
+return `-EFBIG` if that byte exists; silently truncating an oversized original
+would make restoration destructive. Check every `kernel_write()` for both a
+negative error and a short write.
 
 ## What you need
 
@@ -97,8 +102,8 @@ The check script verifies:
   target=/tmp/rk_victim.sh
   ```
 - On load, the module prepends a payload line (`rootkit was here`) to `/tmp/rk_victim.sh`.
-- The original content is preserved after the injected line.
-- On unload, the module restores the original file content.
+- The original content is preserved byte-for-byte after the injected line.
+- On unload, the module restores the exact original content.
 
 ## Verify
 

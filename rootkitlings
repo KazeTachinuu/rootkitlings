@@ -11,7 +11,7 @@ _use_color() { [ -t "$1" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != dumb ];
 
 if _use_color 2; then
     B='\033[1;34m' G='\033[1;32m' Y='\033[1;33m' R='\033[1;31m'
-    C='\033[1;36m' W='\033[1;37m' D='\033[2m' N='\033[0m'
+    C='\033[1;36m' D='\033[2m' N='\033[0m'
 else
     B='' G='' Y='' R='' C='' D='' N=''
 fi
@@ -184,12 +184,19 @@ cmd_check()
     hdr "Checking $name"
     make -C "$ROOT_DIR" MODULE_DIR="$bdir" --quiet
 
-    local output
-    output=$("$ROOT_DIR/vm/boot" --check "$check_script" "$bdir/hello.ko" 2>&1) || true
+    local host_check="$ROOT_DIR/$entry/host-check"
+    if [[ -x $host_check ]]; then
+        "$host_check" "$bdir"
+    fi
+
+    local output vm_status=0
+    output=$(timeout --foreground "${ROOTKITLINGS_CHECK_TIMEOUT:-60}" \
+        "$ROOT_DIR/vm/boot" --check "$check_script" "$bdir/hello.ko" 2>&1) ||
+        vm_status=$?
     printf '%s\n' "$output"
 
-    case "$output" in
-        *"[+] PASSED"*)
+    case "$vm_status:$output" in
+        0:*"[+] PASSED"*)
             ok "$name passed"
             local idx
             idx=$(index_of "$entry") || return
@@ -295,7 +302,7 @@ cmd_run()
     local bdir
     bdir=$(build_dir)
     make -C "$ROOT_DIR" MODULE_DIR="$bdir" --quiet
-    "$ROOT_DIR/vm/boot" "$bdir/hello.ko"
+    "$ROOT_DIR/vm/boot" "$@" "$bdir/hello.ko"
 }
 
 cmd_gdb()
@@ -395,7 +402,7 @@ usage()
     printf "  ${OW}readme${ON}   ${OD}[N]${ON}  Show the README for ling N\n"
     printf "  ${OW}hint${ON}     ${OD}[N]${ON}  Get a nudge without seeing the solution\n"
     printf "  ${OW}peek${ON}     ${OD}[N]${ON}  Show the reference solution\n"
-    printf "  ${OW}run${ON}           Build and boot interactive VM\n"
+    printf "  ${OW}run${ON} ${OD}[--network]${ON}  Build and boot interactive VM\n"
     printf "  ${OW}gdb${ON}           Boot VM paused, waiting for GDB on :1234\n"
     printf "  ${OW}list${ON}          Show all lings and progress\n"
     printf "  ${OW}status${ON}        Show current progress\n"
@@ -424,7 +431,13 @@ case $1 in
         (( $# <= 1 )) || die "Usage: rootkitlings $command [ling]"
         "cmd_$command" "${1:-}"
         ;;
-    run|gdb|list|status)
+    run)
+        shift
+        (( $# <= 1 )) && [[ ${1:-} == --network || $# == 0 ]] ||
+            die "Usage: rootkitlings run [--network]"
+        cmd_run "$@"
+        ;;
+    gdb|list|status)
         command=$1
         shift
         (( $# == 0 )) || die "Usage: rootkitlings $command"

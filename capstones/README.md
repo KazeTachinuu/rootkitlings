@@ -1,51 +1,26 @@
 # Capstones
 
-Lings teach one concept. Capstones say: stop learning, start building.
+Lings isolate one mechanism. Capstones combine only mechanisms already taught.
+They add integration pressure - state ownership, rollback, concurrency, and clean
+unload - but no surprise API.
 
-Each capstone combines everything you learned into something you can run,
-break, and show off. No new concepts, just assembly.
+| # | After | Capstone | Integration goal |
+|--:|------:|-----------|------------------|
+| 0 | 16 | [Config store](0-config-store/README.md) | procfs, lists, allocation, userspace helper |
+| 1 | 23 | [Beacon](1-beacon/README.md) | kthread, wait/sleep, parameter callback, mutex |
+| 2 | 35 | [Tripwire](2-tripwire/README.md) | probe lifecycle and bounded event storage |
+| 3 | 42 | [Dead drop](3-dead-drop/README.md) | hidden procfs interface and trigger |
+| 4 | 51 | [Implant](4-implant/README.md) | kernel socket, command loop, reconnect lifecycle |
+| 5 | 59 | [Red vs blue](5-red-vs-blue/README.md) | hiding, escalation, persistence, detection |
 
-```
-  lings 00-10         lings 11-15         lings 16-33
-  foundation          interfaces          concurrency + introspection + hooking
-       |                   |                   |
-       v                   v                   v
-  +-----------+       +-----------+       +-----------+
-  | Capstone 0|       | Capstone 1|       | Capstone 2|
-  | Message   |       | Command   |       | Tripwire  |
-  | board     |       | box       |       |           |
-  +-----------+       +-----------+       +-----------+
-       visible             control             audit
-       data                surface             tool
+The sequence is cumulative in engineering discipline, not in source code. Each
+capstone stands alone and should initialize in dependency order, unwind in
+reverse order, and leave no worker or hook active after module exit.
 
-  lings 34-40         lings 41-49         lings 50-57
-  hiding              networking          persistence + crypto
-       |                   |                   |
-       v                   v                   v
-  +-----------+       +-----------+       +-----------+
-  | Capstone 3|       | Capstone 4|       | Capstone 5|
-  | Dead      |       | Remote    |       | Red vs    |
-  | drop      |       | shell     |       | blue      |
-  +-----------+       +-----------+       +-----------+
-       spy                operator           adversary
-       comms              console            game
-```
-
-## The arc
-
-Each capstone is the previous one evolved:
-
-0. **Message board** -- your first kernel "app." Even a junior sysadmin could find it.
-1. **Command box** -- a control surface. Commands in, results out. C2 without the network.
-2. **Tripwire** -- hook syscalls, log access. The "good guy" use. For now.
-3. **Dead drop** -- hide the interface. Only you and your handler know it is there.
-4. **Remote shell** -- put it on the network. You are the operator now.
-5. **Red vs blue** -- full rootkit. The final exam is a game against yourself.
-
-## How to use
+## Workflow
 
 ```bash
-./rootkitlings check capstone-0    # verify your solution
-./rootkitlings peek  capstone-0    # diff against reference
-./rootkitlings reset capstone-0    # restore reference solution
+./rootkitlings readme capstone-0
+./rootkitlings check  capstone-0
+./rootkitlings peek   capstone-0
 ```

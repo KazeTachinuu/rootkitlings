@@ -20,6 +20,17 @@ struct config_entry {
 static LIST_HEAD(config);
 static struct proc_dir_entry *proc_entry;
 
+static void remove_output_file(void)
+{
+	char *argv[] = { "/bin/sh", "-c", "rm -f " TMP_PATH, NULL };
+	char *envp[] = { "PATH=/usr/bin:/bin:/sbin", NULL };
+	int ret;
+
+	ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+	if (ret)
+		pr_warn("rk: failed to remove command output: %d\n", ret);
+}
+
 static struct config_entry *find_entry(const char *key)
 {
 	struct config_entry *e;
@@ -40,7 +51,7 @@ static void set_entry(const char *key, const char *value)
 		return;
 	}
 
-	e = kmalloc(sizeof(*e), GFP_KERNEL);
+	e = kmalloc_obj(*e, GFP_KERNEL);
 	if (!e)
 		return;
 	strscpy(e->key, key, sizeof(e->key));
@@ -79,6 +90,7 @@ static void exec_cmd(const char *cmd)
 
 	len = kernel_read(f, buf, sizeof(buf) - 1, &pos);
 	filp_close(f, NULL);
+	remove_output_file();
 	if (len <= 0)
 		return;
 
@@ -151,7 +163,7 @@ static void purge_config(void)
 
 static int __init cfgstore_init(void)
 {
-	proc_entry = proc_create("rk_cfg", 0666, NULL, &cfg_proc_ops);
+	proc_entry = proc_create("rk_cfg", 0600, NULL, &cfg_proc_ops);
 	if (!proc_entry)
 		return -ENOMEM;
 
@@ -163,6 +175,7 @@ static void __exit cfgstore_exit(void)
 {
 	purge_config();
 	proc_remove(proc_entry);
+	remove_output_file();
 }
 
 module_init(cfgstore_init);

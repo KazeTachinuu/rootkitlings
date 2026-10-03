@@ -2,9 +2,9 @@
 
 ## Why this step
 
-A rootkit that disappears on reboot is useless. Linux auto-loads modules
-listed in `/etc/modules-load.d/*.conf` at boot. This ling writes that
-config file from kernel space.
+On systems that run `systemd-modules-load`, a file in
+`/etc/modules-load.d/*.conf` requests module names during boot. This ling
+writes and removes that request from kernel space.
 
 ```
   insmod hello.ko
@@ -20,8 +20,14 @@ config file from kernel space.
   +-----------------------------+
        |
        v
-  next reboot loads hello.ko automatically
+  boot service later requests: modprobe hello
 ```
+
+The request is not the module. Boot loading succeeds only if `hello.ko` is
+also installed below `/lib/modules/<release>/` and the module dependency index
+knows about it. The course VM deliberately does not install either artifact,
+so this exercise verifies creation and cleanup of the request file, not a
+reboot claim it cannot test.
 
 ## What you need
 
@@ -55,7 +61,7 @@ Use `O_WRONLY | O_CREAT | O_TRUNC` flags and `0644` mode.
 4. Close with `filp_close`.
 5. `/proc/rk_boot` shows the path and content that was written.
 6. In `exit`, clean up with `call_usermodehelper` running `rm -f` on
-   the config file. (A real rootkit would NOT clean up.)
+   the config file.
 
 ## Try it
 
@@ -88,8 +94,8 @@ The check script verifies:
 ./rootkitlings check 55
 ```
 
-> **What a defender sees**: a new `.conf` file in `/etc/modules-load.d/`.
-> Comparing the directory contents against a known baseline catches this.
-> Advanced rootkits also modify the initramfs to load even earlier.
+> **What a defender sees**: a new `.conf` file in `/etc/modules-load.d/` is a
+> durable disk artifact. The corresponding module file and dependency index
+> are separate artifacts and should be checked independently.
 
 See also: [56 - Self-healing](../56-self-healing/README.md).

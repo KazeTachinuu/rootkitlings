@@ -33,6 +33,20 @@ static LIST_HEAD(trip_log);
 static DEFINE_SPINLOCK(trip_lock);
 static struct proc_dir_entry *proc_entry;
 
+static long copy_user_string_nofault(char *dst, const char __user *src,
+				     size_t size)
+{
+	size_t i;
+
+	for (i = 0; i < size; i++) {
+		if (copy_from_user_nofault(&dst[i], src + i, 1))
+			return -EFAULT;
+		if (dst[i] == '\0')
+			return i + 1;
+	}
+	return size;
+}
+
 // do_sys_openat2(int dfd, const char __user *filename, struct open_how *how)
 static int pre_do_sys_open(struct kprobe *p, struct pt_regs *regs)
 {
@@ -45,15 +59,15 @@ static int pre_do_sys_open(struct kprobe *p, struct pt_regs *regs)
 	if (!armed || !uname)
 		return 0;
 
-	len = strncpy_from_user(buf, uname, sizeof(buf));
-	if (len <= 0)
+	len = copy_user_string_nofault(buf, uname, sizeof(buf));
+	if (len <= 0 || len >= (long)sizeof(buf))
 		return 0;
 
 	for (i = 0; i < WATCH_COUNT; i++) {
 		if (strcmp(buf, watchlist[i]) != 0)
 			continue;
 
-		e = kmalloc(sizeof(*e), GFP_ATOMIC);
+		e = kmalloc_obj(*e, GFP_ATOMIC);
 		if (!e)
 			return 0;
 		e->uid = current_uid().val;

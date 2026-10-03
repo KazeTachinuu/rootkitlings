@@ -7,22 +7,28 @@ load hello.ko
 assert_loaded hello
 assert_exists /proc/rk_task
 
-# Must show the calling process's PID and name
-content=$(cat /proc/rk_task)
-if echo "$content" | grep -q "$$\|pid\|PID"; then
-    _ok "shows process info: $content"
+# Capture the actual reader PID instead of accepting any string containing
+# "pid". The callback runs in this background cat process.
+cat /proc/rk_task > /tmp/rk_task.out &
+reader_pid=$!
+wait "$reader_pid"
+content=$(cat /tmp/rk_task.out)
+reported_pid=$(printf '%s\n' "$content" | sed -n 's/^pid=\([0-9]*\) comm=.*/\1/p')
+reported_comm=$(printf '%s\n' "$content" | sed -n 's/^pid=[0-9]* comm=\(.*\)$/\1/p')
+if [ "$reported_pid" = "$reader_pid" ]; then
+    _ok "reported the actual reader PID $reader_pid"
 else
-    _fail "no process info found: $content"
+    _fail "reader PID was $reader_pid, module reported '$reported_pid'"
 fi
 
-# Must identify the reader (cat is what reads /proc/rk_task)
-if echo "$content" | grep -q "cat"; then
-    _ok "identifies calling process (cat)"
+if [ "$reported_comm" = "cat" ]; then
+    _ok "reported the reader command name"
 else
-    _fail "does not identify calling process: $content"
+    _fail "expected comm=cat, got '$reported_comm'"
 fi
 
 unload hello
 assert_absent /proc/rk_task
+rm -f /tmp/rk_task.out
 
 summary

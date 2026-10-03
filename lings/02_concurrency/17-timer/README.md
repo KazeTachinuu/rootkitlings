@@ -92,8 +92,8 @@ The check script verifies:
 ./rootkitlings check 17
 ```
 
-> **What a defender sees**: the timer itself is invisible, but its effects
-> (procfs updates, dmesg entries) run on a regular schedule. Predictable
-> timing is a detection signal.
+> **What a defender sees**: process tools do not enumerate kernel timers, but
+> tracing and their periodic effects remain observable. Predictable timing is
+> a detection signal.
 
 See also: [18 - Workqueue](../18-workqueue/README.md).

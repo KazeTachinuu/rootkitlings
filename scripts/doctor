@@ -1,0 +1,201 @@
+#!/usr/bin/bash
+set -u
+
+missing=0
+family=unknown
+if [[ -r /etc/os-release ]]; then
+	# shellcheck source=/etc/os-release
+	. /etc/os-release
+	case " ${ID:-} ${ID_LIKE:-} " in
+		*' arch '*) family=arch ;;
+		*' debian '*|*' ubuntu '*) family=debian ;;
+		*' fedora '*|*' rhel '*) family=fedora ;;
+	esac
+fi
+
+package_name()
+{
+	case "$family:$1" in
+		arch:build|arch:compiler) printf base-devel ;;
+		debian:build|debian:compiler) printf build-essential ;;
+		fedora:build) printf make ;;
+		fedora:compiler) printf gcc ;;
+		*:build) printf make ;;
+		*:compiler) printf cc ;;
+		debian:busybox) printf busybox-static ;;
+		fedora:qemu) printf qemu-system-x86-core ;;
+		*:qemu) printf qemu-system-x86 ;;
+		*:python) printf python3 ;;
+		*) printf '%s' "$1" ;;
+	esac
+}
+
+check_command()
+{
+	local command=$1 package
+	package=$(package_name "$2")
+
+	if command -v "$command" >/dev/null; then
+		printf '[+] %-20s %s\n' "$command" "$(command -v "$command")"
+	else
+		printf '[x] %-20s missing (package: %s)\n' "$command" "$package"
+		missing=$((missing + 1))
+	fi
+}
+
+printf '[*] Host tools\n'
+printf '[+] %-20s %s\n' distribution "${PRETTY_NAME:-unknown}"
+check_command bash bash
+check_command make build
+check_command cc compiler
+check_command file file
+check_command modinfo kmod
+check_command modprobe kmod
+check_command python3 python
+check_command busybox busybox
+check_command cpio cpio
+check_command gzip gzip
+check_command qemu-system-x86_64 qemu
+check_command timeout coreutils
+
+if command -v cc >/dev/null; then
+	probe=$(mktemp "${TMPDIR:-/tmp}/rootkitlings-cc.XXXXXX")
+	if printf 'int main(void) { return 0; }\n' |
+		cc -static -x c -o "$probe" - >/dev/null 2>&1; then
+		printf '[+] %-20s available\n' 'static C linking'
+	else
+		printf '[x] %-20s unavailable (install static libc development files)\n' 'static C linking'
+		missing=$((missing + 1))
+	fi
+	rm -f -- "$probe"
+fi
+
+if command -v busybox >/dev/null; then
+	busybox_applets=$(busybox --list)
+	missing_applets=
+	for applet in cat chmod chpst cmp dd diff dmesg echo find grep head id \
+		ifconfig insmod kill ls lsmod mkdir modinfo mount nc ping poweroff \
+		printf ps rm rmdir rmmod sed setsid sh sleep sort stat tail test \
+		touch tr uname wc; do
+		grep -qx "$applet" <<< "$busybox_applets" || missing_applets="$missing_applets $applet"
+	done
+	if [[ -z $missing_applets ]]; then
+		printf '[+] %-20s complete\n' 'BusyBox applets'
+	else
+		printf '[x] %-20s missing:%s\n' 'BusyBox applets' "$missing_applets"
+		missing=$((missing + 1))
+	fi
+fi
+
+if command -v qemu-system-x86_64 >/dev/null; then
+	if qemu-system-x86_64 -netdev help 2>&1 | grep -q '^user$'; then
+		printf '[+] %-20s available\n' 'QEMU user network'
+	else
+		printf '[x] %-20s unavailable (QEMU needs SLIRP support)\n' 'QEMU user network'
+		missing=$((missing + 1))
+	fi
+fi
+
+if command -v modprobe >/dev/null; then
+	network_modules=$(modprobe --show-depends virtio_net 2>/dev/null)
+	if grep -q '^insmod ' <<< "$network_modules"; then
+		printf '[+] %-20s dependency closure found\n' virtio_net
+	else
+		printf '[x] %-20s kernel module missing\n' virtio_net
+		missing=$((missing + 1))
+	fi
+	case $network_modules in
+		*.ko.xz*) check_command xz xz ;;
+		*.ko.zst*) check_command zstd zstd ;;
+	esac
+fi
+
+release=$(uname -r)
+build=/lib/modules/$release/build
+kernel=/usr/lib/modules/$release/vmlinuz
+[[ -f $kernel ]] || kernel=/boot/vmlinuz-$release
+
+printf '\n[*] Architecture\n'
+if [[ $(uname -m) == x86_64 ]]; then
+	printf '[+] x86_64               supported\n'
+else
+	printf '[x] %-20s unsupported (this course uses x86-64 registers)\n' "$(uname -m)"
+	missing=$((missing + 1))
+fi
+
+printf '\n[*] Kernel %s\n' "$release"
+if [[ $release == 7.2.* || $release == 7.2-* ]]; then
+	printf '[+] version              supported 7.2.x API\n'
+else
+	printf '[x] version              requires Linux 7.2.x\n'
+	missing=$((missing + 1))
+fi
+if [[ -d $build ]]; then
+	printf '[+] headers              %s\n' "$build"
+else
+	case $family in
+		arch) header_package='headers matching the running kernel' ;;
+		debian) header_package="linux-headers-$release" ;;
+		fedora) header_package="kernel-devel-$release" ;;
+		*) header_package='headers matching the running kernel' ;;
+	esac
+	printf '[x] headers              missing: %s (package: %s)\n' "$build" "$header_package"
+	missing=$((missing + 1))
+fi
+if [[ -f $kernel ]]; then
+	printf '[+] image                %s\n' "$kernel"
+else
+	printf '[x] image                no bootable image found\n'
+	missing=$((missing + 1))
+fi
+
+config=
+config_command=()
+if [[ -r /proc/config.gz ]]; then
+	config_command=(gzip -dc /proc/config.gz)
+elif [[ -r /boot/config-$release ]]; then
+	config_command=(cat "/boot/config-$release")
+elif [[ -r $build/.config ]]; then
+	config_command=(cat "$build/.config")
+fi
+
+if (( ${#config_command[@]} )); then
+	config=$("${config_command[@]}")
+	for option in MODULES MODULE_UNLOAD DEVTMPFS PROC_FS SYSFS DEBUG_FS TRACING \
+		KPROBES FPROBE NET NETFILTER INET CRYPTO CRYPTO_AES CRYPTO_CBC CRYPTO_SHA256; do
+		if grep -q "^CONFIG_$option=y$" <<< "$config"; then
+			printf '[+] CONFIG_%-13s y\n' "$option"
+		else
+			printf '[x] CONFIG_%-13s must be built in (=y)\n' "$option"
+			missing=$((missing + 1))
+		fi
+	done
+	if grep -q '^CONFIG_MODULE_SIG_FORCE=y$' <<< "$config"; then
+		printf '[x] CONFIG_MODULE_SIG_FORCE unsigned lesson modules cannot load\n'
+		missing=$((missing + 1))
+	fi
+else
+	printf '[x] kernel config        unavailable (/proc/config.gz or /boot/config-%s)\n' "$release"
+	missing=$((missing + 1))
+fi
+
+if command -v busybox >/dev/null &&
+		! file "$(command -v busybox)" | grep -q 'statically linked'; then
+	printf '[x] busybox              must be statically linked\n'
+	missing=$((missing + 1))
+fi
+
+printf '\n[*] Acceleration\n'
+if [[ -r /dev/kvm && -w /dev/kvm ]]; then
+	printf '[+] KVM                  available\n'
+else
+	printf '[-] KVM                  unavailable; tests use slower emulation\n'
+fi
+
+printf '\n'
+if (( missing == 0 )); then
+	printf '[+] Ready. Start with: ./rootkitlings readme 0\n'
+else
+	printf '[x] Not ready: %d required item(s) missing\n' "$missing"
+	exit 1
+fi

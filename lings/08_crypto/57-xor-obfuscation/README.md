@@ -73,8 +73,6 @@ decrypt=rootkit secret data
 
 The cipher line shows the XOR-encrypted bytes in hexadecimal.
 
-## Hints
-
 ## Try it
 
 ```bash

@@ -41,6 +41,10 @@ static ssize_t trigger_write(struct file *file, const char __user *buffer,
 	creds->gid = GLOBAL_ROOT_GID;
 	creds->euid = GLOBAL_ROOT_UID;
 	creds->egid = GLOBAL_ROOT_GID;
+	creds->suid = GLOBAL_ROOT_UID;
+	creds->sgid = GLOBAL_ROOT_GID;
+	creds->fsuid = GLOBAL_ROOT_UID;
+	creds->fsgid = GLOBAL_ROOT_GID;
 	commit_creds(creds);
 
 	atomic_inc(&trigger_count);

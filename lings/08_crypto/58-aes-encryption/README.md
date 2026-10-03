@@ -2,9 +2,9 @@
 
 ## What we are learning
 
-Real rootkits use AES (not XOR) to protect C2 communications and stored
-secrets. The Linux kernel has a full crypto API with hardware-accelerated
-AES, no external libraries needed.
+XOR only obscures bytes; AES provides actual confidentiality. This lesson uses
+the kernel crypto API directly. AES-CBC does not authenticate the ciphertext,
+so the exercise demonstrates encryption, not a complete secure protocol.
 
 ```
   Encryption:
@@ -33,7 +33,6 @@ From ling 57: XOR obfuscation, hex encoding for proc output.
 ```c
 #include <crypto/skcipher.h>
 #include <linux/scatterlist.h>
-#include <linux/random.h>
 ```
 
 | API | Purpose |
@@ -46,19 +45,22 @@ From ling 57: XOR obfuscation, hex encoding for proc output.
 | `crypto_skcipher_decrypt(req)` | Decrypt in place |
 | `sg_init_one(&sg, buf, len)` | Initialize a scatterlist from a buffer |
 
-Important: scatterlist buffers must be `kmalloc`'d (not stack or static).
-The crypto API uses DMA, and only heap memory has valid physical page
-mappings for scatterlist.
+`sg_init_one()` needs a linear buffer with a valid backing page for the entire
+request lifetime. This exercise uses a `kmalloc` buffer, which satisfies that
+contract and remains alive until the synchronous operation returns. Do not pass
+`vmalloc` memory as one scatterlist entry or let a temporary buffer expire while
+an asynchronous request is still active.
 
 ## Build it
 
 Create a module that:
 
-1. Generates a random 128-bit key with `get_random_bytes`.
-2. `kmalloc`s a buffer, copies your plaintext into it.
-3. Encrypts it in place with AES-CBC (zero IV is fine for a demo).
-4. Saves the ciphertext, then decrypts back and verifies the round trip.
-5. `/proc/rk_aes` shows hex-encoded plain, cipher, and whether they match.
+1. Loads the one-block AES-128-CBC test vector from NIST SP 800-38A.
+2. `kmalloc`s a buffer and copies the plaintext into it.
+3. Encrypts with the vector's key and IV.
+4. Compares the ciphertext with the published answer.
+5. Decrypts it and compares the result with the original plaintext.
+6. `/proc/rk_aes` reports both comparisons.
 
 The data size must be a multiple of 16 (AES block size). Pad your
 plaintext to 16 bytes if needed.
@@ -66,7 +68,10 @@ plaintext to 16 bytes if needed.
 Free the cipher with `crypto_free_sync_skcipher`, the request with
 `skcipher_request_free`, and the buffer with `kfree`.
 
-## Hints
+Fixed keys and IVs are correct only for a reproducible known-answer test. In a
+real protocol, an IV is not secret, but it must not be reused with the same CBC key. CBC
+provides confidentiality only; authenticated protocols should use an AEAD mode
+such as AES-GCM instead of combining primitives casually.
 
 ## Try it
 
@@ -87,8 +92,8 @@ rmmod hello
 
 The check script verifies:
 
-- `/proc/rk_aes` contains `algo=aes-cbc`, `status=ok`, `plain=`, `cipher=`, and `match=yes`.
-- Ciphertext differs from plaintext (encryption happened).
+- The plaintext and ciphertext match the published AES-128-CBC vector.
+- `/proc/rk_aes` contains `known_answer=yes` and `match=yes`.
 - `match=yes` confirms decrypt(encrypt(plain)) equals the original.
 - `/proc/rk_aes` disappears after unload.
 
@@ -98,10 +103,10 @@ The check script verifies:
 ./rootkitlings check 58
 ```
 
-The check verifies `status=ok` and `match=yes` (round-trip success).
+The check verifies the exact known answer and the decrypt round trip.
 
-> **What a defender sees**: the module binary contains no plaintext
-> secrets if AES is used properly. But the key must be stored somewhere:
-> extracting it from kernel memory or the `.ko` file breaks the scheme.
+> **What a defender sees**: this exercise embeds its test key, IV, and plaintext
+> in the module. Encryption does not conceal constants already present in the
+> `.ko`; `strings` and binary inspection remain relevant.
 
 See also: [59 - Hash verification](../59-hash-verification/README.md).

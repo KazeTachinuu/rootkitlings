@@ -2,25 +2,46 @@
 
 Learn Linux kernel rootkit development one mechanism at a time.
 
-58 lings across 9 categories. 6 [capstones](capstones/README.md) where you
+60 lings across 9 categories. 6 [capstones](capstones/README.md) where you
 stop learning and start building. One evolving source file. One disposable VM.
+
+Start at ling 00. It introduces each command, C construct, kernel term, build
+artifact, and debugging tool before using it. On the host, `make doctor` checks
+the required toolchain before you write code.
 
 ## Teaching pattern
 
 Every ling follows the same rhythm:
 
+```text
++--------------------------+
+| 1. Learn one mechanism   |  ./rootkitlings readme N
++------------+-------------+
+             |
+             v
++--------------------------+
+| 2. Implement it          |  edit module/hello.c
++------------+-------------+
+             |
+             v
++--------------------------+
+| 3. Prove it in a VM      |  ./rootkitlings check N
++------------+-------------+
+             |
+             v
++--------------------------+
+| 4. Read the evidence     |  behavior, cleanup, defense
++--------------------------+
 ```
-  read the concept           (rootkitlings readme N)
-       |
-       v
-  implement it yourself      (one file: module/hello.c)
-       |
-       v
-  check it in a VM           (rootkitlings check N)
-       |
-       v
-  understand the defense     ("What a defender sees")
-```
+
+Each lesson answers the same six questions:
+
+1. What problem are we solving?
+2. What happens between userspace and the kernel?
+3. Which minimal API expresses that behavior?
+4. Who owns each resource, and when is it released?
+5. What observable behavior proves it works?
+6. What can a defender see?
 
 Each ling teaches one concept, gives you the API, and lets you write the
 code. The check tells you exactly what passed and what failed. If you are
@@ -31,12 +52,23 @@ Each ling is self-contained: pick the concepts your rootkit needs, skip the rest
 The [simplest rootkit](lings/README.md#minimal-rootkit-5-lings) is 5 lings.
 Everything else is optional hardening.
 
+## Requirements
+
+- x86-64 Linux 7.2.x with its matching kernel image and build headers
+- a statically linked BusyBox
+- QEMU, a C toolchain, kmod, cpio, gzip, and Python 3
+- KVM is optional; QEMU falls back to software emulation
+
+`make doctor` checks the exact running kernel, required kernel features,
+module policy, BusyBox applets, static linking, QEMU networking, driver
+dependencies, and compression tools. Its package hints follow Arch,
+Debian/Ubuntu, or Fedora/RHEL naming.
+
 ## Quick start
 
 ```bash
-# Check host prerequisites
-command -v make git file modinfo python3 bear busybox cpio gzip qemu-system-x86_64
-test -d "/lib/modules/$(uname -r)/build"
+# Check the machine and get precise installation hints
+make doctor
 
 # Read the first exercise
 ./rootkitlings readme 0
@@ -53,33 +85,59 @@ $EDITOR module/hello.c
 
 ## Categories
 
-| # | Category | Lings | Teaches |
-|--:|----------|------:|---------|
-| 00 | [Foundation](lings/00_foundation/README.md) | 00-10 | Module lifecycle, build, multi-file, debugging, params, alloc, procfs |
-| 01 | [Interfaces](lings/01_interfaces/README.md) | 11-15 | Error pointers, proc write, lists, char device, ioctl |
-| 02 | [Concurrency](lings/02_concurrency/README.md) | 16-22 | Timer, workqueue, kthread, waiting, mutex, atomics |
-| 03 | [Introspection](lings/03_introspection/README.md) | 23-27 | Task, credentials, escalation, symbols, randomness |
-| 04 | [Hooking](lings/04_hooking/README.md) | 28-33 | Tracefs, kprobe, kretprobe, write protection, ftrace, lifecycle |
-| 05 | [Hiding](lings/05_hiding/README.md) | 34-40 | Module, sysfs, getdents64, file content, log, process, port |
-| 06 | [Networking](lings/06_networking/README.md) | 41-49 | Netfilter, packet sniffing, ICMP trigger, raw socket, DNS spoof, TCP backdoor, covert channel, traffic counter, packet mangling |
-| 07 | [Persistence](lings/07_persistence/README.md) | 50-54 | Proc trigger, init hooks, file infection, boot persistence, self-healing |
-| 08 | [Crypto](lings/08_crypto/README.md) | 55-57 | XOR obfuscation, AES encryption, hash verification |
+```text
++----------------------+     +---------------------------------------------+
+| FOUNDATION     00-10 |     | lifecycle, build, memory, procfs            |
++----------+-----------+     +---------------------------------------------+
+           |
++----------v-----------+     +---------------------------------------------+
+| INTERFACES     11-16 |---->| CAPSTONE 0  CONFIG STORE                    |
+|                      |     | procfs + owned state + command execution    |
++----------+-----------+     +---------------------------------------------+
+           |
++----------v-----------+     +---------------------------------------------+
+| CONCURRENCY    17-23 |---->| CAPSTONE 1  BEACON                          |
+|                      |     | kthread + waiting + synchronized state      |
++----------+-----------+     +---------------------------------------------+
+           |
++----------v-----------+
+| INTROSPECTION  24-28 |     task, credentials, symbols, randomness
++----------+-----------+
+           |
++----------v-----------+     +---------------------------------------------+
+| HOOKING        29-35 |---->| CAPSTONE 2  TRIPWIRE                        |
+|                      |     | probes + file-access evidence               |
++----------+-----------+     +---------------------------------------------+
+           |
++----------v-----------+     +---------------------------------------------+
+| HIDING         36-42 |---->| CAPSTONE 3  DEAD DROP                       |
+|                      |     | hidden listing + direct-path leak + trigger |
++----------+-----------+     +---------------------------------------------+
+           |
++----------v-----------+     +---------------------------------------------+
+| NETWORKING     43-51 |---->| CAPSTONE 4  IMPLANT                         |
+|                      |     | TCP session + worker + command results      |
++----------+-----------+     +---------------------------------------------+
+           |
++----------v-----------+
+| PERSISTENCE    52-56 |     triggers, file artifacts, watchdog
++----------+-----------+
+           |
++----------v-----------+     +---------------------------------------------+
+| CRYPTO         57-59 |---->| CAPSTONE 5  RED VS BLUE                     |
+|                      |     | concealment + independent detection views   |
++----------------------+     +---------------------------------------------+
+```
+
+[Foundation](lings/00_foundation/README.md) / [Interfaces](lings/01_interfaces/README.md) /
+[Concurrency](lings/02_concurrency/README.md) / [Introspection](lings/03_introspection/README.md) /
+[Hooking](lings/04_hooking/README.md) / [Hiding](lings/05_hiding/README.md) /
+[Networking](lings/06_networking/README.md) / [Persistence](lings/07_persistence/README.md) /
+[Crypto](lings/08_crypto/README.md)
 
 See the complete [roadmap](lings/README.md).
 
-## Capstones
-
-Every ~10 lings, a [capstone](capstones/README.md) assembles what you learned into
-something you can run, break, and show off. No new concepts, just assembly.
-
-| # | Capstone | After | Builds |
-|--:|----------|------:|--------|
-| 0 | Message board | 10 | sysfs + procfs + heap state |
-| 1 | Command box | 15 | ioctl + list + miscdevice |
-| 2 | Tripwire | 33 | ftrace hook + access log |
-| 3 | Dead drop | 40 | hidden /proc + signal handler |
-| 4 | Remote shell | 49 | kernel C2 + beacon loop |
-| 5 | Red vs blue | 57 | full rootkit + detection game |
+Each [capstone](capstones/README.md) uses only mechanisms introduced above it.
 
 ## Tools
 
@@ -101,6 +159,20 @@ Remove generated files:
 make clean
 ```
 
+Validate the catalog, scripts, and every reference module against the current
+kernel headers:
+
+```bash
+make validate
+```
+
+Run every reference solution through its behavioral check in a fresh two-vCPU
+QEMU guest:
+
+```bash
+make test-references
+```
+
 ## CLI
 
 ```bash
@@ -108,10 +180,10 @@ make clean
 ./rootkitlings check  [N]        # Build and verify in a VM
 ./rootkitlings hint   [N]        # Get a nudge (not the answer)
 ./rootkitlings peek   [N]        # Show the reference solution
-./rootkitlings reset  [N]        # Restore hello.c to the reference
 ./rootkitlings status            # Show progress and next steps
 ./rootkitlings list              # Show all lings
-./rootkitlings run               # Boot interactive VM
+./rootkitlings run               # Boot a clean interactive VM
+./rootkitlings run --network     # Add networking for lings 43-51
 ./rootkitlings check capstone-N  # Verify capstone N
 ```
 
@@ -134,7 +206,7 @@ defending them.
 ## Multi-file modules
 
 Ling 02 teaches multi-file builds: `hello-y` in Kbuild, shared headers,
-when to split. Capstone 1's reference solution demonstrates the pattern.
+and when splitting a module makes the code clearer.
 
 ## Editor support
 

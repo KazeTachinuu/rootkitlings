@@ -50,7 +50,7 @@ restored=$(cat /proc/net/tcp | grep -ci "1F90")
 if [ "$restored" -gt 0 ]; then
     _ok "port 8080 visible after unload"
 else
-    _ok "listener may have exited"
+    _fail "listener is still controlled by the check but port did not reappear"
 fi
 
 kill $NC_PID 2>/dev/null

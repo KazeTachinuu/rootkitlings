@@ -11,6 +11,20 @@
 
 static atomic_t cmd_count = ATOMIC_INIT(0);
 
+static long copy_user_string_nofault(char *dst, const char __user *src,
+				     size_t size)
+{
+	size_t i;
+
+	for (i = 0; i < size; i++) {
+		if (copy_from_user_nofault(&dst[i], src + i, 1))
+			return -EFAULT;
+		if (dst[i] == '\0')
+			return i + 1;
+	}
+	return size;
+}
+
 static void dispatch(const char *cmd)
 {
 	if (strcmp(cmd, "ping") == 0) {
@@ -30,8 +44,8 @@ static int pre_rmdir(struct kprobe *p, struct pt_regs *regs)
 	char kpath[128];
 	long len;
 
-	len = strncpy_from_user(kpath, upath, sizeof(kpath));
-	if (len <= 0)
+	len = copy_user_string_nofault(kpath, upath, sizeof(kpath));
+	if (len <= 0 || len >= (long)sizeof(kpath))
 		return 0;
 
 	if (strncmp(kpath, PREFIX, PREFIX_LEN) == 0)

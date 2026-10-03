@@ -63,7 +63,6 @@ you into a shell. Experiment freely: nothing you do here affects your host.
 Inside the VM:
 
 ```sh
-cd /root
 insmod hello.ko
 lsmod
 dmesg | tail

@@ -28,22 +28,16 @@ else
     _fail "normal ping triggered channel: '$msg_after'"
 fi
 
-# Send ICMP echo with magic ID 0xdead carrying a covert message
-icmp_send 127.0.0.1 dead "covert_intel"
-sleep 1
+# This value cannot be supplied by a hardcoded fixture in the module.
+token="covert_$$_$(date +%s)"
+icmp_send 127.0.0.1 dead "$token"
 
 msg_covert=$(cat /proc/rk_covert | sed -n 's/^msg=//p')
-case "$msg_covert" in
-    *covert_intel*)
-        _ok "covert message received: '$msg_covert'"
-        ;;
-    "(none)"|"")
-        _fail "covert message not extracted from ICMP payload"
-        ;;
-    *)
-        _ok "message changed after magic ICMP: '$msg_covert'"
-        ;;
-esac
+if [ "$msg_covert" = "$token" ]; then
+    _ok "exact ICMP payload recovered"
+else
+    _fail "expected '$token', got '$msg_covert'"
+fi
 
 unload hello
 assert_absent /proc/rk_covert

@@ -45,7 +45,7 @@ static const struct proc_ops command_proc_ops = {
 
 static int __init store_init(void)
 {
-	proc_entry = proc_create("rk_store", 0666, NULL, &command_proc_ops);
+	proc_entry = proc_create("rk_store", 0600, NULL, &command_proc_ops);
 	if (!proc_entry)
 		return -ENOMEM;
 

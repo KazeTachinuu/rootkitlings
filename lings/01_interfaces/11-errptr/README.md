@@ -46,12 +46,10 @@ A caller that only checks `IS_ERR` will miss a `NULL` failure.
 A caller that only checks `NULL` will dereference an `ERR_PTR` and crash.
 The safe pattern checks both.
 
-## Reset the experiment
+## Simplify the previous module
 
-```bash
-git diff -- module/hello.c
-git restore module/hello.c
-```
+Keep the lifecycle and metadata from foundation. Remove the proc reader from
+ling 10; this lesson replaces it with a proc directory and nested status file.
 
 ## What to build
 
@@ -133,7 +131,6 @@ reverse order).
 Inside the VM:
 
 ```sh
-cd /root
 insmod hello.ko
 ls /proc/rk_errptr/
 cat /proc/rk_errptr/status

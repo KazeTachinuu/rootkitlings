@@ -23,7 +23,7 @@ the destination port from 7777 to 9999:
 
   The sender thinks it sent to :7777.
   The listener receives on :9999.
-  Nobody in between sees the swap.
+  Capture between the hook and receiver still sees the rewritten packet.
 ```
 
 ## New API
@@ -82,7 +82,7 @@ fields without recalculating. (TCP and IPv6 do not allow this.)
 ## Try it
 
 ```bash
-./rootkitlings run
+./rootkitlings run --network
 ```
 
 Inside the VM:

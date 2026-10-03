@@ -72,7 +72,7 @@ static const struct proc_ops trigger_proc_ops = {
 
 static int __init trigger_init(void)
 {
-	entry = proc_create("rk_gate", 0666, NULL, &trigger_proc_ops);
+	entry = proc_create("rk_gate", 0600, NULL, &trigger_proc_ops);
 	if (!entry)
 		return -ENOMEM;
 

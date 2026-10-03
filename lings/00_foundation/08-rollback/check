@@ -4,6 +4,7 @@
 begin "08-rollback"
 
 load_fail hello.ko fail_second=1
+assert_absent /sys/module/hello
 
 begin "08-rollback success path"
 

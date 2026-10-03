@@ -79,7 +79,7 @@ commands=N
 ## Try it
 
 ```bash
-./rootkitlings run
+./rootkitlings run --network
 ```
 
 Inside the VM:

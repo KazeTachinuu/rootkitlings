@@ -15,7 +15,7 @@ Procfs is convenient but world-visible. A char device with ioctl gives a typed, 
 interface, which is what a rootkit control channel needs. But even ioctl has no authentication:
 anyone with device access can send commands. That gap is closed in crypto (password/key derivation).
 
-Ling 16 teaches the kernel's only way to execute userspace programs. Every rootkit uses it:
+Ling 16 teaches the kernel usermode-helper API for starting a userspace program:
 Reptile launches its reverse shell, Pumakit runs operator commands, persistence modules write
 boot scripts. The API is taught here because it is an interface (kernel calling out to userspace),
 not a persistence mechanism.

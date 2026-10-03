@@ -2,13 +2,9 @@
 
 ## What we are learning
 
-Many real rootkits (Azazel, Reptile, Bdvl) use specially crafted ICMP
-echo requests as a covert command channel. A ping with a specific ID
-field triggers an action: reverse shell, privilege escalation, or
-configuration change.
-
-Firewalls rarely block ICMP echo, and the magic ID is invisible to
-anyone not inspecting raw headers.
+An ICMP echo request carries an identifier field. This lesson treats one value
+as a command trigger, then counts matching packets. Packet capture and network
+monitoring can read the same field, so the trigger is not hidden on the wire.
 
 ## What we are doing
 
@@ -29,8 +25,9 @@ An ICMP echo request sits right after the IP header:
                                   (echo)       here
 ```
 
-The `id` field is what `ping` sets to its PID. We pick a magic value
-(`0x1337`) that normal pings will never use.
+The `id` field commonly distinguishes concurrent ping sessions. We use
+`0x1337` as the exercise value; ordinary traffic can still collide with any
+16-bit value, so the value is not authentication.
 
 ## New API
 
@@ -63,7 +60,7 @@ Key types and functions:
 ## Try it
 
 ```bash
-./rootkitlings run
+./rootkitlings run --network
 ```
 
 Inside the VM:
@@ -71,7 +68,7 @@ Inside the VM:
 ```sh
 insmod hello.ko
 cat /proc/rk_trigger                 # triggers=0
-ping -c 2 127.0.0.1             # normal ping (random echo ID)
+icmp_send 127.0.0.1 1234        # controlled non-magic echo ID
 cat /proc/rk_trigger                 # triggers still 0
 icmp_send 127.0.0.1 1337        # magic echo ID
 cat /proc/rk_trigger                 # triggers=1
@@ -84,7 +81,7 @@ The check script verifies:
 
 - `/proc/rk_trigger` contains `magic=0x1337` and `triggers=N`.
 - `triggers` starts at 0, increments only for ICMP echo with ID 0x1337.
-- Normal `ping` does NOT trigger the counter.
+- An echo request with a controlled non-magic ID does not trigger the counter.
 - `/proc/rk_trigger` disappears after unload.
 
 ## Verify
@@ -93,9 +90,8 @@ The check script verifies:
 ./rootkitlings check 45
 ```
 
-The check sends normal pings (must NOT trigger), then sends ICMP echo
-requests with ID 0x1337 using the `icmp_send` tool and verifies the
-counter increments.
+The check sends explicit non-magic and magic echo IDs with `icmp_send` and
+verifies that only `0x1337` increments the counter.
 
 > **What a defender sees**: `dmesg` shows the hook registration.
 > Unusual ICMP filtering logic in a loaded module is suspicious.

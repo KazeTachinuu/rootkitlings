@@ -4,8 +4,8 @@
 
 A workqueue borrows a shared thread pool. A kernel thread gives you
 a dedicated loop that runs until told to stop. This is what drives
-a C2 beacon: a persistent loop, sleeping between check-ins, invisible
-in the process list as a bracketed kernel thread.
+a C2 beacon: a persistent loop sleeping between check-ins. It remains visible
+in process listings as a bracketed kernel thread.
 
 ```
   insmod                                    rmmod

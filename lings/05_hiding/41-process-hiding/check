@@ -24,7 +24,8 @@ else
 fi
 
 # But ps should not show it
-if ps -e 2>/dev/null | grep -q "$pid"; then
+# shellcheck disable=SC2009 # Exact ps output is the behavior under test.
+if ps -e 2>/dev/null | grep -q "^ *$pid "; then
     _fail "PID $pid visible in ps"
 else
     _ok "PID $pid hidden from ps"

@@ -52,7 +52,7 @@ to 65535 bytes). Get the packet size with `ntohs(ip_hdr(skb)->tot_len)`.
 ## Try it
 
 ```bash
-./rootkitlings run
+./rootkitlings run --network
 ```
 
 Inside the VM:

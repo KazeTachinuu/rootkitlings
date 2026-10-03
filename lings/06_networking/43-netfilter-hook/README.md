@@ -67,12 +67,10 @@ atomics in ling 23.
 
 Serve the count through `/proc/rk_nfhook` (ling 10 pattern).
 
-## Hints
-
 ## Try it
 
 ```bash
-./rootkitlings run
+./rootkitlings run --network
 ```
 
 Inside the VM:

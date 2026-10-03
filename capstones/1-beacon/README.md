@@ -69,9 +69,8 @@ ps aux | grep rk_beacon
 root     [rk_beacon]
 ```
 
-Defenders grep for suspicious kernel threads. A name like `rk_beacon`
-is obvious. Real rootkits name their threads after legitimate kernel
-workers (`kworker/0:1`, `migration/0`). Stealth naming comes later.
+The thread name is visible in the process list. Renaming it changes only the
+label; its task, wakeups, module code, and behavior remain observable.
 
 ## Contract
 

@@ -15,16 +15,27 @@ else
     _fail "store should be empty, got '$empty'"
 fi
 
-# Set a key
-echo "set:target=192.168.1.1" > /proc/rk_cfg
-assert_contains /proc/rk_cfg "target=192.168.1.1"
+token="cfg_$$_$(date +%s)"
+
+# Set a dynamic value that cannot come from a fixed fixture.
+echo "set:target=$token" > /proc/rk_cfg
+assert_contains /proc/rk_cfg "target=$token"
 
 # Set another key
 echo "set:interval=60" > /proc/rk_cfg
 assert_contains /proc/rk_cfg "interval=60"
 
 # Both coexist
-assert_contains /proc/rk_cfg "target=192.168.1.1"
+assert_contains /proc/rk_cfg "target=$token"
+
+# Replacement must update the existing key rather than add a duplicate.
+echo "set:target=${token}_new" > /proc/rk_cfg
+matches=$(grep -c '^target=' /proc/rk_cfg)
+if [ "$matches" -eq 1 ] && grep -q "^target=${token}_new$" /proc/rk_cfg; then
+    _ok "set replaced one existing key"
+else
+    _fail "replacement produced $matches target entries"
+fi
 
 # Set a third key
 echo "set:port=4444" > /proc/rk_cfg
@@ -48,15 +59,17 @@ case "$output" in
         ;;
 esac
 
-# Exec: id
-echo "exec:id" > /proc/rk_cfg
-assert_contains /proc/rk_cfg "uid=0"
+# Exec a dynamic command and require its exact result.
+echo "exec:printf $token" > /proc/rk_cfg
+assert_contains /proc/rk_cfg "_result=$token"
 
 # Exec: uname -r
 echo "exec:uname -r" > /proc/rk_cfg
 assert_contains /proc/rk_cfg "$(uname -r)"
+assert_absent /tmp/.rk_out
 
 unload hello
 assert_absent /proc/rk_cfg
+assert_absent /tmp/.rk_out
 
 summary

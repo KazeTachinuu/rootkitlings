@@ -2,14 +2,15 @@
 
 ## Why this step
 
-Ling 19 showed lost updates. A mutex serializes access to shared state.
+Two workers now update one counter. A mutex serializes the read-modify-write
+operation so no update can be lost.
 Only one thread holds the lock at a time. The loser sleeps until the
 holder releases it.
 
 ## What you need
 
 You already know `kthread_run` and the shared counter pattern from
-ling 21. This ling adds a mutex to eliminate the race.
+ling 21. This ling adds shared state and the lock that owns its invariant.
 
 New includes:
 
@@ -19,7 +20,7 @@ New includes:
 
 ## Build it
 
-Take ling 21's two-thread counter and add a mutex:
+Create a two-thread counter and protect each increment with a mutex:
 
 1. Define `DEFINE_MUTEX(rk_lock)`.
 2. Each thread locks before incrementing and unlocks after.
@@ -45,7 +46,7 @@ mutex_lock(&name);          // acquire (sleeps if held)
 mutex_unlock(&name);        // release
 ```
 
-Take ling 21's `increment_fn` and wrap the shared access in
+Wrap the shared read-modify-write operation in
 `mutex_lock`/`mutex_unlock`. Lock per iteration, not around the
 entire loop.
 
@@ -64,8 +65,6 @@ cat /proc/rk_mutex       # exactly 20000
 dmesg | tail
 rmmod hello
 ```
-
-## Hints
 
 ## Contract
 

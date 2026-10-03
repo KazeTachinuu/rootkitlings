@@ -1,1 +1,0 @@
-Two kthreads, shared counter, no lock. Watch it lose updates.

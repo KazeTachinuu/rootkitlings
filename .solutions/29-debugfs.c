@@ -81,4 +81,4 @@ module_init(tracer_init);
 module_exit(tracer_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Debugfs interface for rootkit state");
+MODULE_DESCRIPTION("Debugfs interface for module state");

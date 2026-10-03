@@ -9,16 +9,25 @@ assert_exists /proc/rk_privesc
 
 # Before trigger
 assert_contains /proc/rk_privesc "triggers=0"
-assert_contains /proc/rk_privesc "uid=0"
 
-# Write the magic word
-printf '%s' "r00tme" > /proc/rk_privesc
+# Trigger and inspect one unprivileged shell. printf is a shell builtin, so the
+# proc callback changes this process rather than a short-lived child.
+# shellcheck disable=SC2016 # The single-quoted program expands in the guest shell.
+result=$(chpst -u 65534:65534 sh -c '
+    printf r00tme > /proc/rk_privesc || exit
+    printf "uid=%s\n" "$(id -u)"
+')
+if [ "$result" = "uid=0" ]; then
+    _ok "unprivileged caller changed to uid=0"
+else
+    _fail "expected uid=0 after trigger, got '$result'"
+fi
 
 # After trigger
 assert_contains /proc/rk_privesc "triggers=1"
 
 # Wrong magic word should not trigger
-printf '%s' "wrong" > /proc/rk_privesc
+chpst -u 65534:65534 sh -c 'printf wrong > /proc/rk_privesc'
 assert_contains /proc/rk_privesc "triggers=1"
 
 unload hello

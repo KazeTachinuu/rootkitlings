@@ -9,6 +9,7 @@
 #include <linux/printk.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <linux/skbuff.h>
 #include <linux/spinlock.h>
 
 #define COVERT_MAGIC 0xDEAD
@@ -22,31 +23,44 @@ static DEFINE_SPINLOCK(msg_lock);
 static unsigned int covert_hook(void *priv, struct sk_buff *skb,
 				const struct nf_hook_state *state)
 {
+	struct iphdr iph_buf;
 	struct iphdr *iph;
+	struct icmphdr icmph_buf;
 	struct icmphdr *icmph;
-	u8 *payload;
+	unsigned int network_off;
+	unsigned int icmp_off;
+	unsigned int payload_off;
 	int payload_len;
 	unsigned long flags;
 
 	if (!skb)
 		return NF_ACCEPT;
 
-	iph = ip_hdr(skb);
+	network_off = skb_network_offset(skb);
+	iph = skb_header_pointer(skb, network_off, sizeof(iph_buf), &iph_buf);
 	if (!iph || iph->protocol != IPPROTO_ICMP)
 		return NF_ACCEPT;
+	if (iph->ihl < 5)
+		return NF_ACCEPT;
 
-	icmph = (struct icmphdr *)((u8 *)iph + (iph->ihl * 4));
+	icmp_off = network_off + iph->ihl * 4;
+	icmph = skb_header_pointer(skb, icmp_off, sizeof(icmph_buf), &icmph_buf);
+	if (!icmph)
+		return NF_ACCEPT;
 	if (icmph->type != ICMP_ECHO ||
 	    ntohs(icmph->un.echo.id) != COVERT_MAGIC)
 		return NF_ACCEPT;
 
-	payload = (u8 *)icmph + sizeof(*icmph);
 	payload_len = ntohs(iph->tot_len) - (iph->ihl * 4) - sizeof(*icmph);
 	if (payload_len <= 0 || payload_len >= MSG_MAX)
 		return NF_ACCEPT;
+	payload_off = icmp_off + sizeof(*icmph);
 
 	spin_lock_irqsave(&msg_lock, flags);
-	memcpy(last_msg, payload, payload_len);
+	if (skb_copy_bits(skb, payload_off, last_msg, payload_len)) {
+		spin_unlock_irqrestore(&msg_lock, flags);
+		return NF_ACCEPT;
+	}
 	last_msg[payload_len] = '\0';
 	msg_len = payload_len;
 	spin_unlock_irqrestore(&msg_lock, flags);
@@ -64,8 +78,18 @@ static struct nf_hook_ops nf_ops = {
 
 static int covert_read(struct seq_file *m, void *v)
 {
-	seq_printf(m, "magic=0x%x\nmsg=%s\n",
-		   COVERT_MAGIC, msg_len ? last_msg : "(none)");
+	char snapshot[MSG_MAX];
+	int snapshot_len;
+	unsigned long flags;
+
+	spin_lock_irqsave(&msg_lock, flags);
+	snapshot_len = msg_len;
+	if (snapshot_len)
+		memcpy(snapshot, last_msg, snapshot_len + 1);
+	spin_unlock_irqrestore(&msg_lock, flags);
+
+	seq_printf(m, "magic=0x%x\nmsg=%s\n", COVERT_MAGIC,
+		   snapshot_len ? snapshot : "(none)");
 	return 0;
 }
 

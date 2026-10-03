@@ -2,8 +2,9 @@
 
 Turn `hello.c` into a loadable module that safely serves `/proc/rk_entry`.
 
-The source evolves across lings.
-After each group, we reset the module so one mechanism remains visible.
+The source evolves across lings. When a lesson replaces the previous
+experiment, it names the exact declarations to remove; no Git knowledge or
+destructive reset command is required.
 
 | # | Ling | Teaches | Weakness exposed |
 |--:|------|---------|-----------------|
@@ -20,6 +21,7 @@ After each group, we reset the module so one mechanism remains visible.
 | 10 | Procfs read | Return bounded data to userspace. | Without bounds, read overflows into adjacent memory. |
 
 At ling 10: the entry exists while loaded, dispatches reads, reaches EOF, disappears on unload.
-Foundation is the only sequential category.
+Foundation is strictly sequential. The numbered route remains the clearest path
+through later categories because each one reuses earlier vocabulary.
 
 After ling 10: continue with [Interfaces](../01_interfaces/README.md).

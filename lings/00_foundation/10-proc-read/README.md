@@ -98,7 +98,6 @@ cat /proc/rk_reader
 Inside the VM:
 
 ```sh
-cd /root
 insmod hello.ko
 dd if=/proc/rk_reader bs=2 2>/dev/null
 dmesg | tail

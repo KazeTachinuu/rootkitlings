@@ -5,8 +5,9 @@ begin "capstone-4: implant"
 
 ifconfig lo 127.0.0.1 up 2>/dev/null
 
-# Start a simple listener that sends "id" then "exit"
-(printf 'id\nexit\n'; sleep 2) | nc -l -p 4444 > /tmp/rk_shell_out 2>&1 &
+token="implant_$$_$(date +%s)"
+# The listener sends a command whose output cannot be hardcoded by the module.
+(printf 'printf %s\nexit\n' "$token"; sleep 2) | nc -l -p 4444 > /tmp/rk_shell_out 2>/dev/null &
 listener_pid=$!
 sleep 1
 
@@ -37,18 +38,15 @@ else
     _fail "no commands executed (commands=$cmds)"
 fi
 
-# Check output from listener (should contain uid=0)
+# Check the exact command result returned over the socket.
 wait $listener_pid 2>/dev/null
 if [ -f /tmp/rk_shell_out ]; then
     out=$(cat /tmp/rk_shell_out)
-    case "$out" in
-        *uid=0*)
-            _ok "remote shell returned uid=0"
-            ;;
-        *)
-            _fail "unexpected output: '$out'"
-            ;;
-    esac
+    if [ "$out" = "$token" ]; then
+        _ok "remote shell returned the exact dynamic result"
+    else
+        _fail "expected '$token', got '$out'"
+    fi
 else
     _fail "no output captured from listener"
 fi

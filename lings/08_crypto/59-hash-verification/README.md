@@ -2,9 +2,9 @@
 
 ## What we are learning
 
-Rootkits verify the integrity of their own components and authenticate
-commands using cryptographic hashes. SHA-256 is the standard: 32 bytes
-in, always 32 bytes out, practically impossible to reverse.
+SHA-256 gives a stable fingerprint: 32 bytes out for any input. Verification
+means computing that fingerprint and comparing it with a trusted expected
+digest using a timing-safe comparison.
 
 ```
   input (any length)         SHA-256           output (always 32 bytes)
@@ -47,7 +47,8 @@ Create a module that:
 
 1. Computes the SHA-256 hash of the string `rootkitlings verification data`.
 2. Formats the 32-byte digest as 64 hex characters.
-3. `/proc/rk_hash` shows the algorithm, status, and hex hash.
+3. Compares it with the trusted digest using `crypto_memneq`.
+4. `/proc/rk_hash` shows the algorithm, verification status, and hex hash.
 
 The expected hash is `5a3faae9795848835c7647c58a9843cf424811d37712aa6340e48e35c28d6dec`.
 You can verify this on the host: `echo -n "rootkitlings verification data" | sha256sum`.
@@ -72,7 +73,7 @@ rmmod hello
 The check script verifies:
 
 - `/proc/rk_hash` contains `algo=sha256`, `status=ok`, and `hash=` (64 hex chars).
-- Writing new data updates the hash.
+- Writing new data updates the hash and changes verification to `failed`.
 - `/proc/rk_hash` disappears after unload.
 
 ## Verify
@@ -84,6 +85,11 @@ The check script verifies:
 The check verifies `status=ok` and that the hash is exactly 64
 hexadecimal characters.
 
+> **Security boundary**: an unkeyed hash does not authenticate commands; an
+> attacker who can replace both data and digest can forge the check. Use HMAC
+> for shared-key authentication or a digital signature for independently
+> verifiable artifacts.
+>
 > **What a defender sees**: a module using the kernel crypto API for
 > SHA-256 is not inherently suspicious (many legitimate modules do).
 > But combined with the techniques from earlier lings, it completes

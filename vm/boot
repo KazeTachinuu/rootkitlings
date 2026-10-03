@@ -11,7 +11,7 @@ RELEASE=$(uname -r)
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != dumb ]; then
     B='\033[1;34m' G='\033[1;32m' Y='\033[1;33m' R='\033[31m' D='\033[2m' N='\033[0m'
 else
-    B= G= Y= R= D= N=
+    B='' G='' Y='' R='' D='' N=''
 fi
 hdr()  { printf "${B}[*]${N} %s\n" "$1"; }
 ok()   { printf "${G}[+]${N} %s\n" "$1"; }
@@ -41,18 +41,26 @@ find_kernel()
 MODULE=
 CHECK=
 GDB=
+NETWORK=
 while (( $# )); do
     case $1 in
         --check) CHECK=${2:?--check requires an argument}; shift 2 ;;
         --gdb)   GDB=1; shift ;;
+        --network) NETWORK=1; shift ;;
         -*)      die "Unknown option: $1" ;;
-        *)       MODULE=$1; shift ;;
+        *)
+            [[ -z $MODULE ]] || die "Unexpected argument: $1"
+            MODULE=$1
+            shift
+            ;;
     esac
 done
+[[ -z $CHECK || -z $NETWORK ]] || die "--check and --network are mutually exclusive"
 
 # -- self-cleaning temp --
 
-WORK=$(mktemp -d) && trap 'rm -rf "$WORK"' EXIT
+WORK=$(mktemp -d) || die "Could not create temporary directory"
+trap 'rm -rf -- "$WORK"' EXIT
 trap 'exit 130' INT TERM
 
 ROOTFS="$WORK/rootfs"
@@ -60,7 +68,7 @@ INITRAMFS="$WORK/initramfs.gz"
 KERNEL=$(find_kernel)
 BUSYBOX=$(command -v busybox || true)
 
-readonly VM_DIR ROOT_DIR RELEASE KERNEL BUSYBOX WORK ROOTFS INITRAMFS MODULE CHECK GDB
+readonly VM_DIR ROOT_DIR RELEASE KERNEL BUSYBOX WORK ROOTFS INITRAMFS MODULE CHECK GDB NETWORK
 
 # -- prerequisites --
 
@@ -71,6 +79,11 @@ check_prerequisites()
         die "BusyBox is not statically linked: $BUSYBOX"
     command -v cpio >/dev/null || die "cpio not found"
     command -v qemu-system-x86_64 >/dev/null || die "QEMU not found"
+    if [[ -n $NETWORK ]]; then
+        command -v modprobe >/dev/null || die "modprobe not found (Arch package: kmod)"
+        modprobe --show-depends virtio_net 2>/dev/null | grep -q '^insmod ' ||
+            die "Kernel network module not found: virtio_net"
+    fi
     [[ -z $MODULE || -f $MODULE ]] || die "Module not found: $MODULE"
     [[ -z $CHECK  || -f $CHECK  ]] || die "Check script not found: $CHECK"
     ok "Prerequisites verified for Linux $RELEASE"
@@ -80,22 +93,43 @@ check_prerequisites()
 
 build_rootfs()
 {
-    local applet
+    local action applet index=0 source target
 
     hdr "Building the BusyBox root filesystem"
-    mkdir -p "$ROOTFS"/{bin,dev,lib,proc,root,sys,tmp}
+    mkdir -p "$ROOTFS"/{bin,dev,etc,lib,proc,rootkitlings,sys,tmp} \
+        "$ROOTFS/lib/modules/$RELEASE"
+    : > "$ROOTFS/lib/modules/$RELEASE/modules.dep"
+    printf 'root:x:0:0:root:/rootkitlings:/bin/sh\n' > "$ROOTFS/etc/passwd"
+    printf 'root:!:0:::::\n' > "$ROOTFS/etc/shadow"
     cp "$BUSYBOX" "$ROOTFS/bin/busybox"
-    for applet in cat chmod cmp dd dmesg echo find grep head id \
-        ifconfig insmod kill ls lsmod mkdir mount nc ping \
-        poweroff printf rmmod sed setsid sh sleep sort stat \
-        tail test tr uname wc; do
+    for applet in cat chmod chpst cmp dd diff dmesg echo find grep head id \
+        ifconfig insmod kill ls lsmod mkdir modinfo mount nc ping poweroff \
+        printf ps rm rmdir rmmod sed setsid sh sleep sort stat tail test \
+        touch tr uname wc; do
         ln -s busybox "$ROOTFS/bin/$applet"
     done
     cp "$VM_DIR/init" "$ROOTFS/init"
     chmod 755 "$ROOTFS/init"
     if [[ -n $MODULE ]]; then
-        cp "$MODULE" "$ROOTFS/root/$(basename "$MODULE")"
-        ok "Module copied to /root/$(basename "$MODULE")"
+        cp "$MODULE" "$ROOTFS/rootkitlings/$(basename "$MODULE")"
+        ok "Module copied to /rootkitlings/$(basename "$MODULE")"
+    fi
+    if [[ -n $NETWORK ]]; then
+        mkdir "$ROOTFS/lib/modules/$RELEASE/network"
+        while read -r action source; do
+            [[ $action == insmod ]] || continue
+            printf -v target '%s/lib/modules/%s/network/%02d.ko' \
+                "$ROOTFS" "$RELEASE" "$index"
+            case $source in
+                *.ko)    cp "$source" "$target" ;;
+                *.ko.gz) command -v gzip >/dev/null || die "gzip not found"; gzip -dc "$source" > "$target" ;;
+                *.ko.xz) command -v xz >/dev/null || die "xz not found"; xz -dc "$source" > "$target" ;;
+                *.ko.zst) command -v zstd >/dev/null || die "zstd not found"; zstd -dc "$source" > "$target" ;;
+                *) die "Unsupported kernel module compression: $source" ;;
+            esac
+            (( ++index ))
+        done < <(modprobe --show-depends virtio_net)
+        ok "Interactive network drivers added"
     fi
     if [[ -n $CHECK ]]; then
         cp "$ROOT_DIR/lib/check.sh" "$ROOTFS/lib/check.sh"
@@ -131,7 +165,7 @@ pack_initramfs()
 run_vm()
 {
     local -a qemu_args
-    local cmdline='console=ttyS0 rdinit=/init panic=0 loglevel=4'
+    local cmdline='console=ttyS0 rdinit=/init panic=1 loglevel=4'
 
     if [[ -r /dev/kvm && -w /dev/kvm ]]; then
         qemu_args=(-accel kvm -cpu host)
@@ -143,6 +177,8 @@ run_vm()
 
     if [[ -n $CHECK ]]; then
         cmdline+=' rootkitlings=check'
+    elif [[ -n $NETWORK ]]; then
+        cmdline+=' rootkitlings=network'
     fi
 
     if [[ -n $GDB ]]; then
@@ -154,14 +190,19 @@ run_vm()
 
     qemu_args+=(
         -m 256M
-        -smp 1
+        -smp 2
         -kernel "$KERNEL"
         -initrd "$INITRAMFS"
         -append "$cmdline"
-        -nic none
         -no-reboot
         -nographic
     )
+
+    if [[ -n $NETWORK ]]; then
+        qemu_args+=(-nic 'user,model=virtio-net-pci')
+    else
+        qemu_args+=(-nic none)
+    fi
 
     hdr "Booting a separate guest kernel"
     printf '%s    $ qemu-system-x86_64' "$D"

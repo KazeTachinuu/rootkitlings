@@ -79,8 +79,13 @@ Inside the VM:
 
 ```sh
 insmod hello.ko
-cat /proc/rk_escalate               # uid=0
-printf 'escalate' > /proc/rk_escalate
+chpst -u 65534:65534 sh -c '
+    cat /proc/rk_escalate
+    printf escalate > /proc/rk_escalate
+    cat /proc/rk_escalate
+'
+# uid=65534
+# uid=0
 dmesg | tail
 rmmod hello
 ```
@@ -89,9 +94,9 @@ rmmod hello
 
 The check script verifies:
 
-- `/proc/rk_escalate` is writable (mode 0666).
-- Reading shows `uid=` field from current credentials.
-- Writing a string starting with `e` triggers escalation to `uid=0`.
+- An unprivileged process can open `/proc/rk_escalate` (mode 0666).
+- That process reads `uid=65534` before the trigger.
+- Writing `escalate` changes that same process to `uid=0`.
 - `/proc/rk_escalate` disappears after unload.
 
 ## Verify
@@ -100,8 +105,8 @@ The check script verifies:
 ./rootkitlings check 26
 ```
 
-> **What a defender sees**: `audit.log` records every UID 0 transition.
-> `ausearch -m USER_AUTH` finds it. The escalation itself is instant and
-> invisible to tools like `ps`, but the audit subsystem catches it.
+> **What a defender sees**: a world-writable proc entry owned by an out-of-tree
+> module, followed by a process whose credentials change without the normal
+> setuid or authentication path.
 
 See also: [27 - Symbols](../27-symbols/README.md).

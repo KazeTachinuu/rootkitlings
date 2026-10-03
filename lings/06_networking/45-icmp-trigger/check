@@ -12,8 +12,9 @@ assert_exists /proc/rk_trigger
 assert_contains /proc/rk_trigger "magic=0x1337"
 assert_contains /proc/rk_trigger "triggers=0"
 
-# Normal ping should NOT trigger (wrong echo ID)
-ping -c 2 127.0.0.1 >/dev/null 2>&1
+# A controlled non-magic echo ID must not trigger.
+icmp_send 127.0.0.1 1234
+sleep 1
 assert_contains /proc/rk_trigger "triggers=0"
 
 # Send ICMP echo with the magic ID 0x1337

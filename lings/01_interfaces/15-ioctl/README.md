@@ -10,12 +10,10 @@ uses before networking, and every hardware driver uses to configure its device.
 Ling 14 registered a miscdevice with open, release, and read.
 This ling adds `unlocked_ioctl` and defines two command numbers.
 
-## Reset the experiment
+## Extend the previous device
 
-```bash
-git diff -- module/hello.c
-git restore module/hello.c
-```
+Keep the misc device from ling 14. Add stored message state, a write callback,
+and the ioctl callback described below.
 
 ## What to build
 
@@ -110,7 +108,6 @@ same `_IOW`/`_IOR` constants to generate matching command numbers.
 Inside the VM:
 
 ```sh
-cd /root
 insmod hello.ko
 cat /dev/rk_ioctl
 ./cmdtool set "phantom"
@@ -141,7 +138,4 @@ single-character edge cases.
 > **What a defender sees**: `strace` reveals every ioctl call, including
 > the command number and argument address. No obfuscation, no authentication.
 
-Interfaces complete. Next: [Capstone 1 - Beacon](../../../capstones/1-beacon/README.md).
-Then continue from the [roadmap](../../README.md).
-
-See also: [17 - Timer](../../02_concurrency/17-timer/README.md).
+See also: [16 - Usermode exec](../16-usermode-exec/README.md).

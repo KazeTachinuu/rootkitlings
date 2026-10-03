@@ -56,11 +56,11 @@ static int ret_read(struct kretprobe_instance *ri, struct pt_regs *regs)
 	if (ret <= 0 || !is_target_file(ctx->fd))
 		return 0;
 
-	kbuf = kmalloc(ret + 1, GFP_KERNEL);
+	kbuf = kmalloc(ret + 1, GFP_ATOMIC);
 	if (!kbuf)
 		return 0;
 
-	if (copy_from_user(kbuf, ctx->ubuf, ret)) {
+	if (copy_from_user_nofault(kbuf, ctx->ubuf, ret)) {
 		kfree(kbuf);
 		return 0;
 	}
@@ -75,7 +75,8 @@ static int ret_read(struct kretprobe_instance *ri, struct pt_regs *regs)
 		p += REDACT_LEN;
 	}
 
-	copy_to_user(ctx->ubuf, kbuf, ret);
+	if (copy_to_user_nofault(ctx->ubuf, kbuf, ret))
+		regs_set_return_value(regs, -EFAULT);
 	kfree(kbuf);
 	return 0;
 }

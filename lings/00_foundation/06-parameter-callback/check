@@ -5,12 +5,19 @@ begin "06-parameter-callback"
 
 load hello.ko name=phantom
 assert_loaded hello
+before=$(cat /sys/module/hello/parameters/changes)
 
 begin "06-parameter-callback sysfs write"
 
-write_param hello name "specter"
-assert_param hello name "specter"
-assert_log "specter"
+value="specter_$$_$(date +%s)"
+write_param hello name "$value"
+assert_param hello name "$value"
+after=$(cat /sys/module/hello/parameters/changes)
+if [ "$after" -eq $((before + 1)) ]; then
+    _ok "setter side effect observed ($before -> $after)"
+else
+    _fail "expected changes=$((before + 1)), got $after"
+fi
 
 unload hello
 assert_absent /sys/module/hello

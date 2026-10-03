@@ -82,8 +82,6 @@ cat /proc/rk_gate                  # 2
 rmmod hello
 ```
 
-## Hints
-
 ## Contract
 
 The check script verifies:
@@ -105,4 +103,4 @@ The check script verifies:
 > zero CPU. It looks like any sleeping kthread, harder to spot than a
 > busy-polling loop.
 
-See also: [21 - Shared state](../21-shared-state/README.md).
+See also: [21 - Completion](../21-completion/README.md).

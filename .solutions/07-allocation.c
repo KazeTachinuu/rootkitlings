@@ -13,7 +13,7 @@ static struct implant_state *state;
 
 static int __init alloc_init(void)
 {
-	state = kmalloc(sizeof(*state), GFP_KERNEL);
+	state = kmalloc_obj(*state, GFP_KERNEL);
 	if (!state)
 		return -ENOMEM;
 

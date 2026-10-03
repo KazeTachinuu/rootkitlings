@@ -76,6 +76,7 @@ static const struct proc_ops escalation_proc_ops = {
 
 static int __init escalation_init(void)
 {
+	/* Deliberately writable: an unprivileged caller needs to reach the lesson. */
 	entry = proc_create("rk_escalate", 0666, NULL, &escalation_proc_ops);
 	if (!entry)
 		return -ENOMEM;

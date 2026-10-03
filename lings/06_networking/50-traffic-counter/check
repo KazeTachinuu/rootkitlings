@@ -9,17 +9,19 @@ load hello.ko
 assert_loaded hello
 assert_exists /proc/rk_counter
 
-# Generate bidirectional traffic
+# Capture a baseline, then generate bidirectional traffic.
+before=$(cat /proc/rk_counter)
 ping -c 3 127.0.0.1 >/dev/null 2>&1
 
 # Extract and verify each counter incremented
 proc_data=$(cat /proc/rk_counter)
 for field in rx_packets tx_packets rx_bytes tx_bytes; do
     val=$(printf '%s\n' "$proc_data" | sed -n "s/^${field}=\([0-9]*\)$/\1/p")
-    if [ -n "$val" ] && [ "$val" -gt 0 ]; then
-        _ok "$field=$val (> 0)"
+    old=$(printf '%s\n' "$before" | sed -n "s/^${field}=\([0-9]*\)$/\1/p")
+    if [ -n "$val" ] && [ -n "$old" ] && [ "$val" -gt "$old" ]; then
+        _ok "$field increased ($old -> $val)"
     else
-        _fail "$field not incremented (got: $val)"
+        _fail "$field did not increase (got: $old -> $val)"
     fi
 done
 

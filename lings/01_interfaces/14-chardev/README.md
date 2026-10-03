@@ -30,12 +30,10 @@ Two differences from procfs:
    while the device is open.
 2. Registration uses `misc_register(&dev)` / `misc_deregister(&dev)`.
 
-## Reset the experiment
+## Replace the previous interface
 
-```bash
-git diff -- module/hello.c
-git restore module/hello.c
-```
+Keep the module lifecycle and the bounded read pattern. Remove the proc entry
+and list from ling 13; this lesson exposes the read through one misc device.
 
 ## What to build
 
@@ -101,7 +99,6 @@ the `if (err)` pattern, not `IS_ERR`.
 Inside the VM:
 
 ```sh
-cd /root
 insmod hello.ko
 ls -la /dev/rk_chardev
 cat /dev/rk_chardev

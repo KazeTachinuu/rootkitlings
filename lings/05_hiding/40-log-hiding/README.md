@@ -3,8 +3,8 @@
 ## Why this step
 
 Rootkits log messages with `pr_info`. Defenders read `dmesg`. A real
-rootkit hooks the syslog syscall to filter its own messages from
-`dmesg` output, so defenders never see them.
+rootkit can hook the syslog syscall to filter selected messages from one
+`dmesg` path. Other readers and external collectors remain independent views.
 
 ## What you already know
 
@@ -32,10 +32,10 @@ the original syscall fill the buffer, then removes matching lines:
     |
     ret_handler:
     +---> only act on type 2 or 3
-    +---> copy_from_user
+    +---> copy_from_user_nofault
     +---> walk line by line (split on '\n')
     +---> memmove to remove lines containing "rk:"
-    +---> copy_to_user, update return value
+    +---> copy_to_user_nofault, update return value
     |
     v
   dmesg output: no "rk:" lines visible
@@ -55,6 +55,9 @@ Register a kretprobe on `__x64_sys_syslog`. The context struct stores
 the syslog `type` and the userspace buffer pointer, captured via
 double indirection in the entry handler (same pattern as ling 38).
 
+Allocate callback scratch space with `GFP_ATOMIC` and use no-fault user-copy
+helpers. On failure, preserve the original syslog result.
+
 The return handler:
 
 1. Checks type is 2 or 3, and return value is positive.
@@ -65,8 +68,6 @@ The return handler:
 5. Updates the return value to the new (shorter) length.
 
 Also create `/proc/rk_logfilter` that reports `hidden=N`.
-
-## Hints
 
 ## Try it
 

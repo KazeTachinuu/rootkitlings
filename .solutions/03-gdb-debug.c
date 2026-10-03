@@ -4,6 +4,7 @@
 #include <linux/seq_file.h>
 
 MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("GDB-visible module function and proc interface");
 
 static const unsigned char tag[] = { 'r', 'o', 'o', 't' };
 

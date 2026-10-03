@@ -20,7 +20,7 @@ static int __init rollback_init(void)
 {
 	int err;
 
-	primary = kmalloc(sizeof(*primary), GFP_KERNEL);
+	primary = kmalloc_obj(*primary, GFP_KERNEL);
 	if (!primary)
 		return -ENOMEM;
 
@@ -29,7 +29,7 @@ static int __init rollback_init(void)
 		goto free_primary;
 	}
 
-	secondary = kmalloc(sizeof(*secondary), GFP_KERNEL);
+	secondary = kmalloc_obj(*secondary, GFP_KERNEL);
 	if (!secondary) {
 		err = -ENOMEM;
 		goto free_primary;

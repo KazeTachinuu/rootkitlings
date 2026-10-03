@@ -16,16 +16,17 @@ sleep 1
 
 # Send a UDP packet to port 53 (DNS port)
 # The module should redirect it to port 5300
-printf 'dns-test-query' | nc -u -w 1 127.0.0.1 53 2>/dev/null || true
+token="dns_$$_$(date +%s)"
+printf '%s' "$token" | nc -u -w 1 127.0.0.1 53 2>/dev/null || true
 sleep 1
 
 # Check if the redirected packet arrived at 5300
 kill $NC_PID 2>/dev/null; wait $NC_PID 2>/dev/null
 recv=$(cat /tmp/dns_recv 2>/dev/null)
-if [ -n "$recv" ]; then
-    _ok "DNS packet redirected to port 5300 (got: $recv)"
+if [ "$recv" = "$token" ]; then
+    _ok "exact UDP payload redirected to port 5300"
 else
-    _fail "no packet received on port 5300"
+    _fail "expected '$token', got '$recv'"
 fi
 
 # Spoof counter should have incremented

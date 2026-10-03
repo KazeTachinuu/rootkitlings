@@ -16,7 +16,7 @@ in reverse order:
 ```
                   init
                       |
-              kmalloc(state)
+            kmalloc_obj(state)
                       |
                   +---+---+
                   |       |
@@ -28,7 +28,7 @@ in reverse order:
                       |       |
                     yes       no
                       |       |
-                      |   kmalloc(second)
+                      | kmalloc_obj(second)
                       |       |
                       |   +---+---+
                       |   |       |
@@ -76,7 +76,6 @@ In your exit function, free both in reverse order (second, then state).
 Inside the VM:
 
 ```sh
-cd /root
 insmod hello.ko fail_second=1
 echo "status=$?"
 lsmod
@@ -91,8 +90,12 @@ dmesg | tail
 The check script verifies:
 
 - With `fail_second=1`: `insmod` fails (module is rejected).
+- The failed path leaves no loaded module or sysfs state.
 - Without args: `insmod` succeeds and the module loads.
-- After `rmmod`: the module unloads cleanly.
+- After `rmmod`: the module and its sysfs state are gone.
+
+The host check verifies the requested source structure: the forced failure jumps
+to a cleanup label, frees the primary allocation, then returns the saved error.
 
 ## Verify
 

@@ -23,20 +23,33 @@ static int __init persist_init(void)
 {
 	struct file *f;
 	loff_t off = 0;
+	ssize_t written;
+	int err;
 	char *argv[] = { "/bin/sh", "-c", "mkdir -p /etc/modules-load.d", NULL };
 	char *envp[] = { "PATH=/bin:/sbin", NULL };
 
-	call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+	err = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+	if (err)
+		return err;
 
 	f = filp_open(PERSIST_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (IS_ERR(f))
 		return PTR_ERR(f);
-	kernel_write(f, "hello\n", 6, &off);
+	written = kernel_write(f, "hello\n", 6, &off);
 	filp_close(f, NULL);
+	if (written < 0)
+		return written;
+	if (written != 6)
+		return -EIO;
 
 	proc_entry = proc_create_single("rk_boot", 0444, NULL, persist_read);
-	if (!proc_entry)
+	if (!proc_entry) {
+		char *rm_argv[] = { "/bin/sh", "-c", "rm -f " PERSIST_PATH,
+				    NULL };
+
+		call_usermodehelper(rm_argv[0], rm_argv, envp, UMH_WAIT_PROC);
 		return -ENOMEM;
+	}
 
 	pr_info("rk: persistence installed at %s\n", PERSIST_PATH);
 	return 0;

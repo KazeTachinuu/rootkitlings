@@ -43,4 +43,4 @@ module_init(cloak_init);
 module_exit(cloak_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Sysfs kobject concealment");
+MODULE_DESCRIPTION("Module-list and sysfs-view concealment");

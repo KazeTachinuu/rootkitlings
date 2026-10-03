@@ -75,8 +75,8 @@ Inside the VM:
 ```sh
 insmod hello.ko
 cat /proc/rk_retprobe                 # success=N failed=N
-cat /dev/null                   # successful read
-cat /nonexistent 2>/dev/null    # failed read
+cat /etc/passwd > /dev/null     # successful vfs_read
+cat /proc 2>/dev/null           # vfs_read returns -EISDIR
 cat /proc/rk_retprobe                 # counters updated
 rmmod hello
 ```
@@ -100,3 +100,6 @@ The check script verifies:
 > return zero bytes, silently suppressing file content.
 
 See also: [32 - Write-protection bypass](../32-write-protection/README.md).
+To exercise a negative `vfs_read` return, read a directory such as `/proc`.
+Opening a nonexistent pathname fails before `vfs_read`, so it cannot test this
+return handler.

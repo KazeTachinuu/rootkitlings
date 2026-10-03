@@ -2,11 +2,13 @@
 
 ## Why this step
 
-`netstat` and `ss` read `/proc/net/tcp` to list open ports. A rootkit
-hooks `tcp4_seq_show` (the function that renders each line) and hides
-entries whose source port matches the hidden port.
+`/proc/net/tcp` is one view of TCP sockets. This lesson hooks
+`tcp4_seq_show`, the function that renders that view, and suppresses entries
+whose local port matches the selected port.
 
-This technique is used by Diamorphine, Reptile, and most LKM rootkits.
+Modern `ss` normally queries the kernel through inet_diag netlink rather than
+parsing `/proc/net/tcp`, so this hook need not hide the socket from `ss`. That
+cross-view disagreement is the detection lesson.
 
 ## What you already know
 
@@ -84,8 +86,6 @@ saved value (erasing the line just written) and increments a counter.
 
 Also create `/proc/rk_portcloak` with `port=8080` and `hidden=N`.
 
-## Hints
-
 ## Try it
 
 ```bash
@@ -122,8 +122,8 @@ The check script verifies:
 The check starts a listener on port 8080, verifies it appears in
 `/proc/net/tcp`, loads the module, and verifies it disappears.
 
-> **What a defender sees**: `nmap` scans find open ports that `ss` does
-> not list. Comparing `nmap` output with `ss` output reveals the hidden
-> port.
+> **What a defender sees**: `/proc/net/tcp`, inet_diag (`ss`), and an external
+> connection attempt are independent views. This module alters only the first;
+> disagreement exposes it.
 
 See also: [Networking](../../06_networking/README.md).

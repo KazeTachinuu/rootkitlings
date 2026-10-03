@@ -69,12 +69,10 @@ spoofed=N
 redirect_port=5300
 ```
 
-## Hints
-
 ## Try it
 
 ```bash
-./rootkitlings run
+./rootkitlings run --network
 ```
 
 Inside the VM:

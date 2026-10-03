@@ -73,7 +73,6 @@ The check script verifies:
 Inside the VM:
 
 ```sh
-cd /root
 insmod hello.ko
 cat /sys/module/hello/parameters/name
 rmmod hello

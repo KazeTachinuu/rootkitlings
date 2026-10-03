@@ -7,8 +7,13 @@ load hello.ko
 assert_loaded hello
 assert_exists /proc/rk_atomic
 
-# Wait for both threads to complete
-sleep 2
+# Observe the worker state instead of guessing a scheduler delay.
+i=0
+while [ "$i" -lt 20 ]; do
+    grep -q '^running=0$' /proc/rk_atomic && break
+    sleep 0.1
+    i=$((i + 1))
+done
 
 # Verify exact count: 2 threads * 10000 iterations = 20000
 count=$(cat /proc/rk_atomic | sed -n 's/^count=\([0-9]*\).*/\1/p')

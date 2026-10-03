@@ -107,7 +107,6 @@ The check script verifies:
 Inside the VM:
 
 ```sh
-cd /root
 insmod hello.ko name=phantom
 cat /sys/module/hello/parameters/name
 printf '%s' specter > /sys/module/hello/parameters/name

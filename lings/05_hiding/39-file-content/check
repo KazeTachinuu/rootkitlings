@@ -3,8 +3,10 @@
 
 begin "39-file-content"
 
-# Create a target file with known content
-printf 'This has SECRET data and another SECRET here\n' > /tmp/rk_target
+token="context_$$_$(date +%s)"
+original="$token SECRET data and another SECRET here"
+expected="$token XXXXXX data and another XXXXXX here"
+printf '%s\n' "$original" > /tmp/rk_target
 
 load hello.ko
 assert_loaded hello
@@ -13,27 +15,11 @@ assert_exists /proc/rk_content
 # Read the target file via read() syscall (not sendfile)
 # BusyBox cat uses sendfile which bypasses sys_read hooks
 content=$(dd if=/tmp/rk_target bs=4096 count=1 2>/dev/null)
-case "$content" in
-    *SECRET*)
-        _fail "SECRET not redacted: $content"
-        ;;
-    *XXXXXX*)
-        _ok "SECRET replaced with XXXXXX"
-        ;;
-    *)
-        _fail "unexpected content: $content"
-        ;;
-esac
-
-# Verify the original structure is preserved (only SECRET changed)
-case "$content" in
-    *"XXXXXX data"*)
-        _ok "surrounding text preserved"
-        ;;
-    *)
-        _fail "surrounding text corrupted: $content"
-        ;;
-esac
+if [ "$content" = "$expected" ]; then
+    _ok "both matches redacted and every surrounding byte preserved"
+else
+    _fail "expected '$expected', got '$content'"
+fi
 
 # Check redaction counter
 assert_contains /proc/rk_content "redactions="
@@ -48,15 +34,12 @@ unload hello
 assert_absent /proc/rk_content
 
 # After unload, file should read normally again
-content_after=$(cat /tmp/rk_target)
-case "$content_after" in
-    *SECRET*)
-        _ok "original content readable after unload"
-        ;;
-    *)
-        _ok "file content after unload: $content_after"
-        ;;
-esac
+content_after=$(dd if=/tmp/rk_target bs=4096 count=1 2>/dev/null)
+if [ "$content_after" = "$original" ]; then
+    _ok "original view restored after unload"
+else
+    _fail "expected original '$original', got '$content_after'"
+fi
 
 rm -f /tmp/rk_target
 

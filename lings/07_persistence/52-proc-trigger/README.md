@@ -6,7 +6,10 @@ Rootkits need a way for the operator to activate features: escalate
 privileges, toggle hiding, update configuration. A writable `/proc`
 entry that accepts a magic word is the simplest trigger mechanism.
 
-This is how Diamorphine activates: write a magic string, get root.
+Public rootkits often multiplex commands onto an existing syscall. Diamorphine,
+for example, interprets selected signals passed to `kill(2)`. This exercise uses
+a dedicated proc entry instead, so the command boundary is visible and easy to
+test before later lessons discuss interception.
 
 ## What we are doing
 
@@ -35,8 +38,8 @@ You already have both pieces from earlier lings:
 
 - **Proc write callback** (ling 12): `copy_from_user` the input,
   null-terminate it, compare against the magic word.
-- **Credential escalation** (ling 26): `prepare_creds()`, set
-  `uid`/`euid` to `GLOBAL_ROOT_UID`, `commit_creds()`.
+- **Credential escalation** (ling 26): `prepare_creds()`, set all real,
+  effective, saved, and filesystem UID/GID fields, then `commit_creds()`.
 
 New considerations:
 
@@ -60,19 +63,26 @@ Inside the VM:
 
 ```sh
 insmod hello.ko
-cat /proc/rk_privesc                       # triggers=0, uid shows current user
-printf 'r00tme' > /proc/rk_privesc         # trigger the escalation
-cat /proc/rk_privesc                       # triggers=1, uid=0
-id                                    # should be root now
+chpst -u 65534:65534 sh -c '
+    printf r00tme > /proc/rk_privesc
+    id -u
+'
+# 0
+cat /proc/rk_privesc                       # triggers=1
 rmmod hello
 ```
+
+Keep the write and `id` in the same shell. Credentials belong to a process. If
+an external helper writes the trigger and exits, the parent shell does not
+inherit that helper's new credentials.
 
 ## Contract
 
 The check script verifies:
 
-- `/proc/rk_privesc` contains `triggers=N` and `uid=N`.
-- Writing `r00tme` escalates the caller to root and increments `triggers`.
+- `/proc/rk_privesc` contains `triggers=N` and the reader's `uid=N`.
+- A UID 65534 process can write `r00tme`, becomes root, and increments
+  `triggers`.
 - Writing anything else does NOT trigger escalation.
 - `/proc/rk_privesc` disappears after unload.
 

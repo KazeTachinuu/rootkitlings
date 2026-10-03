@@ -57,8 +57,6 @@ Create a module that:
 You need the same includes as ling 38: `linux/types.h` before
 `linux/dirent.h`, plus `linux/kthread.h` for the thread.
 
-## Hints
-
 ## Try it
 
 ```bash

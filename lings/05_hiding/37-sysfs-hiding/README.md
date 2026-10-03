@@ -1,10 +1,10 @@
-# 37 - Sysfs cleanup
+# 37 - Sysfs hiding
 
 ## Why this step
 
 Ling 36 hid the module from `lsmod`, but `/sys/module/hello` still
-exists. This ling removes that entry too, closing the cross-view gap.
-Diamorphine and Reptile both perform this step.
+exists. This ling removes that entry too, demonstrating that the module list
+and module kobject are independent views.
 
 ## The concept
 
@@ -21,7 +21,7 @@ Diamorphine and Reptile both perform this step.
      +-- sections/
      +-- ...    <-- kobject_del removes this (this ling)
 
-  Both must be cleaned for full hiding.
+  Removing both suppresses these two views only.
 ```
 
 ## What you already know
@@ -79,8 +79,8 @@ The check script verifies:
 ./rootkitlings check 37
 ```
 
-> **What a defender sees**: both views are clean. But the module's
-> symbols may still appear in `/proc/kallsyms`, and the module's
-> memory is still mapped. `crash` or Volatility finds it.
+> **What a defender sees**: these two views are empty, but the module's code,
+> allocations, callbacks, and other subsystem references still exist. Memory
+> inspection and independent subsystem views do not depend on this kobject.
 
 See also: [38 - Getdents64 hiding](../38-getdents64/README.md).

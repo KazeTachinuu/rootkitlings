@@ -1,108 +1,71 @@
 # Capstone 0: Config store
 
-Build a kernel-space configuration store with command execution.
-Every rootkit stores its config in kernel memory, invisible to `find`
-and `grep`. This is yours.
+Build an in-kernel key/value store controlled through `/proc/rk_cfg`.
 
+## Use what you learned
+
+- proc read and write callbacks
+- `copy_from_user()` at the userspace boundary
+- heap allocation and linked-list cleanup
+- `seq_file` for formatted output
+- `call_usermodehelper()` for the `exec` command
+
+## Commands
+
+| Write to `/proc/rk_cfg` | Result |
+|-------------------------|--------|
+| `set:key=value` | Add or replace one entry |
+| `del:key` | Delete one entry |
+| `exec:command` | Run a command and store stdout in `_result` |
+
+Reading `/proc/rk_cfg` returns one `key=value` pair per line.
+
+The `exec` path reuses ling 16 exactly:
+
+```text
+call_usermodehelper("/bin/sh", "-c", command > temporary file)
+        | wait for the child
+        v
+kernel_read(temporary file) ---> set_entry("_result", output)
+        |
+        +----------------------> rm -f temporary file
 ```
-  userspace                              kernel module
-  +-------------------+                  +-----------------------------+
-  |                   |  write to proc   |                             |
-  | echo "set:target  |----------------->|  proc_write()               |
-  |  =192.168.1.1"    |                  |    |                        |
-  |   > /proc/rk_cfg  |                  |    v                        |
-  +-------------------+                  |  +-----------------------+  |
-                                         |  | struct config_entry   |  |
-  +-------------------+                  |  |   char key[32]        |  |
-  |                   |  read proc       |  |   char value[64]      |  |
-  | cat /proc/rk_cfg  |<----------------|  +-----------------------+  |
-  |                   |                  |    |           |            |
-  +-------------------+                  |    v           v            |
-                                         |  linked       linked       |
-  +-------------------+                  |  list          list         |
-  |                   |  ioctl           |                             |
-  | rk_ctl --clear    |----------------->|  CMD_CLEAR / CMD_EXEC      |
-  |                   |                  |                             |
-  +-------------------+                  +-----------------------------+
-```
 
-## Prerequisites
-
-Lings 00 through 16 (foundation + interfaces).
-
-## What you are building
-
-A rootkit's internal brain. Two interfaces to the same data:
-
-- `/proc/rk_cfg` accepts writes: `set:key=value`, `del:key`, `list`, `exec:CMD`.
-- `/dev/rk_cfg` accepts ioctl: `CMD_SET`, `CMD_DEL`, `CMD_LIST`, `CMD_EXEC`, `CMD_CLEAR`.
-- Config entries live in a linked list on the heap.
-- `exec:COMMAND` runs a userspace command via `call_usermodehelper`,
-  captures stdout to a temp file, reads it back with `filp_open`/`kernel_read`,
-  and stores the output as a config entry with key `_result`.
-- `cat /proc/rk_cfg` dumps all key=value pairs.
-- Exit frees the list, removes proc and device entries.
-
-## What "done" looks like
+Use a fixed-size command buffer, check `call_usermodehelper()`, `filp_open()`,
+and `kernel_read()`, and close the file on every path where it was opened. The
+cleanup helper uses a fixed path; user-controlled text must never be inserted
+into its `rm` command.
 
 ```sh
 insmod hello.ko
-echo "set:target=192.168.1.1" > /proc/rk_cfg
-echo "set:interval=60" > /proc/rk_cfg
+echo 'set:target=192.168.1.1' > /proc/rk_cfg
+echo 'set:interval=60' > /proc/rk_cfg
 cat /proc/rk_cfg
 # target=192.168.1.1
 # interval=60
-echo "exec:uname -r" > /proc/rk_cfg
-cat /proc/rk_cfg
-# target=192.168.1.1
-# interval=60
-# _result=6.12.0
-echo "del:target" > /proc/rk_cfg
-cat /proc/rk_cfg
-# interval=60
-# _result=6.12.0
+
+echo 'exec:uname -r' > /proc/rk_cfg
+grep _result /proc/rk_cfg
+
+echo 'del:target' > /proc/rk_cfg
 rmmod hello
 ```
 
-## Structure
+## Ownership
 
-This outgrows a single file. Split it:
-
-```
-  capstones/0-config-store/
-  +-- Kbuild          hello-y := main.o store.o exec.o
-  +-- main.c          init/exit, proc setup, miscdevice
-  +-- store.c         linked list, set/del/list logic
-  +-- store.h         struct config_entry, function prototypes
-  +-- exec.c          call_usermodehelper wrapper, output capture
-  +-- exec.h          int rk_exec(const char *cmd, char *out, size_t len)
-```
-
-## What a defender sees
-
-`/dev/rk_cfg` appears in the device list. `/proc/rk_cfg` is world-readable.
-`strace` shows the ioctl numbers in plain sight. `ps` shows the executed
-command briefly. No hiding yet.
+Each list node is allocated when its key is first set and freed when the key is
+deleted or the module unloads. The proc entry is removed on unload. The command
+output file is temporary and must not survive cleanup.
 
 ## Contract
 
-The check script verifies:
-
-- `/proc/rk_cfg` and `/dev/rk_cfg` exist after loading.
-- Store is empty on start.
-- `set:key=value` stores an entry (visible in `cat`).
-- `del:key` removes it.
-- `exec:id` runs the command and `_result` contains `uid=0`.
-- `exec:uname -r` output matches the running kernel.
-- Multiple entries coexist (set three, read three).
-- Entries disappear after unload.
-
-## Verify
+The check verifies an empty initial store, insert, replacement, deletion,
+multiple entries, command output, and cleanup after unload.
 
 ```bash
 ./rootkitlings check capstone-0
 ```
 
-## Hints
-
-Only if stuck. Try without them first.
+> **What a defender sees**: `/proc/rk_cfg`, the loaded module, the temporary
+> output file while a command runs, and the userspace process spawned by the
+> helper.

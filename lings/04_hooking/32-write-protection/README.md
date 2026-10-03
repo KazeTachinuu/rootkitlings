@@ -4,8 +4,8 @@
 
 The kernel marks certain memory pages as read-only (rodata, syscall
 tables, function pointers). Rootkits bypass this to overwrite protected
-data. Since kernel 5.3, CR0.WP is pinned and cannot be cleared. The
-modern approach uses `set_memory_rw()` to manipulate page table entries.
+data. This exercise directly edits an x86-64 page-table entry. It is an
+unsupported, architecture-specific bypass - not a normal kernel API.
 
 ## The concept
 
@@ -28,8 +28,9 @@ modern approach uses `set_memory_rw()` to manipulate page table entries.
   5. Restore PTE to read-only
 ```
 
-Since kernel 5.3, CR0.WP is pinned and cannot be cleared. The modern
-approach manipulates individual page table entries instead.
+The course kernel prevents the old `write_cr0()` shortcut. Direct page-table
+editing demonstrates the protection boundary; supported kernel modules should
+use registration and update APIs instead of patching read-only data.
 
 ## What you already know
 
@@ -72,8 +73,6 @@ after=0xCAFEBABE
 modified=yes
 ```
 
-## Hints
-
 ## Try it
 
 ```bash
@@ -104,7 +103,8 @@ The check script verifies:
 The check verifies the marker was 0xDEADBEEF before and 0xCAFEBABE
 after, confirming the write-protection bypass worked.
 
-> **What a defender sees**: `set_memory_rw` calls are logged by some
-> integrity frameworks. W+X pages trigger alerts in lockdown mode.
+> **What a defender sees**: a protected PTE becomes writable and a TLB entry is
+> invalidated. Integrity monitoring or memory comparison can expose the change;
+> this module does not call `set_memory_rw()`.
 
-See also: [33 - Ftrace](../33-ftrace/README.md).
+See also: [33 - Fprobe](../33-fprobe/README.md).

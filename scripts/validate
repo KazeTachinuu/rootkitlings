@@ -1,0 +1,107 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
+BUILD_REFERENCES=1
+
+if [[ ${1:-} == --quick ]]; then
+	BUILD_REFERENCES=0
+	shift
+fi
+(( $# == 0 )) || { printf 'usage: %s [--quick]\n' "$0" >&2; exit 2; }
+
+cd "$ROOT_DIR"
+
+fail()
+{
+	printf '[x] %s\n' "$*" >&2
+	exit 1
+}
+
+check_catalog()
+{
+	local entry name solution count=0
+	local -A seen=()
+
+	while IFS= read -r entry; do
+		[[ -z $entry || $entry == \#* ]] && continue
+		[[ -z ${seen[$entry]:-} ]] || fail "duplicate .order entry: $entry"
+		seen[$entry]=1
+		[[ -d $entry ]] || fail "missing exercise directory: $entry"
+		[[ -f $entry/README.md ]] || fail "missing README: $entry"
+		[[ -x $entry/check ]] || fail "missing executable check: $entry"
+		bash -n "$entry/check"
+		if [[ -e $entry/host-check ]]; then
+			[[ -x $entry/host-check ]] || fail "host-check is not executable: $entry"
+			bash -n "$entry/host-check"
+		fi
+
+		name=${entry##*/}
+		solution=.solutions/$name.c
+		[[ -f $solution || -d .solutions/$name ]] ||
+			fail "missing reference solution: $name"
+		if [[ $entry == lings/* ]]; then
+			[[ -f $entry/hint ]] || fail "missing hint: $entry"
+		fi
+		(( ++count ))
+	done < .order
+
+	(( count > 0 )) || fail '.order is empty'
+	printf '[+] catalog: %d exercises\n' "$count"
+}
+
+check_scripts()
+{
+	bash -n rootkitlings vm/boot scripts/doctor scripts/validate scripts/test-references
+	sh -n vm/init lib/check.sh
+	python3 -c 'compile(open("scripts/expand-compile-db", encoding="utf-8").read(), "scripts/expand-compile-db", "exec")'
+
+	if command -v shellcheck >/dev/null; then
+		shellcheck -S warning rootkitlings vm/boot vm/init
+		shellcheck -S warning -s busybox lib/check.sh
+		while IFS= read -r host_check; do
+			shellcheck -S warning "$host_check"
+		done < <(find lings capstones -name host-check -type f -print)
+	fi
+	printf '[+] scripts\n'
+}
+
+build_references()
+{
+	local work entry name build log passed=0
+	[[ -d $KDIR ]] || fail "kernel build directory not found: $KDIR"
+	work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-validate.XXXXXX")
+	trap 'rm -rf -- "$work"' RETURN
+
+	while IFS= read -r entry; do
+		[[ -z $entry || $entry == \#* ]] && continue
+		name=${entry##*/}
+		build=$work/$name
+		log=$work/$name.log
+		mkdir -p "$build"
+		if [[ -d .solutions/$name ]]; then
+			cp -a ".solutions/$name/." "$build/"
+		else
+			cp ".solutions/$name.c" "$build/hello.c"
+			printf 'obj-m += hello.o\n' > "$build/Kbuild"
+		fi
+
+		if ! make -s -C "$KDIR" M="$build" W=1 modules >"$log" 2>&1; then
+			cat "$log" >&2
+			fail "reference does not build: $name"
+		fi
+		if grep -q 'warning:' "$log"; then
+			cat "$log" >&2
+			fail "reference builds with warnings: $name"
+		fi
+		(( ++passed ))
+	done < .order
+
+	printf '[+] references: %d warning-free builds\n' "$passed"
+}
+
+check_catalog
+check_scripts
+(( BUILD_REFERENCES == 0 )) || build_references
+printf '[+] validation passed\n'

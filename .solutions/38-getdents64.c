@@ -39,12 +39,12 @@ static int ret_getdents64(struct kretprobe_instance *ri,
 	if (ret <= 0)
 		return 0;
 
-	buf = kvmalloc(ret, GFP_KERNEL);
+	buf = kmalloc(ret, GFP_ATOMIC);
 	if (!buf)
 		return 0;
 
-	if (copy_from_user(buf, ctx->dirent, ret)) {
-		kvfree(buf);
+	if (copy_from_user_nofault(buf, ctx->dirent, ret)) {
+		kfree(buf);
 		return 0;
 	}
 
@@ -64,9 +64,11 @@ static int ret_getdents64(struct kretprobe_instance *ri,
 		off += cur->d_reclen;
 	}
 
-	copy_to_user(ctx->dirent, buf, ret);
-	regs_set_return_value(regs, ret);
-	kvfree(buf);
+	if (copy_to_user_nofault(ctx->dirent, buf, ret))
+		regs_set_return_value(regs, -EFAULT);
+	else
+		regs_set_return_value(regs, ret);
+	kfree(buf);
 	return 0;
 }
 

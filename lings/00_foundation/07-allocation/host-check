@@ -1,0 +1,14 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+module=${1:?usage: host-check BUILD_DIR}/hello.ko
+undefined=$(nm -u "$module")
+grep -Eq '[[:space:]](__kmalloc|kmalloc_caches)$' <<<"$undefined" || {
+	printf '[x] module has no kmalloc dependency\n' >&2
+	exit 1
+}
+grep -Eq '[[:space:]]kfree$' <<<"$undefined" || {
+	printf '[x] module has no kfree dependency\n' >&2
+	exit 1
+}
+printf '[+] allocation and release dependencies verified\n'

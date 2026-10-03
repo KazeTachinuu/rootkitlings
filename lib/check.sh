@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC3043 # BusyBox ash provides local; checks run under ash.
 # check.sh -- POSIX sh assertion library for rootkitlings
 # Sourced by per-ling check scripts inside the busybox QEMU VM.
 
@@ -8,9 +9,9 @@ _pass=0
 _fail=0
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != dumb ]; then
-    B='\033[1;34m' G='\033[1;32m' Y='\033[1;33m' R='\033[31m' N='\033[0m'
+    B='\033[1;34m' G='\033[1;32m' R='\033[31m' N='\033[0m'
 else
-    B= G= Y= R= N=
+    B='' G='' R='' N=''
 fi
 
 _ok() {
@@ -35,6 +36,19 @@ begin() {
 }
 
 summary() {
+    local log
+
+    log=$(dmesg)
+    case "$log" in
+        *"BUG: kernel"*|*"WARNING: CPU:"*|*"Oops:"*|*"KASAN:"*|*"UBSAN:"*|\
+        *"general protection fault"*|*"kernel NULL pointer dereference"*)
+            _fail "kernel reported a bug or warning"
+            ;;
+        *)
+            _ok "kernel log is clean"
+            ;;
+    esac
+
     printf "\n"
     _hdr "results: ${_pass} passed, ${_fail} failed"
     if [ "$_fail" -gt 0 ]; then
@@ -47,7 +61,7 @@ summary() {
 
 load() {
     local mod="$1"; shift
-    if insmod "/root/$mod" "$@"; then
+    if insmod "/rootkitlings/$mod" "$@"; then
         _ok "loaded $mod"
     else
         _fail "failed to load $mod"
@@ -65,7 +79,7 @@ unload() {
 
 load_fail() {
     local mod="$1"; shift
-    if insmod "/root/$mod" "$@" 2>/dev/null; then
+    if insmod "/rootkitlings/$mod" "$@" 2>/dev/null; then
         _fail "expected $mod to be rejected, but it loaded"
     else
         _ok "$mod correctly rejected"
@@ -170,4 +184,3 @@ assert_contains() {
             ;;
     esac
 }
-

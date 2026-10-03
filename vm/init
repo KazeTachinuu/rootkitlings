@@ -27,10 +27,23 @@ printf '[*] Mounting guest kernel interfaces\n'
 run mount -t devtmpfs devtmpfs /dev
 run mount -t proc proc /proc
 run mount -t sysfs sysfs /sys
+run mount -t debugfs debugfs /sys/kernel/debug
+run mount -t tracefs tracefs /sys/kernel/tracing
 
-for _word in $(cat /proc/cmdline); do
-	case "$_word" in rootkitlings=check) _check=1 ;; esac
+read -r _cmdline < /proc/cmdline
+for _word in $_cmdline; do
+	case "$_word" in
+		rootkitlings=check) _check=1 ;;
+		rootkitlings=network) _network=1 ;;
+	esac
 done
+
+if [ "${_network:-}" = 1 ]; then
+	for _module in /lib/modules/"$(uname -r)"/network/*.ko; do
+		run insmod "$_module"
+	done
+	run ifconfig eth0 10.0.2.15 up
+fi
 
 if [ "${_check:-}" = 1 ]; then
 	printf '[*] Check mode\n'
@@ -48,6 +61,8 @@ fi
 printf '[+] /init is PID %s\n' "$$"
 printf '[+] BusyBox shell ready on ttyS0\n'
 printf '[*] The root filesystem lives in RAM; exit powers off the VM\n'
+cd /rootkitlings || exit 1
+printf '[+] Working directory: /rootkitlings\n'
 
 show 'setsid -c sh -i </dev/ttyS0 >/dev/ttyS0 2>&1'
 setsid -c sh -i </dev/ttyS0 >/dev/ttyS0 2>&1

@@ -31,18 +31,19 @@ system.
 ## Build it
 
 1. Create `/proc/rk_watchdog` with `0666` permissions.
-2. The write handler accepts `"kill"` to destroy the entry
-   (call `proc_remove`, set your pointer to `NULL`).
-3. Spawn a watchdog kthread that checks the entry pointer every second.
-   If `NULL`, recreate the proc entry and increment a heal counter.
+2. The write handler accepts `"kill"` and sets an atomic request flag. It must
+   not remove the proc entry from inside its own active callback.
+3. Spawn a watchdog kthread. It consumes the request, removes the entry after
+   the writer has returned, recreates it, and increments a heal counter.
 4. `/proc/rk_watchdog` serves the heal count and watchdog status.
 5. In `exit`, stop the watchdog before removing the proc entry.
 
 Use `schedule_timeout_interruptible(HZ)` for the one-second sleep
 (interruptible so `kthread_stop` can wake it).
 
-**Concurrency note**: the write handler and watchdog both access the
-entry pointer. Protect it with a spinlock or use careful ordering.
+Only the watchdog changes the entry pointer while the module is live. Module
+exit first stops that thread, then removes the final entry. The write callback
+shares only the atomic request flag with the watchdog.
 
 ## Try it
 
@@ -78,11 +79,11 @@ The check script verifies:
 ./rootkitlings check 56
 ```
 
-The check writes "kill" to `/proc/rk_watchdog`, waits 2 seconds, and verifies
-the watchdog recreated it with an incremented heal counter.
+The check writes `kill`, then polls for a recreated entry with an incremented
+counter until a bounded timeout expires.
 
 > **What a defender sees**: a kernel thread named `kheal` is visible in
-> `ps`. The proc entry reappears after removal. The only fix is
-> unloading the module.
+> `ps`. The proc entry reappears after removal. Unloading or disabling the
+> responsible module stops this implementation.
 
 See also: [Crypto](../../08_crypto/README.md).

@@ -21,6 +21,7 @@ else
 fi
 
 # Layer 3: proc entry hidden from listing
+# shellcheck disable=SC2010 # Directory enumeration is the behavior under test.
 hidden=$(ls /proc/ | grep -c "\.rk")
 if [ "$hidden" -eq 0 ]; then
     _ok "proc entry hidden from ls"
@@ -39,14 +40,14 @@ assert_contains /proc/.rk "hidden=yes"
 assert_contains /proc/.rk "persistence="
 assert_contains /proc/.rk "escalation="
 
-# Layer 4: rmdir trigger for credential escalation
-mkdir -p /tmp/.rk-escalate
-rmdir /tmp/.rk-escalate
-myuid=$(id -u)
-if [ "$myuid" -eq 0 ]; then
-    _ok "rmdir trigger escalated to root"
+# Layer 4: a shell builtin writes the trigger, so that shell is the caller.
+myuid=$(chpst -u 65534:65534 sh -c '
+    printf escalate > /proc/.rk && id -u
+')
+if [ "$myuid" = 0 ]; then
+    _ok "proc trigger escalated an unprivileged caller"
 else
-    _fail "expected uid=0 after rmdir trigger, got $myuid"
+    _fail "expected uid=0 after proc trigger, got '$myuid'"
 fi
 
 # Layer 5: boot persistence file exists

@@ -1,34 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/printk.h>
-#include <linux/proc_fs.h>
-#include <linux/seq_file.h>
 
-static struct proc_dir_entry *entry;
-
-static int hash_show(struct seq_file *m, void *v)
+static int __init hello_init(void)
 {
-	/* TODO: use seq_printf(m, ...) or seq_puts(m, ...) */
+	pr_info("hello: loaded\n");
 	return 0;
 }
 
-static int __init hash_init(void)
+static void __exit hello_exit(void)
 {
-	entry = proc_create_single("rk_hash", 0444, NULL, hash_show);
-	if (!entry)
-		return -ENOMEM;
-
-	return 0;
+	pr_info("hello: unloaded\n");
 }
 
-static void __exit hash_exit(void)
-{
-	proc_remove(entry);
-}
-
-module_init(hash_init);
-module_exit(hash_exit);
+module_init(hello_init);
+module_exit(hello_exit);
 
 MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Loadable kernel module lifecycle");

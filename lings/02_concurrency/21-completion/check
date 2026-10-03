@@ -1,0 +1,21 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "21-completion"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_completion
+
+i=0
+while [ "$i" -lt 20 ]; do
+    grep -q '^finished=2$' /proc/rk_completion && break
+    sleep 0.1
+    i=$((i + 1))
+done
+assert_read /proc/rk_completion "finished=2"
+
+unload hello
+assert_absent /proc/rk_completion
+
+summary

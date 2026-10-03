@@ -1,0 +1,25 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "33-fprobe"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_fprobe
+
+before=$(cat /proc/rk_fprobe)
+cat /dev/null >/dev/null
+cat /dev/null >/dev/null
+cat /dev/null >/dev/null
+after=$(cat /proc/rk_fprobe)
+
+if [ "$after" -gt "$before" ] 2>/dev/null; then
+    _ok "fprobe observed opens: $before -> $after"
+else
+    _fail "fprobe counter did not increase: $before -> $after"
+fi
+
+unload hello
+assert_absent /proc/rk_fprobe
+
+summary

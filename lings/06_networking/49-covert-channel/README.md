@@ -2,12 +2,9 @@
 
 ## What we are learning
 
-Rootkits communicate with C2 servers through covert channels embedded
-in legitimate protocols. ICMP echo payloads are a classic vehicle:
-firewalls rarely inspect ping content, and the payload bytes carry
-hidden commands.
-
-This technique is used by Pingback (2021), Regin, and many APT tools.
+An ICMP echo request carries arbitrary payload bytes. This lesson uses
+that field as a small message transport and then shows exactly where the
+message remains observable.
 
 ## What we are doing
 
@@ -34,25 +31,30 @@ payload_len = total_ip_len - ip_header_len - sizeof(icmphdr)
 ```
 
 Use `ntohs(iph->tot_len)` for total IP length and `iph->ihl * 4` for
-the IP header length. Both are values you have used before.
+the IP header length. Validate both before deriving the payload length.
+
+An `skb` may be non-linear. Read headers with `skb_header_pointer()` and
+copy payload bytes with `skb_copy_bits()`; direct pointer arithmetic is not
+a valid general packet parser.
 
 **Concurrency**: the hook writes the message, the proc read serves it.
-These run in different contexts. Protect the shared buffer with
-`DEFINE_MUTEX()` and `mutex_lock`/`mutex_unlock` (ling 22 pattern).
+The hook can run in softirq context, where code must not sleep. Protect the
+buffer with a spinlock. The proc reader takes a snapshot under the lock and
+formats it after unlocking.
 
 ## Build it
 
 1. Hook `PRE_ROUTING` and parse ICMP (ling 45 pattern).
 2. Use magic ID `0xDEAD` (different from ling 45's `0x1337`).
 3. When triggered, copy the payload into a kernel buffer.
-4. Protect the buffer with a mutex.
+4. Protect the buffer with a spinlock.
 5. `/proc/rk_covert` serves the last received message (or `(none)` if
    nothing was received yet).
 
 ## Try it
 
 ```bash
-./rootkitlings run
+./rootkitlings run --network
 ```
 
 Inside the VM:
@@ -87,8 +89,8 @@ The check sends normal pings (must NOT trigger), then sends ICMP echo
 with ID 0xdead carrying a payload using the `icmp_send` tool, and
 verifies the message was extracted.
 
-> **What a defender sees**: ICMP packets with unusual payload sizes or
-> patterns are flagged by IDS. Deep packet inspection on ICMP reveals
-> embedded data.
+> **What a defender sees**: packet capture outside the guest records the ICMP
+> identifier and the message in plaintext. This transport is concealed only
+> from tools that ignore ICMP payloads; it is not encrypted.
 
 See also: [50 - Traffic counter](../50-traffic-counter/README.md).

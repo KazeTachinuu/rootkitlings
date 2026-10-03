@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <crypto/hash.h>
+#include <crypto/utils.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/init.h>
@@ -15,6 +16,12 @@
 
 static struct proc_dir_entry *entry;
 static u8 digest[SHA256_LEN];
+static const u8 expected_digest[SHA256_LEN] = {
+	0x5a, 0x3f, 0xaa, 0xe9, 0x79, 0x58, 0x48, 0x83,
+	0x5c, 0x76, 0x47, 0xc5, 0x8a, 0x98, 0x43, 0xcf,
+	0x42, 0x48, 0x11, 0xd3, 0x77, 0x12, 0xaa, 0x63,
+	0x40, 0xe4, 0x8e, 0x35, 0xc2, 0x8d, 0x6d, 0xec,
+};
 static char input_data[DATA_SIZE] = "rootkitlings verification data";
 static int input_len;
 static bool hash_ok;
@@ -45,7 +52,8 @@ static int compute_sha256(const void *data, unsigned int len, u8 *out)
 
 static void rehash(void)
 {
-	hash_ok = (compute_sha256(input_data, input_len, digest) == 0);
+	hash_ok = compute_sha256(input_data, input_len, digest) == 0 &&
+		  !crypto_memneq(digest, expected_digest, sizeof(digest));
 }
 
 static int hash_read(struct seq_file *m, void *v)
@@ -54,9 +62,8 @@ static int hash_read(struct seq_file *m, void *v)
 
 	seq_printf(m, "algo=sha256\nstatus=%s\nhash=",
 		   hash_ok ? "ok" : "failed");
-	if (hash_ok)
-		for (i = 0; i < SHA256_LEN; i++)
-			seq_printf(m, "%02x", digest[i]);
+	for (i = 0; i < SHA256_LEN; i++)
+		seq_printf(m, "%02x", digest[i]);
 	seq_putc(m, '\n');
 	return 0;
 }
@@ -96,7 +103,7 @@ static int __init hashverify_init(void)
 	input_len = strlen(input_data);
 	rehash();
 
-	entry = proc_create("rk_hash", 0666, NULL, &hash_proc_ops);
+	entry = proc_create("rk_hash", 0600, NULL, &hash_proc_ops);
 	if (!entry)
 		return -ENOMEM;
 

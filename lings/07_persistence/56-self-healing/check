@@ -13,8 +13,17 @@ assert_contains /proc/rk_watchdog "heals=0"
 # Kill the proc entry via the write interface
 printf 'kill' > /proc/rk_watchdog
 
-# Watchdog processes kill asynchronously and recreates within 1s
-sleep 3
+# Poll the effect with a bounded timeout instead of sleeping past it.
+i=0
+while [ "$i" -lt 30 ]; do
+    if [ -e /proc/rk_watchdog ] &&
+       heals=$(sed -n 's/^heals=//p' /proc/rk_watchdog) &&
+       [ "${heals:-0}" -gt 0 ] 2>/dev/null; then
+        break
+    fi
+    sleep 0.1
+    i=$((i + 1))
+done
 
 # By now: killed + recreated
 if [ -e /proc/rk_watchdog ]; then
@@ -26,7 +35,7 @@ else
 fi
 
 # Heal counter must have incremented
-heals=$(cat /proc/rk_watchdog | sed -n 's/^heals=//p')
+heals=$(sed -n 's/^heals=//p' /proc/rk_watchdog)
 if [ "$heals" -gt 0 ] 2>/dev/null; then
     _ok "heal counter = $heals"
 else

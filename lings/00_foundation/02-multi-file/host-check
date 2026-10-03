@@ -1,0 +1,25 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+build=${1:?usage: host-check BUILD_DIR}
+
+fail()
+{
+	printf '[x] %s\n' "$*" >&2
+	exit 1
+}
+
+[[ -f $build/main.c ]] || fail 'main.c is missing'
+[[ -f $build/calc.c ]] || fail 'calc.c is missing'
+[[ -f $build/calc.h ]] || fail 'calc.h is missing'
+[[ -f $build/Kbuild ]] || fail 'Kbuild is missing'
+
+grep -Eq '^[[:space:]]*hello-[ym][[:space:]]*[:+]?=.*main\.o.*calc\.o' \
+	"$build/Kbuild" || fail 'Kbuild must link main.o and calc.o into hello.ko'
+
+nm "$build/hello.ko" | grep -Eq '[[:space:]]T[[:space:]]+rk_add$' ||
+	fail 'hello.ko does not contain rk_add from calc.c'
+nm "$build/hello.ko" | grep -Eq '[[:space:]]T[[:space:]]+rk_mul$' ||
+	fail 'hello.ko does not contain rk_mul from calc.c'
+
+printf '[+] multi-file structure verified\n'

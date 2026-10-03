@@ -19,16 +19,11 @@ Procfs entry lifecycle
   cat: calls rk_ops callbacks                  module memory freed
 ```
 
-## Reset the experiment
+## Simplify the previous module
 
-Inspect the rollback experiment, then restore the minimal module:
-
-```bash
-git diff -- module/hello.c
-git restore module/hello.c
-```
-
-Then add only the procfs pieces below to
+Keep the module lifecycle and metadata. Remove the allocation and rollback
+state from lings 07-08; this lesson replaces that experiment with one owned
+procfs entry. Then add the procfs pieces below to
 [hello.c](../../../module/hello.c).
 
 ## Describe an interface
@@ -102,7 +97,6 @@ static void __exit entry_exit(void)
 Inside the VM:
 
 ```sh
-cd /root
 ls /proc/rk_entry
 insmod hello.ko
 ls -l /proc/rk_entry

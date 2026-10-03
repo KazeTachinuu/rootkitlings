@@ -71,9 +71,9 @@ original `pt_regs` argument is gone. The solution:
   ret_handler(ri, regs)
        |
        +---> read ri->data to get saved dirent pointer
-       +---> copy_from_user the filled buffer
+       +---> copy_from_user_nofault the filled buffer
        +---> filter entries, memmove to close gaps
-       +---> copy_to_user the filtered buffer
+       +---> copy_to_user_nofault the filtered buffer
        +---> regs_set_return_value to update byte count
 ```
 
@@ -119,17 +119,19 @@ The entry handler captures the dirent pointer using double indirection
 The return handler:
 
 1. Gets the return value with `regs_return_value(regs)` (byte count).
-2. Allocates a kernel buffer (`kvmalloc`) and copies the dirent data
-   from userspace (`copy_from_user`).
+2. Allocates a kernel buffer with `kmalloc(..., GFP_ATOMIC)` and copies the
+   dirent data with `copy_from_user_nofault()`.
 3. Walks entries using `d_reclen` to find each `d_name`.
 4. Splices out entries whose name starts with your prefix (`memmove`
    to close the gap, subtract `d_reclen` from total).
-5. Copies the filtered buffer back (`copy_to_user`) and updates the
+5. Copies the filtered buffer back (`copy_to_user_nofault`) and updates the
    return value with `regs_set_return_value`.
 
 Also create `/proc/rk_dirfilter` that returns `hidden`.
 
-## Hints
+Kretprobe callbacks cannot sleep. Ordinary user-copy helpers may fault and
+`GFP_KERNEL` allocation may sleep, so neither belongs here. If the atomic
+allocation or no-fault copy fails, leave the original syscall result unchanged.
 
 ## Try it
 

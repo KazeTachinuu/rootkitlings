@@ -7,8 +7,9 @@ bypassing userspace entirely. Unlike a netfilter hook (which only
 receives packets), a raw socket lets the module send crafted packets:
 reverse shells, exfiltration, or covert communication.
 
-The socket belongs to the kernel, not any process. `ss`, `netstat`, and
-`/proc/net/raw` show nothing.
+The socket belongs to the kernel, not a userspace process. It has no useful PID
+owner, but the socket itself remains visible in kernel network tables such as
+`/proc/net/raw`.
 
 ## The concept
 
@@ -18,18 +19,18 @@ The socket belongs to the kernel, not any process. `ss`, `netstat`, and
   app calls socket()               module calls sock_create_kern()
        |                                |
        v                                v
-  visible in:                      invisible to:
-    ss -anp                          ss -anp
-    netstat                          netstat
-    /proc/net/raw                    /proc/net/raw (sometimes)
+  process owner:                   process owner:
+    userspace PID                    none
+
+  socket table:
+    /proc/net/raw                    /proc/net/raw
 
   Both go through:
     IP layer -> network driver -> wire
 ```
 
-A kernel-owned socket has no associated process. Userspace tools that
-list sockets by PID find nothing. This is what makes kernel-level
-networking invisible.
+A kernel-owned socket has no associated userspace process. Process attribution
+is therefore weaker, but socket-table and packet-level visibility remain.
 
 ## What we are doing
 
@@ -77,7 +78,7 @@ proto=ICMP
 ## Try it
 
 ```bash
-./rootkitlings run
+./rootkitlings run --network
 ```
 
 Inside the VM:
@@ -105,7 +106,7 @@ The check script verifies:
 ```
 
 > **What a defender sees**: `dmesg` shows the socket creation message.
-> A kernel-owned raw socket is invisible to `ss -anp` and `netstat`.
-> Only inspecting loaded module code reveals its existence.
+> `/proc/net/raw` exposes the socket even though no userspace PID owns it.
+> Packet capture exposes the traffic independently of socket attribution.
 
 See also: [47 - DNS spoof](../47-dns-spoof/README.md).

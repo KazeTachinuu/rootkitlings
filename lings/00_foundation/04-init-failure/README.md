@@ -146,7 +146,6 @@ When your module crashes, dmesg shows a call trace. Read it bottom-up:
 Inside the VM:
 
 ```sh
-cd /root
 insmod hello.ko
 echo "status=$?"
 lsmod

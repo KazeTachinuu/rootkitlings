@@ -1,14 +1,10 @@
-# 29 - Debugfs interface
+# 29 - Debugfs
 
 ## Why this step
 
-Kernel debug infrastructure at `/sys/kernel/debug/` is rarely inspected
-by defenders. Rootkits can create entries there to stash state alongside
-the kernel's own debug data, hiding in plain sight.
-
-This ling teaches you to create debugfs directories and files, which
-you will use later to expose rootkit state without `/proc` entries
-that are easier to spot.
+Debugfs lets kernel code expose diagnostic state through simple files. This
+lesson creates one directory and one read-only file, then removes the whole
+subtree during unload.
 
 ## The concept
 
@@ -25,9 +21,8 @@ that are easier to spot.
       +-- state              <-- your custom file
 ```
 
-Debugfs is mounted at `/sys/kernel/debug/`. Kernel subsystems put
-diagnostic data here. By creating entries alongside them, a rootkit
-hides its state in a place defenders rarely inspect.
+Debugfs is mounted at `/sys/kernel/debug/`. Its API is intentionally not a
+stable userspace ABI; use it for diagnostics, not a production interface.
 
 ## What you already know
 
@@ -60,8 +55,6 @@ should return an access counter.
 Also create `/proc/rk_tracer` that reports the debugfs path.
 
 Clean up in `tracer_exit` with `debugfs_remove_recursive()`.
-
-## Hints
 
 ## Try it
 
@@ -98,7 +91,7 @@ The check script verifies:
 The check verifies the debugfs directory and state file exist,
 the counter increments, and cleanup happens on unload.
 
-> **What a defender sees**: `ls /sys/kernel/debug/` shows the extra
-> directory. `mount -t debugfs` reveals it.
+> **What a defender sees**: while mounted, `ls /sys/kernel/debug/` shows the
+> extra directory directly. Debugfs is an observable interface, not hiding.
 
 See also: [30 - Kprobe](../30-kprobe/README.md).

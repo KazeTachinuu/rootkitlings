@@ -16,7 +16,7 @@ KASLR disabled for stable addresses.
 In another terminal, load the kernel's debug symbols and connect:
 
 ```bash
-gdb /usr/lib/modules/$(uname -r)/build/vmlinux
+gdb /lib/modules/$(uname -r)/build/vmlinux
 (gdb) target remote :1234
 (gdb) continue
 ```
@@ -28,7 +28,7 @@ in kernel context (it expects userspace by default). If it hangs or
 produces garbage, fall back to plain GDB:
 
 ```bash
-gdb -nx /usr/lib/modules/$(uname -r)/build/vmlinux
+gdb -nx /lib/modules/$(uname -r)/build/vmlinux
 ```
 
 `-nx` skips all plugins. Learn plain GDB first, add pwndbg later.
@@ -41,8 +41,8 @@ to map your module's symbols to the right memory locations.
 After `insmod` in the VM, read the text section address from the VM console:
 
 ```
-/ # insmod /root/hello.ko
-/ # cat /sys/module/hello/sections/.text
+/rootkitlings # insmod hello.ko
+/rootkitlings # cat /sys/module/hello/sections/.text
 0xffffffffc0000000
 ```
 
@@ -87,8 +87,9 @@ step through initialization:
 **Inspect current task.** If your kernel has `CONFIG_GDB_SCRIPTS`, you
 get `lx-*` commands: `lx-dmesg` dumps the kernel log, `lx-lsmod` lists
 loaded modules, and `lx-symbols` auto-loads module symbols on insmod.
-Distribution kernels may not ship these scripts, so the manual
-`add-symbol-file` workflow above always works.
+Distribution kernels may not ship these scripts. The manual `add-symbol-file`
+workflow works when the matching unstripped module object and runtime section
+addresses are available.
 
 **KASLR.** Kernel address space layout randomization shifts all kernel
 addresses at boot. `./rootkitlings gdb` adds `nokaslr` to the kernel
@@ -138,7 +139,7 @@ The code looks correct. Read it, convince yourself, then prove yourself
 wrong with GDB:
 
 1. Boot with `./rootkitlings gdb`
-2. Connect: `gdb /usr/lib/modules/$(uname -r)/build/vmlinux`, then
+2. Connect: `gdb /lib/modules/$(uname -r)/build/vmlinux`, then
    `target remote :1234`, `continue`
 3. In the VM, `insmod` and read the address from
    `/sys/module/hello/sections/.text`
@@ -157,3 +158,11 @@ wrong with GDB:
 
 Debug sessions are local. No runtime artifact to detect. The fixed module
 behaves identically whether debugged or not.
+
+## Verify
+
+```bash
+./rootkitlings check 3
+```
+
+See also: [04 - Init failure](../04-init-failure/README.md).

@@ -50,6 +50,12 @@ Create a module that:
 4. Init rolls back on partial failure (second probe fails = unregister first).
 5. Exit unregisters both in reverse order.
 
+Add a `fail_second` boolean parameter used only by the check. When set, return
+`-EINVAL` after registering the first probe and run the same rollback path as a
+real second-registration failure. The check then loads the module normally; a
+leftover first probe would make that load fail, so this exercises rollback
+rather than merely inspecting cleanup-shaped source code.
+
 ```c
 static struct kprobe kp_read = {
     .symbol_name = "vfs_read",
@@ -86,6 +92,8 @@ The check script verifies:
 
 - `/proc/rk_lifecycle` contains `vfs_read=` and `vfs_write=` counters.
 - Both counters are greater than 0 after triggering reads and writes.
+- `fail_second=1` rejects the load, leaves no proc entry, and does not prevent a
+  subsequent normal registration.
 - `/proc/rk_lifecycle` disappears after unload.
 
 ## Verify

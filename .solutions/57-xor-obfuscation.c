@@ -78,7 +78,7 @@ static int __init xor_init(void)
 	data_len = strlen(plaintext);
 	do_xor_roundtrip();
 
-	entry = proc_create("rk_xor", 0666, NULL, &obfusc_proc_ops);
+	entry = proc_create("rk_xor", 0600, NULL, &obfusc_proc_ops);
 	if (!entry)
 		return -ENOMEM;
 

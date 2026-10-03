@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/errno.h>
+#include <linux/completion.h>
 #include <linux/init.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -15,6 +16,8 @@ static unsigned long shared_counter;
 static DEFINE_MUTEX(counter_lock);
 static struct task_struct *racer_a;
 static struct task_struct *racer_b;
+static DECLARE_COMPLETION(racer_a_done);
+static DECLARE_COMPLETION(racer_b_done);
 static int done_count;
 
 static int guarded_increment(void *data)
@@ -33,6 +36,7 @@ static int guarded_increment(void *data)
 		pr_info("rk: final count=%lu (expected %d)\n",
 			shared_counter, ITERATIONS * 2);
 	mutex_unlock(&counter_lock);
+	complete(data);
 	return 0;
 }
 
@@ -48,14 +52,15 @@ static int __init guarded_init(void)
 	if (!entry)
 		return -ENOMEM;
 
-	racer_a = kthread_run(guarded_increment, NULL, "guard_a");
+	racer_a = kthread_run(guarded_increment, &racer_a_done, "guard_a");
 	if (IS_ERR(racer_a)) {
 		proc_remove(entry);
 		return PTR_ERR(racer_a);
 	}
 
-	racer_b = kthread_run(guarded_increment, NULL, "guard_b");
+	racer_b = kthread_run(guarded_increment, &racer_b_done, "guard_b");
 	if (IS_ERR(racer_b)) {
+		wait_for_completion(&racer_a_done);
 		proc_remove(entry);
 		return PTR_ERR(racer_b);
 	}
@@ -66,6 +71,8 @@ static int __init guarded_init(void)
 
 static void __exit guarded_exit(void)
 {
+	wait_for_completion(&racer_b_done);
+	wait_for_completion(&racer_a_done);
 	proc_remove(entry);
 	pr_info("rk: cleaned up\n");
 }

@@ -30,12 +30,10 @@ In a normal linked list, the list node contains a pointer to the data.
 In an intrusive list, the data struct contains the list node. This avoids
 a separate allocation for the node and improves cache locality.
 
-## Reset the experiment
+## Extend the previous module
 
-```bash
-git diff -- module/hello.c
-git restore module/hello.c
-```
+Keep the proc read/write pattern from ling 12. Replace its single static
+message with a list whose entries are allocated on each write.
 
 ## What to build
 
@@ -72,7 +70,7 @@ Each write creates a new `rk_entry`:
 ```
   echo "first" > /proc/rk_registry
 
-  1. kmalloc(sizeof(struct rk_entry))    <- ling 07 pattern
+  1. kmalloc_obj(*entry, GFP_KERNEL)     <- ling 07 pattern
   2. copy_from_user into e->text         <- ling 12 pattern
   3. null-terminate, strip newline
   4. list_add_tail(&e->node, &entries)   <- new: appends to list
@@ -131,7 +129,6 @@ Write a `free_entries()` helper. Call it from exit before
 Inside the VM:
 
 ```sh
-cd /root
 insmod hello.ko
 cat /proc/rk_registry
 printf '%s' "first" > /proc/rk_registry

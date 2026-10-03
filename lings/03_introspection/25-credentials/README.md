@@ -83,7 +83,7 @@ The check script verifies:
 ./rootkitlings check 25
 ```
 
-> **What a defender sees**: the module reads credentials but does not
-> change them. Reading is invisible. Changing them (ling 26) is not.
+> **What a defender sees**: reading does not modify the credentials, but the
+> module and its proc interface remain observable. Ling 26 changes them.
 
 See also: [26 - Credential escalation](../26-credential-escalation/README.md).

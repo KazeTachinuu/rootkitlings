@@ -10,6 +10,9 @@
 static struct proc_dir_entry *entry;
 static unsigned long read_count;
 static unsigned long write_count;
+static bool fail_second;
+module_param(fail_second, bool, 0600);
+MODULE_PARM_DESC(fail_second, "fail after the first probe to test rollback");
 
 static int read_handler(struct kprobe *p, struct pt_regs *regs)
 {
@@ -51,7 +54,7 @@ static int __init lifecycle_init(void)
 		return err;
 	}
 
-	err = register_kprobe(&kp_write);
+	err = fail_second ? -EINVAL : register_kprobe(&kp_write);
 	if (err) {
 		pr_err("rk: kp_write failed: %d\n", err);
 		unregister_kprobe(&kp_read);

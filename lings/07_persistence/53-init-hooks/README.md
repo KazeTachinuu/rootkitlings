@@ -2,13 +2,10 @@
 
 ## Why this step
 
-A rootkit in kernel space can execute any userspace command.
-`call_usermodehelper` spawns a process as root with no login, no shell
-history, no audit trail from the user's perspective.
-
-Real rootkits use this to add SSH keys, create backdoor users, or
-download payloads. Diamorphine triggers it via a magic signal.
-Reptile uses it to launch reverse shells.
+`call_usermodehelper` asks the kernel to start a userspace program. The helper
+inherits kernel-selected credentials and environment, and the caller chooses
+whether to wait for completion. The resulting process is visible through the
+normal process, audit, and execution telemetry.
 
 ## What you need
 
@@ -69,9 +66,8 @@ The check script verifies:
 ./rootkitlings check 53
 ```
 
-> **What a defender sees**: the process is parented to kthreadd (PID 2),
-> not any user shell. It bypasses utmp/wtmp. The only trace is in
-> `/proc` (briefly) and the command's side effects. Audit rules on
-> `execve` catch it.
+> **What a defender sees**: the process is not launched by an interactive
+> shell, but `/proc`, audit/execution monitoring, filesystem effects, and
+> external observation can still record it.
 
 See also: [54 - File infection](../54-file-infection/README.md).

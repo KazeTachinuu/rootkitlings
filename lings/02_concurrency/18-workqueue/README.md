@@ -75,8 +75,6 @@ dmesg | tail
 rmmod hello
 ```
 
-## Hints
-
 ## Contract
 
 The check script verifies:

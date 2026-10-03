@@ -1,33 +1,31 @@
 # Capstone 3: Dead drop
 
-Build a hidden message board in the kernel. Two operatives communicate
-through a channel that nobody else can see. Not even the sysadmin.
+Build a dead drop in kernel memory. An operator reveals it, leaves a message,
+and hides it again. A defender tests which views still expose the channel.
 
-```
-  operator                        kernel module                     asset
-  +----------+                   +---------------------+          +----------+
-  |          | rmdir             |                     |          |          |
-  |  reveal  | /tmp/.rk-reveal  | rmdir hook          |          |          |
-  |          |------------------>|   show /proc/.drop  |          |          |
-  +----------+                   +---------------------+          +----------+
-       |                                |                              |
-       v                                v                              v
-  echo "msg" > /proc/.drop       +---------------------+     cat /proc/.drop
-       |                         |  struct dead_drop    |          |
-       +------------------------>|    char msg[256]     |--------->+
-                                 |    bool visible      |
-                                 +---------------------+
+```text
+  operator                       kernel module                    asset
++-----------+                 +-------------------+            +-----------+
+|           |  rmdir reveal   | rmdir hook        |            |           |
+| controller+---------------->| visible = true    |            | receiver  |
+|           |                 +---------+---------+            |           |
++-----------+                           |                      +-----+-----+
+       |                                v                            ^
+       | write                +-------------------+       read       |
+       +--------------------->| /proc/.drop       |------------------+
+                              | message[256]      |
+                              +---------+---------+
+                                        ^
                                         |
-  rmdir /tmp/.rk-hide                   v
-  +----------+                   +---------------------+
-  |          |------------------>| hide /proc/.drop    |
-  |  hide    |                   | escalate to root    |
-  +----------+                   +---------------------+
+                              rmdir hide|  visible = false
+                                        |
+                              +---------+---------+
+                              | directory filter  |
+                              | hides ".drop"     |
+                              +-------------------+
 
-  blue team view:
-  $ ls /proc/ | grep drop        (nothing)
-  $ find /proc -name '.drop'     (nothing)
-  $ cat /proc/.drop              (works if you guess the name)
+  listing view:  ls /proc       -> no .drop
+  direct view:   stat /proc/.drop -> entry still exists
 ```
 
 ## Prerequisites
@@ -44,7 +42,7 @@ Controlled via rmdir, the Pumakit pattern (ling 34).
 - `rmdir /tmp/.rk-reveal` reveals the interface (sets a flag).
 - Write a message: `echo "intel" > /proc/.drop`.
 - Read a message: `cat /proc/.drop`.
-- `rmdir /tmp/.rk-hide` hides it again and escalates the caller to root.
+- `rmdir /tmp/.rk-hide` hides it again.
 - Messages live in a heap buffer. Gone on reboot.
 - Both rmdir commands return success but never remove anything.
 
@@ -58,7 +56,6 @@ rmdir /tmp/.rk-reveal
 echo "asset compromised, exfil at 0300" > /proc/.drop
 cat /proc/.drop                # "asset compromised, exfil at 0300"
 rmdir /tmp/.rk-hide
-id                             # uid=0(root)
 ls /proc/ | grep drop          # nothing again
 rmmod hello
 ```
@@ -89,7 +86,7 @@ The check script verifies:
 - Reading `/proc/.drop` while hidden is denied.
 - `rmdir /tmp/.rk-reveal` reveals the interface (read and write work).
 - Message round-trips correctly (write then read returns same string).
-- `rmdir /tmp/.rk-hide` hides it again and escalates to root (`id -u` returns 0).
+- `rmdir /tmp/.rk-hide` hides it again.
 - After hide, reads are denied again and listing still shows nothing.
 - Real rmdir still works (create and remove a normal directory).
 

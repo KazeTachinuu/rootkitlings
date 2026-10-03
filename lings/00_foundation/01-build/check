@@ -4,12 +4,18 @@
 begin "01-build"
 
 # Verify the .ko is a valid kernel module, not an empty file
-size=$(wc -c < /root/hello.ko)
+size=$(wc -c < /rootkitlings/hello.ko)
 if [ "$size" -gt 1000 ]; then
     _ok "hello.ko is $size bytes"
 else
     _fail "hello.ko suspiciously small ($size bytes)"
 fi
+
+info=$(modinfo /rootkitlings/hello.ko 2>/dev/null)
+case "$info" in
+    *"license:        GPL"*) _ok "modinfo reads module metadata" ;;
+    *) _fail "modinfo could not read hello.ko" ;;
+esac
 
 load hello.ko
 assert_loaded hello

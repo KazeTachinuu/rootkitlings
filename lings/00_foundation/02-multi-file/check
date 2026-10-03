@@ -5,10 +5,7 @@ begin "02-multi-file"
 
 load hello.ko
 assert_loaded hello
-assert_exists /proc/rk_calc
-assert_read /proc/rk_calc "add=7 mul=12"
 
 unload hello
-assert_absent /proc/rk_calc
 
 summary

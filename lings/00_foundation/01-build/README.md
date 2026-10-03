@@ -33,56 +33,6 @@ for that kernel.
     you edit          intermediate      insmod loads
 ```
 
-## Multi-file modules
-
-One file works for learning. Real modules split into multiple files.
-Kbuild supports this with `hello-y`:
-
-```make
-obj-m += hello.o
-hello-y := main.o hook.o hide.o
-```
-
-```
-  Kbuild compiles each .c, links them into one .ko:
-
-  main.c ----> main.o ----+
-  hook.c ----> hook.o ----+--> hello.ko
-  hide.c ----> hide.o ----+
-```
-
-Share types and prototypes through a header:
-
-```c
-// hook.h
-#ifndef HOOK_H
-#define HOOK_H
-
-int hook_install(void);
-void hook_remove(void);
-
-#endif
-```
-
-```c
-// main.c
-#include "hook.h"
-```
-
-The lings keep everything in one file so you focus on one concept.
-As modules grow, split by responsibility:
-
-| Lines | Approach |
-|------:|----------|
-| < 100 | Single file. Most lings. |
-| 100-150 | Single file is fine, but consider splitting if you see two distinct responsibilities. |
-| > 150 | Split. The ftrace hooking lings (34+) combine lookup + hook + proc into one file. In a real rootkit, those are separate files. |
-| Capstones | Always split. Capstone 1's reference solution is multi-file. |
-
-The rule: if you can describe what a file does with "and" ("it sets up
-the hook AND manages the proc entry AND does the filtering"), each
-"and" is a separate file.
-
 ## Where to find kernel APIs
 
 When a ling introduces a new function or struct, you can look it up:
@@ -98,7 +48,7 @@ When a ling introduces a new function or struct, you can look it up:
        |     https://docs.kernel.org
        |
        +---> headers on your machine
-             /usr/lib/modules/$(uname -r)/build/include/linux/
+             /lib/modules/$(uname -r)/build/include/linux/
              grep -r 'function_name' to find the definition
 ```
 
@@ -124,14 +74,14 @@ modinfo module/hello.ko
 Also try reading the header your module uses:
 
 ```bash
-grep -n 'pr_info' /usr/lib/modules/$(uname -r)/build/include/linux/printk.h | head
+grep -n 'pr_info' /lib/modules/$(uname -r)/build/include/linux/printk.h | head
 ```
 
 ## Contract
 
 The check script verifies:
 
-- `hello.ko` is a valid ELF module (file size > 1000 bytes).
+- `hello.ko` is non-trivial in size and `modinfo` can read its metadata.
 - `insmod hello.ko` succeeds and `hello` appears in `lsmod`.
 - `/sys/module/hello/sections` exists (valid module structure).
 - `dmesg` must contain `hello: loaded` and `hello: unloaded`.
@@ -144,4 +94,4 @@ The check script verifies:
 > **What a defender sees**: `file` identifies the format, `modinfo` reads the metadata,
 > and `strings` reveals every printable constant. The `.ko` hides nothing.
 
-See also: [04 - Init failure](../04-init-failure/README.md).
+See also: [02 - Multi-file modules](../02-multi-file/README.md).

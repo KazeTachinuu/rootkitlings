@@ -3,13 +3,15 @@
 
 begin "54-file-infection"
 
-# Create a victim script
-printf '#!/bin/sh\necho clean\n' > /tmp/rk_victim.sh
+# Create content that cannot be reproduced from a fixed reference fixture.
+token="clean_$$_$(date +%s)"
+original=$(printf '#!/bin/sh\nprintf %%s %s\n' "$token")
+printf '%s\n' "$original" > /tmp/rk_victim.sh
 chmod 755 /tmp/rk_victim.sh
 
 # Verify it runs clean
 clean=$(/tmp/rk_victim.sh)
-if [ "$clean" = "clean" ]; then
+if [ "$clean" = "$token" ]; then
     _ok "victim script runs clean"
 else
     _fail "victim script broken before infection"
@@ -19,26 +21,14 @@ load hello.ko
 assert_loaded hello
 assert_exists /proc/rk_infect
 
-# Module should have injected payload into the victim
+# Module should prepend exactly one line and preserve every original byte.
 content=$(cat /tmp/rk_victim.sh)
-case "$content" in
-    *"rootkit was here"*)
-        _ok "payload injected into victim"
-        ;;
-    *)
-        _fail "payload not found in victim: $content"
-        ;;
-esac
-
-# Original content must still be present (prepend, not replace)
-case "$content" in
-    *"echo clean"*)
-        _ok "original content preserved"
-        ;;
-    *)
-        _fail "original content lost"
-        ;;
-esac
+expected=$(printf '# rootkit was here\n%s' "$original")
+if [ "$content" = "$expected" ]; then
+    _ok "payload prepended and original bytes preserved"
+else
+    _fail "infected content differs from expected"
+fi
 
 assert_contains /proc/rk_infect "infected=yes"
 assert_contains /proc/rk_infect "target=/tmp/rk_victim.sh"
@@ -48,17 +38,11 @@ assert_absent /proc/rk_infect
 
 # After unload, module should restore the original file
 restored=$(cat /tmp/rk_victim.sh)
-case "$restored" in
-    *"rootkit was here"*)
-        _fail "payload still present after unload"
-        ;;
-    *"echo clean"*)
-        _ok "original content restored after unload"
-        ;;
-    *)
-        _fail "unexpected content after unload: $restored"
-        ;;
-esac
+if [ "$restored" = "$original" ]; then
+    _ok "original content restored byte-for-byte"
+else
+    _fail "restored content differs from original"
+fi
 
 rm -f /tmp/rk_victim.sh
 

@@ -25,12 +25,10 @@ invalid data can crash the kernel. Every byte must be validated.
   +------------------+                +---------------------+
 ```
 
-## Reset the experiment
+## Simplify the previous module
 
-```bash
-git diff -- module/hello.c
-git restore module/hello.c
-```
+Keep the module lifecycle and metadata. Remove the ERR_PTR demonstration from
+ling 11; this lesson replaces it with one readable and writable proc entry.
 
 ## What to build
 
@@ -119,7 +117,6 @@ Use `proc_create("rk_store", 0666, NULL, &rk_ops)` with mode `0666`
 Inside the VM:
 
 ```sh
-cd /root
 insmod hello.ko
 cat /proc/rk_store
 echo "phantom" > /proc/rk_store

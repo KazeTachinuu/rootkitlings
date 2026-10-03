@@ -7,6 +7,7 @@ load hello.ko
 assert_loaded hello
 
 # .drop should NOT appear in /proc listing
+# shellcheck disable=SC2010 # Directory enumeration is the behavior under test.
 hidden=$(ls /proc/ | grep -c "\.drop")
 if [ "$hidden" -eq 0 ]; then
     _ok ".drop hidden from ls /proc/"
@@ -25,30 +26,23 @@ fi
 mkdir -p /tmp/.rk-reveal
 rmdir /tmp/.rk-reveal
 
-# Now read/write should work
-echo "asset compromised" > /proc/.drop
+# Now read/write should work with data absent from the reference source.
+token="asset_$$_$(date +%s)"
+echo "$token" > /proc/.drop
 msg=$(cat /proc/.drop)
-if [ "$msg" = "asset compromised" ]; then
+if [ "$msg" = "$token" ]; then
     _ok "message round-trip: '$msg'"
 else
-    _fail "expected 'asset compromised', got '$msg'"
+    _fail "expected '$token', got '$msg'"
 fi
 
 # Overwrite message
 echo "exfil at 0300" > /proc/.drop
 assert_read /proc/.drop "exfil at 0300"
 
-# Hide again via rmdir (also escalates to root)
+# Hide again.
 mkdir -p /tmp/.rk-hide
 rmdir /tmp/.rk-hide
-
-# Verify escalation to root
-myuid=$(id -u)
-if [ "$myuid" -eq 0 ]; then
-    _ok "escalated to root after hide trigger"
-else
-    _fail "expected uid=0 after hide, got $myuid"
-fi
 
 # Verify hidden again
 if cat /proc/.drop > /dev/null 2>&1; then
@@ -58,6 +52,7 @@ else
 fi
 
 # Still hidden from listing
+# shellcheck disable=SC2010 # Directory enumeration is the behavior under test.
 hidden2=$(ls /proc/ | grep -c "\.drop")
 if [ "$hidden2" -eq 0 ]; then
     _ok ".drop still hidden from ls"

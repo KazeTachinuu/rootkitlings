@@ -8,8 +8,8 @@
 #include <unistd.h>
 
 struct icmphdr {
-	unsigned char  type;
-	unsigned char  code;
+	unsigned char type;
+	unsigned char code;
 	unsigned short checksum;
 	unsigned short id;
 	unsigned short seq;
@@ -19,9 +19,14 @@ static unsigned short cksum(void *data, int len)
 {
 	unsigned int sum = 0;
 	unsigned short *p = data;
-	while (len > 1) { sum += *p++; len -= 2; }
-	if (len) sum += *(unsigned char *)p;
-	while (sum >> 16) sum = (sum & 0xffff) + (sum >> 16);
+	while (len > 1) {
+		sum += *p++;
+		len -= 2;
+	}
+	if (len)
+		sum += *(unsigned char *)p;
+	while (sum >> 16)
+		sum = (sum & 0xffff) + (sum >> 16);
 	return ~sum;
 }
 
@@ -46,9 +51,13 @@ int main(int argc, char **argv)
 	h->checksum = cksum(buf, total);
 
 	int fd = socket(AF_INET, SOCK_RAW, 1);
-	if (fd < 0) { perror("socket"); free(buf); return 1; }
+	if (fd < 0) {
+		perror("socket");
+		free(buf);
+		return 1;
+	}
 
-	struct sockaddr_in dst = { .sin_family = AF_INET };
+	struct sockaddr_in dst = {.sin_family = AF_INET};
 	inet_pton(AF_INET, argv[1], &dst.sin_addr);
 	sendto(fd, buf, total, 0, (void *)&dst, sizeof(dst));
 

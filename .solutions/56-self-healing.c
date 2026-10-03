@@ -62,7 +62,7 @@ static int watchdog_fn(void *data)
 		}
 
 		if (!entry) {
-			entry = proc_create("rk_watchdog", 0666, NULL,
+			entry = proc_create("rk_watchdog", 0600, NULL,
 					    &heal_proc_ops);
 			if (entry) {
 				atomic_inc(&heal_count);
@@ -76,7 +76,7 @@ static int watchdog_fn(void *data)
 
 static int __init watchdog_init(void)
 {
-	entry = proc_create("rk_watchdog", 0666, NULL, &heal_proc_ops);
+	entry = proc_create("rk_watchdog", 0600, NULL, &heal_proc_ops);
 	if (!entry)
 		return -ENOMEM;
 

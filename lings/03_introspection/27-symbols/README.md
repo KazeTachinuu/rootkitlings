@@ -2,10 +2,9 @@
 
 ## Why this step
 
-Not all kernel functions are exported for modules. The portable trick:
+Not all kernel functions are exported for modules. One version-sensitive trick:
 register a kprobe on the symbol name, read `kp.addr`, unregister. This
-gives you a function pointer to any kernel symbol. Every modern rootkit
-uses this pattern.
+resolves symbols that kprobes permits on the running kernel.
 
 ## The concept
 
@@ -27,8 +26,9 @@ uses this pattern.
      as a symbol resolver.
 ```
 
-Since kernel 5.7, `kallsyms_lookup_name` is no longer exported to
-modules. This trick is the standard workaround every modern rootkit uses.
+Since kernel 5.7, `kallsyms_lookup_name` is no longer exported to modules.
+This workaround is not a stable module API: kprobe restrictions and kernel
+configuration can reject a target.
 
 ## What you need
 
@@ -69,9 +69,9 @@ static unsigned long lookup_name(const char *name)
 The kprobe never fires. `register_kprobe` resolves the symbol name
 to an address internally. You read `kp.addr` and immediately unregister.
 
-Why not just call `kallsyms_lookup_name` directly? Since kernel 5.7,
-it is no longer exported to modules. The kprobe trick is the standard
-workaround used by every modern rootkit.
+Why not just call `kallsyms_lookup_name` directly? Since kernel 5.7, it is no
+longer exported to modules. The exercise demonstrates how offensive code works
+around that boundary on the course kernel.
 
 ## Try it
 
@@ -96,14 +96,18 @@ The check script verifies:
 - The address is stable across reads.
 - `/proc/rk_symbols` disappears after unload.
 
+Do not require byte-for-byte equality with `/proc/kallsyms`. On x86, kprobe
+registration may move the probe past an entry instruction such as ENDBR, so
+`kp.addr` can be a few bytes after the symbol's published start address.
+
 ## Verify
 
 ```bash
 ./rootkitlings check 27
 ```
 
-> **What a defender sees**: the kprobe registration and unregistration
-> is logged briefly in debugfs. `ftrace` shows the transient probe.
-> A defender watching kprobe events in real time would catch this.
+> **What a defender sees**: after immediate unregister, no persistent probe is
+> left in the kprobe list. The module, its proc output, and runtime monitoring
+> around probe registration remain detection opportunities.
 
 See also: [28 - Kernel random](../28-kernel-random/README.md).

@@ -39,7 +39,7 @@ static ssize_t entries_write(struct file *file, const char __user *buf,
 	if (count >= sizeof(e->text))
 		return -EINVAL;
 
-	e = kmalloc(sizeof(*e), GFP_KERNEL);
+	e = kmalloc_obj(*e, GFP_KERNEL);
 	if (!e)
 		return -ENOMEM;
 
@@ -76,7 +76,7 @@ static void purge_entries(void)
 
 static int __init registry_init(void)
 {
-	proc_entry = proc_create("rk_registry", 0666, NULL, &entries_proc_ops);
+	proc_entry = proc_create("rk_registry", 0600, NULL, &entries_proc_ops);
 	if (!proc_entry)
 		return -ENOMEM;
 

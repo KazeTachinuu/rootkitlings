@@ -9,7 +9,7 @@ simpler, but limited to one variable at a time.
 ## The concept
 
 ```
-  Without atomic (the race from ling 21):
+  A plain read-modify-write can lose an update:
 
   Thread A                Thread B
   read counter (500)      read counter (500)
@@ -59,7 +59,7 @@ atomic_read(&var);                // read current value
 atomic_set(&var, value);          // set to value
 ```
 
-Take ling 21's `increment_fn` and replace `counter++` with
+Take the two-worker counter and replace the mutex-protected increment with
 `atomic_inc`. No mutex needed, no lock/unlock wrapper. Read
 the values in your proc callback with `atomic_read`.
 

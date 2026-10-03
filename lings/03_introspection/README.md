@@ -14,6 +14,6 @@ Credential escalation (ling 26) is the classic rootkit backdoor: signal a
 process, it becomes root. Diamorphine does this with `kill -63`. Every UID 0
 transition is visible in the audit subsystem.
 
-Ling 27 teaches symbol resolution via the kprobe trick: register a kprobe
-on the symbol name, read `kp.addr`, unregister. Works on any kernel with
-kprobes enabled. Every modern rootkit uses this pattern.
+Ling 27 demonstrates symbol resolution through kprobe registration: register
+the name, read `kp.addr`, then unregister. It depends on the target symbol and
+the kernel's kprobe policy, and the registration is observable while active.

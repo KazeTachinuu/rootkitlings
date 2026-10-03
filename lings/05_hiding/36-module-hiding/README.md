@@ -3,13 +3,13 @@
 ## Why this step
 
 `lsmod` reads the kernel's module list. Remove your module from
-that list and it disappears from `lsmod`. This is what Diamorphine,
-Reptile, and every LKM rootkit does first.
+that list and it disappears from `lsmod`. Diamorphine is one public example of
+this technique.
 
 ## What you already know
 
 From ling 08, you created `/proc/rk_cloak`. From the hooking lings,
-you installed kernel hooks. This ling makes the module itself invisible.
+you installed kernel hooks. This ling removes one enumeration view.
 
 ## Build it
 
@@ -32,8 +32,6 @@ list_del_init(&THIS_MODULE->list);
 
 Save `THIS_MODULE->list.prev` before deleting, in case you want to
 re-insert later (toggle visibility).
-
-## Hints
 
 ## Try it
 
@@ -69,4 +67,4 @@ The check script verifies:
 > still exists. Cross-view diffing catches this: compare `lsmod` output
 > with `ls /sys/module/`. Any module in sysfs but not in lsmod is hidden.
 
-See also: [37 - Sysfs cleanup](../37-sysfs-cleanup/README.md).
+See also: [37 - Sysfs hiding](../37-sysfs-hiding/README.md).

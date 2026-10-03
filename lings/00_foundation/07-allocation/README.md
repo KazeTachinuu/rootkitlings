@@ -8,18 +8,11 @@ existing?
 
 Init allocates one object; exit releases it.
 
-## Reset the experiment
+## Simplify the previous module
 
-First inspect the experiment you are about to discard, then restore the
-repository's minimal module:
-
-```bash
-git diff -- module/hello.c
-git restore module/hello.c
-```
-
-`git restore` replaces the working copy of this one file with its committed
-version. It deliberately discards the parameter edits from lings 05 and 06.
+Keep the module includes, init function, exit function, registration macros,
+license, and description. Remove the `name` parameter and its callback from
+lings 05-06; this lesson replaces that experiment with owned heap state.
 
 ## Add one owned object
 
@@ -38,18 +31,19 @@ static struct rk_state *state;
 
 This declares a structure type and a pointer. No object is allocated yet.
 
-In your init function, allocate the struct with `kmalloc`. The pattern:
+In your init function, allocate the struct with Linux 7.2's typed allocator:
 
 ```c
-state = kmalloc(sizeof(*state), GFP_KERNEL);
+state = kmalloc_obj(*state, GFP_KERNEL);
 ```
 
-`kmalloc` returns a pointer to kernel heap memory, or `NULL` on failure.
-`sizeof(*state)` follows the pointed-to type without repeating its name.
+`kmalloc_obj` derives the allocation size from the object type, so the size
+cannot drift when the pointer type changes. It returns a pointer to kernel heap
+memory, or `NULL` on failure.
 `GFP_KERNEL` permits sleeping (safe in module init, which runs in process
 context).
 
-If `kmalloc` returns `NULL`, init must return `-ENOMEM` (from ling 04,
+If `kmalloc_obj` returns `NULL`, init must return `-ENOMEM` (from ling 04,
 you know a negative return rejects the load). Otherwise, set the value
 to 42 and log it.
 
@@ -62,7 +56,7 @@ Log that state was freed.
          insmod              loaded              rmmod
            |                   |                   |
            v                   v                   v
-  init:  kmalloc ---------> return 0            exit:
+  init: kmalloc_obj ------> return 0            exit:
            |                   |                   |
            v                   |                kfree
         state ---> *state      |                   |
@@ -74,7 +68,7 @@ Log that state was freed.
            v         v         v
  
   state    |=========|=========|=================|        static storage
-  *state         |=========================|              heap (kmalloc..kfree)
+  *state         |=========================|              heap (allocate..free)
   locals   |===|                                          stack (one call)
   code     |=========|=========|=================|        module memory
                  init    loaded         exit
@@ -83,16 +77,15 @@ Log that state was freed.
 | Item | Storage | Lifetime |
 |---|---|---|
 | `state` pointer | Static | Loaded module |
-| `*state` object | Kernel heap | `kmalloc` to `kfree` |
+| `*state` object | Kernel heap | `kmalloc_obj` to `kfree` |
 | Local variables | Init stack | One function call |
 | Init function code | Module memory | Load to unload |
 
 ## Contract
 
-The check script verifies:
-
-- `dmesg` contains `42` (the allocated value is logged).
-- The module loads and unloads cleanly twice (no resource leak).
+The host check verifies that `hello.ko` links against both allocation and free
+symbols. The guest check loads, unloads, and repeats the cycle without a kernel
+warning.
 
 ## Try it
 
@@ -103,7 +96,6 @@ The check script verifies:
 Inside the VM:
 
 ```sh
-cd /root
 insmod hello.ko
 dmesg | tail
 rmmod hello
@@ -116,8 +108,10 @@ dmesg | tail
 ./rootkitlings check 7
 ```
 
-The check also reloads the module to verify no resource leak from the first run.
-> **What a defender sees**: if init returns an error after `kmalloc`, exit never runs.
+Reload catches stale module state and incomplete teardown. The linked symbols
+prove that both operations exist, not that every control-flow path pairs them;
+that stronger question needs review or instrumentation such as kmemleak.
+> **What a defender sees**: if init returns an error after allocation, exit never runs.
 > The allocated memory leaks permanently. The kernel has no garbage collector.
 
 See also: [08 - Rollback](../08-rollback/README.md).

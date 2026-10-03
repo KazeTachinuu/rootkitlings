@@ -10,6 +10,7 @@ assert_exists /proc/rk_dirfilter
 assert_read /proc/rk_dirfilter "hidden"
 
 # But ls should not show it
+# shellcheck disable=SC2010 # Directory enumeration is the behavior under test.
 if ls /proc/ | grep -q "^rk_dirfilter$"; then
     _fail "rk_dirfilter visible in ls /proc/"
 else

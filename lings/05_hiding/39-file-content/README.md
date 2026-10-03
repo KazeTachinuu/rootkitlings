@@ -33,9 +33,9 @@ same pattern to the read syscall.
     |
     ret_handler:
     +---> check if fd points to target file
-    +---> copy_from_user into kbuf
+    +---> copy_from_user_nofault into kbuf
     +---> strstr(kbuf, "SECRET") -> replace with "XXXXXX"
-    +---> copy_to_user back
+    +---> copy_to_user_nofault back
     |
     v
   userspace sees: "data XXXXXX data"
@@ -48,6 +48,9 @@ The file on disk is untouched. Only the read path is filtered.
 Hook `__x64_sys_read` with a kretprobe (same entry+return pattern as
 ling 38). Your context struct stores `fd` and `ubuf` from the entry
 handler.
+
+Allocate callback scratch space with `GFP_ATOMIC` and use no-fault user-copy
+helpers. On failure, preserve the original read result.
 
 The return handler:
 
@@ -64,8 +67,6 @@ You need `linux/file.h` for `fdget`/`fdput` (new to this ling) and
 `linux/fdtable.h` for `fd_file()`.
 
 Also create `/proc/rk_content` that reports `redactions=N`.
-
-## Hints
 
 ## Try it
 
