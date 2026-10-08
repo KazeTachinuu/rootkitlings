@@ -27,3 +27,4 @@ __pycache__/
 tools/icmp_send
 tools/ioctl_test
 tools/cred_trigger_test
+tools/module_load_test
