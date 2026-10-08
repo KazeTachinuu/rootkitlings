@@ -27,7 +27,7 @@ Exit the shell to power off the guest.
 Add a QEMU user-network device when a networking lesson needs one:
 
 ```bash
-./rootkitlings run --network
+./rootkitlings run --cap network
 ```
 
 The guest uses `10.0.2.15`; the host is reachable at `10.0.2.2`.

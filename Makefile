@@ -1,28 +1,32 @@
 KDIR ?= /lib/modules/$(shell uname -r)/build
 MODULE_DIR := $(CURDIR)/module
 
-.PHONY: all clean doctor editor test-references validate validate-quick vm tools
+.PHONY: all clean compile-db test-solutions doctor validate validate-quick vm tools
 all: tools
 	$(MAKE) -C "$(KDIR)" M="$(MODULE_DIR)" W=1 modules
 
-tools: tools/icmp_send
+tools: tools/cred_trigger_test tools/icmp_send tools/ioctl_test
+
+tools/cred_trigger_test: tools/cred_trigger_test.c
+	$(CC) -static -o $@ $<
 
 tools/icmp_send: tools/icmp_send.c
 	$(CC) -static -o $@ $<
 
+tools/ioctl_test: tools/ioctl_test.c
+	$(CC) -static -o $@ $<
+
 clean:
-	$(MAKE) -C "$(KDIR)" M="$(MODULE_DIR)" clean
-	@for d in capstones/*/; do \
+	@for d in module lings/*/* capstones/*; do \
 		[ -f "$$d/Kbuild" ] && $(MAKE) -C "$(KDIR)" M="$(CURDIR)/$$d" clean 2>/dev/null; \
 	done; true
-	rm -f tools/icmp_send
-	rm -f compile_commands.json
+	rm -f tools/cred_trigger_test tools/icmp_send tools/ioctl_test
 	rm -f modules.order Module.symvers .modules.order.cmd .Module.symvers.cmd
 
 doctor:
 	@"$(CURDIR)/scripts/doctor"
 
-editor: clean
+compile-db: clean
 	bear -- $(MAKE) -C "$(KDIR)" M="$(MODULE_DIR)" W=1 modules
 	@python3 scripts/expand-compile-db
 
@@ -35,5 +39,5 @@ validate:
 validate-quick:
 	@"$(CURDIR)/scripts/validate" --quick
 
-test-references:
-	@"$(CURDIR)/scripts/test-references"
+test-solutions:
+	@"$(CURDIR)/scripts/test-solutions"

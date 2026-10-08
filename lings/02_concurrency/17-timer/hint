@@ -1,1 +1,0 @@
-timer_setup + mod_timer. Re-arm inside the callback for periodic.

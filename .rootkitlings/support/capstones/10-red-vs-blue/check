@@ -1,0 +1,92 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "10-red-vs-blue"
+
+request=/etc/modules-load.d/glasshouse.conf
+rm -f "$request"
+probe_before=$(grep -c '__x64_sys_getdents64' \
+    /sys/kernel/debug/kprobes/list || true)
+
+load hello.ko
+
+_hdr "red view"
+if lsmod | grep -q '^hello '; then
+    _fail "hello remains visible in lsmod"
+else
+    _ok "hello absent from lsmod"
+fi
+
+if ls -a /proc | grep -qx '.rk'; then
+    _fail ".rk remains visible in proc enumeration"
+else
+    _ok ".rk absent from proc enumeration"
+fi
+
+_hdr "blue evidence"
+assert_exists /sys/module/hello
+if stat /proc/.rk >/dev/null 2>&1; then
+    _ok "direct lookup finds /proc/.rk"
+else
+    _fail "direct lookup did not find /proc/.rk"
+fi
+assert_contains /proc/.rk "module_hidden=yes"
+assert_contains /proc/.rk "boot_request=present"
+
+mkdir -p /tmp/glasshouse-scope
+: >/tmp/glasshouse-scope/.rk
+if ls -a /tmp/glasshouse-scope | grep -qx '.rk'; then
+    _ok "same name outside procfs remains visible"
+else
+    _fail "directory filter escaped procfs"
+fi
+
+identity=$(chpst -u 65534:65534 \
+    cred_trigger_test /proc/.rk escalate 2>/dev/null)
+if [ "$identity" = "uid=0 euid=0" ]; then
+    _ok "same unprivileged caller became root"
+else
+    _fail "credential trigger returned: ${identity:-nothing}"
+fi
+assert_contains /proc/.rk "escalations=1"
+
+bytes=$(wc -c <"$request")
+content=$(cat "$request")
+if [ "$bytes" -eq 6 ] && [ "$content" = hello ]; then
+    _ok "boot request contains exact module name"
+else
+    _fail "boot request has unexpected bytes"
+fi
+
+probe_loaded=$(grep -c '__x64_sys_getdents64' \
+    /sys/kernel/debug/kprobes/list || true)
+if [ "$probe_loaded" -eq $((probe_before + 1)) ]; then
+    _ok "getdents64 probe registered"
+else
+    _fail "getdents64 probe count did not increase by one"
+fi
+
+_hdr "reveal and remove"
+printf reveal >/proc/.rk
+assert_contains /proc/.rk "module_hidden=no"
+if lsmod | grep -q '^hello '; then
+    _ok "hello returned to lsmod"
+else
+    _fail "reveal did not restore the module list entry"
+fi
+
+unload hello
+assert_absent /proc/.rk
+assert_absent /sys/module/hello
+assert_absent "$request"
+
+probe_after=$(grep -c '__x64_sys_getdents64' \
+    /sys/kernel/debug/kprobes/list || true)
+if [ "$probe_after" -eq "$probe_before" ]; then
+    _ok "getdents64 probe removed"
+else
+    _fail "getdents64 probe count did not return to baseline"
+fi
+
+rm -rf /tmp/glasshouse-scope
+summary

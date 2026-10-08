@@ -1,0 +1,1 @@
+XOR transforms each byte independently and is its own inverse. Walk exactly the supplied length, combining each input byte with the key into the corresponding output position.

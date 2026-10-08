@@ -1,71 +1,116 @@
-# Capstone 0: Config store
+# Live configuration store
 
-Build an in-kernel key/value store controlled through `/proc/rk_cfg`.
+A long-running kernel component needs settings that can change without unloading it.
 
-## Use what you learned
+This module keeps named values in kernel memory and exposes them through `/proc/rk_cfg`.
 
-- proc read and write callbacks
-- `copy_from_user()` at the userspace boundary
-- heap allocation and linked-list cleanup
-- `seq_file` for formatted output
-- `call_usermodehelper()` for the `exec` command
-
-## Commands
-
-| Write to `/proc/rk_cfg` | Result |
-|-------------------------|--------|
-| `set:key=value` | Add or replace one entry |
-| `del:key` | Delete one entry |
-| `exec:command` | Run a command and store stdout in `_result` |
-
-Reading `/proc/rk_cfg` returns one `key=value` pair per line.
-
-The `exec` path reuses ling 16 exactly:
+Each write performs one operation:
 
 ```text
-call_usermodehelper("/bin/sh", "-c", command > temporary file)
-        | wait for the child
-        v
-kernel_read(temporary file) ---> set_entry("_result", output)
-        |
-        +----------------------> rm -f temporary file
+set:<key>=<value>    create or replace a value
+del:<key>            delete a value
 ```
 
-Use a fixed-size command buffer, check `call_usermodehelper()`, `filp_open()`,
-and `kernel_read()`, and close the file on every path where it was opened. The
-cleanup helper uses a fixed path; user-controlled text must never be inserted
-into its `rm` command.
+Reading the entry lists the current values in insertion order.
+
+## Operate it
+
+Load the module and add two settings:
 
 ```sh
 insmod hello.ko
-echo 'set:target=192.168.1.1' > /proc/rk_cfg
+echo 'set:target=192.168.1.10' > /proc/rk_cfg
 echo 'set:interval=60' > /proc/rk_cfg
 cat /proc/rk_cfg
-# target=192.168.1.1
-# interval=60
+```
 
-echo 'exec:uname -r' > /proc/rk_cfg
-grep _result /proc/rk_cfg
+```text
+target=192.168.1.10
+interval=60
+```
 
+Replace one value and delete the other:
+
+```sh
+echo 'set:interval=30' > /proc/rk_cfg
 echo 'del:target' > /proc/rk_cfg
-rmmod hello
+cat /proc/rk_cfg
 ```
 
-## Ownership
-
-Each list node is allocated when its key is first set and freed when the key is
-deleted or the module unloads. The proc entry is removed on unload. The command
-output file is temporary and must not survive cleanup.
-
-## Contract
-
-The check verifies an empty initial store, insert, replacement, deletion,
-multiple entries, command output, and cleanup after unload.
-
-```bash
-./rootkitlings check capstone-0
+```text
+interval=30
 ```
 
-> **What a defender sees**: `/proc/rk_cfg`, the loaded module, the temporary
-> output file while a command runs, and the userspace process spawned by the
-> helper.
+Setting an existing key updates its list item instead of creating a duplicate.
+
+Malformed, empty, and oversized commands fail without changing the store.
+
+## Command and ownership flow
+
+```text
+write /proc/rk_cfg
+         |
+         v
+  copy and parse command
+         |
+         v
+  lock -> find / add / delete -> unlock
+         |
+         v
+read /proc/rk_cfg as key=value lines
+```
+
+`proc.c` owns the userspace boundary.
+
+It bounds and copies one command before parsing it.
+
+`store.c` owns the list and its mutex.
+
+Every new item is allocated when `set:` succeeds and freed by `del:` or module removal.
+
+`config_store_find()` returns a pointer into the list, so callers use it only while holding `config_lock`.
+
+## Files
+
+```text
+main.c      proc-entry lifecycle and final store cleanup
+proc.c      bounded command copy, parsing and dispatch
+store.c     mutex, list items and store operations
+config.h    shared sizes and component contracts
+```
+
+Kbuild links those translation units into one `hello.ko`.
+
+## Your work
+
+Complete `config_write()` in `proc.c`.
+
+Reject empty input and any command that cannot fit in `CONFIG_COMMAND_SIZE`.
+
+Copy exactly `count` bytes, append a null byte, trim surrounding whitespace, and dispatch `set:` or `del:`.
+
+For `set:`, split at the first `=` and reject a missing separator.
+
+Return the original byte count only when the operation succeeds.
+
+Complete the store operations in `store.c`.
+
+`config_store_set()` must reject empty or oversized fields, replace an existing value under the mutex, or allocate and append one new item.
+
+`config_store_delete()` must unlink and free the matching item when it exists.
+
+`config_store_show()` must emit one `key=value` line per item while the list is protected.
+
+`config_store_clear()` must safely unlink and free every remaining item during unload.
+
+Every error path must release the mutex and preserve existing entries.
+
+## Verify
+
+```sh
+./rootkitlings check C00
+```
+
+The verification performs real insert, replacement, deletion, malformed-input, oversized-input, concurrent-access, and unload operations against the module.
+
+The proc entry, loaded module, and stored settings remain visible to ordinary system inspection.

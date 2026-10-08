@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "C09"
+sequence = 63
+title = "Authenticated DNS signal"
+difficulty = "challenge"
+prerequisites = ["L47", "L52", "L53"]
+teaches = ["authenticated-dns-signals"]
+requires = ["dns-wire-encoding", "hmac-authentication", "keyed-domain-generation"]
+vm_capabilities = []
+edit_paths = ["capstones/9-dns-c2/auth.c", "capstones/9-dns-c2/dns.c", "capstones/9-dns-c2/dns_c2.h", "capstones/9-dns-c2/main.c"]

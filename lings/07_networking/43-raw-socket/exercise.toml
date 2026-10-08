@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L43"
+sequence = 50
+title = "Create a kernel-owned socket"
+difficulty = "advanced"
+prerequisites = ["L00"]
+teaches = ["kernel-sockets"]
+requires = ["module-lifecycle"]
+vm_capabilities = []
+edit_paths = ["lings/07_networking/43-raw-socket/hello.c"]

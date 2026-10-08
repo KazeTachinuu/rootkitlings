@@ -1,451 +1,370 @@
 #!/usr/bin/bash
 set -Eeuo pipefail
+trap 'exit 0' PIPE
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-PROGRESS="$ROOT_DIR/.progress"
-ORDER="$ROOT_DIR/.order"
-
-# -- colors --
+PROGRESS="$ROOT_DIR/.rootkitlings/progress"
+SNAPSHOTS="$ROOT_DIR/.rootkitlings/snapshots"
+CATALOG="$ROOT_DIR/scripts/catalog"
 
 _use_color() { [ -t "$1" ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != dumb ]; }
-
 if _use_color 2; then
-    B='\033[1;34m' G='\033[1;32m' Y='\033[1;33m' R='\033[1;31m'
-    C='\033[1;36m' D='\033[2m' N='\033[0m'
-else
-    B='' G='' Y='' R='' C='' D='' N=''
-fi
-
+    B='\033[1;34m' G='\033[1;32m' Y='\033[1;33m' R='\033[1;31m' D='\033[2m' N='\033[0m'
+else B='' G='' Y='' R='' D='' N=''; fi
 if _use_color 1; then
-    OB='\033[1;34m' OG='\033[1;32m' OY='\033[1;33m'
-    OC='\033[1;36m' OW='\033[1;37m' OD='\033[2m' ON='\033[0m'
-else
-    OB='' OG='' OY='' OC='' OW='' OD='' ON=''
-fi
+    OB='\033[1;34m' OG='\033[1;32m' OY='\033[1;33m' OC='\033[1;36m' OW='\033[1;37m' OD='\033[2m' ON='\033[0m'
+else OB='' OG='' OY='' OC='' OW='' OD='' ON=''; fi
+hdr()  { printf "${B}%s${N}\n" "$1" >&2; }
+ok()   { printf "${G}Done:${N} %s\n" "$1" >&2; }
+info() { printf "${D}Info:${N} %s\n" "$1" >&2; }
+warn() { printf "${Y}Warning:${N} %s\n" "$1" >&2; }
+die()  { printf "${R}Error:${N} %s\n" "$1" >&2; exit 1; }
 
-hdr()  { printf "${B}[*]${N} %s\n" "$1" >&2; }
-ok()   { printf "${G}[+]${N} %s\n" "$1" >&2; }
-info() { printf "${D}[.]${N} %s\n" "$1" >&2; }
-warn() { printf "${Y}[-]${N} %s\n" "$1" >&2; }
-die()  { printf "${R}[x]${N} %s\n" "$1" >&2; exit 1; }
+# Load one validated catalog export. Exercise identity, order, environment,
+# source layout, and editable paths all come from scripts/catalog.
+declare -a EXERCISES=()
+declare -A SEQUENCE=() PATH_OF=() TITLE=() SECTION=() DIFFICULTY=()
+declare -A PREREQS=() TEACHES=() REQUIRES=() CAPS=() WORKSPACE=() EDIT_PATHS=() SOLUTION=()
+while IFS=$'\x1f' read -r serial sequence path title section difficulty prerequisites teaches requires capabilities workspace edit_paths solution; do
+    [[ -n $serial ]] || continue
+    EXERCISES+=("$serial")
+    SEQUENCE[$serial]=$sequence PATH_OF[$serial]=$path TITLE[$serial]=$title
+    SECTION[$serial]=$section DIFFICULTY[$serial]=$difficulty
+    PREREQS[$serial]=$prerequisites TEACHES[$serial]=$teaches REQUIRES[$serial]=$requires
+    CAPS[$serial]=$capabilities WORKSPACE[$serial]=$workspace
+    EDIT_PATHS[$serial]=$edit_paths SOLUTION[$serial]=$solution
+    [[ ${PREREQS[$serial]} == - ]] && PREREQS[$serial]=''
+    [[ ${REQUIRES[$serial]} == - ]] && REQUIRES[$serial]=''
+    [[ ${CAPS[$serial]} == - ]] && CAPS[$serial]=''
+done < <("$CATALOG" export)
+(( ${#EXERCISES[@]} > 0 )) || die "Catalog contains no exercises"
 
-# -- .order (loaded once) --
-
-ORDER_LIST=()
-while IFS= read -r _line; do
-    [[ -z $_line || $_line == \#* ]] && continue
-    ORDER_LIST+=("$_line")
-done < "$ORDER"
-
-(( ${#ORDER_LIST[@]} > 0 )) || die "No exercises found in $ORDER"
-
-order_count() { printf '%s' "${#ORDER_LIST[@]}"; }
-entry_at()    { printf '%s' "${ORDER_LIST[$1]}"; }
-
-index_of()
-{
-    local target=$1 i
-    for i in "${!ORDER_LIST[@]}"; do
-        [[ ${ORDER_LIST[$i]} == "$target" ]] && printf '%s' "$i" && return
-    done
-    return 1
-}
-
-# -- entry helpers --
-
-entry_name()  { basename "$1"; }
-is_capstone() { [[ $1 == capstones/* ]]; }
-
-build_dir()
-{
-    local entry=${1:-$(current_entry)}
-    if is_capstone "$entry"; then
-        printf '%s' "$ROOT_DIR/$entry"
-    else
-        printf '%s' "$ROOT_DIR/module"
-    fi
-}
-
-sol_path()
-{
-    local name
-    name=$(entry_name "$1")
-    local dir="$ROOT_DIR/.solutions/$name"
-    [[ -d $dir ]] && printf '%s' "$dir" && return
-    local file="$ROOT_DIR/.solutions/$name.c"
-    [[ -f $file ]] && printf '%s' "$file" && return
-    return 1
-}
-
-# -- progress --
-
-current_pos()
-{
-    local p=0
+current_pos() {
+    local pos=0 total=${#EXERCISES[@]}
     if [[ -f $PROGRESS ]]; then
-        IFS= read -r p < "$PROGRESS" || true
-        [[ $p =~ ^[0-9]+$ ]] || die "Invalid progress in $PROGRESS; expected a number"
+        IFS= read -r pos < "$PROGRESS" || true
+        [[ $pos =~ ^[0-9]+$ ]] || die "Saved course progress is invalid (expected a number)."
     fi
-    local total
-    total=$(order_count)
-    (( p > total )) && p=$total
-    printf '%s' "$p"
+    (( pos > total )) && pos=$total
+    printf '%s' "$pos"
+}
+current_entry() {
+    local pos; pos=$(current_pos)
+    (( pos < ${#EXERCISES[@]} )) || die "Course complete; specify an exercise to revisit (for example L00 or C00)"
+    printf '%s' "${EXERCISES[$pos]}"
+}
+resolve_entry() {
+    if [[ -z ${1:-} ]]; then current_entry; return; fi
+    local path serial; path=$("$CATALOG" resolve "$1") || exit $?
+    for serial in "${EXERCISES[@]}"; do
+        [[ ${PATH_OF[$serial]} == "$path" ]] && { printf '%s' "$serial"; return; }
+    done
+    die "Catalog resolved '$1' to an unlisted exercise"
+}
+display_selector() {
+    printf '%s' "$1"
+}
+kind_label() { [[ $1 == L* ]] && printf 'Ling' || printf 'Capstone'; }
+display_csv() {
+    local value result=''
+    while IFS= read -r value; do
+        [[ -n $value ]] || continue
+        result+="${result:+, }$value"
+    done < <(csv_each "$1")
+    printf '%s' "$result"
+}
+csv_each() {
+    [[ -n $1 ]] || return
+    local IFS=,; read -ra CSV_ITEMS <<< "$1"; printf '%s\n' "${CSV_ITEMS[@]}"
 }
 
-current_entry()
-{
-    local pos
+show_source() {
+    if command -v bat &>/dev/null; then bat --style=plain --paging=never "$1"
+    elif command -v batcat &>/dev/null; then batcat --style=plain --paging=never "$1"
+    else cat "$1"; fi
+}
+show_markdown() {
+    local width=${COLUMNS:-80}; (( width > 100 )) && width=100
+    if command -v glow &>/dev/null; then glow -w "$width" "$1"
+    elif command -v bat &>/dev/null; then bat --style=plain --paging=never --language=markdown "$1"
+    elif command -v batcat &>/dev/null; then batcat --style=plain --paging=never --language=markdown "$1"
+    else cat "$1"; fi
+}
+cumulative_save_dir() { printf '%s/%s' "$SNAPSHOTS" "$1"; }
+cumulative_save_required() {
+    local directory; directory=$(cumulative_save_dir "$1")
+    [[ -f $directory/hello.c && -f $directory/Kbuild ]] ||
+        die "No saved source is available for $1: ${TITLE[$1]}. Your progress was created before per-exercise saves were introduced, so this earlier source cannot be recovered safely."
+}
+cumulative_uses_current_source() {
+    local serial=$1 pos
     pos=$(current_pos)
-    (( pos < $(order_count) )) || die "All exercises complete; specify one by number"
-    entry_at "$pos"
+    (( SEQUENCE[$serial] == pos )) && [[ -f $ROOT_DIR/module/hello.c && ! -L $ROOT_DIR/module/hello.c ]]
 }
-
-# -- argument resolution --
-
-resolve_arg()
-{
-    local arg=$1 e
-    if [[ $arg == capstone-* ]]; then
-        local id=${arg#capstone-}
-        for e in "${ORDER_LIST[@]}"; do
-            [[ $e == capstones/${id}-* ]] && printf '%s' "$e" && return
-        done
-        die "Unknown: $arg"
-    elif [[ $arg =~ ^[0-9]+$ ]]; then
-        local n=$arg
-        while [[ $n == 0* && ${#n} -gt 1 ]]; do
-            n=${n#0}
-        done
-        for e in "${ORDER_LIST[@]}"; do
-            [[ $e == lings/* ]] || continue
-            local entry_num
-            entry_num=$(entry_name "$e")
-            entry_num=${entry_num%%-*}
-            while [[ $entry_num == 0* && ${#entry_num} -gt 1 ]]; do
-                entry_num=${entry_num#0}
-            done
-            [[ $entry_num == "$n" ]] && printf '%s' "$e" && return
-        done
-        die "Ling $arg not found"
-    else
-        die "Invalid argument: '$arg'"
-    fi
-}
-
-resolve_entry()
-{
-    if [[ -n ${1:-} ]]; then
-        resolve_arg "$1"
-    else
-        current_entry
-    fi
-}
-
-# -- display --
-
-show_source()
-{
-    if command -v bat &>/dev/null; then
-        bat --style=plain --paging=never "$1"
-    elif command -v batcat &>/dev/null; then
-        batcat --style=plain --paging=never "$1"
-    else
-        cat "$1"
-    fi
-}
-
-show_markdown()
-{
-    if command -v glow &>/dev/null; then
-        glow -w 80 "$1"
-    elif command -v bat &>/dev/null; then
-        bat --style=plain --paging=never --language=markdown "$1"
-    elif command -v batcat &>/dev/null; then
-        batcat --style=plain --paging=never --language=markdown "$1"
-    else
-        cat "$1"
-    fi
-}
-
-# -- commands --
-
-cmd_check()
-{
-    local entry
-    entry=$(resolve_entry "${1:-}")
-    local name
-    name=$(entry_name "$entry")
-    local check_script="$ROOT_DIR/$entry/check"
-    local bdir
-    bdir=$(build_dir "$entry")
-
-    [[ -f $check_script ]] || die "No check script for $name"
-
-    hdr "Checking $name"
-    make -C "$ROOT_DIR" MODULE_DIR="$bdir" --quiet
-
-    local host_check="$ROOT_DIR/$entry/host-check"
-    if [[ -x $host_check ]]; then
-        "$host_check" "$bdir"
-    fi
-
-    local output vm_status=0
-    output=$(timeout --foreground "${ROOTKITLINGS_CHECK_TIMEOUT:-60}" \
-        "$ROOT_DIR/vm/boot" --check "$check_script" "$bdir/hello.ko" 2>&1) ||
-        vm_status=$?
-    printf '%s\n' "$output"
-
-    case "$vm_status:$output" in
-        0:*"[+] PASSED"*)
-            ok "$name passed"
-            local idx
-            idx=$(index_of "$entry") || return
-            local next=$(( idx + 1 ))
-            if (( next > $(current_pos) )); then
-                printf '%s\n' "$next" > "$PROGRESS"
-            fi
-            if (( next >= $(order_count) )); then
-                printf '\n' >&2
-                ok "All done."
-                return
-            fi
-            local next_entry
-            next_entry=$(entry_at "$next")
-            local next_name
-            next_name=$(entry_name "$next_entry")
-            printf '\n' >&2
-            if is_capstone "$next_entry"; then
-                hdr "Capstone time: $next_name"
-                info "Edit: $next_entry/hello.c"
-                info "rootkitlings readme capstone-${next_name%%-*}"
+build_dir() {
+    case ${WORKSPACE[$1]} in
+        project) printf '%s/%s' "$ROOT_DIR" "${PATH_OF[$1]}" ;;
+        single-file) printf '%s/module' "$ROOT_DIR" ;;
+        cumulative)
+            if cumulative_uses_current_source "$1"; then
+                printf '%s/module' "$ROOT_DIR"
             else
-                hdr "Next: $next_name"
-                info "rootkitlings readme $((10#${next_name%%-*}))"
-            fi
-            ;;
-        *)
-            printf '\n' >&2
-            local num=${name%%-*}
-            if is_capstone "$entry"; then
-                info "rootkitlings readme capstone-$num    Read the spec"
-                info "rootkitlings peek capstone-$num      See the reference"
-            else
-                info "rootkitlings readme $((10#$num))    Read the contract"
-                info "rootkitlings hint $((10#$num))      Get a nudge"
-                info "rootkitlings peek $((10#$num))      See the solution"
-            fi
-            die "$name failed"
-            ;;
+                cumulative_save_required "$1"
+                cumulative_save_dir "$1"
+            fi ;;
+        *) die "Course data error: unknown source layout '${WORKSPACE[$1]}'" ;;
     esac
 }
-
-cmd_readme()
-{
-    local entry
-    entry=$(resolve_entry "${1:-}")
-    local name
-    name=$(entry_name "$entry")
-    local readme="$ROOT_DIR/$entry/README.md"
-    [[ -f $readme ]] || die "No README for $name"
-    hdr "$name"
-    show_markdown "$readme"
+capability_args() {
+    local cap
+    while IFS= read -r cap; do
+        [[ -n $cap ]] && printf '%s\n%s\n' --cap "$cap"
+    done < <(csv_each "${CAPS[$1]}")
 }
-
-cmd_hint()
-{
-    local entry
-    entry=$(resolve_entry "${1:-}")
-    local name
-    name=$(entry_name "$entry")
-    local hint="$ROOT_DIR/$entry/hint"
-
-    if [[ ! -f $hint ]]; then
-        if is_capstone "$entry"; then
-            hdr "Hint: $name"
-            info "Re-read the README. The contract tells you exactly what to build."
-            info "rootkitlings readme capstone-${name%%-*}"
-        else
-            warn "No hint for $name"
-            info "rootkitlings readme $((10#${name%%-*}))"
-        fi
-        return
-    fi
-
-    printf "${C}[*]${N} ${C}Hint: %s${N}\n" "$name" >&2
-    cat "$hint"
+print_edit_paths() {
+    local path
+    if [[ -z ${EDIT_PATHS[$1]} ]]; then info "No source edit is required"; return; fi
+    while IFS= read -r path; do [[ -n $path ]] && info "Edit $path"; done < <(csv_each "${EDIT_PATHS[$1]}")
 }
-
-cmd_peek()
-{
-    local entry
-    entry=$(resolve_entry "${1:-}")
-    local name
-    name=$(entry_name "$entry")
-    local sol
-    sol=$(sol_path "$entry") || die "No reference for $name"
-
-    if [[ -d $sol ]]; then
-        hdr "Reference: $name (multi-file)"
-        for f in "$sol"/*.h "$sol"/*.c "$sol"/Kbuild; do
-            [[ -f $f ]] || continue
-            printf "\n${D}--- %s ---${N}\n" "$(basename "$f")" >&2
-            show_source "$f"
-        done
+print_active_edit_paths() {
+    local serial=$1
+    if [[ ${WORKSPACE[$serial]} == cumulative ]] && ! cumulative_uses_current_source "$serial"; then
+        cumulative_save_required "$serial"
+        info "Edit .rootkitlings/snapshots/$serial/hello.c"
     else
-        hdr "Reference: $name"
-        show_source "$sol"
+        print_edit_paths "$serial"
     fi
 }
-
-cmd_run()
-{
-    local bdir
-    bdir=$(build_dir)
-    make -C "$ROOT_DIR" MODULE_DIR="$bdir" --quiet
-    "$ROOT_DIR/vm/boot" "$@" "$bdir/hello.ko"
+last_cumulative_before() {
+    local serial=$1 i candidate last=''
+    for (( i=0; i<SEQUENCE[$serial]; i++ )); do
+        candidate=${EXERCISES[$i]}; [[ ${WORKSPACE[$candidate]} == cumulative ]] && last=$candidate
+    done
+    [[ -n $last ]] && printf '%s' "$last"
 }
-
-cmd_gdb()
-{
-    local bdir
-    bdir=$(build_dir)
-    make -C "$ROOT_DIR" MODULE_DIR="$bdir" --quiet
-    "$ROOT_DIR/vm/boot" --gdb "$bdir/hello.ko"
-}
-
-cmd_status()
-{
-    local pos
-    pos=$(current_pos)
-    local total
-    total=$(order_count)
-    local entry='' name='All exercises complete'
-    if (( pos < total )); then
-        entry=$(entry_at "$pos")
-        name=$(entry_name "$entry")
-    fi
-    local pct=$(( pos * 100 / total ))
-    local bar_len=30
-    local filled=$(( pct * bar_len / 100 ))
-    local empty=$(( bar_len - filled ))
-
-    printf "\n"
-    printf "${OW}  rootkitlings${ON}\n"
-    printf "\n"
-    printf "  ${OG}%s${ON}/${OD}%s${ON}  " "$pos" "$total"
-    printf "${OG}%s${OD}%s${ON} %d%%\n" \
-        "$(printf '%*s' "$filled" '' | tr ' ' '#')" \
-        "$(printf '%*s' "$empty" '' | tr ' ' '.')" \
-        "$pct"
-    printf "\n"
-    printf "  ${OC}Current${ON}  %s\n" "$name"
-    if [[ -n $entry ]] && is_capstone "$entry"; then
-        printf "  ${OC}Edit${ON}     %s/hello.c\n" "$entry"
-        printf "           ${OD}Complete the capstone to continue${ON}\n"
-    fi
-    printf "\n"
-    printf "  ${OW}check${ON}      Build and verify       ${OD}rootkitlings check${ON}\n"
-    printf "  ${OW}readme${ON}     Read the exercise       ${OD}rootkitlings readme${ON}\n"
-    printf "  ${OW}hint${ON}       Nudge (not the answer)  ${OD}rootkitlings hint${ON}\n"
-    printf "  ${OW}peek${ON}       Reference solution      ${OD}rootkitlings peek${ON}\n"
-    printf "  ${OW}run${ON}        Interactive VM           ${OD}rootkitlings run${ON}\n"
-    printf "\n"
-}
-
-cmd_list()
-{
-    local pos
-    pos=$(current_pos)
-    local i=0 prev_cat=""
-
-    for entry in "${ORDER_LIST[@]}"; do
-        local name
-        name=$(entry_name "$entry")
-
-        if is_capstone "$entry"; then
-            if (( i < pos )); then
-                printf "    ${OG}*${ON} %s\n" "$name"
-            elif (( i == pos )); then
-                printf "    ${OY}*${ON} %s  ${OY}<< capstone${ON}\n" "$name"
+select_source() {
+    local serial=$1 workspace=${WORKSPACE[$1]} target="$ROOT_DIR/module/hello.c"
+    case $workspace in
+        project) return ;;
+        cumulative)
+            local pos; pos=$(current_pos)
+            if (( SEQUENCE[$serial] > pos )); then
+                local current=${EXERCISES[$pos]}
+                die "$serial is locked. Your current exercise is $current: ${TITLE[$current]}. Complete $current first."
+            elif (( SEQUENCE[$serial] == pos )); then
+                [[ -f $target && ! -L $target ]] ||
+                    die "The editable source for $serial is unavailable, and this exercise has not passed yet. Nothing was reconstructed."
             else
-                printf "    ${OD}*${ON} %s\n" "$name"
+                cumulative_save_required "$serial"
+            fi ;;
+        single-file)
+            local source="$ROOT_DIR/${EDIT_PATHS[$serial]}"
+            [[ -f $source ]] || die "Catalog edit path is missing: ${EDIT_PATHS[$serial]}"
+            if [[ -f $target && ! -L $target ]]; then
+                local owner; owner=$(last_cumulative_before "$serial") || die "Course data error: cannot identify the preceding cumulative exercise"
+                cumulative_save_required "$owner"
             fi
-        else
-            local cat_dir=${entry#lings/}
-            cat_dir=${cat_dir%%/*}
-            if [[ $cat_dir != "$prev_cat" ]]; then
-                [[ -n $prev_cat ]] && printf '\n'
-                printf "\n  ${OB}%s${ON}\n" "$cat_dir"
-                prev_cat=$cat_dir
-            fi
-            if (( i < pos )); then
-                printf "    ${OG}+${ON} %s\n" "$name"
-            elif (( i == pos )); then
-                printf "    ${OY}>${ON} %s  ${OY}<< you are here${ON}\n" "$name"
+            ln -sfn "../${EDIT_PATHS[$serial]}" "$target" ;;
+        *) die "Course data error: unknown source layout '$workspace'" ;;
+    esac
+}
+require_active_source() {
+    local serial=$1 workspace=${WORKSPACE[$1]} target="$ROOT_DIR/module/hello.c"
+    case $workspace in
+        project) ;;
+        cumulative)
+            if cumulative_uses_current_source "$serial"; then
+                :
             else
-                printf "    ${OD}.${ON} %s\n" "$name"
-            fi
+                cumulative_save_required "$serial"
+            fi ;;
+        single-file)
+            local expected="$ROOT_DIR/${EDIT_PATHS[$serial]}"
+            [[ -L $target && $(readlink -f "$target") == $(readlink -f "$expected") ]] || die "$serial is not active. Run: ./rootkitlings start $serial" ;;
+    esac
+}
+save_cumulative_source() {
+    local serial=$1 source=$2
+    [[ ${WORKSPACE[$serial]} == cumulative ]] || return
+    local destination temporary
+    destination=$(cumulative_save_dir "$serial")
+    if [[ -d $destination ]]; then
+        if [[ -f $destination/hello.c && -f $destination/Kbuild ]] &&
+                cmp -s "$source/hello.c" "$destination/hello.c" &&
+                cmp -s "$source/Kbuild" "$destination/Kbuild"; then
+            return
         fi
-        i=$(( i + 1 ))
+        die "Saved work for $serial already exists and differs from the source that just passed. Nothing was overwritten. Review .rootkitlings/snapshots/$serial/."
+    fi
+    mkdir -p "$SNAPSHOTS"
+    temporary=$(mktemp -d "$SNAPSHOTS/.${serial}.XXXXXX")
+    cp -- "$source/hello.c" "$source/Kbuild" "$temporary/"
+    mv -- "$temporary" "$destination"
+    ok "Saved work for $serial."
+}
+
+cmd_start() {
+    local serial; serial=$(resolve_entry "${1:-}")
+    select_source "$serial"
+    hdr "$serial: ${TITLE[$serial]}"; print_active_edit_paths "$serial"
+}
+cmd_read() {
+    local serial; serial=$(resolve_entry "${1:-}")
+    local readme="$ROOT_DIR/${PATH_OF[$serial]}/README.md"
+    [[ -f $readme ]] || die "No README for $serial"
+    hdr "$serial: ${TITLE[$serial]}"; show_markdown "$readme"
+    printf '\n' >&2; info "Start: ./rootkitlings start $(display_selector "$serial")"
+}
+cmd_hint() {
+    local serial; serial=$(resolve_entry "${1:-}")
+    local hint="$ROOT_DIR/.rootkitlings/support/${PATH_OF[$serial]}/hint"
+    if [[ ! -f $hint ]]; then warn "No hint is available for $serial"; info "Read: ./rootkitlings read $serial"; return; fi
+    hdr "Hint for $serial: ${TITLE[$serial]}"; cat "$hint"
+}
+cmd_solution() {
+    local serial; serial=$(resolve_entry "${1:-}")
+    local solution="$ROOT_DIR/${SOLUTION[$serial]}" file
+    [[ -e $solution ]] || die "No reference for $serial"
+    warn "Reference solution for $serial: ${TITLE[$serial]}"
+    if [[ -d $solution ]]; then
+        for file in "$solution"/*.h "$solution"/*.c "$solution"/Kbuild; do
+            [[ -f $file ]] || continue; printf "\n${D}--- %s ---${N}\n" "$(basename "$file")" >&2; show_source "$file"
+        done
+    else show_source "$solution"; fi
+}
+cmd_prerequisites() {
+    local serial; serial=$(resolve_entry "${1:-}")
+    hdr "Prerequisites for $serial: ${TITLE[$serial]}"
+    if [[ $serial == L00 ]]; then
+        printf '\nCourse-entry knowledge\n'
+        local _assumption_id assumption_label _competency
+        while IFS=$'\t' read -r _assumption_id assumption_label _competency; do
+            printf '  - %s\n' "$assumption_label"
+        done < <("$CATALOG" assumptions)
+    fi
+    printf '\nRequired exercises\n'
+    if [[ -n ${PREREQS[$serial]} ]]; then
+        local prerequisite
+        while IFS= read -r prerequisite; do
+            [[ -n $prerequisite ]] || continue
+            printf '  - %s: %s\n' "$prerequisite" "${TITLE[$prerequisite]}"
+        done < <(csv_each "${PREREQS[$serial]}")
+    else
+        printf '  No earlier exercise is required.\n'
+    fi
+}
+
+cmd_check() {
+    local serial; serial=$(resolve_entry "${1:-}")
+    local pos idx=${SEQUENCE[$serial]}; pos=$(current_pos)
+    if (( idx > pos )); then
+        local current=${EXERCISES[$pos]}
+        die "$serial is locked. Your current exercise is $current: ${TITLE[$current]}. Complete $current first."
+    fi
+    require_active_source "$serial"
+    local support="$ROOT_DIR/.rootkitlings/support/${PATH_OF[$serial]}" check_script="$ROOT_DIR/.rootkitlings/support/${PATH_OF[$serial]}/check"
+    [[ -f $check_script ]] || die "Checker missing for $serial; the course installation may be incomplete."
+    local bdir; bdir=$(build_dir "$serial")
+    hdr "Checking $serial: ${TITLE[$serial]}"
+    make -C "$ROOT_DIR" MODULE_DIR="$bdir" --quiet
+    [[ ! -x $support/host-check ]] || "$support/host-check" "$bdir"
+    local -a boot_args=(); mapfile -t boot_args < <(capability_args "$serial")
+    local output vm_status=0
+    output=$(timeout --foreground "${ROOTKITLINGS_CHECK_TIMEOUT:-60}" "$ROOT_DIR/vm/boot" "${boot_args[@]}" --check "$check_script" "$bdir/hello.ko" 2>&1) || vm_status=$?
+    printf '%s\n' "$output"
+    if [[ $vm_status != 0 || $output != *"[+] PASSED"* ]]; then
+        printf '\n' >&2; info "Read: ./rootkitlings read $serial"; info "Hint: ./rootkitlings hint $serial"; info "Run:  ./rootkitlings run $serial"; die "$serial failed"
+    fi
+    save_cumulative_source "$serial" "$bdir"
+    ok "Passed $serial."
+    if (( idx < pos )); then
+        local current=${EXERCISES[$pos]}; info "Passed again. Your current exercise is still $current: ${TITLE[$current]}."; return
+    fi
+    local next=$((pos + 1)); printf '%s\n' "$next" > "$PROGRESS"
+    if (( next >= ${#EXERCISES[@]} )); then ok "Course complete: ${#EXERCISES[@]}/${#EXERCISES[@]}"; return; fi
+    local following=${EXERCISES[$next]}
+    printf '\n' >&2; hdr "Next $((next + 1))/${#EXERCISES[@]}: $following: ${TITLE[$following]}"
+    info "Read: ./rootkitlings read"; info "Start: ./rootkitlings start"
+}
+
+cmd_run() {
+    local requested='' arg; local -a manual_caps=()
+    while (( $# )); do
+        arg=$1; shift
+        case $arg in
+            --cap) (( $# )) || die "--cap requires a capability"; manual_caps+=(--cap "$1"); shift ;;
+            -*) die "Unknown option: $arg" ;;
+            *) [[ -z $requested ]] || die "Usage: rootkitlings run [exercise] [--cap NAME]"; requested=$arg ;;
+        esac
+    done
+    local serial; serial=$(resolve_entry "$requested"); require_active_source "$serial"
+    local bdir; bdir=$(build_dir "$serial"); make -C "$ROOT_DIR" MODULE_DIR="$bdir" --quiet
+    local -a catalog_caps=(); mapfile -t catalog_caps < <(capability_args "$serial")
+    "$ROOT_DIR/vm/boot" "${catalog_caps[@]}" "${manual_caps[@]}" "$bdir/hello.ko"
+}
+cmd_gdb() {
+    local serial; serial=$(resolve_entry "${1:-}"); require_active_source "$serial"
+    local bdir; bdir=$(build_dir "$serial"); make -C "$ROOT_DIR" MODULE_DIR="$bdir" --quiet
+    local -a caps=(); mapfile -t caps < <(capability_args "$serial")
+    "$ROOT_DIR/vm/boot" --gdb "${caps[@]}" "$bdir/hello.ko"
+}
+
+cmd_status() {
+    local pos total=${#EXERCISES[@]}; pos=$(current_pos)
+    printf '\n  %brootkitlings%b  %b%d/%d complete%b\n\n' "$OW" "$ON" "$OG" "$pos" "$total" "$ON"
+    if (( pos >= total )); then printf '  %bCourse complete%b\n  Review  %b./rootkitlings list%b\n\n' "$OG" "$ON" "$OD" "$ON"; return; fi
+    local serial=${EXERCISES[$pos]} first_edit=${EDIT_PATHS[${EXERCISES[$pos]}]%%,*}
+    printf '  %bExercise%b %s\n' "$OC" "$ON" "$serial"
+    printf '  %bType%b     %s\n' "$OC" "$ON" "$(kind_label "$serial")"
+    printf '  %bTitle%b    %s\n' "$OC" "$ON" "${TITLE[$serial]}"
+    printf '  %bSection%b  %s\n' "$OC" "$ON" "${SECTION[$serial]}"
+    printf '  %bLevel%b    %s\n' "$OC" "$ON" "${DIFFICULTY[$serial]}"
+    printf '  %bTeaches%b  %s\n' "$OC" "$ON" "$(display_csv "${TEACHES[$serial]}")"
+    [[ -z ${REQUIRES[$serial]} ]] || printf '  %bRequires%b %s\n' "$OC" "$ON" "$(display_csv "${REQUIRES[$serial]}")"
+    [[ -z ${CAPS[$serial]} ]] || printf '  %bEnvironment%b %s\n' "$OC" "$ON" "${CAPS[$serial]^^}"
+    [[ -z $first_edit ]] || printf '  %bEdit%b     %s\n' "$OC" "$ON" "$first_edit"
+    printf '\n  %bNext%b     ./rootkitlings read\n' "$OW" "$ON"
+    printf '  %bWorkflow%b start, edit, check\n' "$OD" "$ON"
+    printf '  %bTools%b    hint, run, solution, list\n\n' "$OD" "$ON"
+}
+cmd_list() {
+    local pos i=0 serial previous=''; pos=$(current_pos)
+    printf '\n  %bCourse%b  %d/%d complete\n\n' "$OW" "$ON" "$pos" "${#EXERCISES[@]}"
+    printf '    %-7s %-3s %-9s %-45s %-9s %s\n' 'State' 'ID' 'Type' 'Title' 'Level' 'Teaches'
+    for serial in "${EXERCISES[@]}"; do
+        if [[ ${SECTION[$serial]} != "$previous" ]]; then printf '\n  %b%s%b\n' "$OB" "${SECTION[$serial]}" "$ON"; previous=${SECTION[$serial]}; fi
+        local state='locked' color=$OD
+        (( i < pos )) && state='passed' color=$OG; (( i == pos )) && state='current' color=$OY
+        printf '    %b%-7s%b %-3s %-9s %-45s %-9s %s\n' "$color" "$state" "$ON" "$serial" "$(kind_label "$serial")" "${TITLE[$serial]}" "${DIFFICULTY[$serial]}" "$(display_csv "${TEACHES[$serial]}")"
+        i=$((i + 1))
     done
     printf '\n'
 }
-
-# -- dispatch --
-
-usage()
-{
-    printf "\n"
-    printf "  ${OW}rootkitlings${ON} ${OD}<command> [ling]${ON}\n"
-    printf "\n"
-    printf "  ${OW}check${ON}    ${OD}[N]${ON}  Build and verify ling N (or current)\n"
-    printf "  ${OW}readme${ON}   ${OD}[N]${ON}  Show the README for ling N\n"
-    printf "  ${OW}hint${ON}     ${OD}[N]${ON}  Get a nudge without seeing the solution\n"
-    printf "  ${OW}peek${ON}     ${OD}[N]${ON}  Show the reference solution\n"
-    printf "  ${OW}run${ON} ${OD}[--network]${ON}  Build and boot interactive VM\n"
-    printf "  ${OW}gdb${ON}           Boot VM paused, waiting for GDB on :1234\n"
-    printf "  ${OW}list${ON}          Show all lings and progress\n"
-    printf "  ${OW}status${ON}        Show current progress\n"
-    printf "\n"
-    printf "  ${OD}Ling numbers: both 3 and 03 work.${ON}\n"
-    printf "  ${OD}Capstones:    rootkitlings check capstone-0${ON}\n"
-    printf "\n"
-    printf "  ${OC}Workflow${ON}\n"
-    printf "    ${OW}1.${ON} rootkitlings readme              ${OD}Read the exercise${ON}\n"
-    printf "    ${OW}2.${ON} \$EDITOR module/hello.c           ${OD}Write your solution${ON}\n"
-    printf "    ${OW}3.${ON} rootkitlings check               ${OD}Test it in a VM${ON}\n"
-    printf "    ${OW}4.${ON} rootkitlings hint                ${OD}Nudge if stuck${ON}\n"
-    printf "    ${OW}5.${ON} rootkitlings peek                ${OD}Reference (last resort)${ON}\n"
-    printf "\n"
+usage() {
+    printf '\n  %brootkitlings%b %b<COMMAND> [EXERCISE]%b\n\n' "$OW" "$ON" "$OD" "$ON"
+    printf '  %-10s %s\n' read 'Read the current or selected exercise' start 'Select the exercise and show what to edit' check 'Build and test your work' hint 'Get a conceptual nudge' solution 'Show the complete reference solution' run 'Open an interactive VM [--cap FEATURE]' gdb 'Boot paused for a GDB session on :1234' status 'Show the current exercise' list 'Show the complete course' prereq 'Show required exercises and concepts' help 'Show this command list'
+    printf '\n  Exercise serials: L03 for a ling or C03 for a capstone.\n  Omit EXERCISE to use the current exercise.\n\n'
+    printf '  Commands accept any unambiguous prefix, such as prer for prereq.\n\n'
 }
 
-if (( $# == 0 )); then
-    usage
-    exit 0
+if (( $# == 0 )); then cmd_status; exit 0; fi
+requested_command=$1
+commands=(read start check hint solution run gdb status list prereq help)
+matches=()
+for candidate in "${commands[@]}"; do
+    [[ $candidate == "$requested_command"* ]] && matches+=("$candidate")
+done
+if (( ${#matches[@]} == 0 )); then
+    die "Unknown command: $requested_command. Run './rootkitlings help'."
+elif (( ${#matches[@]} > 1 )); then
+    die "Ambiguous command '$requested_command'. Matches: ${matches[*]}."
 fi
-
-case $1 in
-    check|readme|hint|peek)
-        command=$1
-        shift
-        (( $# <= 1 )) || die "Usage: rootkitlings $command [ling]"
-        "cmd_$command" "${1:-}"
-        ;;
-    run)
-        shift
-        (( $# <= 1 )) && [[ ${1:-} == --network || $# == 0 ]] ||
-            die "Usage: rootkitlings run [--network]"
-        cmd_run "$@"
-        ;;
-    gdb|list|status)
-        command=$1
-        shift
-        (( $# == 0 )) || die "Usage: rootkitlings $command"
-        "cmd_$command"
-        ;;
-    -h|--help)
-        (( $# == 1 )) || die "Usage: rootkitlings --help"
-        usage
-        ;;
-    *) die "Unknown command: $1. Run 'rootkitlings --help' for usage." ;;
+command=${matches[0]}
+case $command in
+    read|start|check|hint|solution) shift; (( $# <= 1 )) || die "Usage: rootkitlings $command [EXERCISE]"; "cmd_$command" "${1:-}" ;;
+    prereq) shift; (( $# <= 1 )) || die "Usage: rootkitlings prereq [EXERCISE]"; cmd_prerequisites "${1:-}" ;;
+    run) shift; cmd_run "$@" ;;
+    gdb) shift; (( $# <= 1 )) || die "Usage: rootkitlings gdb [EXERCISE]"; cmd_gdb "${1:-}" ;;
+    list|status) shift; (( $# == 0 )) || die "Usage: rootkitlings $command"; "cmd_$command" ;;
+    help) (( $# == 1 )) || die "Usage: rootkitlings help"; usage ;;
 esac

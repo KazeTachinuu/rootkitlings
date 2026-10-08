@@ -1,96 +1,90 @@
-# 00 - What is a kernel module?
+# 00 - Load code into the kernel
 
-## What we are learning
+Most programs run in **userspace**, isolated from the operating system.
+The Linux **kernel** manages processes, memory, devices, and network traffic.
 
-A loadable kernel module is compiled code that Linux can add to the running
-kernel without rebuilding or rebooting it. Its file ends in `.ko`.
+A loadable kernel module is a `.ko` file containing code that can be added to a running kernel.
+Drivers and filesystems use modules; rootkits can abuse the same mechanism.
+A module runs with kernel privileges, so a bug can crash or corrupt the entire system.
 
-A module is not a userspace program:
+## Module lifecycle
 
-- it runs in kernel space with kernel privileges;
-- it has no `main`; the kernel calls registered entry points;
-- it shares the kernel's memory and execution contexts;
-- a bug can crash or corrupt the whole guest kernel.
+A module has no `main()`.
+Linux calls one function when the module loads and another when it unloads:
 
-Rootkits abuse the same mechanisms that drivers and filesystems use.
-
-## What we are doing
-
-Build `hello.c` into `hello.ko` on the host, load it in a disposable QEMU guest.
-
-```
-           host                            QEMU guest
-     +--------------+              +-------------------------+
-     |  hello.c     |              |                         |
-     |     |        |    copy      |  insmod hello.ko        |
-     |     v        |   ------>    |     |                   |
-     |  hello.ko    |              |     v                   |
-     +--------------+              |  hello_init() -> dmesg  |
-                                   |     ...                 |
-                                   |  rmmod hello            |
-                                   |     |                   |
-                                   |     v                   |
-                                   |  hello_exit() -> dmesg  |
-                                   +-------------------------+
+```text
+hello.c
+   |
+   | build
+   v
+hello.ko
+   |
+   | insmod
+   v
+hello_init() ------> "hello: loaded" in the kernel log
+   |
+   | rmmod
+   v
+hello_exit() ------> "hello: unloaded" in the kernel log
 ```
 
-The module never loads into the host kernel.
-
-## Read the lifecycle
-
-Open [hello.c](../../../module/hello.c) and find:
+Open [hello.c](../../../module/hello.c):
 
 ```c
 static int __init hello_init(void)
 static void __exit hello_exit(void)
+
 module_init(hello_init);
 module_exit(hello_exit);
 ```
 
-`module_init` identifies the function used when the module loads.
-`module_exit` identifies the function used when it unloads.
-Their `pr_info` calls write evidence to the kernel log.
+`module_init()` registers the load function.
+Returning `0` means loading succeeded.
+`module_exit()` registers the unload function.
+`pr_info()` writes a message to the kernel log.
 
-## Try it
+## Load and unload it
 
 ```bash
-./rootkitlings run
+./rootkitlings run L00
 ```
 
-This builds the module, copies it into a disposable QEMU VM, and drops
-you into a shell. Experiment freely: nothing you do here affects your host.
+This builds `hello.ko` and boots a disposable QEMU guest.
+The module is never loaded into the host kernel.
 
-Inside the VM:
+At the guest prompt:
 
 ```sh
 insmod hello.ko
 lsmod
 dmesg | tail
+
 rmmod hello
 lsmod
 dmesg | tail
 ```
 
-- `insmod` loads the module file.
-- `lsmod` lists loaded modules.
-- `dmesg` reads the kernel log; `tail` keeps its recent lines.
-- `rmmod` removes the loaded module named `hello`.
+`insmod` loads the file.
+`lsmod` shows loaded modules.
+`dmesg` reads the kernel log.
+`rmmod` unloads the module by name.
 
-## Contract
+Expected trace:
 
-The check script verifies:
-
-- `insmod hello.ko` succeeds and `hello` appears in `lsmod`.
-- `dmesg` must contain `hello: loaded`.
-- `rmmod hello` succeeds and `hello` disappears from `lsmod`.
-- `dmesg` must contain `hello: unloaded`.
+```text
+insmod hello.ko  -> hello appears in lsmod  -> hello: loaded
+rmmod hello      -> hello disappears        -> hello: unloaded
+```
 
 ## Verify
 
 ```bash
-./rootkitlings check 0
+./rootkitlings check L00
 ```
-> **What a defender sees**: the module is visible in `lsmod` and its messages appear in `dmesg`.
-> Every user on the system can see both.
 
-See also: [01 - Build and inspect](../01-build/README.md).
+The check performs the same load, observation, and unload sequence in a fresh guest.
+
+## Visibility
+
+While loaded, the module is visible in `lsmod` and `/sys/module/hello`.
+Its `pr_info()` messages remain visible in `dmesg` after it unloads.

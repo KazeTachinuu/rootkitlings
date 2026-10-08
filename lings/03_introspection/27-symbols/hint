@@ -1,1 +1,0 @@
-The kprobe trick: register on the name, read kp.addr, unregister.

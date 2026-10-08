@@ -1,1 +1,0 @@
-mutex_lock/mutex_unlock around the critical section. Counter hits 20000.

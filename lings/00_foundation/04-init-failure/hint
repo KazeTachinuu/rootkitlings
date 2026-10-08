@@ -1,1 +1,0 @@
-Return a negative errno from init. Exit won't run.

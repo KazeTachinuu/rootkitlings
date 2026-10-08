@@ -1,0 +1,1 @@
+Work backward from the desired sysfs file: it needs file-scope string storage, a parameter type, and permissions. Use that same backing variable in both lifecycle messages so a live write is observable later.

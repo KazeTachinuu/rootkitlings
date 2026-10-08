@@ -1,0 +1,1 @@
+Keep the timer callback bounded and let the worker own the actual tick.  A live interval change must also move the already-pending deadline, not merely affect the next rearm.

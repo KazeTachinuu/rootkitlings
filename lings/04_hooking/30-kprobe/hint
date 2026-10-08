@@ -1,1 +1,0 @@
-struct kprobe: .symbol_name + .pre_handler. register_kprobe.

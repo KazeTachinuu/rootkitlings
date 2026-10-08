@@ -1,0 +1,1 @@
+The operations structure describes where the callback belongs but does not activate it. Install it in the namespace used by the test, propagate registration failure from init, and undo a successful install before unload.

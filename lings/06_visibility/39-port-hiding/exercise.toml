@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L39"
+sequence = 44
+title = "Remove one socket row from /proc/net/tcp"
+difficulty = "advanced"
+prerequisites = ["L30"]
+teaches = ["socket-row-filtering"]
+requires = ["kretprobes"]
+vm_capabilities = []
+edit_paths = ["lings/06_visibility/39-port-hiding/hello.c"]

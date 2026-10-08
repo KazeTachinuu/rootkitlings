@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "C02"
+sequence = 26
+title = "Dead-man watchdog"
+difficulty = "challenge"
+prerequisites = ["L20", "L22", "L23"]
+teaches = ["dead-man-watchdog"]
+requires = ["kernel-threads", "atomic-operations", "mutex-protected-invariants", "wait-queues"]
+vm_capabilities = []
+edit_paths = ["capstones/2-watchdog/main.c", "capstones/2-watchdog/watchdog.c", "capstones/2-watchdog/watchdog.h"]

@@ -1,0 +1,39 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "43-raw-socket"
+
+[ -f /proc/net/raw ] || {
+    _fail "/proc/net/raw is required for this exercise"
+    summary
+}
+before=$(($(wc -l < /proc/net/raw) - 1))
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_rawsock
+
+# Socket should be open after init
+assert_contains /proc/rk_rawsock "socket=open"
+assert_contains /proc/rk_rawsock "type=RAW"
+assert_contains /proc/rk_rawsock "proto=ICMP"
+
+# Verify the raw socket actually exists in the kernel network stack
+after=$(($(wc -l < /proc/net/raw) - 1))
+if [ "$after" -eq $((before + 1)) ]; then
+    _ok "module added one raw socket ($before -> $after)"
+else
+    _fail "expected one new raw socket, got $before -> $after"
+fi
+
+unload hello
+assert_absent /proc/rk_rawsock
+
+restored=$(($(wc -l < /proc/net/raw) - 1))
+if [ "$restored" -eq "$before" ]; then
+    _ok "raw socket released on unload"
+else
+    _fail "raw socket count did not return to $before (got $restored)"
+fi
+
+summary

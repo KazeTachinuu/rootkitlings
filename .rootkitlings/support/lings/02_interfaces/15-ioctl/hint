@@ -1,0 +1,4 @@
+Separate command dispatch from data movement. A write command validates a private
+userspace copy before committing under the lock; a read command snapshots under
+the lock before copying to userspace. Unknown command numbers need the
+ioctl-specific rejection.

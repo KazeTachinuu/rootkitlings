@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "C03"
+sequence = 32
+title = "One-time root token"
+difficulty = "challenge"
+prerequisites = ["L22", "L26", "L28"]
+teaches = ["one-time-root-trigger"]
+requires = ["proc-write", "mutex-protected-invariants", "credential-replacement", "kernel-randomness"]
+vm_capabilities = []
+edit_paths = ["capstones/3-root-trigger/main.c", "capstones/3-root-trigger/privilege.c", "capstones/3-root-trigger/privilege.h", "capstones/3-root-trigger/trigger.c", "capstones/3-root-trigger/trigger.h"]

@@ -1,1 +1,0 @@
-crypto_alloc_shash("sha256"). Init, update, final. Result is 32 bytes.

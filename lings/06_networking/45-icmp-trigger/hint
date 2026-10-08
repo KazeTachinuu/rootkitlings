@@ -1,1 +1,0 @@
-Check ip_hdr->protocol == IPPROTO_ICMP. Match on a magic echo ID.

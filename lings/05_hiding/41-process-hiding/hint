@@ -1,1 +1,0 @@
-kretprobe on __x64_sys_getdents64 (same pattern as ling 38). Spawn a kthread, save its PID as a string. Filter /proc entries matching that PID string.

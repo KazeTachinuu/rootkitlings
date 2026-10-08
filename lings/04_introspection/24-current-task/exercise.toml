@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L24"
+sequence = 27
+title = "Identify the current task"
+difficulty = "standard"
+prerequisites = ["L10"]
+teaches = ["current-task"]
+requires = ["proc-read"]
+vm_capabilities = []
+edit_paths = ["lings/04_introspection/24-current-task/hello.c"]

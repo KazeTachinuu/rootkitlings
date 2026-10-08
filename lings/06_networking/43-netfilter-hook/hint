@@ -1,1 +1,0 @@
-struct nf_hook_ops + nf_register_net_hook. Return NF_ACCEPT or NF_DROP.

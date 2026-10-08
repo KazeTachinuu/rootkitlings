@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L46"
+sequence = 53
+title = "Carry a message in ICMP"
+difficulty = "advanced"
+prerequisites = ["L42"]
+teaches = ["icmp-covert-messaging"]
+requires = ["icmp-triggers"]
+vm_capabilities = []
+edit_paths = ["lings/07_networking/46-covert-channel/hello.c"]

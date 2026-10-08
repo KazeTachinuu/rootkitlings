@@ -1,1 +1,0 @@
-Writable /proc entry. Magic string triggers prepare_creds + commit_creds for privilege escalation.

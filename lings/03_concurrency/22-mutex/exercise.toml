@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L22"
+sequence = 22
+title = "Protect shared state with a mutex"
+difficulty = "standard"
+prerequisites = ["L11", "L19"]
+teaches = ["mutex-protected-invariants"]
+requires = ["mutexes", "kernel-threads"]
+vm_capabilities = []
+edit_paths = ["lings/03_concurrency/22-mutex/hello.c"]

@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "C07"
+sequence = 55
+title = "Connect-back task agent"
+difficulty = "challenge"
+prerequisites = ["L23", "L43"]
+teaches = ["connect-back-agent"]
+requires = ["kernel-threads", "wait-queues", "kernel-sockets"]
+vm_capabilities = ["network"]
+edit_paths = ["capstones/7-implant/beacon.c", "capstones/7-implant/command.c", "capstones/7-implant/implant.h", "capstones/7-implant/main.c"]

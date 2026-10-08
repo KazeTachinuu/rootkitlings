@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L27"
+sequence = 30
+title = "Resolve a kernel symbol with a temporary kprobe"
+difficulty = "standard"
+prerequisites = []
+teaches = ["symbol-resolution"]
+requires = []
+vm_capabilities = []
+edit_paths = ["lings/04_introspection/27-symbols/hello.c"]

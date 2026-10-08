@@ -1,0 +1,1 @@
+The race is the counter's read-modify-write, not worker creation. Use the operation provided by the counter's atomic type so two workers cannot lose an update.

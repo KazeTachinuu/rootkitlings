@@ -1,1 +1,0 @@
-filp_open + kernel_read + kernel_write. Not vfs_read/vfs_write.

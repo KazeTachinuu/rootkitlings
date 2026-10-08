@@ -1,1 +1,0 @@
-current_uid(), current_euid(). The .val field gives the number.

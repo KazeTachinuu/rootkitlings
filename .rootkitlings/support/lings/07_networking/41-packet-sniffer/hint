@@ -1,0 +1,1 @@
+Once the IPv4 header has been validated, its protocol field selects exactly one transport classification. Leave all other protocols untouched and preserve the packet's verdict.

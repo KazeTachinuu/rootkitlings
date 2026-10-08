@@ -1,1 +1,0 @@
-XOR is its own inverse. Cycle the key with key[i % keylen].

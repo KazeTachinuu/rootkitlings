@@ -1,1 +1,0 @@
-module_param(name, charp, 0644). The third arg is sysfs permissions.

@@ -1,0 +1,53 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "38-log-hiding"
+
+# Log a marker BEFORE module load
+dmesg -c > /dev/null 2>&1
+echo "This marker should survive" > /dev/kmsg 2>/dev/null || true
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_logfilter
+
+# The module logs "rk:" lines. dmesg should NOT show them
+# because the module hooks syslog to filter them out.
+log=$(dmesg)
+case "$log" in
+    *"This marker should survive"*)
+        _ok "unrelated log entry preserved"
+        ;;
+    *)
+        _fail "filter removed unrelated log content"
+        ;;
+esac
+case "$log" in
+    *"rk:"*)
+        _fail "rk: lines visible in dmesg (hook not working)"
+        ;;
+    *)
+        _ok "rk: lines hidden from dmesg"
+        ;;
+esac
+
+# Hidden counter should be > 0
+count=$(cat /proc/rk_logfilter | sed -n 's/^hidden=//p')
+if [ "$count" -gt 0 ] 2>/dev/null; then
+    _ok "hidden counter = $count"
+else
+    _fail "hidden counter not incremented ($count)"
+fi
+
+unload hello
+assert_absent /proc/rk_logfilter
+
+# The filter changes one read view; it does not erase records from the ring
+# buffer. Once the hook is gone, the module's rk: records are visible again.
+if dmesg | grep -q 'rk:'; then
+    _ok "filtered records remained in the kernel log"
+else
+    _fail "expected hidden records to reappear after unload"
+fi
+
+summary

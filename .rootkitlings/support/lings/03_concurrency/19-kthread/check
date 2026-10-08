@@ -1,0 +1,31 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "19-kthread"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_thread
+
+# Verify a kernel thread is actually running
+if ps | grep -q '\[rk_thread\]'; then
+    _ok "kernel thread rk_thread is running"
+else
+    _fail "no kernel thread named rk_thread found"
+fi
+
+sleep 3
+
+assert_gt /proc/rk_thread 1
+
+unload hello
+assert_absent /proc/rk_thread
+
+# Thread should be gone after unload
+if ps | grep -q '\[rk_thread\]'; then
+    _fail "kernel thread still running after unload"
+else
+    _ok "kernel thread stopped on unload"
+fi
+
+summary

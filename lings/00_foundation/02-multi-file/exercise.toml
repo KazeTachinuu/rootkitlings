@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L02"
+sequence = 2
+title = "Build one module from multiple files"
+difficulty = "intro"
+prerequisites = ["L01"]
+teaches = ["multi-file-modules"]
+requires = ["module-build"]
+vm_capabilities = []
+edit_paths = ["lings/00_foundation/02-multi-file/main.c", "lings/00_foundation/02-multi-file/calc.c", "lings/00_foundation/02-multi-file/calc.h"]

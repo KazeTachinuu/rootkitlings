@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L04"
+sequence = 4
+title = "Reject a module load"
+difficulty = "standard"
+prerequisites = ["L00"]
+teaches = ["init-failure"]
+requires = ["module-lifecycle"]
+vm_capabilities = []
+edit_paths = ["module/hello.c"]

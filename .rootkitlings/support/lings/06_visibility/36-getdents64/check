@@ -1,0 +1,23 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "36-getdents64"
+
+load hello.ko
+assert_exists /proc/rk_dirfilter
+
+# Direct access still works
+assert_read /proc/rk_dirfilter "hidden"
+
+# But ls should not show it
+# shellcheck disable=SC2010 # Directory enumeration is the behavior under test.
+if ls /proc/ | grep -q "^rk_dirfilter$"; then
+    _fail "rk_dirfilter visible in ls /proc/"
+else
+    _ok "rk_dirfilter hidden from ls /proc/"
+fi
+
+unload hello
+assert_absent /proc/rk_dirfilter
+
+summary

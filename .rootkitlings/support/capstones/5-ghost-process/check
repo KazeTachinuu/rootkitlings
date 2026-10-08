@@ -1,0 +1,65 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "C05: ghost process"
+
+probe_before=$(grep -c '__x64_sys_getdents64'     /sys/kernel/debug/kprobes/list || true)
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_ghost
+
+pid=$(tr -dc '0-9' < /proc/rk_ghost)
+case "$pid" in
+    ''|*[!0-9]*) _fail "invalid hidden PID: $pid" ;;
+    *) _ok "hidden PID is $pid" ;;
+esac
+
+if ls /proc | grep -qx "$pid"; then
+    _fail "PID $pid visible in proc-root enumeration"
+else
+    _ok "PID $pid absent from proc-root enumeration"
+fi
+
+assert_exists "/proc/$pid"
+assert_read "/proc/$pid/comm" "khidden"
+
+if kill -0 "$pid"; then
+    _ok "scheduler still knows PID $pid"
+else
+    _fail "kill -0 cannot find PID $pid"
+fi
+
+if ps -e | grep -q "^ *$pid "; then
+    _fail "PID $pid visible in ps"
+else
+    _ok "PID $pid absent from ps"
+fi
+
+mkdir -p /tmp/numeric-files
+touch "/tmp/numeric-files/$pid"
+if ls /tmp/numeric-files | grep -qx "$pid"; then
+    _ok "matching name outside procfs remains visible"
+else
+    _fail "filter leaked into an unrelated directory"
+fi
+
+probe_during=$(grep -c '__x64_sys_getdents64'     /sys/kernel/debug/kprobes/list || true)
+if [ "$probe_during" -gt "$probe_before" ]; then
+    _ok "getdents64 kretprobe registered"
+else
+    _fail "getdents64 kretprobe is not visible"
+fi
+
+unload hello
+assert_absent /proc/rk_ghost
+assert_absent "/proc/$pid"
+
+probe_after=$(grep -c '__x64_sys_getdents64'     /sys/kernel/debug/kprobes/list || true)
+if [ "$probe_after" -eq "$probe_before" ]; then
+    _ok "getdents64 kretprobe removed"
+else
+    _fail "getdents64 probe count did not return to baseline"
+fi
+
+summary

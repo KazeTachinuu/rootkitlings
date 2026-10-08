@@ -1,0 +1,1 @@
+Keep the atomic-context callback bounded. Its job is to publish the already-initialized work item to process context, leaving the counter update to the worker.

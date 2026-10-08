@@ -160,15 +160,16 @@ assert_gt() {
     local path="$1" threshold="$2"
     local actual
     actual=$(cat "$path")
-    # Strip non-numeric (trailing newline, whitespace)
-    actual=$(printf '%s' "$actual" | tr -dc '0-9')
-    if [ -z "$actual" ]; then
-        _fail "$path: not a number"
-    elif [ "$actual" -gt "$threshold" ]; then
-        _ok "$path ($actual) > $threshold"
-    else
-        _fail "$path: expected > $threshold, got $actual"
-    fi
+    case "$actual" in
+        ''|*[!0-9]*) _fail "$path: expected an unsigned integer, got '$actual'" ;;
+        *)
+            if [ "$actual" -gt "$threshold" ]; then
+                _ok "$path ($actual) > $threshold"
+            else
+                _fail "$path: expected > $threshold, got $actual"
+            fi
+            ;;
+    esac
 }
 
 assert_contains() {

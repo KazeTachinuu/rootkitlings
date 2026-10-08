@@ -1,0 +1,15 @@
+#!/bin/sh
+. /lib/check.sh
+begin "16-usermode-exec"
+
+marker=/tmp/rk_helper_marker
+rm -f "$marker"
+
+load hello.ko
+assert_loaded hello
+assert_exists "$marker"
+
+unload hello
+assert_absent "$marker"
+
+summary

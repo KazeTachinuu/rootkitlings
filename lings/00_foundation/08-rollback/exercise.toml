@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L08"
+sequence = 8
+title = "Roll back partial initialization"
+difficulty = "standard"
+prerequisites = ["L04", "L07"]
+teaches = ["initialization-rollback"]
+requires = ["kernel-allocation", "init-failure"]
+vm_capabilities = []
+edit_paths = ["module/hello.c"]

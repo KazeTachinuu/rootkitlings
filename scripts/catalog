@@ -1,0 +1,111 @@
+#!/usr/bin/python3
+"""Query and validate rootkitlings exercise metadata."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(ROOT / "lib"))
+
+from catalog import Catalog, CatalogError  # noqa: E402
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser()
+    commands = result.add_subparsers(dest="command", required=True)
+    commands.add_parser("validate")
+    assumptions = commands.add_parser("assumptions")
+    assumptions.add_argument("concept", nargs="?")
+    concept_label = commands.add_parser("concept-label")
+    concept_label.add_argument("concept")
+    resolve = commands.add_parser("resolve")
+    resolve.add_argument("selector", help="exact stable serial (L00 or C00)")
+    query = commands.add_parser("query")
+    query.add_argument("selector", help="exact stable serial (L00 or C00)")
+    query.add_argument("field", choices=[
+        "path", "serial", "sequence", "title", "difficulty", "prerequisites",
+        "teaches", "requires", "vm_capabilities", "edit_paths",
+    ])
+    prerequisite_closure = commands.add_parser("prerequisite-closure")
+    prerequisite_closure.add_argument("selector", help="exact stable serial (L00 or C00)")
+    concept_closure = commands.add_parser("concept-closure")
+    concept_closure.add_argument("selector", help="exact stable serial (L00 or C00)")
+    concept_closure.add_argument("--details", action="store_true")
+    listing = commands.add_parser("list")
+    listing.add_argument("--difficulty")
+    listing.add_argument("--concept")
+    commands.add_parser("export")
+    return result
+
+
+def emit(value: object) -> None:
+    if isinstance(value, tuple):
+        for item in value:
+            print(item)
+    elif isinstance(value, bool):
+        print("true" if value else "false")
+    else:
+        print(value)
+
+
+def main() -> int:
+    args = parser().parse_args()
+    try:
+        catalog = Catalog(ROOT)
+        if args.command == "validate":
+            print(f"[+] catalog: {len(catalog.exercises)} exercises")
+        elif args.command == "resolve":
+            print(catalog.resolve(args.selector).path)
+        elif args.command == "query":
+            item = catalog.resolve(args.selector)
+            emit(item.value(args.field))
+        elif args.command == "prerequisite-closure":
+            item = catalog.resolve(args.selector)
+            emit(tuple(value.serial for value in catalog.prerequisite_exercises(item)))
+        elif args.command == "concept-closure":
+            concept_ids = catalog.all_concepts(catalog.resolve(args.selector))
+            for value in sorted(concept_ids):
+                assumption = catalog.assumption(value)
+                if args.details:
+                    print(f"{catalog.concept_label(value)}\t{assumption.competency if assumption else '-'}")
+                else:
+                    print(catalog.concept_label(value))
+        elif args.command == "assumptions":
+            matches = [item for item in catalog.assumptions if not args.concept or item.concept == args.concept]
+            if args.concept and not matches:
+                raise CatalogError(f"unknown course assumption: {args.concept}")
+            for assumption in matches:
+                print(f"{assumption.concept}\t{catalog.concept_label(assumption.concept)}\t{assumption.competency}")
+        elif args.command == "concept-label":
+            print(catalog.concept_label(args.concept))
+        elif args.command == "list":
+            for item in catalog.ordered():
+                if args.difficulty and item.difficulty != args.difficulty:
+                    continue
+                if args.concept and args.concept not in item.teaches and args.concept not in item.requires:
+                    continue
+                print(f"{item.serial}\t{item.path}\t{item.title}")
+        else:
+            for item in catalog.ordered():
+                columns = (
+                    item.serial, item.sequence, item.path.as_posix(), item.title,
+                    catalog.section(item), item.difficulty,
+                    ",".join(item.prerequisites) or "-",
+                    ",".join(catalog.concept_label(value) for value in item.teaches),
+                    ",".join(catalog.concept_label(value) for value in item.requires) or "-",
+                    ",".join(item.vm_capabilities) or "-", catalog.workspace_mode(item),
+                    ",".join(item.edit_paths), catalog.solution_path(item),
+                )
+                print("\x1f".join(str(value) for value in columns))
+    except CatalogError as exc:
+        print(f"[x] {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

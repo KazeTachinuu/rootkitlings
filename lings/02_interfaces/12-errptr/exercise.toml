@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L12"
+sequence = 12
+title = "Return an error through a pointer"
+difficulty = "standard"
+prerequisites = ["L04"]
+teaches = ["error-pointers"]
+requires = ["init-failure"]
+vm_capabilities = []
+edit_paths = ["lings/02_interfaces/12-errptr/hello.c"]

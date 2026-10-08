@@ -1,0 +1,1 @@
+Construct the logical name as an all-or-nothing sequence of labels.  Propagate the first failed derivation or append, and publish the dotted status only after the wire name is complete.

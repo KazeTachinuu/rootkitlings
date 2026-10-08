@@ -1,1 +1,0 @@
-Netfilter hook on ICMP with a magic echo ID. Payload is after the ICMP header.

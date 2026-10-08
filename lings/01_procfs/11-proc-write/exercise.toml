@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L11"
+sequence = 11
+title = "Accept a bounded procfs write"
+difficulty = "standard"
+prerequisites = ["L10"]
+teaches = ["proc-write", "bounded-user-copy", "mutexes"]
+requires = ["proc-read"]
+vm_capabilities = []
+edit_paths = ["lings/01_procfs/11-proc-write/hello.c"]

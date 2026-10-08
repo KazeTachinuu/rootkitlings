@@ -1,2 +1,0 @@
-Put one `struct completion` beside each worker task. The worker calls
-`complete()` once; teardown calls `wait_for_completion()` once.

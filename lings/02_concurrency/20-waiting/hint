@@ -1,1 +1,0 @@
-wait_event sleeps, wake_up signals. init_waitqueue_head first.

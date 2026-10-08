@@ -1,1 +1,0 @@
-atomic_inc, atomic_read. No lock needed.

@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L33"
+sequence = 37
+title = "Roll back a partially installed hook set"
+difficulty = "advanced"
+prerequisites = ["L08", "L29"]
+teaches = ["hook-rollback"]
+requires = ["kprobes", "initialization-rollback"]
+vm_capabilities = []
+edit_paths = ["lings/05_instrumentation/33-hook-lifecycle/hello.c"]

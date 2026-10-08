@@ -42,11 +42,19 @@ MODULE=
 CHECK=
 GDB=
 NETWORK=
+AES_GCM=
 while (( $# )); do
     case $1 in
         --check) CHECK=${2:?--check requires an argument}; shift 2 ;;
         --gdb)   GDB=1; shift ;;
-        --network) NETWORK=1; shift ;;
+        --cap)
+            case ${2:?--cap requires an argument} in
+                aes-gcm) AES_GCM=1 ;;
+                network) NETWORK=1 ;;
+                *) die "Unknown VM capability: $2" ;;
+            esac
+            shift 2
+            ;;
         -*)      die "Unknown option: $1" ;;
         *)
             [[ -z $MODULE ]] || die "Unexpected argument: $1"
@@ -55,7 +63,6 @@ while (( $# )); do
             ;;
     esac
 done
-[[ -z $CHECK || -z $NETWORK ]] || die "--check and --network are mutually exclusive"
 
 # -- self-cleaning temp --
 
@@ -68,19 +75,43 @@ INITRAMFS="$WORK/initramfs.gz"
 KERNEL=$(find_kernel)
 BUSYBOX=$(command -v busybox || true)
 
-readonly VM_DIR ROOT_DIR RELEASE KERNEL BUSYBOX WORK ROOTFS INITRAMFS MODULE CHECK GDB NETWORK
+readonly VM_DIR ROOT_DIR RELEASE KERNEL BUSYBOX WORK ROOTFS INITRAMFS MODULE CHECK GDB NETWORK AES_GCM
 
 # -- prerequisites --
 
 check_prerequisites()
 {
-    [[ -n $BUSYBOX ]] || die "BusyBox not found (Arch package: busybox)"
+	local aes_gcm_modules
+
+    [[ -n $BUSYBOX ]] || die "BusyBox not found; run make doctor for the package name"
     file "$BUSYBOX" | grep -q 'statically linked' ||
         die "BusyBox is not statically linked: $BUSYBOX"
     command -v cpio >/dev/null || die "cpio not found"
     command -v qemu-system-x86_64 >/dev/null || die "QEMU not found"
+    command -v python3 >/dev/null || die "python3 not found"
+    if [[ -n $GDB ]] && ! python3 - 2>/dev/null <<'PY'
+import socket
+
+with socket.socket() as listener:
+    listener.bind(("127.0.0.1", 1234))
+PY
+    then
+        die "GDB port 1234 is already in use; connect to the running VM or stop it first"
+    fi
+    if [[ -n $AES_GCM || -n $NETWORK ]]; then
+        command -v modprobe >/dev/null || die "modprobe not found; run make doctor for the package name"
+    fi
+    if [[ -n $AES_GCM ]]; then
+        aes_gcm_modules=$(modprobe --show-depends gcm 2>/dev/null)
+        grep -q '^insmod ' <<< "$aes_gcm_modules" ||
+            die "Kernel crypto module not found: gcm"
+        case $aes_gcm_modules in
+            *.ko.gz*) command -v gzip >/dev/null || die "gzip not found" ;;
+            *.ko.xz*) command -v xz >/dev/null || die "xz not found" ;;
+            *.ko.zst*) command -v zstd >/dev/null || die "zstd not found" ;;
+        esac
+    fi
     if [[ -n $NETWORK ]]; then
-        command -v modprobe >/dev/null || die "modprobe not found (Arch package: kmod)"
         modprobe --show-depends virtio_net 2>/dev/null | grep -q '^insmod ' ||
             die "Kernel network module not found: virtio_net"
     fi
@@ -102,10 +133,11 @@ build_rootfs()
     printf 'root:x:0:0:root:/rootkitlings:/bin/sh\n' > "$ROOTFS/etc/passwd"
     printf 'root:!:0:::::\n' > "$ROOTFS/etc/shadow"
     cp "$BUSYBOX" "$ROOTFS/bin/busybox"
-    for applet in cat chmod chpst cmp dd diff dmesg echo find grep head id \
+    for applet in cat chmod chpst cmp cut dd diff dmesg echo find grep head \
+        hexdump id \
         ifconfig insmod kill ls lsmod mkdir modinfo mount nc ping poweroff \
-        printf ps rm rmdir rmmod sed setsid sh sleep sort stat tail test \
-        touch tr uname wc; do
+        printf ps rm rmdir rmmod sed setsid sh sha256sum sleep sort stat \
+        tail test touch tr uname wc xxd od; do
         ln -s busybox "$ROOTFS/bin/$applet"
     done
     cp "$VM_DIR/init" "$ROOTFS/init"
@@ -113,6 +145,24 @@ build_rootfs()
     if [[ -n $MODULE ]]; then
         cp "$MODULE" "$ROOTFS/rootkitlings/$(basename "$MODULE")"
         ok "Module copied to /rootkitlings/$(basename "$MODULE")"
+    fi
+    if [[ -n $AES_GCM ]]; then
+        mkdir "$ROOTFS/lib/modules/$RELEASE/crypto"
+        index=0
+        while read -r action source; do
+            [[ $action == insmod ]] || continue
+            printf -v target '%s/lib/modules/%s/crypto/%02d.ko' \
+                "$ROOTFS" "$RELEASE" "$index"
+            case $source in
+                *.ko)    cp "$source" "$target" ;;
+                *.ko.gz) gzip -dc "$source" > "$target" ;;
+                *.ko.xz) xz -dc "$source" > "$target" ;;
+                *.ko.zst) zstd -dc "$source" > "$target" ;;
+                *) die "Unsupported kernel module compression: $source" ;;
+            esac
+            (( ++index ))
+        done < <(modprobe --show-depends gcm)
+        ok "AES-GCM dependencies added"
     fi
     if [[ -n $NETWORK ]]; then
         mkdir "$ROOTFS/lib/modules/$RELEASE/network"
@@ -166,6 +216,7 @@ run_vm()
 {
     local -a qemu_args
     local cmdline='console=ttyS0 rdinit=/init panic=1 loglevel=4'
+    local debugger debugger_prompt
 
     if [[ -r /dev/kvm && -w /dev/kvm ]]; then
         qemu_args=(-accel kvm -cpu host)
@@ -177,15 +228,31 @@ run_vm()
 
     if [[ -n $CHECK ]]; then
         cmdline+=' rootkitlings=check'
-    elif [[ -n $NETWORK ]]; then
+    fi
+    if [[ -n $NETWORK ]]; then
         cmdline+=' rootkitlings=network'
+    fi
+    if [[ -n $AES_GCM ]]; then
+        cmdline+=' rootkitlings=aes-gcm'
     fi
 
     if [[ -n $GDB ]]; then
         cmdline+=' nokaslr'
         qemu_args+=(-s -S)
         ok "GDB server on localhost:1234, VM paused waiting for debugger"
+        ok "QEMU -s opens :1234; -S pauses the guest CPU"
         ok "KASLR disabled for stable symbol addresses"
+        if command -v pwndbg >/dev/null; then
+            debugger=pwndbg
+            debugger_prompt='pwndbg>'
+        else
+            debugger=gdb
+            debugger_prompt='(gdb)'
+        fi
+        hdr "Connect from another terminal"
+        printf '    $ %s %q\n' "$debugger" "/lib/modules/$RELEASE/build/vmlinux"
+        printf '    %s target remote :1234\n' "$debugger_prompt"
+        printf '    %s continue\n' "$debugger_prompt"
     fi
 
     qemu_args+=(
@@ -205,9 +272,9 @@ run_vm()
     fi
 
     hdr "Booting a separate guest kernel"
-    printf '%s    $ qemu-system-x86_64' "$D"
+    printf '%b    $ qemu-system-x86_64' "$D"
     printf ' %q' "${qemu_args[@]}"
-    printf '%s\n' "$N"
+    printf '%b\n' "$N"
 
     qemu-system-x86_64 "${qemu_args[@]}"
 }

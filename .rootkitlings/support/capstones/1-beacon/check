@@ -1,0 +1,45 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "C01: beacon"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_beacon
+
+# Default interval is 5
+assert_contains /proc/rk_beacon "interval: 5"
+
+# Status is running
+assert_contains /proc/rk_beacon "status: running"
+
+# Invalid updates must fail and preserve the current interval.
+if write_param hello interval 0 2>/dev/null; then
+    _fail "interval=0 was accepted"
+else
+    _ok "interval=0 rejected"
+fi
+assert_contains /proc/rk_beacon "interval: 5"
+
+# Change interval via sysfs
+write_param hello interval 1
+assert_contains /proc/rk_beacon "interval: 1"
+
+# Updating the parameter wakes the old wait, so the new rate takes effect now.
+before=$(cat /proc/rk_beacon | sed -n 's/^ticks: *\([0-9]*\)$/\1/p')
+sleep 4
+after=$(cat /proc/rk_beacon | sed -n 's/^ticks: *\([0-9]*\)$/\1/p')
+diff=$(( after - before ))
+if [ "$diff" -ge 3 ] 2>/dev/null; then
+    _ok "new interval took effect immediately ($diff ticks in 4s)"
+else
+    _fail "expected >= 3 ticks in 4s at interval=1, got $diff"
+fi
+
+# Uptime should be non-zero
+assert_contains /proc/rk_beacon "uptime:"
+
+unload hello
+assert_absent /proc/rk_beacon
+
+summary

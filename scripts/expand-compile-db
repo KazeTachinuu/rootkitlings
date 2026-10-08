@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Expand compile_commands.json to cover .solutions/*.c files."""
+"""Expand compile_commands.json for capstone scaffolds and references."""
 import json, glob, os, sys
 
 db_path = sys.argv[1] if len(sys.argv) > 1 else "compile_commands.json"
@@ -8,7 +8,11 @@ base = db[0]
 
 existing = {e["file"] for e in db}
 
-for f in sorted(glob.glob(".solutions/*.c") + glob.glob(".solutions/**/*.c")):
+sources = glob.glob(".rootkitlings/solutions/*.c")
+sources += glob.glob(".rootkitlings/solutions/**/*.c")
+sources += glob.glob("capstones/**/*.c")
+
+for f in sorted(set(sources)):
     abspath = os.path.abspath(f)
     if abspath in existing:
         continue
@@ -18,7 +22,11 @@ for f in sorted(glob.glob(".solutions/*.c") + glob.glob(".solutions/**/*.c")):
     }
     if "arguments" in base:
         args = list(base["arguments"])
-        args[-1] = abspath
+        source_index = next(
+            (i for i, arg in enumerate(args) if arg.endswith("hello.c")),
+            len(args) - 1,
+        )
+        args[source_index] = abspath
         entry["arguments"] = args
     elif "command" in base:
         entry["command"] = base["command"].replace("hello.c", abspath)

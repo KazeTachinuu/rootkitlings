@@ -1,0 +1,349 @@
+schema_version = 1
+
+[[sections]]
+id = "foundation"
+label = "Foundation"
+
+[[sections]]
+id = "procfs"
+label = "Procfs"
+
+[[sections]]
+id = "interfaces"
+label = "Interfaces"
+
+[[sections]]
+id = "concurrency"
+label = "Concurrency"
+
+[[sections]]
+id = "introspection"
+label = "Introspection"
+
+[[sections]]
+id = "instrumentation"
+label = "Instrumentation"
+
+[[sections]]
+id = "visibility"
+label = "Visibility"
+
+[[sections]]
+id = "networking"
+label = "Networking"
+
+[[sections]]
+id = "file-io"
+label = "File I/O"
+
+[[sections]]
+id = "crypto"
+label = "Cryptography"
+
+[[concepts]]
+id = "adversarial-validation"
+label = "Adversarial validation"
+
+[[concepts]]
+id = "atomic-operations"
+label = "Atomic operations"
+
+[[concepts]]
+id = "authenticated-dns-signals"
+label = "Authenticated DNS signals"
+
+[[concepts]]
+id = "authenticated-encryption"
+label = "Authenticated encryption"
+
+[[concepts]]
+id = "beacon-scheduler"
+label = "Beacon scheduler"
+
+[[concepts]]
+id = "bounded-user-copy"
+label = "Bounded userspace copying"
+
+[[concepts]]
+id = "boot-load-persistence"
+label = "Boot-time module persistence"
+
+[[concepts]]
+id = "c-programming"
+label = "C programming"
+
+[[concepts]]
+id = "character-devices"
+label = "Character devices"
+
+[[concepts]]
+id = "completions"
+label = "Completions"
+
+[[concepts]]
+id = "configuration-store"
+label = "Configuration store"
+
+[[concepts]]
+id = "connect-back-agent"
+label = "Connect-back agent"
+
+[[concepts]]
+id = "credential-replacement"
+label = "Credential replacement"
+
+[[concepts]]
+id = "current-task"
+label = "Current task"
+
+[[concepts]]
+id = "dead-man-watchdog"
+label = "Dead-man watchdog"
+
+[[concepts]]
+id = "directory-filtering"
+label = "Directory filtering"
+
+[[concepts]]
+id = "dns-wire-encoding"
+label = "DNS wire encoding"
+
+[[concepts]]
+id = "error-pointers"
+label = "Error pointers"
+
+[[concepts]]
+id = "event-ring-buffer"
+label = "Event ring buffer"
+
+[[concepts]]
+id = "fprobes"
+label = "Fprobes"
+
+[[concepts]]
+id = "ghost-process-view"
+label = "Ghost process view"
+
+[[concepts]]
+id = "hmac-authentication"
+label = "HMAC authentication"
+
+[[concepts]]
+id = "hook-rollback"
+label = "Hook rollback"
+
+[[concepts]]
+id = "icmp-covert-messaging"
+label = "ICMP covert messaging"
+
+[[concepts]]
+id = "icmp-triggers"
+label = "ICMP triggers"
+
+[[concepts]]
+id = "init-failure"
+label = "Initialization failure"
+
+[[concepts]]
+id = "initialization-rollback"
+label = "Initialization rollback"
+
+[[concepts]]
+id = "ioctl-dispatch"
+label = "ioctl dispatch"
+
+[[concepts]]
+id = "kernel-allocation"
+label = "Kernel memory allocation"
+
+[[concepts]]
+id = "kernel-crypto-api"
+label = "Kernel Crypto API"
+
+[[concepts]]
+id = "kernel-debugging"
+label = "Kernel debugging"
+
+[[concepts]]
+id = "kernel-file-transactions"
+label = "Kernel file transactions"
+
+[[concepts]]
+id = "kernel-lists"
+label = "Kernel linked lists"
+
+[[concepts]]
+id = "kernel-randomness"
+label = "Kernel randomness"
+
+[[concepts]]
+id = "kernel-sockets"
+label = "Kernel sockets"
+
+[[concepts]]
+id = "kernel-threads"
+label = "Kernel threads"
+
+[[concepts]]
+id = "kernel-timers"
+label = "Kernel timers"
+
+[[concepts]]
+id = "keyed-domain-generation"
+label = "Keyed domain generation"
+
+[[concepts]]
+id = "kprobes"
+label = "Kprobes"
+
+[[concepts]]
+id = "kretprobes"
+label = "Kretprobes"
+
+[[concepts]]
+id = "linux-processes-and-files"
+label = "Linux processes and files"
+
+[[concepts]]
+id = "log-view-filtering"
+label = "Log-view filtering"
+
+[[concepts]]
+id = "module-build"
+label = "Module build"
+
+[[concepts]]
+id = "module-lifecycle"
+label = "Module lifecycle"
+
+[[concepts]]
+id = "module-list-hiding"
+label = "Module-list hiding"
+
+[[concepts]]
+id = "module-parameters"
+label = "Module parameters"
+
+[[concepts]]
+id = "multi-file-modules"
+label = "Multi-file modules"
+
+[[concepts]]
+id = "mutex-protected-invariants"
+label = "Mutex-protected invariants"
+
+[[concepts]]
+id = "mutexes"
+label = "Mutexes"
+
+[[concepts]]
+id = "netfilter-hooks"
+label = "Netfilter hooks"
+
+[[concepts]]
+id = "networking-fundamentals"
+label = "Networking fundamentals"
+
+[[concepts]]
+id = "one-time-root-trigger"
+label = "One-time root trigger"
+
+[[concepts]]
+id = "packet-classification"
+label = "Packet classification"
+
+[[concepts]]
+id = "packet-redirection"
+label = "Packet redirection"
+
+[[concepts]]
+id = "parameter-callbacks"
+label = "Parameter callbacks"
+
+[[concepts]]
+id = "proc-entry"
+label = "procfs entry"
+
+[[concepts]]
+id = "proc-read"
+label = "procfs reads"
+
+[[concepts]]
+id = "proc-write"
+label = "procfs writes"
+
+[[concepts]]
+id = "read-view-filtering"
+label = "Read-result filtering"
+
+[[concepts]]
+id = "sealed-dead-drop"
+label = "Sealed dead drop"
+
+[[concepts]]
+id = "sha256-verification"
+label = "SHA-256 verification"
+
+[[concepts]]
+id = "socket-row-filtering"
+label = "Socket-row filtering"
+
+[[concepts]]
+id = "spinlocks"
+label = "Spinlocks"
+
+[[concepts]]
+id = "symbol-resolution"
+label = "Symbol resolution"
+
+[[concepts]]
+id = "syscall-argument-decoding"
+label = "System call argument decoding"
+
+[[concepts]]
+id = "sysfs-artifacts"
+label = "sysfs artifacts"
+
+[[concepts]]
+id = "task-credentials"
+label = "Task credentials"
+
+[[concepts]]
+id = "tcp-shell"
+label = "TCP shell"
+
+[[concepts]]
+id = "unix-shell"
+label = "Unix shell"
+
+[[concepts]]
+id = "usermode-helper"
+label = "Usermode helper"
+
+[[concepts]]
+id = "wait-queues"
+label = "Wait queues"
+
+[[concepts]]
+id = "workqueues"
+label = "Workqueues"
+
+[[concepts]]
+id = "xor-obfuscation"
+label = "XOR obfuscation"
+
+[[assumptions]]
+concept = "c-programming"
+competency = "Read and edit C functions, structs, pointers, arrays, control flow, and error-return paths, and interpret compiler diagnostics."
+
+[[assumptions]]
+concept = "unix-shell"
+competency = "Run commands in a POSIX-like shell and use paths, quoting, redirection, pipelines, environment variables, and an editor."
+
+[[assumptions]]
+concept = "linux-processes-and-files"
+competency = "Understand files, directories, permissions, processes, users and groups, PIDs, signals, file descriptors, and the distinction between userspace and kernel space."
+
+[[assumptions]]
+concept = "networking-fundamentals"
+competency = "Recognize IPv4 addresses, TCP and UDP ports, client/server connections, ICMP echo traffic, DNS names, and network byte order."

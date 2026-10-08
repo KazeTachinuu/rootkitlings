@@ -1,0 +1,17 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "50-aead"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_aead
+assert_contains /proc/rk_aead "algo=gcm(aes)"
+assert_contains /proc/rk_aead "sealed=0388dace60b6a392f328c2b971b2fe78ab6e47d42cec13bdf53a67b21257bddf"
+assert_contains /proc/rk_aead "known_answer=yes"
+assert_contains /proc/rk_aead "roundtrip=yes"
+assert_contains /proc/rk_aead "tamper_rejected=yes"
+
+unload hello
+assert_absent /proc/rk_aead
+summary

@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L25"
+sequence = 28
+title = "Read the caller's credentials"
+difficulty = "standard"
+prerequisites = ["L24"]
+teaches = ["task-credentials"]
+requires = ["current-task"]
+vm_capabilities = []
+edit_paths = ["lings/04_introspection/25-credentials/hello.c"]

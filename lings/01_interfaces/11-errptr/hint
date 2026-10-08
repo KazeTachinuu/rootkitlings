@@ -1,1 +1,0 @@
-IS_ERR, PTR_ERR, ERR_PTR. Error codes packed into pointers.

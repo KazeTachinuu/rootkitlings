@@ -1,97 +1,83 @@
-# 01 - Build and inspect the module
+# 01 - Build and inspect a module
 
-## Why this step
+`hello.c` is source code.
+Linux cannot load it directly: the kernel build system must turn it into a kernel object, `hello.ko`.
 
-Ling 00 loaded `hello.ko`, but `./rootkitlings run` created that file for us.
-Before changing kernel code, we need to know what is source, what is generated,
-and which artifact the kernel actually loads.
+```text
+hello.c  ------>  hello.o  ------>  hello.ko
+ source           object            loadable module
+ you edit         intermediate      insmod loads this
+```
 
-Keep `hello.c` unchanged from ling 00.
+Keep `hello.c` unchanged.
+This time, inspect what the build produces.
 
-## How Kbuild works
+## Kbuild
 
-[module/Kbuild](../../../module/Kbuild) contains:
+[module/Kbuild](../../../module/Kbuild) contains one rule:
 
 ```make
 obj-m += hello.o
 ```
 
-`obj-m` asks Kbuild to produce `hello.ko` from the object named `hello.o`.
+`obj-m` declares a loadable module.
+Kbuild takes `hello.c`, compiles `hello.o`, then links `hello.ko` with the metadata required by the current kernel.
 
-The [root Makefile](../../../Makefile) enters the running kernel's build tree and
-passes the absolute `module` directory as an external module with `M=...`.
-Kbuild supplies the configuration, headers, compiler flags, and module rules
-for that kernel.
+The root [Makefile](../../../Makefile) invokes the kernel build system:
 
-```
-                    Kbuild pipeline
-  +-----------+     +-----------+     +-----------+
-  |  hello.c  | --> |  hello.o  | --> |  hello.ko |
-  +-----------+     +-----------+     +-----------+
-    source            object            module
-    text              ELF reloc         ELF reloc
-    you edit          intermediate      insmod loads
-```
-
-## Where to find kernel APIs
-
-When a ling introduces a new function or struct, you can look it up:
-
-```
-  stuck on an API?
-       |
-       +---> search the kernel source
-       |     https://elixir.bootlin.com/linux/latest/source
-       |     type any function name, struct, or macro
-       |
-       +---> official docs
-       |     https://docs.kernel.org
-       |
-       +---> headers on your machine
-             /lib/modules/$(uname -r)/build/include/linux/
-             grep -r 'function_name' to find the definition
+```text
+make
+  |
+  v
+/lib/modules/$(uname -r)/build
+  |
+  | M=/path/to/rootkitlings/module
+  v
+module/hello.ko
 ```
 
-Every include like `#include <linux/module.h>` maps to a file in that
-headers directory. You can read it.
+`M=` identifies the external module directory.
+The kernel build supplies the correct headers, configuration, compiler flags, and linking rules.
 
-## Try it
+## Build it
 
 ```bash
 make clean
 make
+```
+
+Inspect the three stages:
+
+```bash
 file module/hello.c
 file module/hello.o
 file module/hello.ko
 modinfo module/hello.ko
 ```
 
-- `make clean` removes artifacts from an earlier build.
-- `make` builds the module again.
-- `file` identifies a file format.
-- `modinfo` reads module metadata.
+`file` identifies each format.
+`modinfo` reads metadata such as the license, description, and target kernel version without loading the module.
 
-Also try reading the header your module uses:
-
-```bash
-grep -n 'pr_info' /lib/modules/$(uname -r)/build/include/linux/printk.h | head
+```text
+hello.c   C source
+hello.o   relocatable ELF object
+hello.ko  relocatable ELF kernel module
 ```
-
-## Contract
-
-The check script verifies:
-
-- `hello.ko` is non-trivial in size and `modinfo` can read its metadata.
-- `insmod hello.ko` succeeds and `hello` appears in `lsmod`.
-- `/sys/module/hello/sections` exists (valid module structure).
-- `dmesg` must contain `hello: loaded` and `hello: unloaded`.
 
 ## Verify
 
 ```bash
-./rootkitlings check 1
+./rootkitlings check L01
 ```
-> **What a defender sees**: `file` identifies the format, `modinfo` reads the metadata,
-> and `strings` reveals every printable constant. The `.ko` hides nothing.
 
-See also: [02 - Multi-file modules](../02-multi-file/README.md).
+The check reads the built module's metadata, loads it, confirms its sections appear in `/sys/module/hello`, then unloads it and verifies both lifecycle messages.
+
+## Visibility
+
+A `.ko` is not a sealed executable.
+Its metadata and printable strings can be inspected without loading it:
+
+```bash
+modinfo module/hello.ko
+strings module/hello.ko | less
+```

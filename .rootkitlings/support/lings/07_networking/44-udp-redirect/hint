@@ -1,0 +1,4 @@
+Do not mutate a header pointer obtained before the skb was made writable; that
+operation may relocate data. Reacquire the UDP header, change only its destination
+field using the already converted value, and leave checksum repair to the supplied
+code.

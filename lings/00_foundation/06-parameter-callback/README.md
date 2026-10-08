@@ -1,21 +1,38 @@
 # 06 - A callback reacts to parameter writes
-## Why this step
 
-Ling 05 proved that a sysfs write changes `name`, but no module code ran at the
-moment of that change. Init cannot react because init has already finished.
+## Run code when a parameter changes
 
-A setter function runs
-whenever it receives a new value.
+Ling 05 proved that a sysfs write changes `name`, but no module code ran at the moment of that change.
+Init cannot react because init has already finished.
+
+A parameter callback can validate a proposed value and react after storing it.
+Here, every successful update increments a counter that userspace can read:
+
+```text
+printf specter > .../name
+            |
+            v
+name_param_set() --> param_set_charp() --> changes++
+            |
+            v
+name=specter          changes=2
+```
 
 Keep the `name` variable from ling 05.
+Add a counter and expose it as a read-only parameter:
+
+```c
+static unsigned int changes;
+module_param(changes, uint, 0444);
+```
 
 ## See the function pointer first
 
 These two expressions do different things:
 
 ```c
-set_name       /* the address of the function */
-set_name(...)  /* call the function now */
+name_param_set       /* the address of the function */
+name_param_set(...)  /* call the function now */
 ```
 
 An operations table stores the first form.
@@ -26,7 +43,8 @@ Assigning a callback does not execute it.
 Replace `module_param(name, charp, 0644)` with:
 
 ```c
-static int set_name(const char *value, const struct kernel_param *parameter)
+static int name_param_set(const char *value,
+			  const struct kernel_param *parameter)
 {
 	int error;
 
@@ -38,41 +56,33 @@ static int set_name(const char *value, const struct kernel_param *parameter)
 	return 0;
 }
 
-static const struct kernel_param_ops name_ops = {
-	.set = set_name,
+static const struct kernel_param_ops name_param_ops = {
+	.set = name_param_set,
 	.get = param_get_charp,
 };
 
-module_param_cb(name, &name_ops, &name, 0644);
+module_param_cb(name, &name_param_ops, &name, 0644);
 ```
 
 Keep `MODULE_PARM_DESC` after this block.
+Increment `changes` only after `param_set_charp()` succeeds.
 
-The parameter system calls `.set` on a load argument or sysfs write
-and `.get` on a sysfs read:
+The parameter system calls `.set` on a load argument or sysfs write and `.get` on a sysfs read:
 
-```
-                    kernel_param_ops
-                   +----------------+
-                   | .set = set_name|
-                   | .get = get_name|
-                   +-------+--------+
-                           |
-         +-----------------+-----------------+
-         |                                   |
- insmod name=phantom             cat /sys/.../name
- printf acu > /sys/.../name
-         |                                   |
-         v                                   v
-     .set(value)                        .get(buf)
-         |                                   |
-         v                                   v
-   param_set_charp          param_get_charp
-   stores value                reads *name
-         |
-         v
-   your custom reaction
-   (log, counter, etc.)
+```text
+module_param_cb
+       |
+       v
+kernel_param_ops
+       |
+       +-- .set = name_param_set
+       |          |
+       |          +-- validate and store name
+       |          +-- increment changes
+       |
+       +-- .get = param_get_charp
+                  |
+                  +-- return the current name
 ```
 
 Load-time ordering with `insmod hello.ko name=phantom`:
@@ -90,7 +100,7 @@ your init()        --> pr_info("loaded name=phantom")
 module is loaded, sysfs file appears
 ```
 
-## Contract
+## Observable behavior
 
 The check script verifies:
 
@@ -101,7 +111,7 @@ The check script verifies:
 ## Try it
 
 ```bash
-./rootkitlings run
+./rootkitlings run L06
 ```
 
 Inside the VM:
@@ -118,9 +128,13 @@ rmmod hello
 ## Verify
 
 ```bash
-./rootkitlings check 6
+./rootkitlings check L06
 ```
-> **What a defender sees**: anyone with write access to the sysfs file triggers the callback.
-> There is no authentication, no caller check, no rate limit. Ling 24 introduces `current`.
+
+## Limits and detection
+
+Every permitted sysfs write invokes the setter in the writer's process context.
+This interface has no caller authentication or rate limit.
+Ling 24 introduces the `current` task pointer used to inspect the caller.
 
 See also: [07 - Allocation](../07-allocation/README.md).

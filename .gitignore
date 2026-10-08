@@ -5,13 +5,15 @@
 *.mod.c
 *.mod.o
 *.symvers
-*.order
-!.order
 .*.cmd
 .tmp_versions/
 Module.symvers
 modules.order
 compile_commands.json
+.build/
+.cache/
+__pycache__/
+*.pyc
 
 # Editor/OS
 .DS_Store
@@ -20,11 +22,9 @@ compile_commands.json
 *.swp
 *~
 
-# Copyrighted PDFs / given files (books, slides from school)
-given_files/
-given_files_tar.bz2
-epirootkit-slides.pdf
-
 # Rootkitlings
-.progress
+.rootkitlings/progress
+.rootkitlings/snapshots/
 tools/icmp_send
+tools/ioctl_test
+tools/cred_trigger_test

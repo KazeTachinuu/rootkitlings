@@ -1,1 +1,0 @@
-crypto_alloc_sync_skcipher("cbc(aes)"). Set key, build request, encrypt.

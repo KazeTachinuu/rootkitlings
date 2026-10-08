@@ -1,99 +1,10 @@
-# 07 - Allocation, ownership, and lifetime
-## Why this step
+# 07 - Own kernel heap memory
 
-Our callbacks have used variables whose storage was created with the module.
-Later interfaces need objects created at runtime and kept after init returns.
-That introduces two questions: who owns the object, and when does it stop
-existing?
+State created during init can outlive the init call and remain available until module exit.
 
-Init allocates one object; exit releases it.
+This module allocates one object, stores `42` in it, and releases it on unload.
 
-## Simplify the previous module
-
-Keep the module includes, init function, exit function, registration macros,
-license, and description. Remove the `name` parameter and its callback from
-lings 05-06; this lesson replaces that experiment with owned heap state.
-
-## Add one owned object
-
-Add:
-
-```c
-#include <linux/errno.h>
-#include <linux/slab.h>
-
-struct rk_state {
-	int value;
-};
-
-static struct rk_state *state;
-```
-
-This declares a structure type and a pointer. No object is allocated yet.
-
-In your init function, allocate the struct with Linux 7.2's typed allocator:
-
-```c
-state = kmalloc_obj(*state, GFP_KERNEL);
-```
-
-`kmalloc_obj` derives the allocation size from the object type, so the size
-cannot drift when the pointer type changes. It returns a pointer to kernel heap
-memory, or `NULL` on failure.
-`GFP_KERNEL` permits sleeping (safe in module init, which runs in process
-context).
-
-If `kmalloc_obj` returns `NULL`, init must return `-ENOMEM` (from ling 04,
-you know a negative return rejects the load). Otherwise, set the value
-to 42 and log it.
-
-In your exit function, free with `kfree(state)` and set the pointer to `NULL`.
-Log that state was freed.
-
-## Map the lifetimes
-
-```
-         insmod              loaded              rmmod
-           |                   |                   |
-           v                   v                   v
-  init: kmalloc_obj ------> return 0            exit:
-           |                   |                   |
-           v                   |                kfree
-        state ---> *state      |                   |
-       (pointer)  (object)     |                state = NULL
-           |         |         |                   |
-           |    heap memory    |                   v
-           |    [ value: 42 ]  |              pointer = NULL
-           |         |         |              object freed
-           v         v         v
- 
-  state    |=========|=========|=================|        static storage
-  *state         |=========================|              heap (allocate..free)
-  locals   |===|                                          stack (one call)
-  code     |=========|=========|=================|        module memory
-                 init    loaded         exit
-```
-
-| Item | Storage | Lifetime |
-|---|---|---|
-| `state` pointer | Static | Loaded module |
-| `*state` object | Kernel heap | `kmalloc_obj` to `kfree` |
-| Local variables | Init stack | One function call |
-| Init function code | Module memory | Load to unload |
-
-## Contract
-
-The host check verifies that `hello.ko` links against both allocation and free
-symbols. The guest check loads, unloads, and repeats the cycle without a kernel
-warning.
-
-## Try it
-
-```bash
-./rootkitlings run
-```
-
-Inside the VM:
+## Observe it
 
 ```sh
 insmod hello.ko
@@ -102,16 +13,57 @@ rmmod hello
 dmesg | tail
 ```
 
-## Verify
-
-```bash
-./rootkitlings check 7
+```text
+rk: allocated value=42
+rk: freed state
 ```
 
-Reload catches stale module state and incomplete teardown. The linked symbols
-prove that both operations exist, not that every control-flow path pairs them;
-that stronger question needs review or instrumentation such as kmemleak.
-> **What a defender sees**: if init returns an error after allocation, exit never runs.
-> The allocated memory leaks permanently. The kernel has no garbage collector.
+Loading and unloading a second time must produce the same clean lifecycle.
 
-See also: [08 - Rollback](../08-rollback/README.md).
+## Ownership
+
+```text
+module init                 module exit
+     |                           |
+     v                           v
+kmalloc_obj() -> state -----> kfree(state)
+                  |
+                  v
+              value = 42
+```
+
+`state` is a static pointer stored with the loaded module.
+
+`*state` is a separate object on the kernel heap and exists only between successful allocation and `kfree()`.
+
+`kmalloc_obj(*state, GFP_KERNEL)` derives the allocation size from the pointed-to type.
+
+`GFP_KERNEL` may sleep, so it is suitable in module init but not in interrupt, timer, or probe context.
+
+A failed allocation returns `NULL`.
+
+Init must return `-ENOMEM` instead of dereferencing it.
+
+## Implement it
+
+Remove the parameter callback state from the current module and add one `struct implant_state` containing an integer value.
+
+Keep one static pointer named `state`.
+
+In init, allocate `*state` with `kmalloc_obj()` and `GFP_KERNEL`, reject `NULL`, assign `42`, and log the stored value.
+
+In exit, call `kfree(state)`, set the pointer to `NULL`, and log the release.
+
+## Verify
+
+```sh
+./rootkitlings check L07
+```
+
+The host verification requires real allocation and release symbol dependencies in `hello.ko`.
+
+The guest loads, unloads, reloads, and rejects kernel warnings.
+
+Those checks prove both operations exist and complete in this path; proving the absence of every leak requires review or instrumentation such as kmemleak.
+
+Next: [08 - Roll back partial initialization](../08-rollback/README.md).

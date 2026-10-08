@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L36"
+sequence = 41
+title = "Filter directory enumeration"
+difficulty = "advanced"
+prerequisites = ["L30", "L32"]
+teaches = ["directory-filtering"]
+requires = ["kprobes", "kretprobes", "syscall-argument-decoding"]
+vm_capabilities = []
+edit_paths = ["lings/06_visibility/36-getdents64/hello.c"]

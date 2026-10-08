@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L53"
+sequence = 62
+title = "Derive a daily domain"
+difficulty = "advanced"
+prerequisites = []
+teaches = ["keyed-domain-generation"]
+requires = []
+vm_capabilities = []
+edit_paths = ["lings/09_crypto/53-dga/hello.c"]

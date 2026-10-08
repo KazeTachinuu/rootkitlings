@@ -1,0 +1,46 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "13-lists"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_registry
+
+assert_read /proc/rk_registry ""
+
+printf '%s' "first" > /proc/rk_registry
+printf '%s' "second" > /proc/rk_registry
+printf '%s' "third" > /proc/rk_registry
+
+assert_read /proc/rk_registry "first
+second
+third"
+
+i=4
+while [ "$i" -le 32 ]; do
+    printf 'entry-%s' "$i" > /proc/rk_registry
+    i=$((i + 1))
+done
+if printf overflow > /proc/rk_registry 2>/dev/null; then
+    _fail "registry accepted more than 32 entries"
+else
+    _ok "registry rejected entry 33"
+fi
+lines=$(wc -l < /proc/rk_registry)
+if [ "$lines" -eq 32 ]; then
+    _ok "rejected append preserved 32 entries"
+else
+    _fail "registry contains $lines entries after overflow"
+fi
+
+oversized=1234567890123456789012345678901234567890123456789012345678901234
+if printf '%s' "$oversized" > /proc/rk_registry 2>/dev/null; then
+    _fail "accepted a 64-byte entry without room for a terminator"
+else
+    _ok "oversized entry rejected"
+fi
+unload hello
+assert_absent /proc/rk_registry
+
+summary

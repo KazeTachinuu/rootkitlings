@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L07"
+sequence = 7
+title = "Own kernel heap memory"
+difficulty = "standard"
+prerequisites = ["L00"]
+teaches = ["kernel-allocation"]
+requires = ["module-lifecycle"]
+vm_capabilities = []
+edit_paths = ["module/hello.c"]

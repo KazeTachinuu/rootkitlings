@@ -1,0 +1,41 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "10-proc-read"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_reader
+
+content=$(cat /proc/rk_reader)
+if [ "$content" = "hello" ]; then
+    _ok "proc read returned the payload"
+else
+    _fail "expected 'hello', got '$content'"
+fi
+
+partial=$(dd if=/proc/rk_reader bs=2 count=1 2>/dev/null)
+if [ "$partial" = "he" ]; then
+    _ok "short read respects the requested byte count"
+else
+    _fail "expected two-byte short read 'he', got '$partial'"
+fi
+
+# Second read returns the same content (position resets between opens)
+content2=$(cat /proc/rk_reader)
+if [ "$content" = "$content2" ]; then
+    _ok "second read matches first (position resets)"
+else
+    _fail "reads differ: '$content' vs '$content2'"
+fi
+
+if printf 'x' > /proc/rk_reader 2>/dev/null; then
+    _fail "/proc/rk_reader is writable (should be 0444)"
+else
+    _ok "/proc/rk_reader is read-only"
+fi
+
+unload hello
+assert_absent /proc/rk_reader
+
+summary

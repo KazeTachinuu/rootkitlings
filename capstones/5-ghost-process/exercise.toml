@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "C05"
+sequence = 45
+title = "Ghost process"
+difficulty = "challenge"
+prerequisites = ["L07", "L19", "L36"]
+teaches = ["ghost-process-view"]
+requires = ["kernel-allocation", "kernel-threads", "directory-filtering"]
+vm_capabilities = []
+edit_paths = ["capstones/5-ghost-process/dirhide.c", "capstones/5-ghost-process/ghost.c", "capstones/5-ghost-process/ghost.h", "capstones/5-ghost-process/main.c"]

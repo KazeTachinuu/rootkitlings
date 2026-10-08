@@ -1,0 +1,1 @@
+Follow the artifact names through Kbuild: the declaration in `module/Kbuild` names the loadable object, while the root Makefile tells the kernel build which external directory contains it.

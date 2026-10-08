@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L09"
+sequence = 9
+title = "Publish a procfs entry"
+difficulty = "standard"
+prerequisites = ["L00"]
+teaches = ["proc-entry"]
+requires = ["module-lifecycle"]
+vm_capabilities = []
+edit_paths = ["lings/01_procfs/09-proc-entry/hello.c"]

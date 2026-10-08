@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+"""Validate repository-local Markdown links and rootkitlings command examples."""
+
+from pathlib import Path
+import re
+import tomllib
+
+
+roots = [Path("README.md"), Path("vm/README.md")]
+documents = roots + sorted(Path("lings").rglob("*.md")) + sorted(
+    Path("capstones").rglob("*.md")
+)
+failures: list[str] = []
+
+for document in documents:
+    text = document.read_text()
+    for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", text):
+        if "://" in target or target.startswith("#"):
+            continue
+        relative = target.split("#", 1)[0]
+        if relative and not (document.parent / relative).exists():
+            failures.append(f"{document}: missing link target: {target}")
+
+    if re.search(r"\./rootkitlings\s+(?:debug|prerequisites)\b", text):
+        failures.append(f"{document}: uses a removed rootkitlings command")
+    if re.search(r"\bcapstone-[0-9]+\b", text):
+        failures.append(f"{document}: uses a removed capstone selector")
+    if re.search(
+        r"\./rootkitlings\s+(?:read|start|check|hint|solution|run|gdb)\s+[0-9]+\b",
+        text,
+    ):
+        failures.append(f"{document}: uses a removed numeric exercise selector")
+
+    metadata = document.with_name("exercise.toml")
+    if not metadata.is_file():
+        continue
+    serial = tomllib.loads(metadata.read_text())["serial"]
+    examples = re.findall(
+        r"\./rootkitlings\s+(read|start|check|hint|solution|run|gdb)\s+(\S+)",
+        text,
+    )
+    for command, selector in examples:
+        selector = selector.rstrip("`.,;:")
+        if selector != serial:
+            failures.append(
+                f"{document}: {command} example targets {selector}, expected {serial}"
+            )
+    if ("check", serial) not in examples:
+        failures.append(f"{document}: missing canonical './rootkitlings check {serial}'")
+
+if failures:
+    raise SystemExit("\n".join(failures))

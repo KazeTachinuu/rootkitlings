@@ -1,0 +1,86 @@
+#!/bin/sh
+. /lib/check.sh
+
+latest_token()
+{
+    dmesg | sed -n 's/.*rk_privesc token=\([0-9a-f]*\)$/\1/p' | tail -1
+}
+
+begin "3-root-trigger"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_privesc
+assert_read /proc/rk_privesc "triggers=0
+uid=0"
+
+mode=$(stat -c '%a' /proc/rk_privesc)
+if [ "$mode" = 666 ]; then
+    _ok "/proc/rk_privesc mode is 0666"
+else
+    _fail "/proc/rk_privesc mode: expected 666, got $mode"
+fi
+
+token=$(latest_token)
+if printf %s "$token" | grep -Eq '^[0-9a-f]{16}$'; then
+    _ok "initial token is a random-width hexadecimal value"
+else
+    _fail "invalid initial token: ${token:-missing}"
+fi
+if grep -q "$token" /proc/rk_privesc; then
+    _fail "active token leaked through the proc status"
+else
+    _ok "proc status does not disclose the active token"
+fi
+
+if chpst -u 65534:65534 \
+    cred_trigger_test /proc/rk_privesc wrong 2>/dev/null; then
+    _fail "wrong token was accepted"
+else
+    _ok "wrong token rejected"
+fi
+if chpst -u 65534:65534 \
+    cred_trigger_test /proc/rk_privesc 0123456789abcdef00 2>/dev/null; then
+    _fail "oversized token was accepted"
+else
+    _ok "oversized token rejected"
+fi
+assert_contains /proc/rk_privesc "triggers=0"
+
+result=$(chpst -u 65534:65534 \
+    cred_trigger_test /proc/rk_privesc "$token")
+if [ "$result" = "uid=0 euid=0" ]; then
+    _ok "the writing process changed from UID 65534 to UID 0"
+else
+    _fail "unexpected credential transition: $result"
+fi
+assert_contains /proc/rk_privesc "triggers=1"
+
+next_token=$(latest_token)
+if printf %s "$next_token" | grep -Eq '^[0-9a-f]{16}$' && \
+   [ "$next_token" != "$token" ]; then
+    _ok "successful use rotated the token"
+else
+    _fail "token did not rotate after use"
+fi
+
+if chpst -u 65534:65534 \
+    cred_trigger_test /proc/rk_privesc "$token" 2>/dev/null; then
+    _fail "burned token was accepted again"
+else
+    _ok "burned token rejected"
+fi
+
+result=$(chpst -u 65534:65534 \
+    cred_trigger_test /proc/rk_privesc "$next_token")
+if [ "$result" = "uid=0 euid=0" ]; then
+    _ok "rotated token authorized the next caller"
+else
+    _fail "rotated token failed: $result"
+fi
+assert_read /proc/rk_privesc "triggers=2
+uid=0"
+
+unload hello
+assert_absent /proc/rk_privesc
+summary

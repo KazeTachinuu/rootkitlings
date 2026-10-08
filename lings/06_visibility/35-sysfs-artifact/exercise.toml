@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L35"
+sequence = 40
+title = "Sysfs artifact lifecycle"
+difficulty = "advanced"
+prerequisites = ["L08"]
+teaches = ["sysfs-artifacts"]
+requires = ["initialization-rollback"]
+vm_capabilities = []
+edit_paths = ["lings/06_visibility/35-sysfs-artifact/hello.c"]

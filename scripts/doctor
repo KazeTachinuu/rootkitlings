@@ -49,6 +49,7 @@ check_command bash bash
 check_command make build
 check_command cc compiler
 check_command file file
+check_command gdb gdb
 check_command modinfo kmod
 check_command modprobe kmod
 check_command python3 python
@@ -57,6 +58,12 @@ check_command cpio cpio
 check_command gzip gzip
 check_command qemu-system-x86_64 qemu
 check_command timeout coreutils
+
+if command -v pwndbg >/dev/null; then
+	printf '[+] %-20s %s\n' pwndbg "$(command -v pwndbg)"
+else
+	printf '[-] %-20s optional enhanced GDB interface\n' pwndbg
+fi
 
 if command -v cc >/dev/null; then
 	probe=$(mktemp "${TMPDIR:-/tmp}/rootkitlings-cc.XXXXXX")
@@ -73,10 +80,11 @@ fi
 if command -v busybox >/dev/null; then
 	busybox_applets=$(busybox --list)
 	missing_applets=
-	for applet in cat chmod chpst cmp dd diff dmesg echo find grep head id \
+	for applet in cat chmod chpst cmp cut dd diff dmesg echo find grep head \
+		hexdump id \
 		ifconfig insmod kill ls lsmod mkdir modinfo mount nc ping poweroff \
-		printf ps rm rmdir rmmod sed setsid sh sleep sort stat tail test \
-		touch tr uname wc; do
+		printf ps rm rmdir rmmod sed setsid sh sha256sum sleep sort stat \
+		tail test touch tr uname wc xxd od; do
 		grep -qx "$applet" <<< "$busybox_applets" || missing_applets="$missing_applets $applet"
 	done
 	if [[ -z $missing_applets ]]; then
@@ -97,6 +105,13 @@ if command -v qemu-system-x86_64 >/dev/null; then
 fi
 
 if command -v modprobe >/dev/null; then
+	aes_gcm_modules=$(modprobe --show-depends gcm 2>/dev/null)
+	if grep -q '^insmod ' <<< "$aes_gcm_modules"; then
+		printf '[+] %-20s dependency closure found\n' aes-gcm
+	else
+		printf '[x] %-20s kernel module missing\n' aes-gcm
+		missing=$((missing + 1))
+	fi
 	network_modules=$(modprobe --show-depends virtio_net 2>/dev/null)
 	if grep -q '^insmod ' <<< "$network_modules"; then
 		printf '[+] %-20s dependency closure found\n' virtio_net
@@ -104,7 +119,7 @@ if command -v modprobe >/dev/null; then
 		printf '[x] %-20s kernel module missing\n' virtio_net
 		missing=$((missing + 1))
 	fi
-	case $network_modules in
+	case "$aes_gcm_modules $network_modules" in
 		*.ko.xz*) check_command xz xz ;;
 		*.ko.zst*) check_command zstd zstd ;;
 	esac
@@ -162,11 +177,19 @@ fi
 if (( ${#config_command[@]} )); then
 	config=$("${config_command[@]}")
 	for option in MODULES MODULE_UNLOAD DEVTMPFS PROC_FS SYSFS DEBUG_FS TRACING \
-		KPROBES FPROBE NET NETFILTER INET CRYPTO CRYPTO_AES CRYPTO_CBC CRYPTO_SHA256; do
+		KPROBES FPROBE NET NETFILTER INET CRYPTO CRYPTO_AES CRYPTO_HMAC CRYPTO_SHA256; do
 		if grep -q "^CONFIG_$option=y$" <<< "$config"; then
 			printf '[+] CONFIG_%-13s y\n' "$option"
 		else
 			printf '[x] CONFIG_%-13s must be built in (=y)\n' "$option"
+			missing=$((missing + 1))
+		fi
+	done
+	for option in CRYPTO_AEAD CRYPTO_GCM; do
+		if grep -Eq "^CONFIG_$option=(y|m)$" <<< "$config"; then
+			printf '[+] CONFIG_%-13s available\n' "$option"
+		else
+			printf '[x] CONFIG_%-13s must be enabled (=y or =m)\n' "$option"
 			missing=$((missing + 1))
 		fi
 	done
@@ -194,7 +217,7 @@ fi
 
 printf '\n'
 if (( missing == 0 )); then
-	printf '[+] Ready. Start with: ./rootkitlings readme 0\n'
+	printf '[+] Ready. Start with: ./rootkitlings read L00\n'
 else
 	printf '[x] Not ready: %d required item(s) missing\n' "$missing"
 	exit 1

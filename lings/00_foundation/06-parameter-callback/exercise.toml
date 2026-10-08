@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L06"
+sequence = 6
+title = "A callback reacts to parameter writes"
+difficulty = "standard"
+prerequisites = ["L05"]
+teaches = ["parameter-callbacks"]
+requires = ["module-parameters"]
+vm_capabilities = []
+edit_paths = ["module/hello.c"]

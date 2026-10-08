@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L23"
+sequence = 23
+title = "Wake a thread on demand"
+difficulty = "standard"
+prerequisites = ["L19"]
+teaches = ["wait-queues"]
+requires = ["kernel-threads"]
+vm_capabilities = []
+edit_paths = ["lings/03_concurrency/23-waiting/hello.c"]

@@ -1,95 +1,108 @@
-# Capstone 1: Beacon
+# Beacon scheduler
 
-Build a module that runs a background heartbeat. Every C2 implant has
-a beacon loop: wake up, check in, go back to sleep. This is yours.
+A beacon wakes periodically to perform a short action, then waits again.
 
-```
-  module load
-       |
-       v
-  kthread_run("rk_beacon")
-       |
-       v
-  +---------------------------+
-  |  beacon loop              |      /proc/rk_beacon
-  |                           |      +------------------+
-  |  while (!should_stop) {   |      | uptime: 45s      |
-  |    mutex_lock(&state)     |----->| ticks: 9         |
-  |    ticks++                |      | interval: 5      |
-  |    mutex_unlock(&state)   |      | status: running  |
-  |    ssleep(interval)       |      +------------------+
-  |  }                        |
-  +---------------------------+      /sys/.../interval
-                                     echo 10 > interval
-                                     (callback updates interval)
-```
+This module implements the timing and control loop without sending network traffic.
 
-## Prerequisites
+It counts completed intervals and exposes a live snapshot through `/proc/rk_beacon`.
 
-Lings 00 through 23 (foundation + interfaces + concurrency).
+## Operate it
 
-## What you are building
-
-A kernel thread that wakes up every N seconds, increments a counter,
-and reports its state through `/proc/rk_beacon`.
-
-- A kthread runs the beacon loop.
-- A sysfs parameter `interval` controls the sleep duration (default 5s).
-- A parameter callback validates the new interval (must be 1-300).
-- A mutex protects the shared state (tick count, interval, start time).
-- `/proc/rk_beacon` reports: uptime, tick count, interval, status.
-- On unload, the thread stops cleanly via `kthread_stop`.
-
-## What "done" looks like
+Load the module with its five-second default interval:
 
 ```sh
 insmod hello.ko
-sleep 12
 cat /proc/rk_beacon
-# uptime: 12s
-# ticks: 2
-# interval: 5
-# status: running
-echo 2 > /sys/module/hello/parameters/interval
-sleep 5
+```
+
+```text
+uptime: 0s
+ticks: 0
+interval: 5
+status: running
+```
+
+After a complete interval, the tick count advances:
+
+```sh
+sleep 6
 cat /proc/rk_beacon
-# uptime: 17s
-# ticks: 4
-# interval: 2
-# status: running
-rmmod hello
 ```
 
-## What a defender sees
-
-The kthread shows up in `ps`:
-
-```
-ps aux | grep rk_beacon
-root     [rk_beacon]
+```text
+uptime: 6s
+ticks: 1
+interval: 5
+status: running
 ```
 
-The thread name is visible in the process list. Renaming it changes only the
-label; its task, wakeups, module code, and behavior remain observable.
+Change the live interval through sysfs:
 
-## Contract
+```sh
+echo 1 > /sys/module/hello/parameters/interval
+sleep 3
+cat /proc/rk_beacon
+```
 
-The check script verifies:
+The exact uptime and tick count depend on command timing, but the interval is now one second and ticks advance at the new rate.
 
-- `/proc/rk_beacon` exists after loading.
-- `ticks` increments over time (at least 2 ticks in 12 seconds at default interval).
-- `interval` defaults to 5.
-- Changing `interval` via sysfs changes the tick rate.
-- `status` is `running` while loaded.
-- `/proc/rk_beacon` disappears after unload.
-- No kernel warnings or hung thread on unload.
+## Timer and work
+
+```text
+timer expires
+     |
+     +---- queue work ----> ticks++
+     |
+     +---- rearm timer
+              ^
+              |
+interval write+---- move next expiry to now + interval
+```
+
+The timer callback runs in atomic context and performs no sleeping work.
+
+It queues `beacon_work` on the system workqueue, then rearms itself from the current interval.
+
+The work callback runs in process context and increments the completed tick count.
+
+An interval update uses `mod_timer()` so a change from 300 seconds to one second affects the pending expiry immediately.
+
+`READ_ONCE()` and `WRITE_ONCE()` publish the integer interval, while an atomic counter publishes completed work.
+
+## Files
+
+```text
+main.c      start components and unwind failed initialization
+beacon.c    parameter, timer, queued work and atomic state
+status.c    read-only proc snapshot
+beacon.h    worker lifecycle and snapshot contract
+status.h    proc-entry lifecycle contract
+```
+
+`beacon.c` owns all mutable state.
+
+`status.c` formats a copied snapshot instead of reaching into that state directly.
+
+## Your work
+
+Complete `beacon_timer_expired()` in `beacon.c`.
+
+Return immediately when `running` is false.
+
+Otherwise queue `beacon_work`, then rearm `beacon_timer` for `jiffies + interval * HZ` using the current interval.
+
+Complete the successful update in `interval_set()`.
+
+When the beacon is running, use `mod_timer()` to move the pending expiry to `jiffies + new_interval * HZ`.
+
+The parsing, range validation, atomic tick update, startup, and synchronous timer/work cleanup are provided.
 
 ## Verify
 
-```bash
-./rootkitlings check capstone-1
+```sh
+./rootkitlings check C01
 ```
 
-## Hints
+The verification observes the initial state, rejects an invalid interval without changing it, changes the live interval, measures advancing ticks, and unloads the worker cleanly.
 
-Only if stuck. Try without them first.
+The proc entry, parameter, timer cadence, queued work, and loaded module are all observable.

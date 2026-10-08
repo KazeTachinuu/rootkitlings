@@ -1,0 +1,39 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "15-ioctl"
+
+load hello.ko
+assert_loaded hello
+assert_exists /dev/rk_ioctl
+
+# Verify it's a character device
+if [ -c /dev/rk_ioctl ]; then
+    _ok "/dev/rk_ioctl is a character device"
+else
+    _fail "/dev/rk_ioctl is not a character device"
+fi
+
+assert_read /dev/rk_ioctl "hello"
+
+# Test ioctl SET then GET
+if command -v ioctl_test >/dev/null 2>&1; then
+    ioctl_test set "specter"
+    got=$(ioctl_test get)
+    if [ "$got" = "specter" ]; then
+        _ok "ioctl SET+GET round-trip: specter"
+    else
+        _fail "ioctl GET returned '$got', expected 'specter'"
+    fi
+
+    # Verify ioctl SET is visible via read interface
+    assert_read /dev/rk_ioctl "specter"
+
+else
+    _fail "ioctl_test helper not found (run make tools)"
+fi
+
+unload hello
+assert_absent /dev/rk_ioctl
+
+summary

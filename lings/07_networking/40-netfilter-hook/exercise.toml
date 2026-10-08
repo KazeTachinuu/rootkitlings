@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L40"
+sequence = 47
+title = "Observe packets with Netfilter"
+difficulty = "advanced"
+prerequisites = ["L00"]
+teaches = ["netfilter-hooks"]
+requires = ["module-lifecycle"]
+vm_capabilities = []
+edit_paths = ["lings/07_networking/40-netfilter-hook/hello.c"]

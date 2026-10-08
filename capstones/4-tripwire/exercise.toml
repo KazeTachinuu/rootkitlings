@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "C04"
+sequence = 38
+title = "File tripwire"
+difficulty = "challenge"
+prerequisites = ["L25", "L29"]
+teaches = ["spinlocks", "event-ring-buffer"]
+requires = ["current-task", "task-credentials", "kprobes"]
+vm_capabilities = []
+edit_paths = ["capstones/4-tripwire/main.c", "capstones/4-tripwire/monitor.c", "capstones/4-tripwire/tripwire.h"]

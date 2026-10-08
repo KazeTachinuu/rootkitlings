@@ -1,0 +1,4 @@
+The descriptor has algorithm-specific trailing context, so its allocation is
+larger than the visible struct and depends on the transform. Draw both ownership
+boundaries first, then ensure every failure and success path releases them in
+reverse order.

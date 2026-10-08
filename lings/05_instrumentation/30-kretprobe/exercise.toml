@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L30"
+sequence = 34
+title = "Observe function results with a kretprobe"
+difficulty = "advanced"
+prerequisites = ["L29"]
+teaches = ["kretprobes"]
+requires = ["kprobes"]
+vm_capabilities = []
+edit_paths = ["lings/05_instrumentation/30-kretprobe/hello.c"]

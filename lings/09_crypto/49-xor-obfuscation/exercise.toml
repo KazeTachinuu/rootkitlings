@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L49"
+sequence = 58
+title = "Obfuscate a static string with XOR"
+difficulty = "advanced"
+prerequisites = []
+teaches = ["xor-obfuscation"]
+requires = []
+vm_capabilities = []
+edit_paths = ["lings/09_crypto/49-xor-obfuscation/hello.c"]

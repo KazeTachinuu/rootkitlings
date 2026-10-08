@@ -1,0 +1,40 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "51-hash-verification"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_hash
+
+assert_contains /proc/rk_hash "algo=sha256"
+assert_contains /proc/rk_hash "status=ok"
+
+hash=$(cat /proc/rk_hash | sed -n 's/^hash=\([0-9a-f]*\)$/\1/p')
+if [ "$hash" = "5a3faae9795848835c7647c58a9843cf424811d37712aa6340e48e35c28d6dec" ]; then
+    _ok "trusted input has the expected SHA-256 digest"
+else
+    _fail "unexpected trusted digest: $hash"
+fi
+
+printf '%s' "changed" > /proc/rk_hash 2>/dev/null
+hash2=$(cat /proc/rk_hash | sed -n 's/^hash=\([0-9a-f]*\)$/\1/p')
+if [ "$hash2" = "d67e2e944994496c8d8ec76eed0cf9f09679448d584b532bebf941852a37f5ed" ]; then
+    _ok "changed input has the expected SHA-256 digest"
+else
+    _fail "unexpected changed digest: $hash2"
+fi
+assert_contains /proc/rk_hash "status=failed"
+
+before=$(cat /proc/rk_hash)
+if head -c 256 /dev/zero | tr '\000' x > /proc/rk_hash 2>/dev/null; then
+    _fail "oversized input accepted"
+else
+    _ok "oversized input rejected"
+fi
+assert_read /proc/rk_hash "$before"
+
+unload hello
+assert_absent /proc/rk_hash
+
+summary

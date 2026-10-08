@@ -1,11 +1,22 @@
 # 05 - Parameters are live module state
-## Why this step
 
-Our module can load safely, but changing its greeting still requires editing C
-and rebuilding. We need a value userspace can provide at load time and inspect
-or change while the module is loaded.
+## Configure a module without rebuilding it
 
-Start from the successful module at the end of ling 04.
+A module parameter connects one kernel variable to load-time arguments and a sysfs file.
+For example, the same module can load with a default target or an operator-selected target:
+
+```text
+insmod hello.ko name=phantom
+                     |
+                     v
+        /sys/module/hello/parameters/name
+                     |
+                     v
+              name == "phantom"
+```
+
+Start from the module used in lesson 04.
+Restore init's return value to `0` so the module can load before adding the parameter.
 
 ## Add one string parameter
 
@@ -52,22 +63,21 @@ module_param wires:  variable <---> sysfs file
 one backing store, two access paths
 ```
 
-Use the parameter in your init and exit log calls so you can see
-the value changing.
+Use the parameter in your init and exit log calls so you can see the value changing.
 
-## Contract
+## Observable behavior
 
 The check script verifies:
 
-- Module loads with default parameter (`name` == `world`)
-- Module loads with `name=phantom` (parameter is `phantom`)
-- Parameter can be changed at runtime via sysfs
-- Module unloads cleanly
+- Loading without an argument exposes `world`.
+- Loading with `name=phantom` exposes `phantom`.
+- Writing `specter` through sysfs changes the same kernel variable.
+- Unloading removes the parameter path.
 
 ## Try it
 
 ```bash
-./rootkitlings run
+./rootkitlings run L05
 ```
 
 Inside the VM:
@@ -88,13 +98,15 @@ dmesg | tail
 ## Verify
 
 ```bash
-./rootkitlings check 5
+./rootkitlings check L05
 ```
 
-The check loads with no arg (default `world`), then with `name=phantom`,
-then writes `specter` via sysfs. It verifies the parameter value at each step
-and checks that exit prints the last written value.
-> **What a defender sees**: parameters are world-readable in `/sys/module/hello/parameters/`.
-> Anyone on the system can read them. And writing triggers no module code at all.
+The check reads the real sysfs parameter after each operation.
+
+## Limits and detection
+
+Mode `0644` makes the parameter world-readable and writable by root.
+The parameter name and current value are visible under `/sys/module/hello/parameters/`.
+A plain `module_param()` stores a new value but provides no custom validation or side effect.
 
 See also: [06 - Parameter callback](../06-parameter-callback/README.md).

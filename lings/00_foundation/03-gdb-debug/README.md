@@ -1,168 +1,282 @@
-# 03 - GDB debugging
+# 03 - Find a bug with GDB
 
-When `printk` is not enough, attach a debugger to the running kernel.
+The module adds the bytes in `root` and publishes the result through `/proc/rk_debug`.
 
-## Setup
-
-The QEMU VM supports GDB debugging with the `gdb` command:
-
-```bash
-./rootkitlings gdb
+```text
+'r' + 'o' + 'o' + 't'
+114 + 111 + 111 + 116 = 452
 ```
 
-This boots the VM paused, with a GDB server on `localhost:1234` and
-KASLR disabled for stable addresses.
+The module returns `196`.
+Use GDB to find where the value changes.
 
-In another terminal, load the kernel's debug symbols and connect:
+## How the wrapper works
+
+GDB runs on the host and controls the guest CPU through QEMU.
+
+```text
+terminal 1                                      terminal 2
++-----------------------------------+           +-------------------------+
+| qemu-system-x86_64                |           | pwndbg vmlinux          |
+|   -s                             |<-- TCP --->| target remote :1234     |
+|   -S                             |   1234     | continue                |
+|   -append "... nokaslr"           |           |                         |
++----------------+------------------+           +-------------------------+
+                 |
+                 v
+          guest starts running
+```
+
+```text
+-s       open the GDB server on port 1234
+-S       wait for GDB before running the CPU
+nokaslr  make vmlinux addresses match the running kernel
+```
+
+`-s` is shorthand for `-gdb tcp::1234`.
+
+```text
+without -S:  boot starts -> early breakpoint passes -> GDB connects
+with -S:     CPU paused  -> GDB connects           -> continue -> boot
+```
+
+Two files provide symbols:
+
+```text
+vmlinux   kernel symbols
+hello.ko  module symbols, available after insmod
+```
+
+`hello.ko` is relocatable.
+Its symbols contain offsets, not the final addresses chosen by the kernel.
+
+```text
+checksum offset in hello.ko
+              + runtime .text address from sysfs
+              ----------------------------------
+                guest address used by GDB
+```
+
+`add-symbol-file` relocates those symbols inside GDB.
+It does not load the module into the guest.
+`nokaslr` aligns `vmlinux`; `add-symbol-file` handles the separately loaded module.
+
+The module uses `-Og -g` so GDB can follow its source and local variables.
+
+## 1. Prepare the exercise
+
+```bash
+./rootkitlings start L03
+```
+
+This stages the deliberately faulty [`hello.c`](hello.c) for the debugger exercise.
+
+## 2. Start QEMU — terminal 1
+
+```bash
+./rootkitlings gdb L03
+```
+
+QEMU opens port `1234` and waits.
+The guest has not started yet.
+
+## 3. Connect — terminal 2
+
+Open the matching kernel image:
+
+```bash
+pwndbg /lib/modules/$(uname -r)/build/vmlinux
+```
+
+Use plain GDB if Pwndbg is unavailable:
 
 ```bash
 gdb /lib/modules/$(uname -r)/build/vmlinux
-(gdb) target remote :1234
-(gdb) continue
 ```
 
-The kernel boots. You can `Ctrl-C` in GDB at any time to pause it.
+Connect, then release the paused CPU:
 
-If you use pwndbg, the same connection works. But pwndbg can misbehave
-in kernel context (it expects userspace by default). If it hangs or
-produces garbage, fall back to plain GDB:
-
-```bash
-gdb -nx /lib/modules/$(uname -r)/build/vmlinux
+```text
+target remote :1234
+continue
 ```
 
-`-nx` skips all plugins. Learn plain GDB first, add pwndbg later.
+`target remote` connects to QEMU's GDB stub.
+Symbol files remain on the host; QEMU provides guest registers, memory, and execution control.
 
-## Loading module symbols
+Terminal 1 finishes booting and opens the guest shell.
 
-The kernel loads your `.ko` at a runtime address. GDB needs that address
-to map your module's symbols to the right memory locations.
+## 4. Load the module — terminal 1
 
-After `insmod` in the VM, read the text section address from the VM console:
-
+```sh
+insmod hello.ko
+cat /sys/module/hello/sections/.text
 ```
-/rootkitlings # insmod hello.ko
-/rootkitlings # cat /sys/module/hello/sections/.text
+
+Keep the address printed by the second command:
+
+```text
 0xffffffffc0000000
 ```
 
-Copy that address, then switch to the GDB terminal:
+Your address may differ.
 
-```
-(gdb) add-symbol-file module/hello.ko 0xffffffffc0000000
-```
+## 5. Load the module symbols — terminal 2
 
-Now you can set breakpoints on module functions by name.
+GDB has no prompt while the guest runs.
+Press `Ctrl-C` to pause the guest and recover it:
 
-## Essential commands
-
-| Command | What it does |
-|---------|-------------|
-| `break rk_show` | Breakpoint on function entry |
-| `break compute if result > 100` | Conditional breakpoint |
-| `continue` | Resume execution |
-| `step` / `next` | Step into / step over |
-| `finish` | Run until current function returns |
-| `print variable` | Show a variable's value |
-| `print *ptr` | Dereference and print a struct |
-| `print/x variable` | Print in hex |
-| `x/16xb addr` | Examine 16 bytes at address |
-| `bt` | Stack backtrace |
-| `info registers` | CPU register state |
-| `watch variable` | Break when variable changes |
-| `list` | Show source around current line |
-
-## Kernel-specific tricks
-
-**Break on module load.** Set a breakpoint on `do_init_module` to catch
-any module's `init` function before it runs. Useful when you need to
-step through initialization:
-
-```
-(gdb) break do_init_module
-(gdb) continue
-# now insmod in the VM, GDB stops before init runs
+```text
+^C
 ```
 
-**Inspect current task.** If your kernel has `CONFIG_GDB_SCRIPTS`, you
-get `lx-*` commands: `lx-dmesg` dumps the kernel log, `lx-lsmod` lists
-loaded modules, and `lx-symbols` auto-loads module symbols on insmod.
-Distribution kernels may not ship these scripts. The manual `add-symbol-file`
-workflow works when the matching unstripped module object and runtime section
-addresses are available.
-
-**KASLR.** Kernel address space layout randomization shifts all kernel
-addresses at boot. `./rootkitlings gdb` adds `nokaslr` to the kernel
-command line automatically. On real systems or other VMs, you would need
-to add it yourself, or GDB's symbols won't match runtime addresses.
-
-**Print kernel structures.** GDB can print any kernel struct if symbols
-are loaded:
-
-```
-(gdb) print *current
-(gdb) print current->pid
-(gdb) print current->comm
+```text
+Ctrl-C -> remote interrupt -> QEMU stops the guest CPU -> prompt returns
 ```
 
-## GDB vs pwndbg
+Load `hello.ko` at the address printed in terminal 1:
 
-pwndbg is a GDB plugin that adds color, automatic context display, and
-some kernel-aware commands:
+```text
+add-symbol-file lings/00_foundation/03-gdb-debug/hello.ko 0xffffffffc0000000
+break checksum
+continue
+```
 
-| Feature | GDB | pwndbg |
-|---------|-----|--------|
-| Register display | `info registers` (manual) | Automatic on every stop |
-| Disassembly | `disassemble` (plain) | Color-coded, automatic |
-| Memory inspection | `x/` commands | `telescope`, `hexdump` |
-| Struct printing | `print *ptr` | `dt` with field layout |
-| Stack trace | `bt` | Enhanced with source context |
-| Kernel tasks | manual | `kcurrent`, `kfile` |
+Replace the example address with yours.
 
-pwndbg wraps GDB, it does not replace it. Every GDB command still works.
-Recent pwndbg versions added `kcurrent` (show current task), `kfile`
-(open files), `pagewalk` (page table walk), and `kmem-trace` (heap
-allocation tracing). These are useful but not essential for module
-debugging.
+```text
+add-symbol-file  relocate module symbols in GDB
+break checksum   resolve checksum to a guest address and set a breakpoint
+continue         let QEMU run the guest CPU
+```
 
-The main benefit of pwndbg for this course: automatic register and
-disassembly display on every stop. You see the state without typing
-`info registers` and `disassemble` after each step.
+## 6. Trigger the bug — terminal 1
 
-## The exercise
+```sh
+cat /proc/rk_debug
+```
 
-The template checksums the bytes `{ 'r', 'o', 'o', 't' }` and writes
-the result to `/proc/rk_debug`. The expected sum is 452
-(114 + 111 + 111 + 116), but the module prints something else.
+The read blocks because GDB stopped inside `checksum()`.
 
-The code looks correct. Read it, convince yourself, then prove yourself
-wrong with GDB:
+## 7. Inspect the call — terminal 2
 
-1. Boot with `./rootkitlings gdb`
-2. Connect: `gdb /lib/modules/$(uname -r)/build/vmlinux`, then
-   `target remote :1234`, `continue`
-3. In the VM, `insmod` and read the address from
-   `/sys/module/hello/sections/.text`
-4. In GDB: `add-symbol-file module/hello.ko 0x<address>`
-5. Set a breakpoint on `checksum`, trigger it by reading `/proc/rk_debug`
-6. Step through the loop. Print `sum` after each iteration. Find the
-   iteration where the value stops making sense.
-7. Fix the one-word bug.
+```text
+list
+backtrace
+frame 0
+info args
+```
 
-## The contract
+```text
+list        show the source around the current line
+backtrace   show the calls that reached checksum()
+frame 0     select checksum()'s stack frame
+info args   show data and len
+```
 
-- `/proc/rk_debug` exists after `insmod`
-- Reading it returns exactly `result=452\n`
+`bt` is the short form of `backtrace`.
 
-## What a defender sees
+Pwndbg can show the current source, registers, disassembly, and stack together:
 
-Debug sessions are local. No runtime artifact to detect. The fixed module
-behaves identically whether debugged or not.
+```text
+context
+```
+
+Inspect the four input bytes:
+
+```text
+hexdump data 4
+```
+
+The plain-GDB equivalent is:
+
+```text
+x/4ub data
+```
+
+`x/4ub` means examine four unsigned bytes starting at `data`.
+
+## 8. Follow the accumulator — terminal 2
+
+Use `next` until GDB reaches the `for` loop.
+Then track the loop index and accumulator:
+
+```text
+next
+info locals
+display /d i
+display /d sum
+next
+```
+
+Repeat `next` through the loop.
+The displays refresh after every stop.
+
+```text
+next -> run to the next source line -> stop -> refresh displays
+```
+
+```text
+byte added      mathematical total      value stored in u8
+----------      ------------------      ------------------
+114             114                     114
+111             225                     225
+111             336                      80
+116             452                     196
+```
+
+`u8` holds only `0` through `255`.
+The value wraps when the total reaches `336`.
+
+## 9. Finish and shut down
+
+Leave the function, remove the temporary debugger state, and resume the guest:
+
+```text
+finish
+undisplay
+clear checksum
+continue
+```
+
+Terminal 1 now prints:
+
+```text
+result=196
+```
+
+Stop the guest cleanly:
+
+```sh
+rmmod hello
+poweroff
+```
+
+After QEMU exits, close the debugger:
+
+```text
+quit
+```
+
+## Fix the bug
+
+Change the accumulator to a type that can hold `452`:
+
+```c
+u32 sum = 0;
+```
 
 ## Verify
 
 ```bash
-./rootkitlings check 3
+./rootkitlings check L03
 ```
 
-See also: [04 - Init failure](../04-init-failure/README.md).
+The verification requires the real proc result:
+
+```text
+result=452
+```
+
+It also confirms that `hello.ko` contains the `checksum` symbol and GDB debug information.
+Only the disposable guest kernel is debugged; the host kernel is never attached.

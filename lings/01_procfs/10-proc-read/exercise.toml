@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L10"
+sequence = 10
+title = "Return bytes from procfs"
+difficulty = "standard"
+prerequisites = ["L09"]
+teaches = ["proc-read"]
+requires = ["proc-entry"]
+vm_capabilities = []
+edit_paths = ["lings/01_procfs/10-proc-read/hello.c"]

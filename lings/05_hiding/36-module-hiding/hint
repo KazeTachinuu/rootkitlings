@@ -1,1 +1,0 @@
-list_del on THIS_MODULE->list. Save pointers for re-add in exit.

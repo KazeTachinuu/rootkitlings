@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "C08"
+sequence = 57
+title = "Boot-time module request"
+difficulty = "challenge"
+prerequisites = ["L48"]
+teaches = ["boot-load-persistence"]
+requires = ["kernel-file-transactions"]
+vm_capabilities = []
+edit_paths = ["capstones/8-boot-persistence/main.c", "capstones/8-boot-persistence/persistence.c", "capstones/8-boot-persistence/persistence.h"]

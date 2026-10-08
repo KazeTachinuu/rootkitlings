@@ -1,1 +1,0 @@
-struct miscdevice + misc_register. MISC_DYNAMIC_MINOR.

@@ -1,0 +1,14 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "12-errptr"
+
+load hello.ko
+assert_loaded hello
+assert_read /proc/rk_errptr "error=-12
+allocation=ok"
+
+unload hello
+assert_absent /proc/rk_errptr
+
+summary

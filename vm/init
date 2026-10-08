@@ -35,8 +35,15 @@ for _word in $_cmdline; do
 	case "$_word" in
 		rootkitlings=check) _check=1 ;;
 		rootkitlings=network) _network=1 ;;
+		rootkitlings=aes-gcm) _aes_gcm=1 ;;
 	esac
 done
+
+if [ "${_aes_gcm:-}" = 1 ]; then
+	for _module in /lib/modules/"$(uname -r)"/crypto/*.ko; do
+		run insmod "$_module"
+	done
+fi
 
 if [ "${_network:-}" = 1 ]; then
 	for _module in /lib/modules/"$(uname -r)"/network/*.ko; do

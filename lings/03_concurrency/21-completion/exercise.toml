@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L21"
+sequence = 21
+title = "Wait for finite work to finish"
+difficulty = "standard"
+prerequisites = ["L19"]
+teaches = ["completions"]
+requires = ["kernel-threads"]
+vm_capabilities = []
+edit_paths = ["lings/03_concurrency/21-completion/hello.c"]

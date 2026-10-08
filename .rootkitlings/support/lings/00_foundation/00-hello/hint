@@ -1,0 +1,1 @@
+Trace the two lifecycle events Linux must know about: one function is selected for load and one for unload. Each should leave an observable kernel-log message.

@@ -1,0 +1,1 @@
+Configuration has two fallible stages: acquiring the keyed-hash transform and installing its key. Distinguish an encoded allocation error from a valid transform, and do not return a transform whose key setup failed.

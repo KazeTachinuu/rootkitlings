@@ -1,0 +1,59 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "39-port-hiding"
+
+ifconfig lo 127.0.0.1 up 2>/dev/null
+
+# Start a listener on port 8080 (the hidden port)
+nc -l -p 8080 -s 127.0.0.1 &
+NC_PID=$!
+sleep 1
+
+# Verify port 8080 appears in /proc/net/tcp before module load
+# Port 8080 = 0x1F90
+before=$(cat /proc/net/tcp | grep -ci "1F90")
+if [ "$before" -gt 0 ]; then
+    _ok "port 8080 visible before module load ($before entries)"
+else
+    _fail "port 8080 not in /proc/net/tcp before load"
+    kill $NC_PID 2>/dev/null; wait $NC_PID 2>/dev/null
+    summary
+fi
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_portcloak
+
+# After module load, port 8080 should be hidden from /proc/net/tcp
+after=$(cat /proc/net/tcp | grep -ci "1F90")
+if [ "$after" -eq 0 ]; then
+    _ok "port 8080 hidden from /proc/net/tcp"
+else
+    _fail "port 8080 still visible ($after entries)"
+fi
+
+assert_contains /proc/rk_portcloak "port=8080"
+
+# The hidden counter should be > 0
+hidden=$(cat /proc/rk_portcloak | sed -n 's/^hidden=//p')
+if [ "$hidden" -gt 0 ] 2>/dev/null; then
+    _ok "hide counter = $hidden"
+else
+    _fail "hide counter not incremented ($hidden)"
+fi
+
+unload hello
+
+# After unload, port should be visible again
+restored=$(cat /proc/net/tcp | grep -ci "1F90")
+if [ "$restored" -gt 0 ]; then
+    _ok "port 8080 visible after unload"
+else
+    _fail "listener is still controlled by the check but port did not reappear"
+fi
+
+kill $NC_PID 2>/dev/null
+wait $NC_PID 2>/dev/null
+
+summary

@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L16"
+sequence = 16
+title = "Run a userspace helper"
+difficulty = "standard"
+prerequisites = ["L11"]
+teaches = ["usermode-helper"]
+requires = ["proc-write"]
+vm_capabilities = []
+edit_paths = ["lings/02_interfaces/16-usermode-exec/hello.c"]

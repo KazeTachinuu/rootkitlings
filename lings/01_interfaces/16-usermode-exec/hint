@@ -1,1 +1,0 @@
-UMH_WAIT_PROC blocks. filp_open + kernel_read to capture output. proc_create_single for the read side.

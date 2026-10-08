@@ -1,0 +1,16 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+build=${1:?usage: host-check BUILD_DIR}
+
+nm "$build/hello.ko" | grep -Eq '[[:space:]]t[[:space:]]+checksum$' || {
+	printf '[x] checksum is not available as a local module symbol\n' >&2
+	exit 1
+}
+
+readelf -S "$build/hello.ko" | grep -q '\.debug_info' || {
+	printf '[x] hello.ko has no GDB debug information\n' >&2
+	exit 1
+}
+
+printf '[+] checksum symbol and debug information verified\n'

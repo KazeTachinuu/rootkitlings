@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L38"
+sequence = 43
+title = "Filter one kernel-log read path"
+difficulty = "advanced"
+prerequisites = ["L30"]
+teaches = ["log-view-filtering"]
+requires = ["kretprobes"]
+vm_capabilities = []
+edit_paths = ["lings/06_visibility/38-log-hiding/hello.c"]

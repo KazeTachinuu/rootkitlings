@@ -1,0 +1,62 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-tests.XXXXXX")
+trap 'rm -rf -- "$work"' EXIT
+
+cd "$ROOT_DIR"
+make --quiet tools
+
+declare -A requested=()
+for filter; do
+	scripts/catalog resolve "$filter" >/dev/null
+	requested[$filter]=1
+done
+
+passed=0
+failed=0
+matched=0
+while IFS=$'\t' read -r serial entry _title; do
+	(( $# == 0 )) || [[ -n ${requested[$serial]:-} ]] || continue
+	(( ++matched ))
+
+	name=${entry##*/}
+	support=.rootkitlings/support/$entry
+	build=$work/$name
+	mkdir -p "$build"
+	if [[ -d .rootkitlings/solutions/$name ]]; then
+		cp -a ".rootkitlings/solutions/$name/." "$build/"
+	else
+		cp ".rootkitlings/solutions/$name.c" "$build/hello.c"
+		printf 'obj-m += hello.o\n' > "$build/Kbuild"
+	fi
+
+	printf '\n[*] %s\n' "$name"
+	output=
+	boot_args=()
+	while IFS= read -r capability; do
+		[[ -n $capability ]] && boot_args+=(--cap "$capability")
+	done < <(scripts/catalog query "$serial" vm_capabilities)
+	if make --quiet MODULE_DIR="$build" &&
+		{ [[ ! -x $support/host-check ]] || "$support/host-check" "$build"; } &&
+		output=$(timeout --foreground "${ROOTKITLINGS_CHECK_TIMEOUT:-60}" \
+			vm/boot "${boot_args[@]}" --check "$support/check" "$build/hello.ko" \
+			</dev/null 2>&1) &&
+		[[ $output == *"[+] PASSED"* ]]; then
+		printf '%s\n' "$output"
+		printf '[+] %s passed\n' "$name"
+		(( ++passed ))
+	else
+		printf '%s\n' "${output:-build failed}" >&2
+		printf '[x] %s failed\n' "$name" >&2
+		(( ++failed ))
+	fi
+done < <(scripts/catalog list)
+
+(( $# == 0 || matched == ${#requested[@]} )) || {
+	printf '[x] one or more requested exercises were not found\n' >&2
+	exit 1
+}
+printf '\n[*] solution tests: %d passed, %d failed\n' "$passed" "$failed"
+(( failed == 0 ))

@@ -1,0 +1,29 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "49-xor-obfuscation"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_xor
+
+assert_contains /proc/rk_xor "cipher=302d2d36292b36623127213027366226233623"
+assert_contains /proc/rk_xor "plain=rootkit secret data"
+
+# Write new plaintext and verify round-trip
+printf '%s' "test123" > /proc/rk_xor
+assert_contains /proc/rk_xor "cipher=36273136737071"
+assert_contains /proc/rk_xor "plain=test123"
+
+before=$(cat /proc/rk_xor)
+if head -c 128 /dev/zero | tr '\000' x > /proc/rk_xor 2>/dev/null; then
+    _fail "oversized plaintext accepted"
+else
+    _ok "oversized plaintext rejected"
+fi
+assert_read /proc/rk_xor "$before"
+
+unload hello
+assert_absent /proc/rk_xor
+
+summary

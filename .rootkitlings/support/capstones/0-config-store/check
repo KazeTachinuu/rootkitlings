@@ -1,0 +1,108 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "C00: config store"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_cfg
+
+# Store empty on start
+empty=$(cat /proc/rk_cfg)
+if [ -z "$empty" ]; then
+    _ok "store empty on start"
+else
+    _fail "store should be empty, got '$empty'"
+fi
+
+token="cfg_$$_$(date +%s)"
+
+# Set a dynamic value that cannot come from a fixed fixture.
+echo "set:target=$token" > /proc/rk_cfg
+assert_contains /proc/rk_cfg "target=$token"
+
+# Set another key
+echo "set:interval=60" > /proc/rk_cfg
+assert_contains /proc/rk_cfg "interval=60"
+
+# Both coexist
+assert_contains /proc/rk_cfg "target=$token"
+
+# Replacement must update the existing key rather than add a duplicate.
+echo "set:target=${token}_new" > /proc/rk_cfg
+matches=$(grep -c '^target=' /proc/rk_cfg)
+if [ "$matches" -eq 1 ] && grep -q "^target=${token}_new$" /proc/rk_cfg; then
+    _ok "set replaced one existing key"
+else
+    _fail "replacement produced $matches target entries"
+fi
+
+# Set a third key
+echo "set:port=4444" > /proc/rk_cfg
+output=$(cat /proc/rk_cfg)
+count=$(printf '%s\n' "$output" | wc -l)
+if [ "$count" -ge 3 ]; then
+    _ok "multiple entries coexist ($count lines)"
+else
+    _fail "expected >= 3 entries, got $count"
+fi
+
+# Delete a key
+echo "del:target" > /proc/rk_cfg
+output=$(cat /proc/rk_cfg)
+case "$output" in
+    *target=*)
+        _fail "target still present after del"
+        ;;
+    *)
+        _ok "target removed by del"
+        ;;
+esac
+
+# Malformed and oversized commands must be rejected without changing state.
+before=$(cat /proc/rk_cfg)
+if printf 'unknown:value' > /proc/rk_cfg 2>/dev/null; then
+    _fail "unknown command was accepted"
+else
+    _ok "unknown command rejected"
+fi
+oversized=$(printf '%0130d' 0)
+if printf '%s' "$oversized" > /proc/rk_cfg 2>/dev/null; then
+    _fail "oversized command was accepted"
+else
+    _ok "oversized command rejected"
+fi
+after=$(cat /proc/rk_cfg)
+if [ "$before" = "$after" ]; then
+    _ok "rejected commands preserved the store"
+else
+    _fail "rejected commands changed the store"
+fi
+
+# Readers and writers may enter concurrently.
+(
+    i=0
+    while [ "$i" -lt 25 ]; do
+        echo "set:left=$i" > /proc/rk_cfg
+        i=$((i + 1))
+    done
+) &
+left_pid=$!
+(
+    i=0
+    while [ "$i" -lt 25 ]; do
+        echo "set:right=$i" > /proc/rk_cfg
+        cat /proc/rk_cfg >/dev/null
+        i=$((i + 1))
+    done
+) &
+right_pid=$!
+wait "$left_pid"
+wait "$right_pid"
+assert_contains /proc/rk_cfg "left=24"
+assert_contains /proc/rk_cfg "right=24"
+
+unload hello
+assert_absent /proc/rk_cfg
+
+summary

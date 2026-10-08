@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L01"
+sequence = 1
+title = "Build and inspect a module"
+difficulty = "intro"
+prerequisites = ["L00"]
+teaches = ["module-build"]
+requires = ["module-lifecycle"]
+vm_capabilities = []
+edit_paths = ["module/hello.c"]

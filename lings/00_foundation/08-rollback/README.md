@@ -1,108 +1,73 @@
-# 08 - Failed init rolls ownership back
+# 08 - Roll back partial initialization
 
-## Why this step
+Module exit runs only after init succeeds.
 
-Ling 07 handled complete success: init allocated one object and exit freed it.
-But initialization usually has several steps. If step one succeeds and step two
-fails, exit will not run because the module never finished loading.
+If init acquires one resource and a later step fails, init must release the earlier resource before returning the error.
 
-Init must clean up its own partial work before returning an error.
+This module allocates two objects and provides `fail_second=1` to force failure between them.
 
-## The rollback pattern
-
-The kernel convention for multi-step init uses `goto` labels to unwind
-in reverse order:
-
-```
-                  init
-                      |
-            kmalloc_obj(state)
-                      |
-                  +---+---+
-                  |       |
-               fail?    ok
-                  |       |
-            return      fail_second?
-           -ENOMEM        |
-                      +---+---+
-                      |       |
-                    yes       no
-                      |       |
-                      | kmalloc_obj(second)
-                      |       |
-                      |   +---+---+
-                      |   |       |
-                      |  fail?    ok
-                      |   |       |
-                      v   v       v
-                 free_state:   return 0
-                  kfree(state)    |
-                  return error    v
-                      |       exit:
-                      v        kfree(second)
-                  not loaded    kfree(state)
-                  exit never
-                    runs
-```
-
-Two different code paths free `state`: the `goto` label in init (on
-failure), and exit (on success). Only one of them runs for a given load.
-
-## Build it
-
-Keep `state` from ling 07. Add:
-
-- A second `struct rk_state *second`.
-- A boolean module parameter `fail_second` (default false). Use
-  `module_param(fail_second, bool, 0444)` from `linux/moduleparam.h`.
-
-In your init function:
-
-1. Allocate `state` (ling 07 pattern).
-2. If `fail_second` is true, set an error and `goto` the cleanup label.
-3. Otherwise, allocate `second`.
-4. If `second` allocation fails, also `goto` the cleanup label.
-5. If both succeed, log success and return 0.
-6. The cleanup label frees `state` and returns the error.
-
-In your exit function, free both in reverse order (second, then state).
-
-## Try it
-
-```bash
-./rootkitlings run
-```
-
-Inside the VM:
+## Observe both paths
 
 ```sh
 insmod hello.ko fail_second=1
-echo "status=$?"
-lsmod
-dmesg | tail
+echo $?
+lsmod | grep hello
+```
+
+The load fails and `hello` is absent.
+
+The normal path acquires both objects and releases them on unload:
+
+```sh
 insmod hello.ko
 rmmod hello
 dmesg | tail
 ```
 
-## Contract
+## Reverse-order cleanup
 
-The check script verifies:
+```text
+allocate primary
+       |
+       v
+allocate secondary ---- failure ----> free primary -> return error
+       |
+     success
+       |
+       v
+module exit: free secondary -> free primary
+```
 
-- With `fail_second=1`: `insmod` fails (module is rejected).
-- The failed path leaves no loaded module or sysfs state.
-- Without args: `insmod` succeeds and the module loads.
-- After `rmmod`: the module and its sysfs state are gone.
+A cleanup label represents one ownership boundary.
 
-The host check verifies the requested source structure: the forced failure jumps
-to a cleanup label, frees the primary allocation, then returns the saved error.
+Every failure after `primary` is acquired jumps to the label that frees it.
+
+The success path returns before that label and transfers both objects to module exit.
+
+Resources are released in reverse acquisition order because later resources may depend on earlier ones.
+
+## Implement it
+
+Keep the primary allocation and add a second pointer plus a read-only boolean parameter named `fail_second`.
+
+After allocating `primary`, set an error and jump to `free_primary` when the parameter is true.
+
+Use the same label when allocation of `secondary` returns `NULL`.
+
+At `free_primary`, free the primary object, clear its pointer, and return the saved error.
+
+On normal exit, free `secondary` before `primary` and clear both pointers.
 
 ## Verify
 
-```bash
-./rootkitlings check 8
+```sh
+./rootkitlings check L08
 ```
-> **What a defender sees**: the module owns its memory safely, but userspace has no way
-> to interact with it beyond sysfs parameters. It needs a real interface.
 
-See also: [09 - Procfs entry](../09-proc-entry/README.md).
+The guest exercises the forced failure and successful load paths and confirms that neither leaves module state behind.
+
+The host verification confirms that the failure path jumps to cleanup, frees `primary`, and returns the saved error.
+
+The source-level check proves the requested ownership shape; runtime leak detection requires dedicated allocator instrumentation.
+
+Next: [09 - Publish a procfs entry](../../01_procfs/09-proc-entry/README.md).

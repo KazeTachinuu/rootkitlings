@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L20"
+sequence = 20
+title = "Update a simple counter atomically"
+difficulty = "standard"
+prerequisites = ["L19"]
+teaches = ["atomic-operations"]
+requires = ["kernel-threads"]
+vm_capabilities = []
+edit_paths = ["lings/03_concurrency/20-atomic/hello.c"]

@@ -1,0 +1,16 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+build=${1:?usage: host-check BUILD_DIR}
+
+[[ -f $build/hello.ko ]] || {
+	printf '[x] hello.ko is missing\n' >&2
+	exit 1
+}
+
+if strings "$build/hello.ko" | grep -Fqx 'rootkit secret data'; then
+	printf '[x] plaintext is embedded in hello.ko\n' >&2
+	exit 1
+fi
+
+printf '[+] plaintext is absent from printable module strings\n'

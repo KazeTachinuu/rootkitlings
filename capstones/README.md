@@ -1,26 +1,49 @@
 # Capstones
 
-Lings isolate one mechanism. Capstones combine only mechanisms already taught.
-They add integration pressure - state ownership, rollback, concurrency, and clean
-unload - but no surprise API.
+Capstones combine mechanisms already introduced by the lings.
+They are integration exercises: define ownership, acquire resources in order, unwind failures in reverse order, synchronize shared state, and leave no live hook or worker behind.
 
-| # | After | Capstone | Integration goal |
-|--:|------:|-----------|------------------|
-| 0 | 16 | [Config store](0-config-store/README.md) | procfs, lists, allocation, userspace helper |
-| 1 | 23 | [Beacon](1-beacon/README.md) | kthread, wait/sleep, parameter callback, mutex |
-| 2 | 35 | [Tripwire](2-tripwire/README.md) | probe lifecycle and bounded event storage |
-| 3 | 42 | [Dead drop](3-dead-drop/README.md) | hidden procfs interface and trigger |
-| 4 | 51 | [Implant](4-implant/README.md) | kernel socket, command loop, reconnect lifecycle |
-| 5 | 59 | [Red vs blue](5-red-vs-blue/README.md) | hiding, escalation, persistence, detection |
+Each capstone records its taught concept, directly applied concepts, minimal prerequisites, and sequence in `exercise.toml`.
+The CLI interleaves all 11 capstones into the 54-ling progression; from the repository root, use `./rootkitlings list` for the canonical route instead of choosing one by directory order.
 
-The sequence is cumulative in engineering discipline, not in source code. Each
-capstone stands alone and should initialize in dependency order, unwind in
-reverse order, and leave no worker or hook active after module exit.
+## Design
 
-## Workflow
+Every source file should own one resource or mechanism:
 
-```bash
-./rootkitlings readme capstone-0
-./rootkitlings check  capstone-0
-./rootkitlings peek   capstone-0
+```text
+                         hello.ko
+                            ^
+                            | Kbuild links
+                +-----------+-----------+
+                |                       |
+             main.o                 feature.o
+                ^                       ^
+                |                       |
+     acquisition and rollback      one mechanism
+                \                       /
+                 +----------+----------+
+                            |
+                    shared contracts
 ```
+
+`main.c` owns acquisition order and rollback.
+Mutable state remains private to the component that protects it, and the shared header contains only contracts used across translation units.
+
+Split files when two components own different state, resources, or failure paths—not by line count.
+Avoid a generic `common.c` that obscures those boundaries.
+
+## Work
+
+```sh
+./rootkitlings read C00
+$EDITOR capstones/0-config-store/store.c
+./rootkitlings check C00
+```
+
+The lesson README names every file and function in scope.
+`check` builds the complete directory and exercises observable behavior in a fresh VM.
+Use `hint` for the ownership or failure-ordering invariant; use `solution` only when you want to compare every reference file with the scaffold.
+
+The final capstones increasingly emphasize independent defensive views: a technique is not complete merely because one reporting path no longer shows its underlying object.
+
+Return to the [course overview](../README.md) or review the [ling progression](../lings/README.md).

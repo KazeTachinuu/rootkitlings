@@ -1,1 +1,0 @@
-kprobe on __x64_sys_rmdir. Double indirection: regs->di is pt_regs*, uregs->di is the path. strncpy_from_user to copy it.

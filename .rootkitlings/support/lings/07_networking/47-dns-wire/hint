@@ -1,0 +1,1 @@
+Treat each pair of dots as one label boundary. Validate the label before emitting anything, reserve one byte for its length, and remember that the encoded name needs a final root-label byte as well as the reported byte count.

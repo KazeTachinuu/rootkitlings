@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L18"
+sequence = 18
+title = "Defer work to process context"
+difficulty = "standard"
+prerequisites = ["L17"]
+teaches = ["workqueues"]
+requires = ["kernel-timers"]
+vm_capabilities = []
+edit_paths = ["lings/03_concurrency/18-workqueue/hello.c"]

@@ -1,1 +1,0 @@
-_IOW/_IOR macros for cmd numbers. .unlocked_ioctl dispatches on cmd.

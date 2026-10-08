@@ -1,0 +1,1 @@
+Filter only the intended proc-root enumeration result.  Before moving any bytes, prove that each variable-length record lies completely inside the returned buffer, and preserve ownership of temporary storage on every exit path.

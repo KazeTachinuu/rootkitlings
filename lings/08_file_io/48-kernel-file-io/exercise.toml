@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L48"
+sequence = 56
+title = "Apply and roll back a file edit"
+difficulty = "advanced"
+prerequisites = ["L08"]
+teaches = ["kernel-file-transactions"]
+requires = ["initialization-rollback"]
+vm_capabilities = []
+edit_paths = ["lings/08_file_io/48-kernel-file-io/hello.c"]

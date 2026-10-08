@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L32"
+sequence = 36
+title = "Decode a syscall argument in a probe"
+difficulty = "advanced"
+prerequisites = ["L11", "L29"]
+teaches = ["syscall-argument-decoding"]
+requires = ["bounded-user-copy", "kprobes"]
+vm_capabilities = []
+edit_paths = ["lings/05_instrumentation/32-rmdir-trigger/hello.c"]

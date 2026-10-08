@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L37"
+sequence = 42
+title = "Replace content in one read result"
+difficulty = "advanced"
+prerequisites = ["L30"]
+teaches = ["read-view-filtering"]
+requires = ["kretprobes"]
+vm_capabilities = []
+edit_paths = ["lings/06_visibility/37-file-content/hello.c"]

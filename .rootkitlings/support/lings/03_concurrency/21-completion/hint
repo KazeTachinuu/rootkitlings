@@ -1,0 +1,1 @@
+The completion means all result-producing work is visible and teardown may proceed. Signal the completion belonging to this worker only after its result has reached the final state.

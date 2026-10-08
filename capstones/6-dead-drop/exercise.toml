@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "C06"
+sequence = 46
+title = "Sealed dead drop"
+difficulty = "challenge"
+prerequisites = ["L36"]
+teaches = ["sealed-dead-drop"]
+requires = ["directory-filtering", "proc-write"]
+vm_capabilities = []
+edit_paths = ["capstones/6-dead-drop/dead_drop.h", "capstones/6-dead-drop/dirhide.c", "capstones/6-dead-drop/drop.c", "capstones/6-dead-drop/main.c", "capstones/6-dead-drop/trigger.c"]

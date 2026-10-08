@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "C00"
+sequence = 24
+title = "Live configuration store"
+difficulty = "challenge"
+prerequisites = ["L13", "L22"]
+teaches = ["configuration-store"]
+requires = ["kernel-allocation", "proc-write", "kernel-lists", "mutex-protected-invariants"]
+vm_capabilities = []
+edit_paths = ["capstones/0-config-store/config.h", "capstones/0-config-store/main.c", "capstones/0-config-store/proc.c", "capstones/0-config-store/store.c"]

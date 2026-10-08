@@ -1,1 +1,0 @@
-kretprobe on tcp4_seq_show (kernel function, no double indirection). entry_handler: save seq->count, check if inet_sk(sock)->inet_sport matches htons(HIDDEN_PORT). return handler: restore seq->count to unwrite the hidden entry.

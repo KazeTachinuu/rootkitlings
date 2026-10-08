@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L31"
+sequence = 35
+title = "Trace several functions with one fprobe"
+difficulty = "advanced"
+prerequisites = ["L29"]
+teaches = ["fprobes"]
+requires = ["kprobes"]
+vm_capabilities = []
+edit_paths = ["lings/05_instrumentation/31-fprobe/hello.c"]

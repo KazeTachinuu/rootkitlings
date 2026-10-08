@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "C10"
+sequence = 64
+title = "Operation Glasshouse"
+difficulty = "challenge"
+prerequisites = ["C08", "L26", "L34", "L36"]
+teaches = ["adversarial-validation"]
+requires = ["initialization-rollback", "module-list-hiding", "directory-filtering", "credential-replacement", "boot-load-persistence"]
+vm_capabilities = []
+edit_paths = ["capstones/10-red-vs-blue/conceal.c", "capstones/10-red-vs-blue/control.c", "capstones/10-red-vs-blue/main.c", "capstones/10-red-vs-blue/persistence.c", "capstones/10-red-vs-blue/rootkit.h"]

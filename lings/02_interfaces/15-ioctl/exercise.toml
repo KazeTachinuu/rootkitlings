@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L15"
+sequence = 15
+title = "Dispatch typed ioctl commands"
+difficulty = "standard"
+prerequisites = ["L14"]
+teaches = ["ioctl-dispatch"]
+requires = ["character-devices"]
+vm_capabilities = []
+edit_paths = ["lings/02_interfaces/15-ioctl/hello.c"]

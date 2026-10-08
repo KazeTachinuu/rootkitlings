@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L51"
+sequence = 60
+title = "Verify data with SHA-256"
+difficulty = "advanced"
+prerequisites = ["L12", "L50"]
+teaches = ["sha256-verification"]
+requires = ["kernel-crypto-api", "kernel-allocation", "error-pointers"]
+vm_capabilities = []
+edit_paths = ["lings/09_crypto/51-hash-verification/hello.c"]

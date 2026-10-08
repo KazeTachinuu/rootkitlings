@@ -1,0 +1,1 @@
+Treat a command as a transaction: validate a private candidate before taking the store lock, then make one complete state change while the lock protects every list reference.

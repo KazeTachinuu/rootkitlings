@@ -1,1 +1,0 @@
-Atomic flag for hook state. Proc counter incremented by the callback.

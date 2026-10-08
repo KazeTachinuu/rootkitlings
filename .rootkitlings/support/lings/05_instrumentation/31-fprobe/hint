@@ -1,0 +1,1 @@
+One probe object covers the complete supplied symbol array. Use the registration form for a list of names, let its error decide init success, and remove that same probe before unload.

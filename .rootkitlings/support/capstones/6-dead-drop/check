@@ -1,0 +1,120 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "6-dead-drop"
+
+getdents_before=$(grep -c '__x64_sys_getdents64' \
+    /sys/kernel/debug/kprobes/list || true)
+rmdir_before=$(grep -c '__x64_sys_rmdir' \
+    /sys/kernel/debug/kprobes/list || true)
+
+load hello.ko
+assert_loaded hello
+
+if ls -a /proc | grep -qx '.drop'; then
+    _fail ".drop is visible in proc enumeration"
+else
+    _ok ".drop absent from proc enumeration"
+fi
+
+if stat /proc/.drop >/dev/null 2>&1; then
+    _ok "direct lookup finds /proc/.drop"
+else
+    _fail "direct lookup did not find /proc/.drop"
+fi
+
+if cat /proc/.drop >/dev/null 2>&1; then
+    _fail "locked drop allowed a read"
+else
+    _ok "locked drop rejects reads"
+fi
+
+if printf 'blocked' >/proc/.drop 2>/dev/null; then
+    _fail "locked drop allowed a write"
+else
+    _ok "locked drop rejects writes"
+fi
+
+mkdir /tmp/.rk-unlock
+if rmdir /tmp/.rk-unlock && [ ! -d /tmp/.rk-unlock ]; then
+    _ok "unlock knock preserves normal rmdir behavior"
+else
+    _fail "unlock knock changed normal rmdir behavior"
+fi
+if cat /proc/.drop >/dev/null 2>&1; then
+    _ok "unlock knock opens the drop"
+else
+    _fail "unlock knock did not open the drop"
+fi
+
+token="drop_$$_$(date +%s)"
+if printf '%s' "$token" >/proc/.drop 2>/dev/null; then
+    _ok "unlocked drop accepts a message"
+else
+    _fail "unlocked drop rejected a message"
+fi
+assert_read /proc/.drop "$token"
+
+oversize=$(dd if=/dev/zero bs=300 count=1 2>/dev/null | tr '\0' x)
+if printf '%s' "$oversize" >/proc/.drop 2>/dev/null; then
+    _fail "oversized message was accepted"
+else
+    _ok "oversized message rejected"
+fi
+assert_read /proc/.drop "$token"
+
+mkdir -p /tmp/drop-scope
+: >/tmp/drop-scope/.drop
+if ls -a /tmp/drop-scope | grep -qx '.drop'; then
+    _ok "same name outside procfs remains visible"
+else
+    _fail "filter escaped the proc root"
+fi
+
+mkdir /tmp/.rk-lock
+rmdir /tmp/.rk-lock
+if cat /proc/.drop >/dev/null 2>&1; then
+    _fail "lock knock left reads enabled"
+else
+    _ok "lock knock seals the drop"
+fi
+
+mkdir /tmp/ordinary-rmdir
+rmdir /tmp/ordinary-rmdir
+if [ -d /tmp/ordinary-rmdir ]; then
+    _fail "ordinary rmdir was changed"
+else
+    _ok "ordinary rmdir still removes a directory"
+fi
+
+getdents_loaded=$(grep -c '__x64_sys_getdents64' \
+    /sys/kernel/debug/kprobes/list || true)
+rmdir_loaded=$(grep -c '__x64_sys_rmdir' \
+    /sys/kernel/debug/kprobes/list || true)
+if [ "$getdents_loaded" -eq $((getdents_before + 1)) ]; then
+    _ok "getdents64 probe registered"
+else
+    _fail "getdents64 probe count did not increase by one"
+fi
+if [ "$rmdir_loaded" -eq $((rmdir_before + 1)) ]; then
+    _ok "rmdir probe registered"
+else
+    _fail "rmdir probe count did not increase by one"
+fi
+
+unload hello
+assert_absent /proc/.drop
+
+getdents_after=$(grep -c '__x64_sys_getdents64' \
+    /sys/kernel/debug/kprobes/list || true)
+rmdir_after=$(grep -c '__x64_sys_rmdir' \
+    /sys/kernel/debug/kprobes/list || true)
+if [ "$getdents_after" -eq "$getdents_before" ] && \
+   [ "$rmdir_after" -eq "$rmdir_before" ]; then
+    _ok "both probes removed"
+else
+    _fail "probe count did not return to baseline"
+fi
+
+rm -rf /tmp/drop-scope
+summary

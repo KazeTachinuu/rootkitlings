@@ -1,0 +1,1 @@
+There are two register frames here: the probe sees the syscall wrapper's argument, which points to the syscall's saved registers. Follow that extra level, then use the x86-64 first-argument convention to find the userspace path.

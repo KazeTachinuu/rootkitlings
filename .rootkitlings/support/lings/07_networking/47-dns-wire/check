@@ -1,0 +1,56 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "47-dns-wire"
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_dns
+
+name="agent$$.dead.example"
+printf '%s' "$name" > /proc/rk_dns
+assert_contains /proc/rk_dns "name=$name"
+
+label63=$(printf '%063d' 0 | tr 0 a)
+printf '%s.example' "$label63" > /proc/rk_dns
+assert_contains /proc/rk_dns "name=$label63.example"
+
+label64="${label63}a"
+if printf '%s.example' "$label64" > /proc/rk_dns 2>/dev/null; then
+    _fail "64-byte DNS label was accepted"
+else
+    _ok "63-byte label limit enforced"
+fi
+assert_contains /proc/rk_dns "name=$label63.example"
+
+label61=$(printf '%061d' 0 | tr 0 b)
+max_name="$label63.$label63.$label63.$label61"
+printf '%s' "$max_name" > /proc/rk_dns
+assert_contains /proc/rk_dns "name=$max_name"
+assert_contains /proc/rk_dns "wire_len=255"
+
+too_long="${max_name}b"
+if printf '%s' "$too_long" > /proc/rk_dns 2>/dev/null; then
+    _fail "256-byte DNS wire name was accepted"
+else
+    _ok "255-byte wire-name limit enforced"
+fi
+assert_contains /proc/rk_dns "name=$max_name"
+
+if printf 'safe\0tail.example' > /proc/rk_dns 2>/dev/null; then
+    _fail "embedded NUL was accepted"
+else
+    _ok "embedded NUL rejected"
+fi
+assert_contains /proc/rk_dns "name=$max_name"
+
+if printf 'bad..name' > /proc/rk_dns 2>/dev/null; then
+    _fail "empty DNS label was accepted"
+else
+    _ok "empty DNS label rejected"
+fi
+assert_contains /proc/rk_dns "name=$max_name"
+
+unload hello
+assert_absent /proc/rk_dns
+summary

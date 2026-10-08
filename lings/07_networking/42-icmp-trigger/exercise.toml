@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L42"
+sequence = 49
+title = "Match an ICMP trigger"
+difficulty = "advanced"
+prerequisites = ["L41"]
+teaches = ["icmp-triggers"]
+requires = ["packet-classification"]
+vm_capabilities = []
+edit_paths = ["lings/07_networking/42-icmp-trigger/hello.c"]

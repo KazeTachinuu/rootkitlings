@@ -1,0 +1,1 @@
+The counter describes committed changes, not attempted writes. Route the parameter through an operations table, let the standard string setter validate and store first, and react only to its successful result.

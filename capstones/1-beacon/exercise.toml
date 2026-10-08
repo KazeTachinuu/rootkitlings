@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "C01"
+sequence = 25
+title = "Beacon scheduler"
+difficulty = "challenge"
+prerequisites = ["L06", "L18"]
+teaches = ["beacon-scheduler"]
+requires = ["module-parameters", "parameter-callbacks", "kernel-timers", "workqueues"]
+vm_capabilities = []
+edit_paths = ["capstones/1-beacon/beacon.c", "capstones/1-beacon/beacon.h", "capstones/1-beacon/main.c", "capstones/1-beacon/status.c", "capstones/1-beacon/status.h"]

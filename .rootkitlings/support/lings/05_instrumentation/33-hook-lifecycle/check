@@ -1,0 +1,44 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "33-hook-lifecycle"
+
+# Force the partial-init path. The normal load that follows would fail with a
+# duplicate probe if the first registration had not been rolled back.
+load_fail hello.ko fail_second=1
+assert_absent /proc/rk_lifecycle
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_lifecycle
+
+# Capture baselines, then trigger vfs_read and vfs_write.
+baseline=$(cat /proc/rk_lifecycle)
+before_read=$(printf '%s\n' "$baseline" | sed -n 's/.*vfs_read=\([0-9]*\).*/\1/p')
+before_write=$(printf '%s\n' "$baseline" | sed -n 's/.*vfs_write=\([0-9]*\).*/\1/p')
+cat /proc/rk_lifecycle > /dev/null
+cat /proc/rk_lifecycle > /dev/null
+echo test > /tmp/rk_lifecycle_test
+
+assert_contains /proc/rk_lifecycle "vfs_read="
+assert_contains /proc/rk_lifecycle "vfs_write="
+
+# Verify both counters increased
+vr=$(cat /proc/rk_lifecycle | sed -n 's/.*vfs_read=\([0-9]*\).*/\1/p')
+vw=$(cat /proc/rk_lifecycle | sed -n 's/.*vfs_write=\([0-9]*\).*/\1/p')
+if [ "$vr" -gt "$before_read" ] 2>/dev/null; then
+    _ok "vfs_read count increased ($before_read -> $vr)"
+else
+    _fail "vfs_read count should be > 0"
+fi
+if [ "$vw" -gt "$before_write" ] 2>/dev/null; then
+    _ok "vfs_write count increased ($before_write -> $vw)"
+else
+    _fail "vfs_write count should be > 0"
+fi
+
+unload hello
+assert_absent /proc/rk_lifecycle
+rm -f /tmp/rk_lifecycle_test
+
+summary

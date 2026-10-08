@@ -1,1 +1,0 @@
-Hook outgoing UDP port 53. Replace the answer IP in the DNS response. Recompute checksums.

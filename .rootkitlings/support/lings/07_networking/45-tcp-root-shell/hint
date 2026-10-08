@@ -1,0 +1,4 @@
+Track references as ownership tokens: three descriptor slots must each receive
+one, while the session initially owns only one. For each standard descriptor in
+order, arrange the needed reference before transferring it, and reject any
+reserved number that breaks the 0/1/2 contract.

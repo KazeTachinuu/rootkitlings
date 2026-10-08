@@ -19,50 +19,137 @@ fail()
 	exit 1
 }
 
+catalog_entries()
+{
+	local _serial entry _title
+	while IFS=$'\t' read -r _serial entry _title; do
+		printf '%s\n' "$entry"
+	done < <(scripts/catalog list)
+}
+
+check_metadata()
+{
+	scripts/catalog validate || fail 'exercise metadata validation failed'
+}
+
 check_catalog()
 {
-	local entry name solution count=0
-	local -A seen=()
+	local entry support name solution count=0 lings=0 capstones=0 previous='' previous_node=''
+	local number node expected_ling=0 expected_capstone=0 discovered
+	local layout_diff solution_name
+	local -A seen=() seen_solution=()
 
 	while IFS= read -r entry; do
-		[[ -z $entry || $entry == \#* ]] && continue
-		[[ -z ${seen[$entry]:-} ]] || fail "duplicate .order entry: $entry"
+		[[ -z ${seen[$entry]:-} ]] || fail "duplicate catalog entry: $entry"
 		seen[$entry]=1
 		[[ -d $entry ]] || fail "missing exercise directory: $entry"
 		[[ -f $entry/README.md ]] || fail "missing README: $entry"
-		[[ -x $entry/check ]] || fail "missing executable check: $entry"
-		bash -n "$entry/check"
-		if [[ -e $entry/host-check ]]; then
-			[[ -x $entry/host-check ]] || fail "host-check is not executable: $entry"
-			bash -n "$entry/host-check"
+		support=.rootkitlings/support/$entry
+		[[ -x $support/check ]] || fail "missing executable check: $support/check"
+		bash -n "$support/check"
+		if [[ -e $support/host-check ]]; then
+			[[ -x $support/host-check ]] || fail "host-check is not executable: $support/host-check"
+			bash -n "$support/host-check"
 		fi
 
 		name=${entry##*/}
-		solution=.solutions/$name.c
-		[[ -f $solution || -d .solutions/$name ]] ||
+		seen_solution[$name]=1
+		solution=.rootkitlings/solutions/$name.c
+		[[ -f $solution || -d .rootkitlings/solutions/$name ]] ||
 			fail "missing reference solution: $name"
+		[[ ! -f $solution || ! -d .rootkitlings/solutions/$name ]] ||
+			fail "reference has both file and directory forms: $name"
 		if [[ $entry == lings/* ]]; then
-			[[ -f $entry/hint ]] || fail "missing hint: $entry"
+			number=${name%%-*}
+			(( 10#$number == expected_ling )) ||
+				fail "expected ling $(printf '%02d' "$expected_ling"), found $name"
+			(( ++expected_ling, ++lings ))
+			[[ -f $support/hint ]] || fail "missing hint: $support/hint"
+			node=${entry%/*}
+			if [[ $node != "$previous_node" && $node != lings/00_foundation ]]; then
+				[[ -f $entry/hello.c ]] || fail "first ling in node needs a starter: $entry/hello.c"
+			fi
+			previous_node=$node
+			if [[ $previous == capstones/* ]]; then
+				[[ -f $entry/hello.c ]] ||
+					fail "ling after capstone needs a starter: $entry/hello.c"
+			fi
+		else
+			number=${name%%-*}
+			(( 10#$number == expected_capstone )) ||
+				fail "expected capstone $expected_capstone, found $name"
+			(( ++expected_capstone, ++capstones ))
+			[[ -f $entry/Kbuild ]] || fail "missing capstone Kbuild: $entry"
+			compgen -G "$entry/*.c" >/dev/null ||
+				fail "capstone has no source files: $entry"
+			if [[ -d .rootkitlings/solutions/$name ]]; then
+				[[ -f .rootkitlings/solutions/$name/Kbuild ]] ||
+					fail "multi-file reference has no Kbuild: $name"
+				compgen -G ".rootkitlings/solutions/$name/*.c" >/dev/null ||
+					fail "multi-file reference has no sources: $name"
+				layout_diff=$(comm -3 \
+					<(find "$entry" -maxdepth 1 -type f \
+						\( -name Kbuild -o -name '*.c' -o -name '*.h' \) \
+						! -name '*.mod.c' \
+						-printf '%f\n' | sort) \
+					<(find ".rootkitlings/solutions/$name" -maxdepth 1 -type f \
+						\( -name Kbuild -o -name '*.c' -o -name '*.h' \) \
+						! -name '*.mod.c' \
+						-printf '%f\n' | sort))
+				[[ -z $layout_diff ]] ||
+					fail "scaffold/reference layout mismatch for $name: $layout_diff"
+			fi
 		fi
 		(( ++count ))
-	done < .order
+		previous=$entry
+	done < <(catalog_entries)
 
-	(( count > 0 )) || fail '.order is empty'
-	printf '[+] catalog: %d exercises\n' "$count"
+	while IFS= read -r solution_name; do
+		[[ -n ${seen_solution[$solution_name]:-} ]] ||
+			fail "orphaned reference solution: $solution_name"
+	done < <(find .rootkitlings/solutions -mindepth 1 -maxdepth 1 \
+		\( -type d -o -type f -name '*.c' \) -printf '%f\n' |
+		sed 's/\.c$//' | sort)
+
+	(( count > 0 )) || fail 'catalog is empty'
+	while IFS= read -r discovered; do
+		[[ -n ${seen[$discovered]:-} ]] || fail "exercise is not listed in the catalog: $discovered"
+	done < <(find lings -mindepth 2 -maxdepth 2 -type d -print; find capstones -mindepth 1 -maxdepth 1 -type d -print)
+
+	if find lings capstones -type f \
+		\( -name check -o -name host-check -o -name hint \) -print -quit |
+		grep -q .; then
+		fail 'course support file leaked into an exercise directory'
+	fi
+
+	while IFS= read -r source; do
+		[[ $source == *.mod.c ]] && continue
+		if git check-ignore -q -- "$source"; then
+			fail "exercise source is ignored by Git: $source"
+		fi
+	done < <(find lings capstones -type f \
+		\( -name '*.c' -o -name '*.h' -o -name Kbuild \) -print)
+
+	printf '[+] catalog: %d lings, %d capstones\n' "$lings" "$capstones"
 }
 
 check_scripts()
 {
-	bash -n rootkitlings vm/boot scripts/doctor scripts/validate scripts/test-references
+	bash -n rootkitlings vm/boot scripts/doctor scripts/validate scripts/test-solutions
 	sh -n vm/init lib/check.sh
+	python3 -c 'compile(open("lib/catalog.py", encoding="utf-8").read(), "lib/catalog.py", "exec")'
+	python3 -c 'compile(open("scripts/catalog", encoding="utf-8").read(), "scripts/catalog", "exec")'
 	python3 -c 'compile(open("scripts/expand-compile-db", encoding="utf-8").read(), "scripts/expand-compile-db", "exec")'
+	python3 -c 'compile(open("scripts/format-docs", encoding="utf-8").read(), "scripts/format-docs", "exec")'
+	python3 scripts/format-docs --check
+	python3 scripts/check-doc-links
 
 	if command -v shellcheck >/dev/null; then
 		shellcheck -S warning rootkitlings vm/boot vm/init
 		shellcheck -S warning -s busybox lib/check.sh
 		while IFS= read -r host_check; do
 			shellcheck -S warning "$host_check"
-		done < <(find lings capstones -name host-check -type f -print)
+		done < <(find .rootkitlings/support -name host-check -type f -print)
 	fi
 	printf '[+] scripts\n'
 }
@@ -75,15 +162,14 @@ build_references()
 	trap 'rm -rf -- "$work"' RETURN
 
 	while IFS= read -r entry; do
-		[[ -z $entry || $entry == \#* ]] && continue
 		name=${entry##*/}
 		build=$work/$name
 		log=$work/$name.log
 		mkdir -p "$build"
-		if [[ -d .solutions/$name ]]; then
-			cp -a ".solutions/$name/." "$build/"
+		if [[ -d .rootkitlings/solutions/$name ]]; then
+			cp -a ".rootkitlings/solutions/$name/." "$build/"
 		else
-			cp ".solutions/$name.c" "$build/hello.c"
+			cp ".rootkitlings/solutions/$name.c" "$build/hello.c"
 			printf 'obj-m += hello.o\n' > "$build/Kbuild"
 		fi
 
@@ -96,12 +182,53 @@ build_references()
 			fail "reference builds with warnings: $name"
 		fi
 		(( ++passed ))
-	done < .order
+	done < <(catalog_entries)
 
 	printf '[+] references: %d warning-free builds\n' "$passed"
 }
 
+build_scaffolds()
+{
+	local work entry name build log passed=0 skipped=0
+	[[ -d $KDIR ]] || fail "kernel build directory not found: $KDIR"
+	work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-scaffolds.XXXXXX")
+	trap 'rm -rf -- "$work"' RETURN
+
+	while IFS= read -r entry; do
+		name=${entry##*/}
+		build=$work/$name
+		log=$work/$name.log
+		mkdir -p "$build"
+		if [[ -f $entry/Kbuild ]]; then
+			cp -a "$entry/." "$build/"
+		elif [[ -f $entry/hello.c ]]; then
+			cp "$entry/hello.c" "$build/hello.c"
+			printf 'obj-m += hello.o\n' > "$build/Kbuild"
+		else
+			(( ++skipped ))
+			continue
+		fi
+
+		if ! make -s -C "$KDIR" M="$build" W=1 modules >"$log" 2>&1; then
+			cat "$log" >&2
+			fail "scaffold does not build: $entry"
+		fi
+		if grep -q 'warning:' "$log"; then
+			cat "$log" >&2
+			fail "scaffold builds with warnings: $entry"
+		fi
+		(( ++passed ))
+	done < <(catalog_entries)
+
+	printf '[+] scaffolds: %d warning-free builds, %d cumulative sources skipped\n' \
+		"$passed" "$skipped"
+}
+
+check_metadata
 check_catalog
 check_scripts
-(( BUILD_REFERENCES == 0 )) || build_references
+if (( BUILD_REFERENCES )); then
+	build_scaffolds
+	build_references
+fi
 printf '[+] validation passed\n'

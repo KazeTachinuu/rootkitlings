@@ -1,0 +1,1 @@
+Protect the entire read-modify-write as one critical section, using the same lock the reader already uses. Keep the protected region no larger than the shared invariant requires.

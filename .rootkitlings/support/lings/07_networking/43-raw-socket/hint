@@ -1,0 +1,1 @@
+Map each requirement to the socket-creation tuple: kernel ownership and namespace, IPv4 family, raw semantics, and ICMP protocol. Store the created socket in the pointer already released by the exit path, and preserve the creator's error.

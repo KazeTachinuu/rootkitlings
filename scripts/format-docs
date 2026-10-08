@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+"""Put each prose sentence on its own Markdown source line."""
+
+from __future__ import annotations
+
+import argparse
+import re
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parent.parent
+MARKUP = re.compile(r"^(?:\s|#|\||```|~~~|\[.+\]:|<)")
+LIST_ITEM = re.compile(r"^(\s*(?:[-*+]|\d+[.)]) )(.*)$")
+QUOTE = re.compile(r"^(>+ ?)(.*)$")
+BOUNDARY = re.compile(r'([.!?]["\'”’`*_)]*) +(?=\S)')
+PROTECTED = {
+    "e.g.": "e§g§",
+    "i.e.": "i§e§",
+    "vs.": "vs§",
+}
+
+
+def split_sentences(paragraph: str) -> list[str]:
+	for text, token in PROTECTED.items():
+		paragraph = paragraph.replace(text, token)
+	paragraph = BOUNDARY.sub(r"\1\n", paragraph)
+	for text, token in PROTECTED.items():
+		paragraph = paragraph.replace(token, text)
+	return paragraph.splitlines()
+
+
+def format_prefixed_line(line: str) -> list[str] | None:
+	for pattern in (LIST_ITEM, QUOTE):
+		match = pattern.match(line)
+		if not match:
+			continue
+		prefix, text = match.groups()
+		if not text:
+			return [line]
+		sentences = split_sentences(text)
+		continuation = "> " if prefix.startswith(">") else " " * len(prefix)
+		return [prefix + sentences[0], *(continuation + part for part in sentences[1:])]
+	return None
+
+
+def format_markdown(source: str) -> str:
+	lines = source.splitlines()
+	result: list[str] = []
+	paragraph: list[str] = []
+	in_fence = False
+
+	def flush() -> None:
+		if paragraph:
+			result.extend(split_sentences(" ".join(part.strip() for part in paragraph)))
+			paragraph.clear()
+
+	for line in lines:
+		stripped = line.lstrip()
+		prefixed = format_prefixed_line(line) if not in_fence else None
+		if stripped.startswith(("```", "~~~")):
+			flush()
+			in_fence = not in_fence
+			result.append(line)
+		elif prefixed is not None:
+			flush()
+			result.extend(prefixed)
+		elif in_fence or not line or MARKUP.match(line) or line.endswith("  "):
+			flush()
+			result.append(line)
+		else:
+			paragraph.append(line)
+	flush()
+	return "\n".join(result) + "\n"
+
+
+def main() -> int:
+	parser = argparse.ArgumentParser()
+	parser.add_argument("--check", action="store_true")
+	args = parser.parse_args()
+	changed: list[Path] = []
+
+	for path in sorted(ROOT.rglob("*.md")):
+		if ".git" in path.parts:
+			continue
+		before = path.read_text(encoding="utf-8")
+		after = format_markdown(before)
+		if before == after:
+			continue
+		changed.append(path.relative_to(ROOT))
+		if not args.check:
+			path.write_text(after, encoding="utf-8")
+
+	if args.check and changed:
+		for path in changed:
+			print(f"needs sentence-per-line formatting: {path}")
+		return 1
+	if not args.check:
+		print(f"formatted {len(changed)} Markdown files")
+	return 0
+
+
+if __name__ == "__main__":
+	raise SystemExit(main())

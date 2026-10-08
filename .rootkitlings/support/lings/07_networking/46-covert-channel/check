@@ -1,0 +1,49 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "46-covert-channel"
+
+ifconfig lo 127.0.0.1 up 2>/dev/null
+
+load hello.ko
+assert_loaded hello
+assert_exists /proc/rk_covert
+
+assert_contains /proc/rk_covert "magic=0xdead"
+
+# No covert message yet
+msg=$(cat /proc/rk_covert | sed -n 's/^msg=//p')
+if [ "$msg" = "(none)" ] || [ -z "$msg" ]; then
+    _ok "no covert message yet"
+else
+    _fail "unexpected message: '$msg'"
+fi
+
+# Normal ping should NOT trigger (wrong echo ID)
+ping -c 2 127.0.0.1 >/dev/null 2>&1
+msg_after=$(cat /proc/rk_covert | sed -n 's/^msg=//p')
+if [ "$msg_after" = "(none)" ] || [ -z "$msg_after" ]; then
+    _ok "normal ping did not trigger covert channel"
+else
+    _fail "normal ping triggered channel: '$msg_after'"
+fi
+
+# This value cannot be supplied by a hardcoded fixture in the module.
+token="covert_$$_$(date +%s)"
+icmp_send 127.0.0.1 dead "$token"
+
+msg_covert=$(cat /proc/rk_covert | sed -n 's/^msg=//p')
+if [ "$msg_covert" = "$token" ]; then
+    _ok "exact ICMP payload recovered"
+else
+    _fail "expected '$token', got '$msg_covert'"
+fi
+
+icmp_send 127.0.0.1 dead --hex 7361666500626164
+sleep 1
+assert_contains /proc/rk_covert "msg=$token"
+
+unload hello
+assert_absent /proc/rk_covert
+
+summary

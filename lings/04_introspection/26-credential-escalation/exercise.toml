@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L26"
+sequence = 29
+title = "Replace a task's credentials"
+difficulty = "standard"
+prerequisites = ["L11", "L25"]
+teaches = ["credential-replacement"]
+requires = ["task-credentials", "proc-write"]
+vm_capabilities = []
+edit_paths = ["lings/04_introspection/26-credential-escalation/hello.c"]

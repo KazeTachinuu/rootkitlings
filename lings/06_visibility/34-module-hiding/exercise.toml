@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L34"
+sequence = 39
+title = "Hide one module-list entry"
+difficulty = "advanced"
+prerequisites = ["L13"]
+teaches = ["module-list-hiding"]
+requires = ["module-lifecycle", "kernel-lists"]
+vm_capabilities = []
+edit_paths = ["lings/06_visibility/34-module-hiding/hello.c"]

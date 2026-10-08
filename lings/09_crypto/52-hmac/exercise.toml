@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L52"
+sequence = 61
+title = "Authenticate a message with HMAC"
+difficulty = "advanced"
+prerequisites = ["L08", "L51"]
+teaches = ["hmac-authentication"]
+requires = ["kernel-crypto-api", "sha256-verification", "error-pointers", "initialization-rollback"]
+vm_capabilities = []
+edit_paths = ["lings/09_crypto/52-hmac/hello.c"]

@@ -1,0 +1,35 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "34-module-hiding"
+
+load hello.ko
+assert_exists /proc/rk_cloak
+
+if lsmod | grep -q '^hello '; then
+    _fail "hello remains visible in lsmod"
+else
+    _ok "hello absent from lsmod"
+fi
+assert_exists /sys/module/hello
+assert_read /proc/rk_cloak "hidden=yes"
+
+if printf unknown >/proc/rk_cloak 2>/dev/null; then
+    _fail "unknown control command accepted"
+else
+    _ok "unknown control command rejected"
+fi
+assert_read /proc/rk_cloak "hidden=yes"
+
+printf reveal >/proc/rk_cloak
+assert_read /proc/rk_cloak "hidden=no"
+if lsmod | grep -q '^hello '; then
+    _ok "hello restored to lsmod"
+else
+    _fail "reveal did not restore hello"
+fi
+
+unload hello
+assert_absent /proc/rk_cloak
+assert_absent /sys/module/hello
+summary

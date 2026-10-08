@@ -1,1 +1,0 @@
-kthread_create + wake_up_process. Check kthread_should_stop in the loop.

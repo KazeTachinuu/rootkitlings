@@ -1,0 +1,1 @@
+Existence is not ownership.  Classify the durable file as yours only when its complete byte sequence matches; every other readable form must be preserved as foreign state.

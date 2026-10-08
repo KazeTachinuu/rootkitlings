@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L13"
+sequence = 13
+title = "Store records in a kernel list"
+difficulty = "standard"
+prerequisites = ["L07", "L11"]
+teaches = ["kernel-lists"]
+requires = ["proc-write", "kernel-allocation", "mutexes"]
+vm_capabilities = []
+edit_paths = ["lings/02_interfaces/13-lists/hello.c"]

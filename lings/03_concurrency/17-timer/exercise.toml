@@ -1,0 +1,10 @@
+schema_version = 1
+serial = "L17"
+sequence = 17
+title = "Run code later with a timer"
+difficulty = "standard"
+prerequisites = []
+teaches = ["kernel-timers"]
+requires = []
+vm_capabilities = []
+edit_paths = ["lings/03_concurrency/17-timer/hello.c"]
