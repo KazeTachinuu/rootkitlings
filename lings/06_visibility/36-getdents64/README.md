@@ -46,7 +46,7 @@ If allocation, validation, or copying fails, it preserves the original syscall r
 
 ```sh
 ./rootkitlings start L36
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/directory-filtering/hello.c
 ```
 
 Complete the marked decision in the existing record loop.

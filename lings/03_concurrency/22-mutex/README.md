@@ -34,7 +34,7 @@ Lock `counter_lock` immediately before `shared_counter++` and unlock it immediat
 
 ```bash
 ./rootkitlings start L22
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/mutex-invariant/hello.c
 ./rootkitlings check L22
 ```
 

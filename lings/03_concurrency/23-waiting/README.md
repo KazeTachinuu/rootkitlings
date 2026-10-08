@@ -49,7 +49,7 @@ Several writes before the worker runs intentionally coalesce into one wake cycle
 
 ```bash
 ./rootkitlings start L23
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/wait-queue/hello.c
 ./rootkitlings check L23
 ```
 

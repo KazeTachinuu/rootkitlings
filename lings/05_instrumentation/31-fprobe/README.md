@@ -52,7 +52,7 @@ The supplied init rollback already unregisters the probe if proc creation fails.
 
 ```bash
 ./rootkitlings start L31
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/fprobe/hello.c
 ./rootkitlings check L31
 ```
 

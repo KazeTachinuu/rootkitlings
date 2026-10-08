@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L36"
-sequence = 41
+schema_version = 2
+id = "directory-filtering"
 title = "Filter directory enumeration"
+stage = "visibility"
+kind = "lesson"
+status = "required"
+tradecraft = ["concealment", "instrumentation"]
 difficulty = "advanced"
-prerequisites = ["L30", "L32"]
+prerequisites = ["kretprobe", "syscall-argument-decoding"]
 teaches = ["directory-filtering"]
 requires = ["kprobes", "kretprobes", "syscall-argument-decoding"]
-vm_capabilities = []
-edit_paths = ["lings/06_visibility/36-getdents64/hello.c"]
+
+[workspace]
+mode = "single-file"
+source = "curriculum/templates/directory-filtering"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/06_visibility/36-getdents64/README.md"
+check = "curriculum/support/directory-filtering/check"
+host_check = ""
+hint = "curriculum/support/directory-filtering/hint"
+solution = "curriculum/solutions/directory-filtering"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

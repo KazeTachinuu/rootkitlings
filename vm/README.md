@@ -24,10 +24,10 @@ mount
 
 Exit the shell to power off the guest.
 
-Add a QEMU user-network device when a networking lesson needs one:
+Networking exercises declare that capability in their metadata, so the learner command enables it automatically:
 
 ```bash
-./rootkitlings run --cap network
+./rootkitlings run L40
 ```
 
 The guest uses `10.0.2.15`; the host is reachable at `10.0.2.2`.
@@ -40,3 +40,15 @@ The guest uses `10.0.2.15`; the host is reachable at `10.0.2.2`.
 
 The shell opens in `/rootkitlings`, which contains only the module you built.
 The script does not load it for you.
+
+## Add guest tools
+
+Request only the tools an exercise needs.
+The option is repeatable and accepts either an executable filename or a repository-relative path under `tools/`:
+
+```bash
+./vm/boot --tool cred_trigger_test --tool tools/ioctl_test path/to/module.ko
+```
+
+Requested tools are built first and copied to `/bin` in the guest.
+Unknown, non-executable, symlinked, or escaping paths are rejected; other host tools are not included.

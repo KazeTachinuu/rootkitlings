@@ -43,7 +43,7 @@ A different directory may contain the same basename without being filtered.
 
 ```sh
 ./rootkitlings start L37
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/read-view-filtering/hello.c
 ```
 
 Inside the provided bounded match loop, replace the current occurrence with `REDACT_TO` using `memcpy(p, REDACT_TO, REDACT_LEN)`.

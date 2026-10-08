@@ -58,7 +58,7 @@ Module exit removes `/proc/rk_registry` before purging the list so no new callba
 
 ## Implement it
 
-In [`hello.c`](hello.c), declare one record pointer in `registry_show()` and emit each `text` field with `seq_printf()` while holding `entries_lock`.
+In the workspace `hello.c`, declare one record pointer in `registry_show()` and emit each `text` field with `seq_printf()` while holding `entries_lock`.
 
 In `registry_write()`, append the prepared record with `list_add_tail()` at the marked line.
 

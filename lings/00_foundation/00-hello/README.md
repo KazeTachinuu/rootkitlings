@@ -28,7 +28,7 @@ hello_init() ------> "hello: loaded" in the kernel log
 hello_exit() ------> "hello: unloaded" in the kernel log
 ```
 
-Open [hello.c](../../../module/hello.c):
+Run `./rootkitlings start L00`, then open the printed `hello.c` workspace path:
 
 ```c
 static int __init hello_init(void)

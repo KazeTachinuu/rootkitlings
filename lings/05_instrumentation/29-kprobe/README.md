@@ -38,7 +38,7 @@ The supplied init rollback already unregisters the probe if proc creation fails.
 
 ```bash
 ./rootkitlings start L29
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/kprobe/hello.c
 ./rootkitlings check L29
 ```
 

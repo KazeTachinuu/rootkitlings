@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "C03"
-sequence = 32
+schema_version = 2
+id = "one-time-root-token"
 title = "One-time root token"
+stage = "introspection"
+kind = "capstone"
+status = "required"
+tradecraft = ["control", "cryptography", "privilege"]
 difficulty = "challenge"
-prerequisites = ["L22", "L26", "L28"]
+prerequisites = ["mutex-invariant", "credential-replacement", "kernel-randomness"]
 teaches = ["one-time-root-trigger"]
 requires = ["proc-write", "mutex-protected-invariants", "credential-replacement", "kernel-randomness"]
-vm_capabilities = []
-edit_paths = ["capstones/3-root-trigger/main.c", "capstones/3-root-trigger/privilege.c", "capstones/3-root-trigger/privilege.h", "capstones/3-root-trigger/trigger.c", "capstones/3-root-trigger/trigger.h"]
+
+[workspace]
+mode = "project"
+source = "curriculum/templates/one-time-root-token"
+files = ["Kbuild", "main.c", "privilege.c", "privilege.h", "trigger.c", "trigger.h"]
+editable = ["main.c", "privilege.c", "privilege.h", "trigger.c", "trigger.h"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "capstones/3-root-trigger/README.md"
+check = "curriculum/support/one-time-root-token/check"
+host_check = ""
+hint = "curriculum/support/one-time-root-token/hint"
+solution = "curriculum/solutions/one-time-root-token"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = ["credential-trigger-test"]
+cleanup_required = true

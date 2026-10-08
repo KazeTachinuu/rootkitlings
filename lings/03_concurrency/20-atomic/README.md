@@ -39,7 +39,7 @@ Increment `shared_counter` with `atomic_inc()` inside the worker loop.
 
 ```bash
 ./rootkitlings start L20
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/atomic-counter/hello.c
 ./rootkitlings check L20
 ```
 

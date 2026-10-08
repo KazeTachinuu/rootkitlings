@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L02"
-sequence = 2
+schema_version = 2
+id = "multi-file-module"
 title = "Build one module from multiple files"
+stage = "foundation"
+kind = "lesson"
+status = "required"
+tradecraft = []
 difficulty = "intro"
-prerequisites = ["L01"]
+prerequisites = ["module-build"]
 teaches = ["multi-file-modules"]
 requires = ["module-build"]
-vm_capabilities = []
-edit_paths = ["lings/00_foundation/02-multi-file/main.c", "lings/00_foundation/02-multi-file/calc.c", "lings/00_foundation/02-multi-file/calc.h"]
+
+[workspace]
+mode = "project"
+source = "curriculum/templates/multi-file-module"
+files = ["Kbuild", "calc.c", "calc.h", "main.c", "placeholder.c"]
+editable = ["main.c", "calc.c", "calc.h"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/00_foundation/02-multi-file/README.md"
+check = "curriculum/support/multi-file-module/check"
+host_check = "curriculum/support/multi-file-module/host-check"
+hint = "curriculum/support/multi-file-module/hint"
+solution = "curriculum/solutions/multi-file-module"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

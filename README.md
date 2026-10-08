@@ -2,8 +2,8 @@
 
 Learn Linux kernel engineering and rootkit tradecraft by building small, observable modules.
 
-A **ling** is a focused lesson exercise; the course contains 54 lings and 11 integration **capstones**.
-Each exercise declares its prerequisites and sequence in `exercise.toml`; the CLI turns that metadata into one 65-exercise route and advances only when the current check passes.
+A **ling** is a focused lesson; a **capstone** integrates mechanisms already learned.
+The catalog currently contains 54 lings and 11 capstones in one metadata-defined route.
 
 All modules run against Linux 7.2.x in a disposable QEMU guest.
 Use them only in that guest or on systems you are authorized to test.
@@ -17,7 +17,7 @@ Run `./rootkitlings prereq L00` for the canonical course-entry list.
 make doctor
 ./rootkitlings read L00
 ./rootkitlings start L00
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/module-lifecycle/hello.c
 ./rootkitlings check L00
 ```
 
@@ -33,7 +33,7 @@ read the contract -> edit the printed path -> check in a clean VM
 ```
 
 `read` gives the context, expected behavior, and exact task.
-`start` prepares the workspace.
+`start` creates an isolated workspace and prints its path.
 `check` builds with warnings enabled, boots a fresh guest, exercises live behavior, and verifies cleanup.
 
 If you get stuck, `hint` gives a conceptual nudge and `solution` shows the reference implementation.
@@ -60,15 +60,19 @@ They combine ownership, failure handling, concurrency, and defensive observation
 ## Workspace
 
 ```text
-module/                  active workspace for a single-file ling
-lings/                   lesson READMEs, metadata, and scaffolds
-capstones/               multi-file integration exercises
-.rootkitlings/support/   checks and conceptual hints
-.rootkitlings/solutions/ reference implementations used by solution
-vm/                      disposable guest runtime
+course.toml              route, aliases, and controlled vocabularies
+lings/                   focused lesson contracts and metadata
+capstones/               integration contracts and metadata
+curriculum/templates/    immutable starting code
+curriculum/support/      checks and progressive hints
+curriculum/solutions/    reference implementations
+.rootkitlings/work/      learner-owned working copies
+lib/ and scripts/        course engine and maintenance commands
+tools/ and vm/           guest helpers and disposable runtime
 ```
 
-The CLI selects the correct edit target; you do not need to copy lesson files by hand.
+The CLI derives paths, capabilities, tools, and checks from metadata; exercise files do not duplicate them.
+Learner state and workspaces stay under the ignored `.rootkitlings/` directory.
 Guest filesystems are discarded on exit, and networking remains disabled unless an exercise requests it.
 
 ## More

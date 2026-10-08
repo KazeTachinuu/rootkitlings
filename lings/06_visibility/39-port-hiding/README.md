@@ -42,7 +42,7 @@ The local port is stored in network byte order and is compared with `htons(HIDDE
 
 ```sh
 ./rootkitlings start L39
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/socket-row-filtering/hello.c
 ```
 
 In the marked matching branch, set `ctx->hide = true`.

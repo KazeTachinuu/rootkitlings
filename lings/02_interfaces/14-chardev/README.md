@@ -47,7 +47,7 @@ The device name becomes the filename under `/dev`.
 
 ## Implement it
 
-In [`hello.c`](hello.c), the scaffold provides the read path, operation table, and complete `struct miscdevice`.
+In the workspace `hello.c`, the scaffold provides the read path, operation table, and complete `struct miscdevice`.
 
 Return `misc_register(&device)` from `device_init()`.
 

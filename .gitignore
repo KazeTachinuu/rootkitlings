@@ -22,9 +22,8 @@ __pycache__/
 *.swp
 *~
 
-# Rootkitlings
-.rootkitlings/progress
-.rootkitlings/snapshots/
+# Learner state and workspaces
+.rootkitlings/
 tools/icmp_send
 tools/ioctl_test
 tools/cred_trigger_test

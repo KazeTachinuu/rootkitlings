@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L50"
-sequence = 59
+schema_version = 2
+id = "authenticated-encryption"
 title = "Encrypt and authenticate a message"
+stage = "crypto"
+kind = "lesson"
+status = "required"
+tradecraft = ["cryptography"]
 difficulty = "advanced"
-prerequisites = ["L07"]
+prerequisites = ["kernel-allocation"]
 teaches = ["kernel-crypto-api", "authenticated-encryption"]
 requires = ["kernel-allocation"]
-vm_capabilities = ["aes-gcm"]
-edit_paths = ["lings/09_crypto/50-aead/hello.c"]
+
+[workspace]
+mode = "single-file"
+source = "curriculum/templates/authenticated-encryption"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/09_crypto/50-aead/README.md"
+check = "curriculum/support/authenticated-encryption/check"
+host_check = ""
+hint = "curriculum/support/authenticated-encryption/hint"
+solution = "curriculum/solutions/authenticated-encryption"
+
+[verification]
+timeout_seconds = 60
+capabilities = ["aes-gcm"]
+tools = []
+cleanup_required = true

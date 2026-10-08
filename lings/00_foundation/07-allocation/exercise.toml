@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L07"
-sequence = 7
+schema_version = 2
+id = "kernel-allocation"
 title = "Own kernel heap memory"
+stage = "foundation"
+kind = "lesson"
+status = "required"
+tradecraft = ["lifecycle"]
 difficulty = "standard"
-prerequisites = ["L00"]
+prerequisites = ["module-lifecycle"]
 teaches = ["kernel-allocation"]
 requires = ["module-lifecycle"]
-vm_capabilities = []
-edit_paths = ["module/hello.c"]
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "completion"
+parent = "parameter-callback"
+
+[resources]
+readme = "lings/00_foundation/07-allocation/README.md"
+check = "curriculum/support/kernel-allocation/check"
+host_check = "curriculum/support/kernel-allocation/host-check"
+hint = "curriculum/support/kernel-allocation/hint"
+solution = "curriculum/solutions/kernel-allocation"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

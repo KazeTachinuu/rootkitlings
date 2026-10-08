@@ -37,7 +37,7 @@ In the handler, read the result and increment exactly one counter.
 
 ```bash
 ./rootkitlings start L30
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/kretprobe/hello.c
 ./rootkitlings check L30
 ```
 

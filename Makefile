@@ -1,8 +1,25 @@
 KDIR ?= /lib/modules/$(shell uname -r)/build
-MODULE_DIR := $(CURDIR)/module
+MODULE_DIR ?=
 
-.PHONY: all clean compile-db test-solutions doctor validate validate-quick vm tools
-all: tools
+.PHONY: all help module clean compile-db test-solutions doctor validate validate-quick vm tools
+
+.DEFAULT_GOAL := help
+
+all: help
+
+help:
+	@printf '%s\n' \
+		'Rootkitlings maintainer targets:' \
+		'  tools           Build guest-side verification tools' \
+		'  doctor          Check host dependencies' \
+		'  validate        Run the full repository validation' \
+		'  validate-quick  Run static validation only' \
+		'  test-solutions  Build and test reference solutions' \
+		'  compile-db      Generate compile_commands.json' \
+		'  vm              Build and boot L00'
+
+module:
+	@test -n "$(MODULE_DIR)" || { echo 'MODULE_DIR is required' >&2; exit 2; }
 	$(MAKE) -C "$(KDIR)" M="$(MODULE_DIR)" W=1 modules
 
 tools: tools/cred_trigger_test tools/icmp_send tools/ioctl_test
@@ -17,21 +34,24 @@ tools/ioctl_test: tools/ioctl_test.c
 	$(CC) -static -o $@ $<
 
 clean:
-	@for d in module lings/*/* capstones/*; do \
-		[ -f "$$d/Kbuild" ] && $(MAKE) -C "$(KDIR)" M="$(CURDIR)/$$d" clean 2>/dev/null; \
-	done; true
-	rm -f tools/cred_trigger_test tools/icmp_send tools/ioctl_test
-	rm -f modules.order Module.symvers .modules.order.cmd .Module.symvers.cmd
+	@workspace_id=$$("$(CURDIR)/scripts/catalog" query L00 id); \
+	workspace="$(CURDIR)/.rootkitlings/work/$$workspace_id"; \
+	if [ -d "$$workspace" ]; then "$(CURDIR)/rootkitlings" clean L00; fi
+	$(RM) tools/cred_trigger_test tools/icmp_send tools/ioctl_test
 
 doctor:
 	@"$(CURDIR)/scripts/doctor"
 
-compile-db: clean
-	bear -- $(MAKE) -C "$(KDIR)" M="$(MODULE_DIR)" W=1 modules
+compile-db:
+	@"$(CURDIR)/rootkitlings" start L00
+	bear -- "$(CURDIR)/rootkitlings" build L00
 	@python3 scripts/expand-compile-db
 
-vm: all
-	"$(CURDIR)/vm/boot" "$(MODULE_DIR)/hello.ko"
+vm: tools
+	@"$(CURDIR)/rootkitlings" start L00
+	@"$(CURDIR)/rootkitlings" build L00
+	@workspace_id=$$("$(CURDIR)/scripts/catalog" query L00 id); \
+	"$(CURDIR)/vm/boot" "$(CURDIR)/.rootkitlings/work/$$workspace_id/hello.ko"
 
 validate:
 	@"$(CURDIR)/scripts/validate"

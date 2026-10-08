@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L26"
-sequence = 29
+schema_version = 2
+id = "credential-replacement"
 title = "Replace a task's credentials"
+stage = "introspection"
+kind = "lesson"
+status = "required"
+tradecraft = ["control", "privilege"]
 difficulty = "standard"
-prerequisites = ["L11", "L25"]
+prerequisites = ["proc-write", "task-credentials"]
 teaches = ["credential-replacement"]
 requires = ["task-credentials", "proc-write"]
-vm_capabilities = []
-edit_paths = ["lings/04_introspection/26-credential-escalation/hello.c"]
+
+[workspace]
+mode = "single-file"
+source = "curriculum/templates/credential-replacement"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/04_introspection/26-credential-escalation/README.md"
+check = "curriculum/support/credential-replacement/check"
+host_check = ""
+hint = "curriculum/support/credential-replacement/hint"
+solution = "curriculum/solutions/credential-replacement"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

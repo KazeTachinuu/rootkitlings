@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L37"
-sequence = 42
+schema_version = 2
+id = "read-view-filtering"
 title = "Replace content in one read result"
+stage = "visibility"
+kind = "lesson"
+status = "required"
+tradecraft = ["concealment", "instrumentation"]
 difficulty = "advanced"
-prerequisites = ["L30"]
+prerequisites = ["kretprobe"]
 teaches = ["read-view-filtering"]
 requires = ["kretprobes"]
-vm_capabilities = []
-edit_paths = ["lings/06_visibility/37-file-content/hello.c"]
+
+[workspace]
+mode = "single-file"
+source = "curriculum/templates/read-view-filtering"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/06_visibility/37-file-content/README.md"
+check = "curriculum/support/read-view-filtering/check"
+host_check = ""
+hint = "curriculum/support/read-view-filtering/hint"
+solution = "curriculum/solutions/read-view-filtering"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L53"
-sequence = 62
+schema_version = 2
+id = "keyed-domain-generation"
 title = "Derive a daily domain"
+stage = "crypto"
+kind = "lesson"
+status = "required"
+tradecraft = ["networking", "cryptography"]
 difficulty = "advanced"
 prerequisites = []
 teaches = ["keyed-domain-generation"]
 requires = []
-vm_capabilities = []
-edit_paths = ["lings/09_crypto/53-dga/hello.c"]
+
+[workspace]
+mode = "single-file"
+source = "curriculum/templates/keyed-domain-generation"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/09_crypto/53-dga/README.md"
+check = "curriculum/support/keyed-domain-generation/check"
+host_check = ""
+hint = "curriculum/support/keyed-domain-generation/hint"
+solution = "curriculum/solutions/keyed-domain-generation"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

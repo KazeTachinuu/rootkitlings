@@ -112,7 +112,7 @@ The cast to `unsigned long long` matches `%llx` on every supported architecture.
 
 ```sh
 ./rootkitlings start L53
-$EDITOR lings/09_crypto/53-dga/hello.c
+$EDITOR .rootkitlings/work/keyed-domain-generation/hello.c
 ./rootkitlings check L53
 ```
 

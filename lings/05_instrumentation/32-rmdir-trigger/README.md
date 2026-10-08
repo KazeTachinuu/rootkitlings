@@ -44,7 +44,7 @@ Leave the bounded no-fault copy and dispatch logic unchanged.
 
 ```bash
 ./rootkitlings start L32
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/syscall-argument-decoding/hello.c
 ./rootkitlings check L32
 ```
 

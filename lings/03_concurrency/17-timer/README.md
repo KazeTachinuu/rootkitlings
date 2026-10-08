@@ -44,7 +44,7 @@ Complete `beacon_init()` so it schedules the initialized timer's first firing.
 
 ```bash
 ./rootkitlings start L17
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/kernel-timer/hello.c
 ./rootkitlings check L17
 ```
 

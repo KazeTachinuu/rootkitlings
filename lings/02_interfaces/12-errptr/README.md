@@ -58,7 +58,7 @@ The supplied caller already demonstrates the correct `IS_ERR`, `PTR_ERR`, and `N
 
 ```bash
 ./rootkitlings start L12
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/error-pointer/hello.c
 ./rootkitlings check L12
 ```
 

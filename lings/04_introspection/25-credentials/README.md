@@ -33,7 +33,7 @@ Print its UID and GID after converting them through `init_user_ns`.
 
 ```bash
 ./rootkitlings start L25
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/task-credentials/hello.c
 ./rootkitlings check L25
 ```
 

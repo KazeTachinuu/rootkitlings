@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "C05"
-sequence = 45
+schema_version = 2
+id = "ghost-process"
 title = "Ghost process"
+stage = "visibility"
+kind = "capstone"
+status = "required"
+tradecraft = ["concealment", "detection"]
 difficulty = "challenge"
-prerequisites = ["L07", "L19", "L36"]
+prerequisites = ["kernel-allocation", "kernel-thread", "directory-filtering"]
 teaches = ["ghost-process-view"]
 requires = ["kernel-allocation", "kernel-threads", "directory-filtering"]
-vm_capabilities = []
-edit_paths = ["capstones/5-ghost-process/dirhide.c", "capstones/5-ghost-process/ghost.c", "capstones/5-ghost-process/ghost.h", "capstones/5-ghost-process/main.c"]
+
+[workspace]
+mode = "project"
+source = "curriculum/templates/ghost-process"
+files = ["Kbuild", "dirhide.c", "ghost.c", "ghost.h", "main.c"]
+editable = ["dirhide.c", "ghost.c", "ghost.h", "main.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "capstones/5-ghost-process/README.md"
+check = "curriculum/support/ghost-process/check"
+host_check = ""
+hint = "curriculum/support/ghost-process/hint"
+solution = "curriculum/solutions/ghost-process"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

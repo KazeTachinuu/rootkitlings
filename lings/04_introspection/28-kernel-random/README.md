@@ -33,7 +33,7 @@ Fill the entire `auth_token` array with `get_random_bytes()`.
 
 ```bash
 ./rootkitlings start L28
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/kernel-randomness/hello.c
 ./rootkitlings check L28
 ```
 

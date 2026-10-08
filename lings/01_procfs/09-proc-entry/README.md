@@ -40,7 +40,7 @@ Procfs retains the address of `entry_ops`, so the table must remain valid for th
 
 ## Implement it
 
-In [`hello.c`](hello.c), the scaffold provides the module lifecycle, saved entry pointer, and empty operations table.
+In the workspace `hello.c`, the scaffold provides the module lifecycle, saved entry pointer, and empty operations table.
 
 In `entry_init()`, create `rk_entry`, save the returned pointer, and return `-ENOMEM` when it is `NULL`.
 

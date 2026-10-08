@@ -43,10 +43,12 @@ CHECK=
 GDB=
 NETWORK=
 AES_GCM=
+declare -a TOOLS=() TOOL_PATHS=()
 while (( $# )); do
     case $1 in
         --check) CHECK=${2:?--check requires an argument}; shift 2 ;;
         --gdb)   GDB=1; shift ;;
+        --tool)  TOOLS+=("${2:?--tool requires an argument}"); shift 2 ;;
         --cap)
             case ${2:?--cap requires an argument} in
                 aes-gcm) AES_GCM=1 ;;
@@ -77,12 +79,45 @@ BUSYBOX=$(command -v busybox || true)
 
 readonly VM_DIR ROOT_DIR RELEASE KERNEL BUSYBOX WORK ROOTFS INITRAMFS MODULE CHECK GDB NETWORK AES_GCM
 
+resolve_tools()
+{
+    local requested relative component candidate resolved tools_root
+
+    if (( ${#TOOLS[@]} == 0 )); then
+        return 0
+    fi
+    make -C "$ROOT_DIR" --quiet tools
+    tools_root=$(realpath -e -- "$ROOT_DIR/tools") || die "Tools directory not found"
+    for requested in "${TOOLS[@]}"; do
+        [[ $requested != /* ]] || die "Tool path must be relative to the repository: $requested"
+        case $requested in
+            tools/*) relative=${requested#tools/} ;;
+            */*) die "Tool path must be under tools/: $requested" ;;
+            *) relative=$requested ;;
+        esac
+        [[ -n $relative ]] || die "Tool path is empty"
+        IFS=/ read -r -a components <<< "$relative"
+        candidate=$tools_root
+        for component in "${components[@]}"; do
+            [[ -n $component && $component != . && $component != .. ]] ||
+                die "Invalid tool path: $requested"
+            candidate+=/$component
+            [[ ! -L $candidate ]] || die "Tool path may not contain symlinks: $requested"
+        done
+        resolved=$(realpath -e -- "$candidate" 2>/dev/null) || die "Unknown tool: $requested"
+        [[ $resolved == "$tools_root"/* && -f $resolved && -x $resolved ]] ||
+            die "Tool is not a regular executable under tools/: $requested"
+        TOOL_PATHS+=("$resolved")
+    done
+}
+
 # -- prerequisites --
 
 check_prerequisites()
 {
 	local aes_gcm_modules
 
+    resolve_tools
     [[ -n $BUSYBOX ]] || die "BusyBox not found; run make doctor for the package name"
     file "$BUSYBOX" | grep -q 'statically linked' ||
         die "BusyBox is not statically linked: $BUSYBOX"
@@ -187,14 +222,10 @@ build_rootfs()
         chmod 755 "$ROOTFS/check"
         ok "Check script copied to /check"
     fi
-    # Include any compiled tools
-    if [[ -d $ROOT_DIR/tools ]]; then
-        for tool in "$ROOT_DIR"/tools/*; do
-            [[ -x $tool && ! -d $tool && $tool != *.c ]] || continue
-            cp "$tool" "$ROOTFS/bin/$(basename "$tool")"
-            ok "Tool copied to /bin/$(basename "$tool")"
-        done
-    fi
+    for tool in "${TOOL_PATHS[@]}"; do
+        cp "$tool" "$ROOTFS/bin/$(basename "$tool")"
+        ok "Tool copied to /bin/$(basename "$tool")"
+    done
     ok "Root filesystem ready"
 }
 

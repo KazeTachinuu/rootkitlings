@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L00"
-sequence = 0
+schema_version = 2
+id = "module-lifecycle"
 title = "Load code into the kernel"
+stage = "foundation"
+kind = "lesson"
+status = "required"
+tradecraft = ["lifecycle"]
 difficulty = "intro"
 prerequisites = []
 teaches = ["module-lifecycle"]
 requires = []
-vm_capabilities = []
-edit_paths = ["module/hello.c"]
+
+[workspace]
+mode = "cumulative"
+source = "curriculum/templates/module-lifecycle"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/00_foundation/00-hello/README.md"
+check = "curriculum/support/module-lifecycle/check"
+host_check = ""
+hint = "curriculum/support/module-lifecycle/hint"
+solution = "curriculum/solutions/module-lifecycle"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

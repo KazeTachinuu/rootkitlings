@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import sys
 
@@ -11,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT / "lib"))
 
-from catalog import Catalog, CatalogError  # noqa: E402
+from catalog import Catalog, CatalogError, QUERY_FIELDS  # noqa: E402
 
 
 def parser() -> argparse.ArgumentParser:
@@ -23,17 +24,14 @@ def parser() -> argparse.ArgumentParser:
     concept_label = commands.add_parser("concept-label")
     concept_label.add_argument("concept")
     resolve = commands.add_parser("resolve")
-    resolve.add_argument("selector", help="exact stable serial (L00 or C00)")
+    resolve.add_argument("selector", help="stable ID or serial alias (L00, M00, or C00)")
     query = commands.add_parser("query")
-    query.add_argument("selector", help="exact stable serial (L00 or C00)")
-    query.add_argument("field", choices=[
-        "path", "serial", "sequence", "title", "difficulty", "prerequisites",
-        "teaches", "requires", "vm_capabilities", "edit_paths",
-    ])
+    query.add_argument("selector", help="stable ID or serial alias (L00, M00, or C00)")
+    query.add_argument("field", choices=sorted(QUERY_FIELDS))
     prerequisite_closure = commands.add_parser("prerequisite-closure")
-    prerequisite_closure.add_argument("selector", help="exact stable serial (L00 or C00)")
+    prerequisite_closure.add_argument("selector", help="stable ID or serial alias")
     concept_closure = commands.add_parser("concept-closure")
-    concept_closure.add_argument("selector", help="exact stable serial (L00 or C00)")
+    concept_closure.add_argument("selector", help="stable ID or serial alias")
     concept_closure.add_argument("--details", action="store_true")
     listing = commands.add_parser("list")
     listing.add_argument("--difficulty")
@@ -89,18 +87,36 @@ def main() -> int:
                 if args.concept and args.concept not in item.teaches and args.concept not in item.requires:
                     continue
                 print(f"{item.serial}\t{item.path}\t{item.title}")
-        else:
+        elif args.command == "export":
+            records = []
             for item in catalog.ordered():
-                columns = (
-                    item.serial, item.sequence, item.path.as_posix(), item.title,
-                    catalog.section(item), item.difficulty,
-                    ",".join(item.prerequisites) or "-",
-                    ",".join(catalog.concept_label(value) for value in item.teaches),
-                    ",".join(catalog.concept_label(value) for value in item.requires) or "-",
-                    ",".join(item.vm_capabilities) or "-", catalog.workspace_mode(item),
-                    ",".join(item.edit_paths), catalog.solution_path(item),
-                )
-                print("\x1f".join(str(value) for value in columns))
+                records.append({
+                    "id": item.id, "serial": item.serial, "sequence": item.sequence,
+                    "path": item.path.as_posix(), "title": item.title,
+                    "stage": item.stage, "kind": item.kind, "status": item.status,
+                    "tradecraft": list(item.tradecraft), "difficulty": item.difficulty,
+                    "prerequisites": list(item.prerequisites),
+                    "teaches": list(item.teaches), "requires": list(item.requires),
+                    "workspace": {
+                        "mode": item.workspace.mode, "source": item.workspace.source or None,
+                        "files": list(item.workspace.files),
+                        "editable": list(item.workspace.editable), "build": item.workspace.build,
+                        "baseline": item.workspace.baseline,
+                        "parent": item.workspace.parent or None,
+                    },
+                    "resources": {
+                        "readme": item.resources.readme, "check": item.resources.check,
+                        "host_check": item.resources.host_check or None,
+                        "hint": item.resources.hint, "solution": item.resources.solution,
+                    },
+                    "verification": {
+                        "timeout_seconds": item.verification.timeout_seconds,
+                        "capabilities": list(item.verification.capabilities),
+                        "tools": list(item.verification.tools),
+                        "cleanup_required": item.verification.cleanup_required,
+                    },
+                })
+            print(json.dumps({"revision": catalog.revision, "exercises": records}, indent=2))
     except CatalogError as exc:
         print(f"[x] {exc}", file=sys.stderr)
         return 1

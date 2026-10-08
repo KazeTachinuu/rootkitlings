@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "C09"
-sequence = 63
+schema_version = 2
+id = "authenticated-dns-signal"
 title = "Authenticated DNS signal"
+stage = "crypto"
+kind = "capstone"
+status = "required"
+tradecraft = ["control", "cryptography", "networking"]
 difficulty = "challenge"
-prerequisites = ["L47", "L52", "L53"]
+prerequisites = ["dns-wire-encoding", "hmac-authentication", "keyed-domain-generation"]
 teaches = ["authenticated-dns-signals"]
 requires = ["dns-wire-encoding", "hmac-authentication", "keyed-domain-generation"]
-vm_capabilities = []
-edit_paths = ["capstones/9-dns-c2/auth.c", "capstones/9-dns-c2/dns.c", "capstones/9-dns-c2/dns_c2.h", "capstones/9-dns-c2/main.c"]
+
+[workspace]
+mode = "project"
+source = "curriculum/templates/authenticated-dns-signal"
+files = ["Kbuild", "auth.c", "dns.c", "dns_c2.h", "main.c"]
+editable = ["auth.c", "dns.c", "dns_c2.h", "main.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "capstones/9-dns-c2/README.md"
+check = "curriculum/support/authenticated-dns-signal/check"
+host_check = ""
+hint = "curriculum/support/authenticated-dns-signal/hint"
+solution = "curriculum/solutions/authenticated-dns-signal"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

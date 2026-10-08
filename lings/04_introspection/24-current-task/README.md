@@ -31,7 +31,7 @@ Print `current->pid` and `current->comm` as `pid=<number> comm=<name>` in `info_
 
 ```bash
 ./rootkitlings start L24
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/current-task/hello.c
 ./rootkitlings check L24
 ```
 

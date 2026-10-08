@@ -35,7 +35,7 @@ Complete `resolve_symbol()` so every successful registration has a matching unre
 
 ```bash
 ./rootkitlings start L27
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/symbol-resolution/hello.c
 ./rootkitlings check L27
 ```
 

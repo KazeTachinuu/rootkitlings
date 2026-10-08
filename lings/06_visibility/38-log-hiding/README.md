@@ -40,7 +40,7 @@ Any failure leaves the original syscall result unchanged.
 
 ```sh
 ./rootkitlings start L38
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/log-view-filtering/hello.c
 ```
 
 Complete the marked line decision.

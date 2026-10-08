@@ -64,7 +64,7 @@ The control entry is deliberately reachable by exact path while the module is hi
 
 ```sh
 ./rootkitlings start L34
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/module-list-hiding/hello.c
 ```
 
 Complete `hide_module()`.

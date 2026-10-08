@@ -4,8 +4,8 @@ Printable strings embedded in a module are easy to extract without loading it:
 
 ```sh
 ./rootkitlings start L49
-make --quiet
-strings module/hello.ko
+./rootkitlings build L49
+strings .rootkitlings/work/xor-obfuscation/hello.ko
 ```
 
 A fixed command, path, or server name can therefore become a simple signature.

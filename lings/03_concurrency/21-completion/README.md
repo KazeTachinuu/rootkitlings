@@ -36,7 +36,7 @@ Call `complete(&worker->done)` when the worker finishes its simulated work.
 
 ```bash
 ./rootkitlings start L21
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/completion/hello.c
 ./rootkitlings check L21
 ```
 

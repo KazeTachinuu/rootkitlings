@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "C07"
-sequence = 55
+schema_version = 2
+id = "connect-back-agent"
 title = "Connect-back task agent"
+stage = "networking"
+kind = "capstone"
+status = "required"
+tradecraft = ["control", "execution", "networking"]
 difficulty = "challenge"
-prerequisites = ["L23", "L43"]
+prerequisites = ["wait-queue", "kernel-socket"]
 teaches = ["connect-back-agent"]
 requires = ["kernel-threads", "wait-queues", "kernel-sockets"]
-vm_capabilities = ["network"]
-edit_paths = ["capstones/7-implant/beacon.c", "capstones/7-implant/command.c", "capstones/7-implant/implant.h", "capstones/7-implant/main.c"]
+
+[workspace]
+mode = "project"
+source = "curriculum/templates/connect-back-agent"
+files = ["Kbuild", "beacon.c", "command.c", "implant.h", "main.c"]
+editable = ["beacon.c", "command.c", "implant.h", "main.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "capstones/7-implant/README.md"
+check = "curriculum/support/connect-back-agent/check"
+host_check = ""
+hint = "curriculum/support/connect-back-agent/hint"
+solution = "curriculum/solutions/connect-back-agent"
+
+[verification]
+timeout_seconds = 90
+capabilities = ["network"]
+tools = []
+cleanup_required = true

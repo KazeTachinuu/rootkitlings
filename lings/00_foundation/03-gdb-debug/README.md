@@ -69,7 +69,7 @@ The module uses `-Og -g` so GDB can follow its source and local variables.
 ./rootkitlings start L03
 ```
 
-This stages the deliberately faulty [`hello.c`](hello.c) for the debugger exercise.
+This stages the deliberately faulty `hello.c` in the isolated workspace for the debugger exercise.
 
 ## 2. Start QEMU — terminal 1
 

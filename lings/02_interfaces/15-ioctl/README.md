@@ -99,7 +99,7 @@ The misc device, locked read path, stored message, and ioctl command definitions
 
 ```sh
 ./rootkitlings start L15
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/ioctl-dispatch/hello.c
 ./rootkitlings check L15
 ```
 

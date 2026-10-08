@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L22"
-sequence = 22
+schema_version = 2
+id = "mutex-invariant"
 title = "Protect shared state with a mutex"
+stage = "concurrency"
+kind = "lesson"
+status = "required"
+tradecraft = []
 difficulty = "standard"
-prerequisites = ["L11", "L19"]
+prerequisites = ["proc-write", "kernel-thread"]
 teaches = ["mutex-protected-invariants"]
 requires = ["mutexes", "kernel-threads"]
-vm_capabilities = []
-edit_paths = ["lings/03_concurrency/22-mutex/hello.c"]
+
+[workspace]
+mode = "single-file"
+source = "curriculum/templates/mutex-invariant"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/03_concurrency/22-mutex/README.md"
+check = "curriculum/support/mutex-invariant/check"
+host_check = ""
+hint = "curriculum/support/mutex-invariant/hint"
+solution = "curriculum/solutions/mutex-invariant"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

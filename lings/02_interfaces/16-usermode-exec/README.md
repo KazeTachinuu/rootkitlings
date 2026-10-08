@@ -64,7 +64,7 @@ The supplied lifecycle creates the marker on load and removes it on unload.
 
 ```bash
 ./rootkitlings start L16
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/usermode-helper/hello.c
 ./rootkitlings run L16
 ```
 

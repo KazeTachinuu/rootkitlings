@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L25"
-sequence = 28
+schema_version = 2
+id = "task-credentials"
 title = "Read the caller's credentials"
+stage = "introspection"
+kind = "lesson"
+status = "required"
+tradecraft = ["detection", "privilege"]
 difficulty = "standard"
-prerequisites = ["L24"]
+prerequisites = ["current-task"]
 teaches = ["task-credentials"]
 requires = ["current-task"]
-vm_capabilities = []
-edit_paths = ["lings/04_introspection/25-credentials/hello.c"]
+
+[workspace]
+mode = "single-file"
+source = "curriculum/templates/task-credentials"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/04_introspection/25-credentials/README.md"
+check = "curriculum/support/task-credentials/check"
+host_check = ""
+hint = "curriculum/support/task-credentials/hint"
+solution = "curriculum/solutions/task-credentials"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

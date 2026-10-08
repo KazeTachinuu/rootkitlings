@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L12"
-sequence = 12
+schema_version = 2
+id = "error-pointer"
 title = "Return an error through a pointer"
+stage = "interfaces"
+kind = "lesson"
+status = "required"
+tradecraft = ["lifecycle"]
 difficulty = "standard"
-prerequisites = ["L04"]
+prerequisites = ["init-failure"]
 teaches = ["error-pointers"]
 requires = ["init-failure"]
-vm_capabilities = []
-edit_paths = ["lings/02_interfaces/12-errptr/hello.c"]
+
+[workspace]
+mode = "single-file"
+source = "curriculum/templates/error-pointer"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/02_interfaces/12-errptr/README.md"
+check = "curriculum/support/error-pointer/check"
+host_check = ""
+hint = "curriculum/support/error-pointer/hint"
+solution = "curriculum/solutions/error-pointer"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

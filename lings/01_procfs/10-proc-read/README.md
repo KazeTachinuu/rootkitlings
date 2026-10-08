@@ -42,7 +42,7 @@ Storing `entry_read` in `.proc_read` registers the callback; it does not call it
 
 ## Implement it
 
-In [`hello.c`](hello.c), the scaffold provides the payload, callback signature, operations table, proc entry, and cleanup.
+In the workspace `hello.c`, the scaffold provides the payload, callback signature, operations table, proc entry, and cleanup.
 
 Return `simple_read_from_buffer(buffer, count, position, payload, sizeof(payload) - 1)` from `entry_read()`.
 

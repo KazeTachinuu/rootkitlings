@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L21"
-sequence = 21
+schema_version = 2
+id = "completion"
 title = "Wait for finite work to finish"
+stage = "concurrency"
+kind = "lesson"
+status = "required"
+tradecraft = ["execution", "lifecycle"]
 difficulty = "standard"
-prerequisites = ["L19"]
+prerequisites = ["kernel-thread"]
 teaches = ["completions"]
 requires = ["kernel-threads"]
-vm_capabilities = []
-edit_paths = ["lings/03_concurrency/21-completion/hello.c"]
+
+[workspace]
+mode = "single-file"
+source = "curriculum/templates/completion"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/03_concurrency/21-completion/README.md"
+check = "curriculum/support/completion/check"
+host_check = ""
+hint = "curriculum/support/completion/hint"
+solution = "curriculum/solutions/completion"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

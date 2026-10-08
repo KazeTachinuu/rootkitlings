@@ -44,7 +44,7 @@ After the existing creation and error check, wake `heartbeat_thread` with `wake_
 
 ```bash
 ./rootkitlings start L19
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/kernel-thread/hello.c
 ./rootkitlings check L19
 ```
 

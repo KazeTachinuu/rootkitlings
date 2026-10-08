@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "C00"
-sequence = 24
+schema_version = 2
+id = "live-config-store"
 title = "Live configuration store"
+stage = "concurrency"
+kind = "capstone"
+status = "required"
+tradecraft = ["control"]
 difficulty = "challenge"
-prerequisites = ["L13", "L22"]
+prerequisites = ["kernel-list", "mutex-invariant"]
 teaches = ["configuration-store"]
 requires = ["kernel-allocation", "proc-write", "kernel-lists", "mutex-protected-invariants"]
-vm_capabilities = []
-edit_paths = ["capstones/0-config-store/config.h", "capstones/0-config-store/main.c", "capstones/0-config-store/proc.c", "capstones/0-config-store/store.c"]
+
+[workspace]
+mode = "project"
+source = "curriculum/templates/live-config-store"
+files = ["Kbuild", "config.h", "main.c", "proc.c", "store.c"]
+editable = ["config.h", "main.c", "proc.c", "store.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "capstones/0-config-store/README.md"
+check = "curriculum/support/live-config-store/check"
+host_check = ""
+hint = "curriculum/support/live-config-store/hint"
+solution = "curriculum/solutions/live-config-store"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

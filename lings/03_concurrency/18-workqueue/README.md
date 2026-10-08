@@ -40,7 +40,7 @@ Keep the existing timer re-arm after it so the event remains periodic.
 
 ```bash
 ./rootkitlings start L18
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/workqueue/hello.c
 ./rootkitlings check L18
 ```
 

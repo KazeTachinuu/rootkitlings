@@ -14,7 +14,7 @@ This time, inspect what the build produces.
 
 ## Kbuild
 
-[module/Kbuild](../../../module/Kbuild) contains one rule:
+The `Kbuild` file in the workspace contains one rule:
 
 ```make
 obj-m += hello.o
@@ -23,17 +23,17 @@ obj-m += hello.o
 `obj-m` declares a loadable module.
 Kbuild takes `hello.c`, compiles `hello.o`, then links `hello.ko` with the metadata required by the current kernel.
 
-The root [Makefile](../../../Makefile) invokes the kernel build system:
+`build` invokes the kernel build system for the active workspace:
 
 ```text
-make
+./rootkitlings build L01
   |
   v
 /lib/modules/$(uname -r)/build
   |
-  | M=/path/to/rootkitlings/module
+  | M=.rootkitlings/work/module-build
   v
-module/hello.ko
+.rootkitlings/work/module-build/hello.ko
 ```
 
 `M=` identifies the external module directory.
@@ -42,17 +42,17 @@ The kernel build supplies the correct headers, configuration, compiler flags, an
 ## Build it
 
 ```bash
-make clean
-make
+./rootkitlings start L01
+./rootkitlings build L01
 ```
 
 Inspect the three stages:
 
 ```bash
-file module/hello.c
-file module/hello.o
-file module/hello.ko
-modinfo module/hello.ko
+file .rootkitlings/work/module-build/hello.c
+file .rootkitlings/work/module-build/hello.o
+file .rootkitlings/work/module-build/hello.ko
+modinfo .rootkitlings/work/module-build/hello.ko
 ```
 
 `file` identifies each format.
@@ -78,6 +78,6 @@ A `.ko` is not a sealed executable.
 Its metadata and printable strings can be inspected without loading it:
 
 ```bash
-modinfo module/hello.ko
-strings module/hello.ko | less
+modinfo .rootkitlings/work/module-build/hello.ko
+strings .rootkitlings/work/module-build/hello.ko | less
 ```

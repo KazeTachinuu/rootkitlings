@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L06"
-sequence = 6
+schema_version = 2
+id = "parameter-callback"
 title = "A callback reacts to parameter writes"
+stage = "foundation"
+kind = "lesson"
+status = "required"
+tradecraft = ["control"]
 difficulty = "standard"
-prerequisites = ["L05"]
+prerequisites = ["module-parameter"]
 teaches = ["parameter-callbacks"]
 requires = ["module-parameters"]
-vm_capabilities = []
-edit_paths = ["module/hello.c"]
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "completion"
+parent = "module-parameter"
+
+[resources]
+readme = "lings/00_foundation/06-parameter-callback/README.md"
+check = "curriculum/support/parameter-callback/check"
+host_check = ""
+hint = "curriculum/support/parameter-callback/hint"
+solution = "curriculum/solutions/parameter-callback"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

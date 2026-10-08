@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L32"
-sequence = 36
+schema_version = 2
+id = "syscall-argument-decoding"
 title = "Decode a syscall argument in a probe"
+stage = "instrumentation"
+kind = "lesson"
+status = "required"
+tradecraft = ["control", "instrumentation"]
 difficulty = "advanced"
-prerequisites = ["L11", "L29"]
+prerequisites = ["proc-write", "kprobe"]
 teaches = ["syscall-argument-decoding"]
 requires = ["bounded-user-copy", "kprobes"]
-vm_capabilities = []
-edit_paths = ["lings/05_instrumentation/32-rmdir-trigger/hello.c"]
+
+[workspace]
+mode = "single-file"
+source = "curriculum/templates/syscall-argument-decoding"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/05_instrumentation/32-rmdir-trigger/README.md"
+check = "curriculum/support/syscall-argument-decoding/check"
+host_check = ""
+hint = "curriculum/support/syscall-argument-decoding/hint"
+solution = "curriculum/solutions/syscall-argument-decoding"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

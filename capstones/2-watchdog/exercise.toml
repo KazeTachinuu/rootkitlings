@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "C02"
-sequence = 26
+schema_version = 2
+id = "dead-man-watchdog"
 title = "Dead-man watchdog"
+stage = "concurrency"
+kind = "capstone"
+status = "required"
+tradecraft = ["control", "execution"]
 difficulty = "challenge"
-prerequisites = ["L20", "L22", "L23"]
+prerequisites = ["atomic-counter", "mutex-invariant", "wait-queue"]
 teaches = ["dead-man-watchdog"]
 requires = ["kernel-threads", "atomic-operations", "mutex-protected-invariants", "wait-queues"]
-vm_capabilities = []
-edit_paths = ["capstones/2-watchdog/main.c", "capstones/2-watchdog/watchdog.c", "capstones/2-watchdog/watchdog.h"]
+
+[workspace]
+mode = "project"
+source = "curriculum/templates/dead-man-watchdog"
+files = ["Kbuild", "main.c", "watchdog.c", "watchdog.h"]
+editable = ["main.c", "watchdog.c", "watchdog.h"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "capstones/2-watchdog/README.md"
+check = "curriculum/support/dead-man-watchdog/check"
+host_check = ""
+hint = "curriculum/support/dead-man-watchdog/hint"
+solution = "curriculum/solutions/dead-man-watchdog"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

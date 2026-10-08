@@ -36,7 +36,8 @@ Avoid a generic `common.c` that obscures those boundaries.
 
 ```sh
 ./rootkitlings read C00
-$EDITOR capstones/0-config-store/store.c
+./rootkitlings start C00
+$EDITOR .rootkitlings/work/live-config-store/store.c
 ./rootkitlings check C00
 ```
 

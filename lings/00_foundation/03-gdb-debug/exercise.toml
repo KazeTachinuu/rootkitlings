@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L03"
-sequence = 3
+schema_version = 2
+id = "kernel-debugging"
 title = "Find a bug with GDB"
+stage = "foundation"
+kind = "lesson"
+status = "required"
+tradecraft = ["detection"]
 difficulty = "standard"
-prerequisites = ["L01"]
+prerequisites = ["module-build"]
 teaches = ["kernel-debugging"]
 requires = ["module-build"]
-vm_capabilities = []
-edit_paths = ["lings/00_foundation/03-gdb-debug/hello.c"]
+
+[workspace]
+mode = "project"
+source = "curriculum/templates/kernel-debugging"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/00_foundation/03-gdb-debug/README.md"
+check = "curriculum/support/kernel-debugging/check"
+host_check = "curriculum/support/kernel-debugging/host-check"
+hint = "curriculum/support/kernel-debugging/hint"
+solution = "curriculum/solutions/kernel-debugging"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

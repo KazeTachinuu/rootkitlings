@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L05"
-sequence = 5
+schema_version = 2
+id = "module-parameter"
 title = "Parameters are live module state"
+stage = "foundation"
+kind = "lesson"
+status = "required"
+tradecraft = ["control"]
 difficulty = "standard"
-prerequisites = ["L00"]
+prerequisites = ["module-lifecycle"]
 teaches = ["module-parameters"]
 requires = ["module-lifecycle"]
-vm_capabilities = []
-edit_paths = ["module/hello.c"]
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "completion"
+parent = "init-failure"
+
+[resources]
+readme = "lings/00_foundation/05-parameter/README.md"
+check = "curriculum/support/module-parameter/check"
+host_check = ""
+hint = "curriculum/support/module-parameter/hint"
+solution = "curriculum/solutions/module-parameter"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

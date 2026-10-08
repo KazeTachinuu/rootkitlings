@@ -35,7 +35,7 @@ When registration of `kp_write` fails, unregister `kp_read` before returning the
 
 ```bash
 ./rootkitlings start L33
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/hook-rollback/hello.c
 ./rootkitlings check L33
 ```
 

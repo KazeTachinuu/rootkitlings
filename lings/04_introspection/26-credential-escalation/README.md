@@ -35,7 +35,7 @@ Complete `escalate_to_root()` with `prepare_creds()`, all eight identity assignm
 
 ```bash
 ./rootkitlings start L26
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/credential-replacement/hello.c
 ./rootkitlings check L26
 ```
 

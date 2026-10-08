@@ -25,7 +25,7 @@ Eleven [capstones](../capstones/README.md) are interleaved after the mechanisms 
 
 Every `exercise.toml` records what the exercise teaches, the concepts its marked task applies, and the smallest non-redundant set of earlier exercises that supplies those concepts.
 Course-entry assumptions live once in `course.toml`; they are not repeated in every exercise.
-Use `../rootkitlings list` to see the canonical 65-exercise route and `../rootkitlings status` to see your place in it.
+Use `../rootkitlings list` to see the canonical route and `../rootkitlings status` to see your place in it.
 
 ## Engineering rules
 

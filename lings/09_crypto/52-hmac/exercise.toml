@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L52"
-sequence = 61
+schema_version = 2
+id = "hmac-authentication"
 title = "Authenticate a message with HMAC"
+stage = "crypto"
+kind = "lesson"
+status = "required"
+tradecraft = ["cryptography"]
 difficulty = "advanced"
-prerequisites = ["L08", "L51"]
+prerequisites = ["initialization-rollback", "sha256-verification"]
 teaches = ["hmac-authentication"]
 requires = ["kernel-crypto-api", "sha256-verification", "error-pointers", "initialization-rollback"]
-vm_capabilities = []
-edit_paths = ["lings/09_crypto/52-hmac/hello.c"]
+
+[workspace]
+mode = "single-file"
+source = "curriculum/templates/hmac-authentication"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/09_crypto/52-hmac/README.md"
+check = "curriculum/support/hmac-authentication/check"
+host_check = ""
+hint = "curriculum/support/hmac-authentication/hint"
+solution = "curriculum/solutions/hmac-authentication"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

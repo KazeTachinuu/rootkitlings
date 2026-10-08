@@ -1,10 +1,32 @@
-schema_version = 1
-serial = "L23"
-sequence = 23
+schema_version = 2
+id = "wait-queue"
 title = "Wake a thread on demand"
+stage = "concurrency"
+kind = "lesson"
+status = "required"
+tradecraft = ["control", "execution"]
 difficulty = "standard"
-prerequisites = ["L19"]
+prerequisites = ["kernel-thread"]
 teaches = ["wait-queues"]
 requires = ["kernel-threads"]
-vm_capabilities = []
-edit_paths = ["lings/03_concurrency/23-waiting/hello.c"]
+
+[workspace]
+mode = "single-file"
+source = "curriculum/templates/wait-queue"
+files = ["Kbuild", "hello.c"]
+editable = ["hello.c"]
+build = "."
+baseline = "template"
+
+[resources]
+readme = "lings/03_concurrency/23-waiting/README.md"
+check = "curriculum/support/wait-queue/check"
+host_check = ""
+hint = "curriculum/support/wait-queue/hint"
+solution = "curriculum/solutions/wait-queue"
+
+[verification]
+timeout_seconds = 45
+capabilities = []
+tools = []
+cleanup_required = true

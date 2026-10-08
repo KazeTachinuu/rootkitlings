@@ -37,7 +37,7 @@ visible
 
 ```sh
 ./rootkitlings start L35
-$EDITOR module/hello.c
+$EDITOR .rootkitlings/work/sysfs-artifact/hello.c
 ```
 
 Study how `marker_create_locked()` allocates `rk_marker`, publishes `status`, and rolls back if publishing fails.
