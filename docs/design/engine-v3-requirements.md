@@ -323,6 +323,13 @@ Inherited workspaces derive the provider's effective artifact and reject conflic
 Artifact values are portable `.ko` basenames; paths, traversal, whitespace, and option-like names are invalid.
 `Catalog.module_artifact(exercise)` is the sole resolver exposed to build and verification consumers.
 
+Verification build variants are declarative `[[verification.cases]]` records.
+Each case has a stable `id`, learner-facing `label`, string-to-string `build_variables`, an `expect_build` result, an optional guest `check`, and an optional `build_output_contains` assertion.
+Successful builds require an existing guest check and cannot assert build output.
+Expected build failures have no guest check and require a bounded printable output assertion.
+Case IDs and case-insensitive labels are unique per exercise, make-variable names are restricted to portable identifier syntax, and all scalar values are bounded printable strings.
+Manifests without cases resolve through `Catalog.verification_cases()` to one compatible default successful case using the exercise's existing guest check; exported catalog data always contains the resolved cases.
+
 ### 4. Track-aware CLI behavior
 
 Tests:

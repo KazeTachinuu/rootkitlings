@@ -123,6 +123,17 @@ def main() -> int:
                         "capabilities": list(item.verification.capabilities),
                         "tools": list(item.verification.tools),
                         "cleanup_required": item.verification.cleanup_required,
+                        "cases": [
+                            {
+                                "id": case.id,
+                                "label": case.label,
+                                "build_variables": dict(case.build_variables),
+                                "expect_build": case.expect_build,
+                                "check": case.check,
+                                "build_output_contains": case.build_output_contains,
+                            }
+                            for case in catalog.verification_cases(item)
+                        ],
                     },
                 })
             print(json.dumps({

@@ -5,7 +5,10 @@ import tempfile
 import tomllib
 import unittest
 
-from lib.catalog import Catalog, CatalogError, Exercise, Resources, Verification, Workspace
+from lib.catalog import (
+    Catalog, CatalogError, Exercise, Resources, Verification, VerificationCase,
+    Workspace,
+)
 from lib.workspace import WorkspaceError
 
 
@@ -75,6 +78,131 @@ class GeneratedSerialTests(unittest.TestCase):
         self.assertIsNone(
             data["exercises"][0]["workspace"]["module_artifact_override"]
         )
+        self.assertEqual(
+            data["exercises"][0]["verification"]["cases"],
+            [{
+                "id": "default",
+                "label": "Default",
+                "build_variables": {},
+                "expect_build": "pass",
+                "check": data["exercises"][0]["resources"]["check"],
+                "build_output_contains": "",
+            }],
+        )
+
+
+class VerificationCaseTests(unittest.TestCase):
+    def parse(self, cases):
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = Catalog.__new__(Catalog)
+            catalog.root = Path(directory)
+            for case in cases:
+                check = case.get("check", "")
+                if check:
+                    target = catalog.root / check
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_text("#!/bin/sh\n")
+            return catalog._verification({
+                "timeout_seconds": 30,
+                "capabilities": [],
+                "tools": [],
+                "cleanup_required": True,
+                "cases": cases,
+            }, Path("exercise.toml"))
+
+    def test_explicit_success_and_failure_cases(self) -> None:
+        verification = self.parse([
+            {
+                "id": "normal", "label": "Normal load",
+                "build_variables": {"RK_FAIL_POINT": "0"},
+                "expect_build": "pass", "check": "checks/normal",
+                "build_output_contains": "",
+            },
+            {
+                "id": "unknown", "label": "Unknown value",
+                "build_variables": {"RK_FAIL_POINT": "99"},
+                "expect_build": "fail", "check": "",
+                "build_output_contains": "unsupported failure point",
+            },
+        ])
+        self.assertEqual(verification.cases[0].build_variables, (("RK_FAIL_POINT", "0"),))
+        self.assertEqual(verification.cases[1].expect_build, "fail")
+
+    def test_implicit_default_case_preserves_existing_manifests(self) -> None:
+        exercise = _exercise("existing", "template")
+        catalog = Catalog.__new__(Catalog)
+        self.assertEqual(
+            catalog.verification_cases(exercise),
+            (VerificationCase("default", "Default", (), "pass", "check", ""),),
+        )
+
+    def test_rejects_duplicate_ids_and_labels(self) -> None:
+        base = {
+            "id": "normal", "label": "Normal",
+            "build_variables": {}, "expect_build": "pass",
+            "check": "check", "build_output_contains": "",
+        }
+        for duplicate in (
+            {**base, "label": "Other"},
+            {**base, "id": "other", "label": "normal"},
+        ):
+            with self.subTest(duplicate=duplicate):
+                with self.assertRaisesRegex(CatalogError, "duplicate verification case"):
+                    self.parse([base, duplicate])
+
+    def test_rejects_unsafe_variables_and_unprintable_or_long_values(self) -> None:
+        base = {
+            "id": "normal", "label": "Normal", "expect_build": "pass",
+            "check": "check", "build_output_contains": "",
+        }
+        for variables in ({"BAD-NAME": "1"}, {"GOOD": "line\nbreak"}, {"GOOD": "x" * 257}):
+            with self.subTest(variables=variables):
+                with self.assertRaises(CatalogError):
+                    self.parse([{**base, "build_variables": variables}])
+
+    def test_enforces_success_and_failure_contracts(self) -> None:
+        cases = (
+            {
+                "id": "success", "label": "Success", "build_variables": {},
+                "expect_build": "pass", "check": "",
+                "build_output_contains": "",
+            },
+            {
+                "id": "success", "label": "Success", "build_variables": {},
+                "expect_build": "pass", "check": "check",
+                "build_output_contains": "unexpected",
+            },
+            {
+                "id": "failure", "label": "Failure", "build_variables": {},
+                "expect_build": "fail", "check": "check",
+                "build_output_contains": "error",
+            },
+            {
+                "id": "failure", "label": "Failure", "build_variables": {},
+                "expect_build": "fail", "check": "",
+                "build_output_contains": "",
+            },
+        )
+        for case in cases:
+            with self.subTest(case=case):
+                with self.assertRaises(CatalogError):
+                    self.parse([case])
+
+    def test_catalog_validation_requires_case_check_to_exist(self) -> None:
+        catalog = Catalog(ROOT)
+        item = catalog.exercises[0]
+        verification = Verification(
+            item.verification.timeout_seconds,
+            item.verification.capabilities,
+            item.verification.tools,
+            item.verification.cleanup_required,
+            (VerificationCase(
+                "normal", "Normal", (), "pass", "missing/guest-check", ""
+            ),),
+        )
+        explicit = Exercise(**{**item.__dict__, "verification": verification})
+        with self.assertRaisesRegex(CatalogError, "missing verification case check"):
+            catalog._validate_paths(explicit)
 
 
 def _exercise(

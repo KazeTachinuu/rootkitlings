@@ -30,6 +30,7 @@ ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 SERIAL_RE = re.compile(r"(?:L|M|C)[0-9]{2}\Z")
 TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 MODULE_ARTIFACT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.ko\Z")
+MAKE_VARIABLE_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 DIFFICULTIES = {"intro", "standard", "advanced", "challenge"}
 KINDS = {"lesson", "milestone", "capstone"}
 STATUSES = {"required", "elective", "retired"}
@@ -42,6 +43,10 @@ TOP_FIELDS = {
 }
 RESOURCE_FIELDS = {"readme", "check", "host_check", "hint", "solution"}
 VERIFICATION_FIELDS = {"timeout_seconds", "capabilities", "tools", "cleanup_required"}
+VERIFICATION_CASE_FIELDS = {
+    "id", "label", "build_variables", "expect_build", "check",
+    "build_output_contains",
+}
 QUERY_FIELDS = {
     "id", "path", "serial", "sequence", "title", "stage", "kind",
     "status", "tradecraft", "difficulty", "prerequisites", "teaches", "requires",
@@ -106,11 +111,22 @@ class Resources:
 
 
 @dataclass(frozen=True)
+class VerificationCase:
+    id: str
+    label: str
+    build_variables: tuple[tuple[str, str], ...]
+    expect_build: str
+    check: str
+    build_output_contains: str
+
+
+@dataclass(frozen=True)
 class Verification:
     timeout_seconds: int
     capabilities: tuple[str, ...]
     tools: tuple[str, ...]
     cleanup_required: bool
+    cases: tuple[VerificationCase, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -317,15 +333,77 @@ class Catalog:
     def _verification(self, value, path):
         if not isinstance(value, dict):
             raise CatalogError(f"{path}: verification must be a table")
-        _exact_fields(value, VERIFICATION_FIELDS, path / "verification")
+        expected = VERIFICATION_FIELDS | ({"cases"} if "cases" in value else set())
+        _exact_fields(value, expected, path / "verification")
         timeout = value["timeout_seconds"]
         if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout <= 0:
             raise CatalogError(f"{path}: verification timeout must be a positive integer")
         cleanup = value["cleanup_required"]
         if not isinstance(cleanup, bool):
             raise CatalogError(f"{path}: verification cleanup must be boolean")
+        raw_cases = value.get("cases", ())
+        if "cases" in value and not isinstance(raw_cases, list):
+            raise CatalogError(f"{path}: verification cases must be an array of tables")
+        cases = tuple(
+            self._verification_case(case, path, index)
+            for index, case in enumerate(raw_cases)
+        )
+        if "cases" in value and not cases:
+            raise CatalogError(f"{path}: verification cases must be non-empty")
+        case_ids = [case.id for case in cases]
+        case_labels = [case.label.casefold() for case in cases]
+        if len(case_ids) != len(set(case_ids)):
+            raise CatalogError(f"{path}: duplicate verification case ids")
+        if len(case_labels) != len(set(case_labels)):
+            raise CatalogError(f"{path}: duplicate verification case labels")
         return Verification(timeout, tuple(_token_list(value, "capabilities", path)),
-                            tuple(_token_list(value, "tools", path)), cleanup)
+                            tuple(_token_list(value, "tools", path)), cleanup, cases)
+
+    def _verification_case(self, value, path, index):
+        case_path = path / "verification" / "cases" / str(index)
+        if not isinstance(value, dict):
+            raise CatalogError(f"{case_path}: verification case must be a table")
+        _exact_fields(value, VERIFICATION_CASE_FIELDS, case_path)
+        case_id = _identifier(value["id"], case_path)
+        label = _bounded_printable(value["label"], "label", case_path, empty=False)
+        if label != label.strip():
+            raise CatalogError(f"{case_path}: label must not have surrounding whitespace")
+        variables = value["build_variables"]
+        if not isinstance(variables, dict):
+            raise CatalogError(f"{case_path}: build_variables must be a table")
+        normalized = []
+        for name, variable_value in variables.items():
+            if not isinstance(name, str) or not MAKE_VARIABLE_RE.fullmatch(name):
+                raise CatalogError(f"{case_path}: unsafe make variable name {name!r}")
+            normalized.append((
+                name,
+                _bounded_printable(
+                    variable_value, f"build_variables.{name}", case_path, empty=True
+                ),
+            ))
+        expect_build = value["expect_build"]
+        if not isinstance(expect_build, str) or expect_build not in {"pass", "fail"}:
+            raise CatalogError(f"{case_path}: expect_build must be 'pass' or 'fail'")
+        check = _optional_path(value["check"], case_path, self.root)
+        output = _bounded_printable(
+            value["build_output_contains"], "build_output_contains", case_path,
+            empty=True,
+        )
+        if expect_build == "pass":
+            if not check:
+                raise CatalogError(f"{case_path}: successful case requires a guest check")
+            if output:
+                raise CatalogError(
+                    f"{case_path}: successful case forbids build_output_contains"
+                )
+        elif check or not output.strip():
+            raise CatalogError(
+                f"{case_path}: failed case forbids a guest check and requires "
+                "build_output_contains"
+            )
+        return VerificationCase(
+            case_id, label, tuple(sorted(normalized)), expect_build, check, output
+        )
 
     def validate(self) -> None:
         _unique(self.exercises, "id")
@@ -428,7 +506,9 @@ class Catalog:
             raise CatalogError(f"course.toml: tool registry usage mismatch: {sorted(tool_ids-used_tools)}")
 
     def _validate_paths(self, item):
-        required_files = [item.resources.readme, item.resources.check, item.resources.hint]
+        required_files = [item.resources.readme, item.resources.hint]
+        if not item.verification.cases:
+            required_files.append(item.resources.check)
         optional_files = [item.resources.host_check]
         for value in required_files:
             if not value or not (self.root / value).is_file():
@@ -436,6 +516,11 @@ class Catalog:
         for value in optional_files:
             if value and not (self.root / value).is_file():
                 raise CatalogError(f"{item.path}: missing optional resource file: {value}")
+        for case in item.verification.cases:
+            if case.check and not (self.root / case.check).is_file():
+                raise CatalogError(
+                    f"{item.path}: missing verification case check: {case.check}"
+                )
         if not item.resources.solution or not (self.root / item.resources.solution).is_dir():
             raise CatalogError(f"{item.path}: solution must be an existing directory")
         if item.workspace.source and not (self.root / item.workspace.source).is_dir():
@@ -672,6 +757,14 @@ class Catalog:
     def all_concepts(self, item: Exercise) -> set[str]:
         return {value.concept for value in self.assumptions} | self.prerequisite_concepts(item)
 
+    def verification_cases(self, item: Exercise) -> tuple[VerificationCase, ...]:
+        """Return explicit cases, or the compatible single success case."""
+        if item.verification.cases:
+            return item.verification.cases
+        return (VerificationCase(
+            "default", "Default", (), "pass", item.resources.check, ""
+        ),)
+
     def assumption(self, concept_id: str) -> Assumption | None:
         return next((item for item in self.assumptions if item.concept == concept_id), None)
 
@@ -732,6 +825,20 @@ def _string(data, key, path):
     value = data[key]
     if not isinstance(value, str) or not value.strip(): raise CatalogError(f"{path}: {key} must be non-empty")
     return value.strip()
+
+
+def _bounded_printable(value, field, path, *, empty):
+    if (
+        not isinstance(value, str)
+        or (not empty and not value)
+        or len(value) > 256
+        or any(not character.isprintable() for character in value)
+    ):
+        qualifier = "printable string of at most 256 characters"
+        if not empty:
+            qualifier = f"non-empty {qualifier}"
+        raise CatalogError(f"{path}: {field} must be a {qualifier}")
+    return value
 
 
 def _token(data, key, path):
