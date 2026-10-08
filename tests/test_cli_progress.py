@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import io
 from pathlib import Path
 import runpy
@@ -24,6 +24,7 @@ class ProgressResetCLITests(unittest.TestCase):
             "WORK": runtime / "work",
             "PASSED": runtime / "passed",
             "ARCHIVE": runtime / "archive",
+            "SETUP_STAMP": runtime / "setup.toml",
         }
         self.globals.update(values)
         self.globals["STORE"] = self.globals["StateStore"](
@@ -34,7 +35,7 @@ class ProgressResetCLITests(unittest.TestCase):
             self.globals["COMPLETION_DEPENDENCIES"],
             self.globals["BASELINE_PROVIDERS"],
         )
-        self.globals["setup"]()
+        self.globals["initialize_runtime"]()
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -50,6 +51,119 @@ class ProgressResetCLITests(unittest.TestCase):
         with redirect_stdout(output):
             self.globals["cmd_progress_reset"](arguments)
         return output.getvalue()
+
+    def test_setup_accept_runs_doctor_then_module_free_probe_and_stamps(self) -> None:
+        calls = []
+        original_run = self.globals["run"]
+
+        def fake_run(command, **kwargs):
+            calls.append((command, kwargs))
+            output = "[+] doctor passed\n" if len(calls) == 1 else "[+] PASSED\n"
+            return SimpleNamespace(returncode=0, stdout=output)
+
+        try:
+            self.globals["run"] = fake_run
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.globals["cmd_setup"](["--accept"])
+        finally:
+            self.globals["run"] = original_run
+        self.assertEqual(calls[0][0], [str(ROOT / "scripts/doctor")])
+        self.assertEqual(calls[1][0], [
+            str(ROOT / "vm/boot"),
+            "--check",
+            str(ROOT / "vm/checks/containment"),
+        ])
+        self.assertTrue(all(call[1]["capture"] for call in calls))
+        self.assertTrue(self.globals["current_setup_status"]().ready)
+
+    def test_setup_failure_never_writes_stamp(self) -> None:
+        original_run = self.globals["run"]
+        cases = (
+            [SimpleNamespace(returncode=1, stdout="doctor failed\n")],
+            [
+                SimpleNamespace(returncode=0, stdout="doctor ok\n"),
+                SimpleNamespace(returncode=0, stdout="missing marker\n"),
+            ],
+        )
+        try:
+            for results in cases:
+                with self.subTest(results=len(results)):
+                    if self.globals["SETUP_STAMP"].exists():
+                        self.globals["SETUP_STAMP"].unlink()
+                    queue = list(results)
+                    self.globals["run"] = lambda *_args, **_kwargs: queue.pop(0)
+                    with self.assertRaisesRegex(self.globals["CLIError"], "Setup failed"):
+                        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                            self.globals["cmd_setup"](["--accept"])
+                    self.assertFalse(self.globals["SETUP_STAMP"].exists())
+        finally:
+            self.globals["run"] = original_run
+
+    def test_setup_rejects_every_argument_shape_except_accept(self) -> None:
+        for arguments in ([], ["accept"], ["--accept", "extra"]):
+            with self.subTest(arguments=arguments):
+                with self.assertRaisesRegex(self.globals["CLIError"], "setup --accept"):
+                    self.globals["cmd_setup"](arguments)
+
+    def test_setup_stale_reason_and_recovery_are_precise(self) -> None:
+        expected = self.globals["expected_setup_stamp"]()
+        stale = self.globals["SetupStamp"](
+            policy_version=expected.policy_version,
+            course_revision="old-revision",
+            kernel_release=expected.kernel_release,
+            boundary_hash=expected.boundary_hash,
+        )
+        self.globals["write_setup_stamp"](
+            self.globals["SETUP_STAMP"],
+            stale,
+            checks_passed=True,
+        )
+        self.assertEqual(
+            self.globals["current_setup_status"]().reason,
+            "course-revision-changed",
+        )
+        with self.assertRaisesRegex(
+            self.globals["CLIError"],
+            r"course revision changed.*rootkitlings setup --accept",
+        ):
+            self.globals["require_setup"]()
+
+    def test_main_gates_only_build_and_execution_commands(self) -> None:
+        original_commands = self.globals["CMDS"]
+        original_initialize = self.globals["initialize_runtime"]
+        original_require = self.globals["require_setup"]
+        gated = []
+        commands = {
+            name: (lambda _arguments: None)
+            for name in (
+                "setup", "read", "start", "build", "check", "hint",
+                "solution", "run", "gdb", "status", "list", "prereq",
+                "restore", "progress-reset", "clean",
+            )
+        }
+        try:
+            self.globals["CMDS"] = commands
+            self.globals["initialize_runtime"] = lambda: None
+            self.globals["require_setup"] = lambda: gated.append(True)
+            for command in commands:
+                gated.clear()
+                self.globals["main"]([command])
+                self.assertEqual(
+                    bool(gated),
+                    command in {"start", "build", "check", "run", "gdb"},
+                )
+        finally:
+            self.globals["CMDS"] = original_commands
+            self.globals["initialize_runtime"] = original_initialize
+            self.globals["require_setup"] = original_require
+
+    def test_status_reports_setup_separately_from_course_count(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.globals["cmd_status"]([])
+        lines = output.getvalue().splitlines()
+        self.assertRegex(lines[0], r"^Setup   required \(not completed\)")
+        self.assertRegex(lines[1], r"^Course  0/\d+ required complete$")
 
     def _build_exercise(self, stable_id="artifact-test", host_check=""):
         return SimpleNamespace(

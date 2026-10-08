@@ -11,6 +11,14 @@ import sys
 from pathlib import Path
 
 from lib.catalog import Catalog, CatalogError
+from lib.setup_gate import (
+    SETUP_STAMP_PATH,
+    SetupGateError,
+    SetupStamp,
+    boundary_hash,
+    setup_status,
+    write_setup_stamp,
+)
 from lib.state import StateStore, StateError
 from lib.workspace import (
     WorkspaceError,
@@ -29,6 +37,16 @@ STATE = RT / 'state.toml'
 WORK = RT / 'work'
 PASSED = RT / 'passed'
 ARCHIVE = RT / 'archive'
+SETUP_STAMP = ROOT / SETUP_STAMP_PATH
+SETUP_POLICY_VERSION = '1'
+SETUP_POLICY_TEXT = (
+    'I am authorized to use this local lab. I will stop on unexpected host '
+    'access, containment drift, or a kernel fault. The default guest is '
+    'disposable, has no host mount, persistent disk, production data, or '
+    'network beyond loopback; later networking is metadata-declared.'
+)
+DOCTOR_TIMEOUT = 30
+SETUP_PROBE_TIMEOUT = 60
 
 
 class CLIError(RuntimeError):
@@ -87,12 +105,96 @@ STORE = StateStore(
 )
 
 
-def setup():
+def initialize_runtime():
     for path in (RT, WORK, PASSED, ARCHIVE):
         path.mkdir(parents=True, exist_ok=True)
         if path.is_symlink():
             die(f'Runtime directory must not be a symlink: {path.relative_to(ROOT)}')
     STORE.migrate_v2(ARCHIVE)
+
+
+def expected_setup_stamp():
+    inputs = {'policy': SETUP_POLICY_TEXT}
+    for relative in ('vm/boot', 'vm/init', 'vm/checks/containment'):
+        path = ROOT / relative
+        if path.is_symlink() or not path.is_file():
+            raise SetupGateError(
+                f'setup boundary input is not a regular file: {relative}'
+            )
+        try:
+            inputs[relative] = path.read_bytes()
+        except OSError as error:
+            raise SetupGateError(
+                f'cannot read setup boundary input {relative}: {error}'
+            ) from error
+    return SetupStamp(
+        policy_version=SETUP_POLICY_VERSION,
+        course_revision=CAT.revision,
+        kernel_release=os.uname().release,
+        boundary_hash=boundary_hash(inputs),
+    )
+
+
+def current_setup_status():
+    return setup_status(SETUP_STAMP, expected_setup_stamp())
+
+
+def require_setup():
+    status = current_setup_status()
+    if not status.ready:
+        die(
+            f'Setup required ({setup_reason(status.reason)}). '
+            'Run: ./rootkitlings setup --accept'
+        )
+
+
+def setup_reason(reason):
+    labels = {
+        'missing': 'not completed',
+        'policy-version-changed': 'setup policy changed',
+        'course-revision-changed': 'course revision changed',
+        'kernel-release-changed': 'host kernel changed',
+        'boundary-changed': 'guest boundary changed',
+    }
+    if reason.startswith('invalid: '):
+        return f'invalid stamp: {reason.removeprefix("invalid: ")}'
+    return labels.get(reason, reason)
+
+
+def cmd_setup(a):
+    if a != ['--accept']:
+        die('Usage: rootkitlings setup --accept')
+    head('Authorized disposable lab')
+    print(SETUP_POLICY_TEXT)
+    info('Checking host tools and the default guest boundary')
+    doctor = run(
+        [str(ROOT / 'scripts/doctor')],
+        timeout=DOCTOR_TIMEOUT,
+        capture=True,
+    )
+    if doctor.stdout:
+        print(doctor.stdout, end='')
+    if doctor.returncode:
+        die('Setup failed: scripts/doctor did not pass')
+    containment = run(
+        [
+            str(ROOT / 'vm/boot'),
+            '--check',
+            str(ROOT / 'vm/checks/containment'),
+        ],
+        timeout=SETUP_PROBE_TIMEOUT,
+        capture=True,
+    )
+    if containment.stdout:
+        print(containment.stdout, end='')
+    if containment.returncode or '[+] PASSED' not in (containment.stdout or ''):
+        die('Setup failed: disposable guest containment check did not pass')
+    write_setup_stamp(
+        SETUP_STAMP,
+        expected_setup_stamp(),
+        checks_passed=True,
+    )
+    done('Setup ready')
 
 
 def label(item):
@@ -501,6 +603,14 @@ def cmd_run(a, gdb=False):
 
 def cmd_status(a):
     none(a, 'status')
+    gate = current_setup_status()
+    if gate.ready:
+        print('Setup   ready')
+    else:
+        print(
+            f'Setup   required ({setup_reason(gate.reason)}); '
+            'run ./rootkitlings setup --accept'
+        )
     with STORE.read_locked() as s:
         x = current(s)
         completed = len(set(ROUTE) & s.completed)
@@ -641,6 +751,8 @@ def usage():
     print(
         '''rootkitlings <COMMAND> [EXERCISE]
 
+  setup --accept
+              Verify authorization and disposable guest containment
   read start build check hint solution run gdb status list prereq
   build     Compile the selected workspace without checking it
   restore   Archive work and restore its starting baseline
@@ -654,6 +766,7 @@ Selectors accept stable IDs or serials. Commands accept unique prefixes.'''
 
 
 CMDS = {
+    'setup': cmd_setup,
     'read': cmd_read,
     'start': cmd_start,
     'build': cmd_build,
@@ -684,7 +797,9 @@ def main(a):
     if command == 'help':
         CMDS[command](arguments)
         return 0
-    setup()
+    initialize_runtime()
+    if command in {'start', 'build', 'check', 'run', 'gdb'}:
+        require_setup()
     CMDS[command](arguments)
     return 0
 
@@ -692,6 +807,6 @@ def main(a):
 if __name__ == '__main__':
     try:
         raise SystemExit(main(sys.argv[1:]))
-    except (CLIError, StateError, WorkspaceError) as error:
+    except (CLIError, SetupGateError, StateError, WorkspaceError) as error:
         print(f'{R}Error:{N} {error}', file=sys.stderr)
         raise SystemExit(1)

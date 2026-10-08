@@ -76,14 +76,14 @@ PY
 check_scripts()
 {
     bash -n vm/boot scripts/doctor scripts/validate scripts/test-solutions
-    sh -n vm/init lib/check.sh
-    python3 -m py_compile rootkitlings lib/catalog.py scripts/catalog scripts/check-doc-links
+    sh -n vm/init vm/checks/containment lib/check.sh
+    python3 -m py_compile rootkitlings lib/catalog.py lib/setup_gate.py scripts/catalog scripts/check-doc-links
     while IFS= read -r check; do bash -n "$check"; done < <(find curriculum/support -name check -o -name host-check)
     python3 scripts/format-docs --check
     python3 scripts/check-doc-links
     if command -v shellcheck >/dev/null; then
         shellcheck -S warning vm/boot vm/init scripts/validate scripts/test-solutions
-        shellcheck -S warning -s busybox lib/check.sh
+        shellcheck -S warning -s busybox lib/check.sh vm/checks/containment
         while IFS= read -r host_check; do shellcheck -S warning "$host_check"; done < <(find curriculum/support -name host-check -type f -print)
     fi
     printf '[+] scripts\n'

@@ -217,7 +217,7 @@ fi
 
 printf '\n'
 if (( missing == 0 )); then
-	printf '[+] Ready. Start with: ./rootkitlings read L00\n'
+	printf '[+] Host ready\n'
 else
 	printf '[x] Not ready: %d required item(s) missing\n' "$missing"
 	exit 1
