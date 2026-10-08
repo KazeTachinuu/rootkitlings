@@ -8,7 +8,7 @@ tradecraft = ["instrumentation", "networking"]
 difficulty = "advanced"
 prerequisites = ["module-lifecycle"]
 teaches = ["netfilter-hooks"]
-requires = ["module-lifecycle"]
+requires = ["module-lifecycle", "networking-fundamentals"]
 
 [workspace]
 mode = "single-file"

@@ -468,16 +468,16 @@ label = "XOR obfuscation"
 
 [[assumptions]]
 concept = "c-programming"
-competency = "Read and edit C functions, structs, pointers, arrays, control flow, and error-return paths, and interpret compiler diagnostics."
+competency = "Read and edit small C functions, pointers, structs, and error returns."
 
 [[assumptions]]
 concept = "unix-shell"
-competency = "Run commands in a POSIX-like shell and use paths, quoting, redirection, pipelines, environment variables, and an editor."
+competency = "Run commands, navigate paths, and edit files in a POSIX-like shell."
 
 [[assumptions]]
 concept = "linux-processes-and-files"
-competency = "Understand files, directories, permissions, processes, users and groups, PIDs, signals, file descriptors, and the distinction between userspace and kernel space."
+competency = "Distinguish host and guest, userspace and kernel space, and understand paths, permissions, processes, and file descriptors."
 
 [[assumptions]]
 concept = "networking-fundamentals"
-competency = "Recognize IPv4 addresses, TCP and UDP ports, client/server connections, ICMP echo traffic, DNS names, and network byte order."
+competency = "Recognize IPv4, TCP, UDP, ICMP, ports, DNS names, and network byte order."

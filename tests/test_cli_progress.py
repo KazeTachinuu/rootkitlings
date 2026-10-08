@@ -192,6 +192,25 @@ class LearnerCLITests(unittest.TestCase):
         self.assertNotIn("progress-reset", help_text)
         self.assertIn("current exercise is used", help_text)
 
+    def test_prereq_shows_only_assumptions_the_exercise_uses(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output), redirect_stderr(io.StringIO()):
+            self.globals["cmd_prereq"](["L00"])
+        text = output.getvalue()
+        self.assertIn("C programming:", text)
+        self.assertIn("Unix shell:", text)
+        self.assertIn("Linux processes and files:", text)
+        self.assertNotIn("Networking fundamentals", text)
+        self.assertNotIn("Before you begin", text)
+
+    def test_prereq_shows_assumption_where_it_is_first_used(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output), redirect_stderr(io.StringIO()):
+            self.globals["cmd_prereq"](["L40"])
+        text = output.getvalue()
+        self.assertIn("Networking fundamentals:", text)
+        self.assertIn("Recognize IPv4, TCP, UDP", text)
+
     def _build_exercise(self, stable_id="artifact-test", host_check=""):
         return SimpleNamespace(
             id=stable_id,

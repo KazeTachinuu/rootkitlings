@@ -8,7 +8,7 @@ tradecraft = ["lifecycle"]
 difficulty = "intro"
 prerequisites = []
 teaches = ["module-lifecycle"]
-requires = []
+requires = ["c-programming", "unix-shell", "linux-processes-and-files"]
 
 [workspace]
 mode = "cumulative"

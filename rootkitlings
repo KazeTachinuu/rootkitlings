@@ -764,14 +764,6 @@ def cmd_prereq(a):
         x = resolve(one(a, 'prereq'), s)
         completed = set(s.completed)
     head(f'Prerequisites for {label(x)}: {x.title}')
-    if x.id == ROUTE[0]:
-        print('Before you begin')
-        for assumption in CAT.assumptions:
-            print(
-                f'  - {CAT.concept_label(assumption.concept)}: '
-                f'{assumption.competency}'
-            )
-        print()
     print('Complete first')
     if not x.prerequisites:
         print('  - None')
@@ -782,7 +774,9 @@ def cmd_prereq(a):
     if x.requires:
         print('\nKnowledge used')
         for c in x.requires:
-            print(f'  - {CAT.concept_label(c)}')
+            assumption = CAT.assumption(c)
+            detail = f': {assumption.competency}' if assumption else ''
+            print(f'  - {CAT.concept_label(c)}{detail}')
     info(f'Next: ./rootkitlings read {label(x)}')
 
 
