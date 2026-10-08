@@ -17,8 +17,8 @@ Each file appears only when its mechanism becomes active:
 | R01 Module build and lifecycle (public L00) | `Kbuild`, `core/main.c` | External build, metadata, load, unload |
 | R02 Precise failed init | unchanged | Build-time failure input and exact preflight rejection |
 | R03 Owned state | add `include/rootkit.h`, `core/state.c` | Composite linking, opaque ownership boundary, heap lifetime, error-pointer contract |
-| R04 Reverse rollback | add `status/status.c` | Second owned resource and reverse partial-init unwind |
-| M00 Inspectable core | unchanged from R04 | Integrated failure, cleanup, reload, and allocator evidence |
+| R04 Procfs status and rollback | add `status/status.c` | Real procfs publication and reverse partial-init unwind |
+| M00 Inspectable core | unchanged from R04 | Integrated failure, publication, cleanup, reload, and allocator evidence |
 
 The first milestone is **M00 (Inspectable core)** in both design and generated learner-facing serials.
 
@@ -50,7 +50,7 @@ rootkitlings-y := core/main.o core/state.o
 ccflags-y += -I$(src)/include
 ```
 
-R04 appends the real status object:
+R04 appends the real procfs status component:
 
 ```make
 rootkitlings-y := core/main.o core/state.o status/status.o
@@ -132,31 +132,30 @@ The check requires the exact `-ENOMEM` loader failure, no module artifact, no ob
 
 The ownership functions become `noinline` when introduced because M00 attributes allocator call sites to their exact ELF symbol ranges.
 
-## R04: second resource and reverse rollback
+## R04: procfs status publication and reverse rollback
 
 R04 additively introduces `status/status.c` and immediately links and calls it.
-The header gains the permanent status API:
+The header gains the permanent publication API:
 
 ```c
-struct rk_status;
-
-__must_check noinline struct rk_status *rk_status_create(const struct rk_state *state);
-noinline void rk_status_destroy(struct rk_status *status);
+__must_check int rk_status_publish(const struct rk_state *state);
+void rk_status_unpublish(void);
 ```
 
-`status/status.c` alone defines `struct rk_status`, owns its allocation, and may retain a non-owning state pointer.
-State must therefore outlive status.
+`status/status.c` alone owns the proc entry and may retain a non-owning state pointer for later read support.
+It does not allocate a placeholder status object.
+State must therefore exist before publication and outlive the proc entry.
 
 The concrete acquisition order is:
 
 ```text
-preflight -> state -> status
+preflight -> state -> proc status
 ```
 
 Every failure and normal unload use the exact reverse order for resources that were successfully acquired:
 
 ```text
-status -> state
+proc status -> state
 ```
 
 `core/main.c` owns this ordering but never allocates or frees component storage itself.
@@ -165,14 +164,14 @@ Failed module initialization performs its unwind locally because `module_exit` i
 R04 adds:
 
 ```c
-RK_FAIL_STATUS_CREATE = 3,
+RK_FAIL_STATUS_PUBLISH = 3,
 ```
 
-Value 3 makes `rk_status_create()` return `ERR_PTR(-EUCLEAN)` after state exists.
-Init preserves `PTR_ERR()`, destroys state, and returns the original error.
-The check requires exact rejection, absence of the module, independent evidence that the state allocation was freed, and immediate successful value-0 load/unload.
-
-The status constructor and destructor are `noinline` from their first implementation for the same allocator-evidence reason as the state pair.
+Value 3 injects `-EUCLEAN` at the publication boundary after state exists but before `proc_create*()` runs.
+This is explicitly a synthetic boundary failure, not a claim that `proc_create*()` returned that errno.
+The real `NULL` result from `proc_create*()` is handled as `-ENOMEM` and enforced by static inspection or a checker-owned probe.
+Init preserves the selected error, destroys state, and returns it.
+The check requires exact rejection, absence of the module and proc entry, independent evidence that the state allocation was freed, and immediate successful value-0 publication, unload, disappearance, and reload.
 
 ## Additive snapshot contract
 
@@ -226,8 +225,8 @@ The check builds values 0 through 3 independently and requires:
 - normal load, unload, absence, and immediate reload for value 0;
 - exact rejection before acquisition for value 1;
 - exact state allocation failure for value 2;
-- exact status failure plus state rollback for value 3;
-- module absence after every rejected load;
+- exact publication-boundary failure plus state rollback for value 3;
+- module and proc-entry absence after every rejected load;
 - no warning and compile-time rejection of unknown failure values.
 
 ## Independent allocator evidence
@@ -242,10 +241,10 @@ The `ptr` token is opaque and must not be described as a dereferenceable or disc
 Its textual value remains stable across paired allocation and free events and is suitable only for equality correlation within one trace run.
 
 Before boot, the host checker reads the exact `rootkitlings.ko` ELF symbol table and `.text` section.
-It records the `.text`-relative value and nonzero size of `rk_state_create`, `rk_state_destroy`, `rk_status_create`, and `rk_status_destroy`.
+It records the `.text`-relative value and nonzero size of `rk_state_create` and `rk_state_destroy`.
 It rejects missing, overlapping, or wrong-section symbols.
 Distinct ranges enforce the `noinline` contract.
-The host renders those eight numeric constants into a temporary guest-check copy without modifying the learner workspace.
+The host renders those four numeric constants into a temporary guest-check copy without modifying the learner workspace.
 
 The guest check:
 
@@ -254,17 +253,17 @@ The guest check:
 2. enables `kmalloc`, loads the value-0 module, reads
    `/sys/module/rootkitlings/sections/.text`, and combines that runtime base
    with each host-derived offset and size;
-3. stops tracing while the module remains loaded and requires one `kmalloc`
-   raw call site inside each constructor range, recording its opaque nonzero
-   pointer token;
+3. stops tracing while the module remains loaded, requires the proc status path,
+   mode, and module inventory to agree, and requires one `kmalloc` raw call site
+   inside the state-constructor range, recording its opaque nonzero pointer token;
 4. disables `kmalloc`, enables `kfree`, clears the trace, unloads the module,
    disables tracing, and reads the free-phase trace;
-5. requires one matching `kfree` token from the corresponding destructor range
-   for each recorded allocation;
-6. confirms module absence, removes checker captures, clears the trace, and
-   restores the original event enable state.
+5. requires one matching `kfree` token from the state-destructor range;
+6. confirms module and proc-entry absence, immediately reloads and unloads
+   successfully, reconfirms absence, removes checker captures, clears the trace,
+   and restores the original event enable state.
 
-This proves only that the two constructor-attributed tokens observed in that run were later passed to `kfree` from their expected destructor ranges.
+This proves only that the state-constructor-attributed token observed in that run was later passed to `kfree` from its expected destructor range.
 It is not a general leak detector and does not prove absence of every possible kernel leak.
 
 Tracepoint availability, required event fields, ELF symbol data, the loaded `.text` base, and parseable raw call sites are pinned-lab prerequisites.
@@ -273,9 +272,9 @@ A static documentation job may report the runtime check as not run, but route co
 
 ## Status publication boundary
 
-Stage 1 publishes no learner-authored procfs, sysfs, debugfs, parameter, or device interface.
-The kernel-provided `/sys/module/rootkitlings` artifact is load evidence, not a status channel.
-Procfs publication, permissions, and read semantics begin in Stage 2.
+Stage 1 publishes the procfs status resource so rollback has a concrete second resource and a kernel-maintained namespace observation.
+It does not teach the read contract yet; bounded content and open-file behavior begin with the next lesson.
+The kernel-provided `/sys/module/rootkitlings` artifact remains independent load evidence rather than the learner-authored status channel.
 
 ## Check safety
 
