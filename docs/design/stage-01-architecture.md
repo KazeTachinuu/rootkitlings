@@ -89,12 +89,14 @@ Unknown values fail compilation.
 Value 1 makes init return `-ECANCELED` before acquiring any resource.
 Value 0 preserves the R01 successful lifecycle.
 
-The check performs clean external-module builds for both values.
-For value 1 it requires loader rejection, the exact errno class, absence from `/proc/modules` and `/sys/module/rootkitlings`, and no cleanup claim based on an exit log.
+The check performs isolated external-module builds for both values.
+For value 1, a guest helper calls `finit_module()` and requires the numeric `errno` value `ECANCELED`; localized `insmod` text is not evidence of the error class.
+The check requires absence before and after both rejected attempts in `/proc/modules` and `/sys/module/rootkitlings`.
 It then rebuilds with value 0 and requires immediate successful load and unload.
 
 Failed init performs no teardown because R02 owns no resource.
-The kernel does not invoke the registered exit callback after failed initialization; later checkpoints must unwind acquired resources inside init before returning an error.
+The kernel does not invoke the registered exit callback after failed initialization; this is a documented lifecycle contract, not something inferred from a learner-authored log.
+Later checkpoints must unwind acquired resources inside init before returning an error.
 
 ## R03: owned heap state
 

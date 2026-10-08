@@ -127,12 +127,12 @@ Later networking checks may enable only capabilities declared by their exercise 
 
 #### R01 - Build, load, inspect, and unload a module
 
-- Teaches: external Kbuild, module metadata, init/exit, `insmod`, `rmmod`, and
-  kernel logs.
+- Teaches: external Kbuild, module metadata, init/exit, `insmod`, and `rmmod`.
 - Produces: a loadable module with a complete outer lifecycle.
 - Requires: the authorized disposable-lab setup gate.
-- Defensive evidence: static metadata, sections, symbols, `/sys/module`, module
-  inventory, and persistent logs.
+- Defensive evidence: static metadata and lifecycle symbols before loading, then
+  agreement between `/sys/module` and module inventory across load, unload, and
+  immediate reload. Logs are diagnostics, not residency or cleanup evidence.
 - Current sources: L00 and L01.
 
 #### R02 - Reject initialization with a precise error
@@ -142,8 +142,10 @@ Later networking checks may enable only capabilities declared by their exercise 
   the first fixed failure point.
 - Produces: a component with a deliberate, diagnosable activation failure.
 - Requires: R01.
-- Defensive evidence: failed load, absent module, exact error, and proof that exit
-  did not run.
+- Defensive evidence: numeric loader `errno`, explicit absence before and after
+  repeated rejected loads, and an independent successful lifecycle regression.
+  The rule that failed initialization does not call module exit is taught from
+  the kernel contract rather than claimed from a log.
 - Current source: L04.
 
 #### R03 - Build and own private heap state
@@ -161,8 +163,9 @@ Later networking checks may enable only capabilities declared by their exercise 
 
 #### R04 - Own resources and roll back in reverse order
 
-- Teaches: acquisition order, single ownership, reverse unwind, idempotent cleanup,
-  and fail-at-each-stage testing using deterministic build-time failure injection.
+- Teaches: acquisition order, single ownership, reverse unwind, pointer
+  invalidation after release, and fail-at-each-stage testing using deterministic
+  build-time failure injection.
 - Produces: the new `status` component, its shared private interface, and the
   top-level lifecycle and rollback graph used by every milestone.
 - Requires: R03.
