@@ -1,60 +1,140 @@
-#!/usr/bin/bash
-set -Eeuo pipefail
+#!/usr/bin/python3
+"""Build and run reference solutions through the learner verification path."""
 
-ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-tests.XXXXXX")
-trap 'rm -rf -- "$work"' EXIT
-cd "$ROOT_DIR"
+from __future__ import annotations
 
-declare -A requested=()
-for filter; do
-    id=$(scripts/catalog query "$filter" id)
-    requested[$id]=1
-done
-
-runtime_rows()
-{
-    mkdir -p "$work/solutions"
-    python3 - "$work/solutions" "${!requested[@]}" <<'PY'
 from pathlib import Path
+import subprocess
 import sys
-sys.path.insert(0, str(Path.cwd() / "lib"))
-from catalog import Catalog
-destination = Path(sys.argv[1])
-requested = set(sys.argv[2:])
-catalog = Catalog(Path.cwd()); tools = {tool.id: tool.binary for tool in catalog.tools}
-for item in sorted(catalog.exercises, key=lambda value: (value.sequence < 0, value.sequence, value.id)):
-    if requested and item.id not in requested:
-        continue
-    r, v = item.resources, item.verification
-    build = catalog.materialize_solution(item, destination, item.id)
-    print("\x1f".join((item.id, item.serial, str(build), r.check, r.host_check,
-          catalog.module_artifact(item),
-          str(v.timeout_seconds), ",".join(v.capabilities),
-          ",".join(tools[value] for value in v.tools))))
-PY
-}
+import tempfile
 
-passed=0 failed=0 matched=0
-while IFS=$'\x1f' read -r id serial build check host_check module_artifact timeout_seconds capabilities tools; do
-    (( ++matched ))
-    printf '\n[*] %s (%s)\n' "$serial" "$id"
-    output=; boot_args=()
-    while IFS= read -r capability; do [[ -n $capability ]] && boot_args+=(--cap "$capability"); done < <(tr ',' '\n' <<< "$capabilities")
-    while IFS= read -r tool; do
-        [[ -n $tool ]] || continue
-        make --quiet "$tool"; boot_args+=(--tool "$tool")
-    done < <(tr ',' '\n' <<< "$tools")
-    if make --quiet module MODULE_DIR="$build" &&
-        { [[ -z $host_check ]] || "$host_check" "$build" "$build/$module_artifact"; } &&
-        output=$(timeout --foreground "$timeout_seconds" vm/boot "${boot_args[@]}" --check "$check" "$build/$module_artifact" </dev/null 2>&1) &&
-        [[ $output == *"[+] PASSED"* ]]; then
-        printf '%s\n[+] %s passed\n' "$output" "$id"; (( ++passed ))
-    else
-        printf '%s\n[x] %s failed\n' "${output:-build or host check failed}" "$id" >&2; (( ++failed ))
-    fi
-done < <(runtime_rows)
 
-(( $# == 0 || matched == ${#requested[@]} )) || { printf '[x] one or more requested exercises were not found\n' >&2; exit 1; }
-printf '\n[*] solution tests: %d passed, %d failed\n' "$passed" "$failed"
-(( failed == 0 ))
+ROOT = Path(__file__).resolve().parent.parent
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(ROOT))
+
+from lib.catalog import Catalog, CatalogError  # noqa: E402
+from lib.verification import (  # noqa: E402
+    VerificationError,
+    build_verification_cases,
+)
+
+
+class SolutionCheckError(RuntimeError):
+    pass
+
+
+def run(command: list[str], timeout: int | None = None) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(
+            command,
+            cwd=ROOT,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        output = error.stdout or ""
+        if isinstance(output, bytes):
+            output = output.decode(errors="replace")
+        raise SolutionCheckError(
+            f"command timed out after {timeout}s: {' '.join(command)}\n{output}"
+        ) from error
+
+
+def boot_arguments(catalog: Catalog, item) -> list[str]:
+    binaries = {tool.id: tool.binary for tool in catalog.tools}
+    arguments: list[str] = []
+    for capability in item.verification.capabilities:
+        arguments += ["--cap", capability]
+    for tool_id in item.verification.tools:
+        binary = binaries[tool_id]
+        result = run(["make", "--quiet", binary])
+        if result.returncode:
+            raise SolutionCheckError(
+                f"could not build verification tool {binary}\n{result.stdout}"
+            )
+        arguments += ["--tool", binary]
+    return arguments
+
+
+def verify_item(catalog: Catalog, item, solution_root: Path) -> None:
+    source = catalog.materialize_solution(item, solution_root, item.id)
+    timeout = item.verification.timeout_seconds
+    arguments = boot_arguments(catalog, item)
+    with build_verification_cases(
+        ROOT,
+        source,
+        item.workspace.files,
+        item.workspace.build,
+        catalog.module_artifact(item),
+        catalog.verification_cases(item),
+        timeout,
+    ) as outcomes:
+        for index, outcome in enumerate(outcomes, 1):
+            print(f"[*] Case {index}/{len(outcomes)}: {outcome.case.label}")
+            if outcome.artifact is None:
+                print("[+] Build rejected as required")
+                continue
+            if item.resources.host_check:
+                host = run([
+                    str(ROOT / item.resources.host_check),
+                    str(outcome.build_root),
+                    str(outcome.artifact),
+                ], timeout)
+                if host.stdout:
+                    print(host.stdout, end="")
+                if host.returncode:
+                    raise SolutionCheckError("source and artifact check failed")
+            guest = run([
+                str(ROOT / "vm/boot"),
+                *arguments,
+                "--check",
+                str(ROOT / outcome.case.check),
+                str(outcome.artifact),
+            ], timeout)
+            if guest.stdout:
+                print(guest.stdout, end="")
+            if guest.returncode or "[+] PASSED" not in guest.stdout:
+                raise SolutionCheckError(
+                    f"guest check failed: {outcome.case.label}"
+                )
+
+
+def main(arguments: list[str]) -> int:
+    try:
+        catalog = Catalog(ROOT)
+        requested = {catalog.resolve(value).id for value in arguments}
+    except CatalogError as error:
+        print(f"[x] {error}", file=sys.stderr)
+        return 2
+    items = sorted(
+        catalog.exercises,
+        key=lambda item: (item.sequence < 0, item.sequence, item.id),
+    )
+    if requested:
+        items = [item for item in items if item.id in requested]
+    passed = 0
+    failed = 0
+    with tempfile.TemporaryDirectory(prefix="rootkitlings-solutions-") as temporary:
+        solution_root = Path(temporary)
+        for item in items:
+            shown = item.serial or item.id
+            print(f"\n[*] {shown} ({item.id})")
+            try:
+                verify_item(catalog, item, solution_root)
+            except (OSError, SolutionCheckError, VerificationError) as error:
+                print(f"[x] {item.id} failed: {error}", file=sys.stderr)
+                failed += 1
+            else:
+                print(f"[+] {item.id} passed")
+                passed += 1
+    print(f"\n[*] solution tests: {passed} passed, {failed} failed")
+    return int(failed != 0)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
