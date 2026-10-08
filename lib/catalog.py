@@ -356,6 +356,19 @@ class Catalog:
             raise CatalogError(f"{path}: duplicate verification case ids")
         if len(case_labels) != len(set(case_labels)):
             raise CatalogError(f"{path}: duplicate verification case labels")
+        if cases:
+            if not any(case.expect_build == "pass" for case in cases):
+                raise CatalogError(
+                    f"{path}: verification cases require a successful control"
+                )
+            saw_failure = False
+            for case in cases:
+                if case.expect_build == "fail":
+                    saw_failure = True
+                elif saw_failure:
+                    raise CatalogError(
+                        f"{path}: successful verification cases must precede failures"
+                    )
         return Verification(timeout, tuple(_token_list(value, "capabilities", path)),
                             tuple(_token_list(value, "tools", path)), cleanup, cases)
 

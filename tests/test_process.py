@@ -1,0 +1,40 @@
+from pathlib import Path
+import os
+import tempfile
+import time
+import unittest
+
+from lib.process import ProcessError, ProcessTimeout, run_process
+
+
+class ProcessTests(unittest.TestCase):
+    def test_launch_error_is_translated(self) -> None:
+        with self.assertRaisesRegex(ProcessError, "cannot execute"):
+            run_process(["/definitely/missing/rootkitlings-command"])
+
+    def test_timeout_kills_descendant_process_group(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            pid_file = Path(temporary) / "child.pid"
+            with self.assertRaises(ProcessTimeout):
+                run_process(
+                    [
+                        "/bin/sh",
+                        "-c",
+                        f"sleep 30 & echo $! > {pid_file}; wait",
+                    ],
+                    timeout=0.1,
+                    capture=True,
+                )
+            child_pid = int(pid_file.read_text())
+            for _ in range(20):
+                try:
+                    os.kill(child_pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.05)
+            else:
+                self.fail("timed-out descendant process remained alive")
+
+
+if __name__ == "__main__":
+    unittest.main()

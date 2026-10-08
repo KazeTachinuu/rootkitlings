@@ -8,12 +8,12 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
-import subprocess
 import tempfile
 from typing import Iterable, Iterator
 
 from .catalog import VerificationCase
-from .workspace import WorkspaceError, materialize
+from .process import ProcessError, ProcessTimeout, run_process
+from .workspace import WorkspaceError, canonical_tree_hash, materialize
 
 
 ARTIFACT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.ko\Z")
@@ -30,6 +30,13 @@ class VerificationOutcome:
     build_root: Path
     artifact: Path | None
     output: str
+
+
+@dataclass(frozen=True)
+class VerificationRun:
+    frozen_source: Path
+    source_hash: str
+    outcomes: tuple[VerificationOutcome, ...]
 
 
 def _real_directory(path: Path, label: str) -> Path:
@@ -90,7 +97,7 @@ def build_verification_cases(
     artifact_basename: str,
     cases: Iterable[VerificationCase],
     timeout_seconds: int,
-) -> Iterator[tuple[VerificationOutcome, ...]]:
+) -> Iterator[VerificationRun]:
     """Build every case in isolation and retain its tree for the context lifetime."""
     repository_root = _real_directory(repository_root, "repository root")
     source_tree = _real_directory(source_tree, "source tree")
@@ -107,12 +114,29 @@ def build_verification_cases(
     except OSError as exc:
         raise VerificationError(f"cannot create verification directory: {exc}") from exc
     with temporary_context as temporary:
-        case_parent = Path(temporary)
+        temporary_root = Path(temporary)
+        frozen_parent = temporary_root / "source"
+        case_parent = temporary_root / "cases"
+        frozen_parent.mkdir()
+        case_parent.mkdir()
+        try:
+            before_hash = canonical_tree_hash(source_tree, declared_values)
+            frozen_source = materialize(
+                source_tree, frozen_parent, "frozen", declared_values
+            )
+            frozen_hash = canonical_tree_hash(frozen_source, declared_values)
+            after_hash = canonical_tree_hash(source_tree, declared_values)
+        except WorkspaceError as exc:
+            raise VerificationError(f"cannot freeze verification source: {exc}") from exc
+        if not before_hash == frozen_hash == after_hash:
+            raise VerificationError(
+                "workspace changed while verification files were being frozen; rerun check"
+            )
         outcomes = []
         for case in case_values:
             try:
                 case_root = materialize(
-                    source_tree, case_parent, case.id, declared_values
+                    frozen_source, case_parent, case.id, declared_values
                 )
             except WorkspaceError as exc:
                 raise VerificationError(
@@ -132,27 +156,20 @@ def build_verification_cases(
                 "module",
             ]
             try:
-                result = subprocess.run(
+                result = run_process(
                     command,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
                     timeout=timeout_seconds,
-                    check=False,
+                    capture=True,
                 )
-            except subprocess.TimeoutExpired as exc:
-                output = exc.stdout or ""
-                if isinstance(output, bytes):
-                    output = output.decode(errors="replace")
+            except ProcessTimeout as exc:
                 raise VerificationError(
-                    f"verification case {case.id!r} timed out after "
-                    f"{timeout_seconds}s\n{output}"
+                    f"verification case {case.id!r} {exc}"
                 ) from exc
-            except OSError as exc:
+            except ProcessError as exc:
                 raise VerificationError(
                     f"cannot execute verification case {case.id!r}: {exc}"
                 ) from exc
-            output = result.stdout
+            output = result.stdout or ""
             if case.build_output_contains and case.build_output_contains not in output:
                 raise VerificationError(
                     f"verification case {case.id!r} output lacks required marker "
@@ -162,6 +179,11 @@ def build_verification_cases(
                 if result.returncode == 0:
                     raise VerificationError(
                         f"verification case {case.id!r} unexpectedly built successfully"
+                    )
+                if artifact.exists() or artifact.is_symlink():
+                    raise VerificationError(
+                        f"verification case {case.id!r} failed but left an artifact: "
+                        f"{artifact_basename}"
                     )
                 outcomes.append(VerificationOutcome(case, build_root, None, output))
                 continue
@@ -180,4 +202,4 @@ def build_verification_cases(
             outcomes.append(
                 VerificationOutcome(case, build_root, _artifact(artifact, case), output)
             )
-        yield tuple(outcomes)
+        yield VerificationRun(frozen_source, frozen_hash, tuple(outcomes))

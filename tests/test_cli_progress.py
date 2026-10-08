@@ -273,12 +273,12 @@ class LearnerCLITests(unittest.TestCase):
                 lambda command, **kwargs: calls.append((command, kwargs))
                 or SimpleNamespace(returncode=0)
             )
-            self.globals["run_host_check"](exercise, workspace, artifact)
+            self.globals["run_host_check"](exercise, workspace, artifact, 17)
         finally:
             self.globals["run"] = original_run
         command, kwargs = calls[0]
         self.assertEqual(command[-2:], [str(workspace), str(artifact)])
-        self.assertEqual(kwargs, {})
+        self.assertEqual(kwargs, {"timeout": 17, "capture": True})
 
     def test_check_runs_each_declarative_case_and_records_one_attempt(self) -> None:
         exercise = self.globals["CAT"].ordered()[0]
@@ -314,7 +314,15 @@ class LearnerCLITests(unittest.TestCase):
 
         @contextmanager
         def fake_builds(*_args, **_kwargs):
-            yield outcomes
+            source_hash = self.globals["canonical_tree_hash"](
+                build_root,
+                exercise.workspace.files,
+            )
+            yield SimpleNamespace(
+                outcomes=outcomes,
+                frozen_source=build_root,
+                source_hash=source_hash,
+            )
 
         originals = {
             name: self.globals[name]
@@ -330,14 +338,14 @@ class LearnerCLITests(unittest.TestCase):
         try:
             self.globals["build_verification_cases"] = fake_builds
             self.globals["run_host_check"] = (
-                lambda *_args: SimpleNamespace(returncode=0)
+                lambda *_args: SimpleNamespace(returncode=0, stdout="")
             )
             self.globals["run"] = (
                 lambda command, **_kwargs: guest_runs.append(command)
                 or SimpleNamespace(returncode=0, stdout="[+] PASSED\n")
             )
             self.globals["record_attempt"] = (
-                lambda item, passed: attempts.append((item.id, passed))
+                lambda item, passed, *_args: attempts.append((item.id, passed)) or False
             )
             output = io.StringIO()
             with redirect_stdout(output), redirect_stderr(io.StringIO()):
@@ -349,6 +357,86 @@ class LearnerCLITests(unittest.TestCase):
         self.assertIn("Build rejected as required", output.getvalue())
         self.assertEqual(len(guest_runs), 1)
         self.assertEqual(attempts, [(exercise.id, True)])
+
+    def test_missing_workspace_is_not_an_attempt(self) -> None:
+        exercise = self.globals["CAT"].ordered()[0]
+        with self.assertRaisesRegex(self.globals["CLIError"], "has no workspace"):
+            self.globals["cmd_check"]([exercise.serial])
+        with self.globals["STORE"].read_locked() as state:
+            self.assertNotIn(exercise.id, state.exercises)
+
+    def test_changed_workspace_records_one_failed_attempt_not_pass(self) -> None:
+        exercise = self.globals["CAT"].ordered()[0]
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.globals["cmd_start"]([exercise.serial])
+        workspace = self.globals["WORK"] / exercise.id
+        frozen_parent = Path(self.temporary.name) / "frozen"
+        frozen_parent.mkdir()
+        frozen = self.globals["materialize"](
+            workspace,
+            frozen_parent,
+            "source",
+            exercise.workspace.files,
+        )
+        verified_hash = self.globals["canonical_tree_hash"](
+            frozen,
+            exercise.workspace.files,
+        )
+        editable = workspace / exercise.workspace.editable[0]
+        editable.write_text(editable.read_text() + "\n/* changed */\n")
+
+        changed = self.globals["record_attempt"](
+            exercise,
+            True,
+            frozen,
+            verified_hash,
+        )
+        self.assertTrue(changed)
+        with self.globals["STORE"].read_locked() as state:
+            record = state.exercises[exercise.id]
+            self.assertEqual(record.attempts, 1)
+            self.assertNotIn(exercise.id, state.completed)
+            self.assertEqual(record.passed_snapshot, "")
+
+    def test_guest_launch_error_records_exactly_one_attempt(self) -> None:
+        exercise = self.globals["CAT"].ordered()[0]
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.globals["cmd_start"]([exercise.serial])
+        workspace = self.globals["WORK"] / exercise.id
+        artifact = workspace / self.globals["CAT"].module_artifact(exercise)
+        artifact.write_bytes(b"module")
+        outcome = SimpleNamespace(
+            case=SimpleNamespace(label="Control", check=exercise.resources.check),
+            build_root=workspace,
+            artifact=artifact,
+        )
+
+        @contextmanager
+        def fake_builds(*_args, **_kwargs):
+            yield SimpleNamespace(
+                outcomes=(outcome,),
+                frozen_source=workspace,
+                source_hash=self.globals["canonical_tree_hash"](
+                    workspace,
+                    exercise.workspace.files,
+                ),
+            )
+
+        original_builds = self.globals["build_verification_cases"]
+        original_run = self.globals["run"]
+        try:
+            self.globals["build_verification_cases"] = fake_builds
+            self.globals["run"] = lambda *_args, **_kwargs: self.globals["die"](
+                "cannot execute guest"
+            )
+            with self.assertRaisesRegex(self.globals["CLIError"], "cannot execute"):
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    self.globals["cmd_check"]([exercise.serial])
+        finally:
+            self.globals["build_verification_cases"] = original_builds
+            self.globals["run"] = original_run
+        with self.globals["STORE"].read_locked() as state:
+            self.assertEqual(state.exercises[exercise.id].attempts, 1)
 
     def test_template_solution_renders_recursive_paths_in_order(self) -> None:
         exercise = SimpleNamespace(

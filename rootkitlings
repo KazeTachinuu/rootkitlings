@@ -6,11 +6,11 @@ from __future__ import annotations
 import difflib
 import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 from lib.catalog import Catalog, CatalogError
+from lib.process import ProcessError, ProcessTimeout, run_process
 from lib.setup_gate import (
     SETUP_STAMP_PATH,
     SetupGateError,
@@ -315,17 +315,16 @@ def none(a, command):
 
 def run(cmd, timeout=None, capture=False):
     try:
-        return subprocess.run(
+        return run_process(
             cmd,
             cwd=ROOT,
-            text=True,
             timeout=timeout,
-            check=False,
-            stdout=subprocess.PIPE if capture else None,
-            stderr=subprocess.STDOUT if capture else None,
+            capture=capture,
         )
-    except subprocess.TimeoutExpired:
-        die(f'Command timed out after {timeout}s: {" ".join(map(str, cmd))}')
+    except ProcessTimeout as error:
+        raise CLIError(str(error)) from error
+    except ProcessError as error:
+        raise CLIError(str(error)) from error
 
 
 def cmd_start(a):
@@ -479,12 +478,12 @@ def build_workspace(x):
     return artifact
 
 
-def run_host_check(x, build_directory, artifact):
+def run_host_check(x, build_directory, artifact, timeout):
     return run([
         str(ROOT / x.resources.host_check),
         str(build_directory),
         str(artifact),
-    ])
+    ], timeout=timeout, capture=True)
 
 
 def cmd_build(a):
@@ -544,25 +543,43 @@ def check_timeout(x):
     return int(value)
 
 
-def record_attempt(x, passed):
+def record_attempt(x, passed, verified_source=None, verified_hash=None):
+    changed = False
     with STORE.locked() as s:
         available(x, s)
         r = s.exercise(x.id)
         r.attempts += 1
-        r.workspace_hash = canonical_tree_hash(wp(x), x.workspace.files)
+        try:
+            live_hash = canonical_tree_hash(wp(x), x.workspace.files)
+        except WorkspaceError:
+            live_hash = ''
+        r.workspace_hash = live_hash
         if passed:
-            content_hash, _ = create_snapshot(wp(x), PASSED, x.workspace.files)
-            r.passed_snapshot = content_hash
-            r.workspace_hash = content_hash
-            s.completed.add(x.id)
+            if verified_source is None or verified_hash is None:
+                raise CLIError('successful attempt requires a verified frozen source')
+            if live_hash != verified_hash:
+                changed = True
+            else:
+                content_hash, _ = create_snapshot(
+                    verified_source,
+                    PASSED,
+                    x.workspace.files,
+                )
+                if content_hash != verified_hash:
+                    raise CLIError('verified snapshot hash changed unexpectedly')
+                r.passed_snapshot = content_hash
+                r.workspace_hash = content_hash
+                s.completed.add(x.id)
+    return changed
 
 
 def cmd_check(a):
     with STORE.read_locked() as s:
         x = resolve(one(a, 'check'), s)
         available(x, s)
+    workspace = need(x)
+    timeout = check_timeout(x)
     try:
-        workspace = need(x)
         cases = CAT.verification_cases(x)
         with build_verification_cases(
             ROOT,
@@ -571,22 +588,25 @@ def cmd_check(a):
             x.workspace.build,
             CAT.module_artifact(x),
             cases,
-            check_timeout(x),
-        ) as outcomes:
+            timeout,
+        ) as verification:
+            outcomes = verification.outcomes
             for index, outcome in enumerate(outcomes, 1):
                 head(f'Check {index}/{len(outcomes)}: {outcome.case.label}')
                 if outcome.artifact is None:
                     done('Build rejected as required')
                     continue
-                if (
-                    x.resources.host_check
-                    and run_host_check(
+                if x.resources.host_check:
+                    host = run_host_check(
                         x,
                         outcome.build_root,
                         outcome.artifact,
-                    ).returncode
-                ):
-                    die(f'Source and artifact checks failed for {label(x)}')
+                        timeout,
+                    )
+                    if host.stdout:
+                        print(host.stdout, end='')
+                    if host.returncode:
+                        die(f'Source and artifact checks failed for {label(x)}')
                 result = run(
                     [
                         str(ROOT / 'vm/boot'),
@@ -595,18 +615,30 @@ def cmd_check(a):
                         str(ROOT / outcome.case.check),
                         str(outcome.artifact),
                     ],
-                    timeout=check_timeout(x),
+                    timeout=timeout,
                     capture=True,
                 )
                 if result.stdout:
                     print(result.stdout, end='')
                 if result.returncode or '[+] PASSED' not in (result.stdout or ''):
                     die(f'Guest check failed: {outcome.case.label}')
+            verified_source = verification.frozen_source
+            verified_hash = verification.source_hash
+            workspace_changed = record_attempt(
+                x,
+                True,
+                verified_source,
+                verified_hash,
+            )
     except (CLIError, VerificationError):
         record_attempt(x, False)
         info(f'Hint: ./rootkitlings hint {label(x)}')
         raise
-    record_attempt(x, True)
+    if workspace_changed:
+        die(
+            'Workspace changed while checks were running; no pass was recorded. '
+            f'Rerun: ./rootkitlings check {label(x)}'
+        )
     done(f'Passed {label(x)}.')
     with STORE.read_locked() as s:
         next_item = current(s)

@@ -183,12 +183,35 @@ class VerificationCaseTests(unittest.TestCase):
                 with self.assertRaises(CatalogError):
                     self.parse([case])
 
-        failure = self.parse([{
+        failure = self.parse([
+            {
+                "id": "control", "label": "Control", "build_variables": {},
+                "expect_build": "pass", "check": "check",
+                "build_output_contains": "",
+            },
+            {
+                "id": "failure", "label": "Failure", "build_variables": {},
+                "expect_build": "fail", "check": "",
+                "build_output_contains": "",
+            },
+        ])
+        self.assertEqual(failure.cases[1].build_output_contains, "")
+
+    def test_cases_require_control_before_failures(self) -> None:
+        failure = {
             "id": "failure", "label": "Failure", "build_variables": {},
             "expect_build": "fail", "check": "",
             "build_output_contains": "",
-        }])
-        self.assertEqual(failure.cases[0].build_output_contains, "")
+        }
+        control = {
+            "id": "control", "label": "Control", "build_variables": {},
+            "expect_build": "pass", "check": "check",
+            "build_output_contains": "",
+        }
+        with self.assertRaisesRegex(CatalogError, "successful control"):
+            self.parse([failure])
+        with self.assertRaisesRegex(CatalogError, "must precede"):
+            self.parse([failure, control])
 
     def test_catalog_validation_requires_case_check_to_exist(self) -> None:
         catalog = Catalog(ROOT)

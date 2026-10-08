@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
 
@@ -14,6 +13,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT))
 
 from lib.catalog import Catalog, CatalogError  # noqa: E402
+from lib.process import ProcessError, ProcessTimeout, run_process  # noqa: E402
 from lib.verification import (  # noqa: E402
     VerificationError,
     build_verification_cases,
@@ -24,35 +24,27 @@ class SolutionCheckError(RuntimeError):
     pass
 
 
-def run(command: list[str], timeout: int | None = None) -> subprocess.CompletedProcess:
+def run(command: list[str], timeout: int | None = None):
     try:
-        return subprocess.run(
+        return run_process(
             command,
             cwd=ROOT,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
             timeout=timeout,
-            check=False,
+            capture=True,
+            discard_stdin=True,
         )
-    except subprocess.TimeoutExpired as error:
-        output = error.stdout or ""
-        if isinstance(output, bytes):
-            output = output.decode(errors="replace")
-        raise SolutionCheckError(
-            f"command timed out after {timeout}s: {' '.join(command)}\n{output}"
-        ) from error
+    except (ProcessError, ProcessTimeout) as error:
+        raise SolutionCheckError(str(error)) from error
 
 
-def boot_arguments(catalog: Catalog, item) -> list[str]:
+def boot_arguments(catalog: Catalog, item, timeout: int) -> list[str]:
     binaries = {tool.id: tool.binary for tool in catalog.tools}
     arguments: list[str] = []
     for capability in item.verification.capabilities:
         arguments += ["--cap", capability]
     for tool_id in item.verification.tools:
         binary = binaries[tool_id]
-        result = run(["make", "--quiet", binary])
+        result = run(["make", "--quiet", binary], timeout)
         if result.returncode:
             raise SolutionCheckError(
                 f"could not build verification tool {binary}\n{result.stdout}"
@@ -64,7 +56,7 @@ def boot_arguments(catalog: Catalog, item) -> list[str]:
 def verify_item(catalog: Catalog, item, solution_root: Path) -> None:
     source = catalog.materialize_solution(item, solution_root, item.id)
     timeout = item.verification.timeout_seconds
-    arguments = boot_arguments(catalog, item)
+    arguments = boot_arguments(catalog, item, timeout)
     with build_verification_cases(
         ROOT,
         source,
@@ -73,7 +65,8 @@ def verify_item(catalog: Catalog, item, solution_root: Path) -> None:
         catalog.module_artifact(item),
         catalog.verification_cases(item),
         timeout,
-    ) as outcomes:
+    ) as verification:
+        outcomes = verification.outcomes
         for index, outcome in enumerate(outcomes, 1):
             print(f"[*] Case {index}/{len(outcomes)}: {outcome.case.label}")
             if outcome.artifact is None:

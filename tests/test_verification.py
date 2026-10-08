@@ -1,9 +1,11 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from lib.catalog import VerificationCase
 from lib.verification import VerificationError, build_verification_cases
+from lib.workspace import materialize as real_materialize
 
 
 class VerificationBuildTests(unittest.TestCase):
@@ -31,6 +33,7 @@ module:
 \t  special) mkfifo \"$(MODULE_DIR)/test.ko\" ;; \\
 \t  timeout) sleep 2 ;; \\
 \t  fail) exit 2 ;; \\
+\t  fail-artifact) printf module > "$(MODULE_DIR)/test.ko"; exit 2 ;; \\
 \t  *) exit 3 ;; \\
 \tesac
 """,
@@ -67,7 +70,8 @@ module:
     def test_cases_are_isolated_and_variables_are_argv_values(self) -> None:
         first = self.case("first", "pass", value="one value")
         second = self.case("second", "pass", value="two")
-        with self.builds((first, second)) as outcomes:
+        with self.builds((first, second)) as verification:
+            outcomes = verification.outcomes
             self.assertEqual(len(outcomes), 2)
             self.assertEqual(
                 (outcomes[0].build_root / "main.c").read_text(),
@@ -78,6 +82,11 @@ module:
                 "original\ntwo\n",
             )
             self.assertFalse((outcomes[0].build_root / "ignored.c").exists())
+            self.assertEqual(
+                (verification.frozen_source / "main.c").read_text(),
+                "original\n",
+            )
+            self.assertTrue(verification.source_hash)
             retained = outcomes[0].build_root
             self.assertTrue(outcomes[0].artifact.is_file())
         self.assertFalse(retained.exists())
@@ -87,7 +96,8 @@ module:
             self.case("marked", "reject", expect="fail", marker="expected marker"),
             self.case("unmarked", "reject-other", expect="fail"),
         )
-        with self.builds(cases) as outcomes:
+        with self.builds(cases) as verification:
+            outcomes = verification.outcomes
             self.assertEqual([item.artifact for item in outcomes], [None, None])
             self.assertIn("expected marker", outcomes[0].output)
 
@@ -139,6 +149,48 @@ module:
                 5,
             ):
                 pass
+
+    def test_failed_build_must_not_leave_artifact(self) -> None:
+        case = self.case("failed", "fail-artifact", expect="fail")
+        with self.assertRaisesRegex(VerificationError, "left an artifact"):
+            with self.builds((case,)):
+                pass
+
+    def test_source_change_while_freezing_is_rejected(self) -> None:
+        def changing_materialize(source, parent, stable_id, files):
+            result = real_materialize(source, parent, stable_id, files)
+            if stable_id == "frozen":
+                (self.source / "main.c").write_text("changed\n", encoding="utf-8")
+            return result
+
+        with patch("lib.verification.materialize", changing_materialize):
+            with self.assertRaisesRegex(VerificationError, "changed while"):
+                with self.builds((self.case("pass", "pass"),)):
+                    pass
+
+    def test_all_cases_use_frozen_source_after_live_change(self) -> None:
+        original_materialize = real_materialize
+
+        def changing_live_source(source, parent, stable_id, files):
+            if stable_id == "first":
+                (self.source / "main.c").write_text("live changed\n", encoding="utf-8")
+            return original_materialize(source, parent, stable_id, files)
+
+        cases = (
+            self.case("first", "pass", value="one"),
+            self.case("second", "pass", value="two"),
+        )
+        with patch("lib.verification.materialize", changing_live_source):
+            with self.builds(cases) as verification:
+                first, second = verification.outcomes
+                self.assertEqual(
+                    (first.build_root / "main.c").read_text(),
+                    "original\none\n",
+                )
+                self.assertEqual(
+                    (second.build_root / "main.c").read_text(),
+                    "original\ntwo\n",
+                )
 
 
 if __name__ == "__main__":
