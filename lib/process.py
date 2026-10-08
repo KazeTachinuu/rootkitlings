@@ -48,6 +48,16 @@ def run_process(
         )
     except OSError as error:
         raise ProcessError(f"cannot execute {' '.join(values)}: {error}") from error
+
+    def merged_output(first: str, second: str) -> str:
+        return second if second.startswith(first) else first + second
+
+    def timeout_output(error: subprocess.TimeoutExpired) -> str:
+        output = error.output or ""
+        if isinstance(output, bytes):
+            return output.decode(errors="replace")
+        return output
+
     def stop_group() -> str:
         try:
             os.killpg(process.pid, signal.SIGTERM)
@@ -55,22 +65,37 @@ def run_process(
             pass
         try:
             remaining, _ = process.communicate(timeout=1)
-        except subprocess.TimeoutExpired:
+            return remaining or ""
+        except subprocess.TimeoutExpired as term_error:
+            partial = timeout_output(term_error)
             try:
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
-            remaining, _ = process.communicate()
-        return remaining or ""
+            try:
+                remaining, _ = process.communicate(timeout=1)
+                return merged_output(partial, remaining or "")
+            except subprocess.TimeoutExpired as kill_error:
+                partial = merged_output(partial, timeout_output(kill_error))
+                # A descendant can deliberately leave the process group while
+                # retaining the captured pipe. Do not let that escaped pipe
+                # turn timeout cleanup into an unbounded wait.
+                if process.stdout is not None:
+                    process.stdout.close()
+                try:
+                    process.wait(timeout=1)
+                except subprocess.TimeoutExpired as wait_error:
+                    raise ProcessError(
+                        f"command did not stop after SIGKILL: {' '.join(values)}"
+                    ) from wait_error
+                return partial
 
     try:
         output, _ = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired as error:
-        partial = error.output or ""
-        if isinstance(partial, bytes):
-            partial = partial.decode(errors="replace")
+        partial = timeout_output(error)
         stopped_output = stop_group()
-        output = stopped_output if stopped_output.startswith(partial) else partial + stopped_output
+        output = merged_output(partial, stopped_output)
         raise ProcessTimeout(values, timeout or 0, output) from error
     except BaseException:
         stop_group()

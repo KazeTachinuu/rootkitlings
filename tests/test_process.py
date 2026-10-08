@@ -1,5 +1,7 @@
 from pathlib import Path
 import os
+import shlex
+import signal
 import tempfile
 import time
 import unittest
@@ -34,6 +36,30 @@ class ProcessTests(unittest.TestCase):
                 time.sleep(0.05)
             else:
                 self.fail("timed-out descendant process remained alive")
+
+    def test_escaped_descendant_cannot_make_timeout_cleanup_hang(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            pid_file = Path(temporary) / "escaped.pid"
+            command = (
+                "setsid /bin/sh -c "
+                + shlex.quote(f"echo $$ > {pid_file}; sleep 30")
+                + " &"
+            )
+            started = time.monotonic()
+            try:
+                with self.assertRaises(ProcessTimeout):
+                    run_process(
+                        ["/bin/sh", "-c", command],
+                        timeout=0.1,
+                        capture=True,
+                    )
+            finally:
+                if pid_file.exists():
+                    try:
+                        os.kill(int(pid_file.read_text()), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+            self.assertLess(time.monotonic() - started, 4)
 
 
 if __name__ == "__main__":
