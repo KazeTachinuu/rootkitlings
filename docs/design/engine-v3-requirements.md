@@ -140,6 +140,21 @@ Validation must enforce:
 CLI `baseline()` must ask the catalog for the derived baseline provider rather than reading an exercise-local parent.
 Workspace materialization must atomically combine verified provider files with the immutable additions directory and must never source an inherited path from the additions tree.
 
+#### Reference solution overlays
+
+Implementation: complete in the engine and maintainer tooling.
+
+`Catalog.solution_tree()` recursively composes a derived exercise's sparse solution overlay over its baseline provider and validates the result against the declared workspace files.
+`Catalog.materialize_solution()` writes that composed tree atomically for builds and runtime checks.
+Repository validation and solution tests consume these APIs instead of copying raw solution directories, so sparse overlays are tested as the learner's complete eventual source tree.
+The learner-facing `solution` command prints complete recursive trees for template references and a deterministic unified diff for each derived reference, naming its exact provider and omitting unchanged inherited files.
+Disclosure state is recorded only after composition and rendering succeed.
+
+Still pending:
+
+- Adopt sparse overlays in target-route metadata and delete the temporary
+  compatibility branch for legacy explicit-parent full solutions.
+
 ### 4. Support explicit state migration
 
 Implementation: generic state and migration foundations are complete.

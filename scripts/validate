@@ -19,7 +19,7 @@ from catalog import Catalog
 catalog = Catalog(Path.cwd())
 for item in sorted(catalog.exercises, key=lambda value: (value.sequence < 0, value.sequence, value.id)):
     print("\x1f".join((item.id, item.workspace.baseline, item.workspace.source,
-          ",".join(item.workspace.files), item.workspace.build, item.resources.solution)))
+          ",".join(item.workspace.files), item.workspace.build)))
 PY
 }
 
@@ -48,8 +48,12 @@ for item in catalog.exercises:
     hint = root / r.hint
     if not hint.is_file() or hint.is_symlink() or hint.stat().st_mode & 0o111: failures.append(f"{item.id}: hint is not a non-executable regular file: {r.hint}")
     if r.host_check and not executable(root / r.host_check): failures.append(f"{item.id}: host-check is not executable: {r.host_check}")
-    solution = root / r.solution
-    if not (solution / "Kbuild").is_file() or not any(solution.glob("*.c")): failures.append(f"{item.id}: solution needs Kbuild and C source: {r.solution}")
+    try:
+        composed = catalog.solution_tree(item)
+    except Exception as error:
+        failures.append(f"{item.id}: solution composition failed: {error}")
+    else:
+        if set(composed) != set(item.workspace.files): failures.append(f"{item.id}: composed solution paths differ from workspace files")
     if item.workspace.baseline == "template":
         expected = Path("curriculum/templates") / item.id; templates.add(expected)
         if Path(item.workspace.source) != expected: failures.append(f"{item.id}: nonuniform template path: {item.workspace.source}")
@@ -87,12 +91,23 @@ check_scripts()
 
 build_assets()
 {
-    local id baseline source files build_path solution work tree log relative
+    local id baseline source files build_path work tree log relative
     local templates=0 completions=0 solutions=0
     [[ -d $KDIR ]] || fail "kernel build directory not found: $KDIR"
     work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-validate.XXXXXX")
     trap 'rm -rf -- "$work"' RETURN
-    while IFS=$'\x1f' read -r id baseline source files build_path solution; do
+    mkdir -p "$work/solutions"
+    python3 - "$work/solutions" <<'PY'
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path.cwd() / "lib"))
+from catalog import Catalog
+catalog = Catalog(Path.cwd())
+destination = Path(sys.argv[1])
+for item in catalog.exercises:
+    catalog.materialize_solution(item, destination, item.id)
+PY
+    while IFS=$'\x1f' read -r id baseline source files build_path; do
         if [[ $baseline == template ]]; then
             tree=$work/templates/$id; mkdir -p "$tree"
             while IFS= read -r relative; do
@@ -106,7 +121,7 @@ build_assets()
         else
             (( ++completions ))
         fi
-        tree=$work/solutions/$id; mkdir -p "$(dirname "$tree")"; cp -a "$solution" "$tree"
+        tree=$work/solutions/$id
         log=$work/solution-$id.log
         if ! make -s -C "$KDIR" M="$tree" W=1 modules >"$log" 2>&1 || grep -q 'warning:' "$log"; then cat "$log" >&2; fail "solution does not build warning-free: $id"; fi
         (( ++solutions ))

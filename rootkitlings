@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import difflib
 import os
 import shutil
 import subprocess
@@ -252,14 +253,78 @@ def cmd_hint(a):
 
 def cmd_solution(a):
     # Self-study references remain intentionally available out of route order.
-    with STORE.locked() as s:
+    with STORE.read_locked() as s:
         x = resolve(one(a, 'solution'), s)
+        completed = set(s.completed)
+    output = solution_output(x, completed)
+    print(output, end='')
+    with STORE.locked() as s:
         s.exercise(x.id).solution_revealed = True
-    print(f'{Y}Warning:{N} Reference solution for {label(x)}: {x.title}', file=sys.stderr)
-    for p in sorted((ROOT / x.resources.solution).iterdir()):
-        if p.is_file() and (p.suffix in ('.c', '.h') or p.name == 'Kbuild'):
-            print(f'\n--- {p.name} ---', file=sys.stderr)
-            print(p.read_text(), end='')
+
+
+def solution_text(data, relative):
+    try:
+        return data.decode('utf-8')
+    except UnicodeDecodeError as error:
+        die(f'Reference solution is not UTF-8 text: {relative}')
+
+
+def solution_output(x, completed):
+    tree = CAT.solution_tree(x)
+    provider = CAT.baseline_provider(x)
+    derived = provider is not None and x.workspace.baseline != 'completion'
+    lines = []
+    if not derived:
+        lines.append(f'{Y}Warning:{N} Reference solution for {label(x)}: {x.title}\n')
+        if provider is None:
+            lines.append('Baseline: immutable template\n')
+        else:
+            lines.append(
+                f'Baseline: {label(provider)} ({provider.id}): '
+                f'{provider.title}\n'
+            )
+        lines.append('Showing the complete reference workspace.\n')
+        for relative, solution_file in sorted(tree.items()):
+            text = solution_text(solution_file.data, relative)
+            lines.append(f'\n--- {relative} ---\n')
+            lines.append(text)
+            if text and not text.endswith('\n'):
+                lines.append('\n')
+        return ''.join(lines)
+
+    provider_tree = CAT.solution_tree(provider)
+    lines.append(f'{Y}Warning:{N} Reference changes for {label(x)}: {x.title}\n')
+    lines.append(
+        f'Baseline: {label(provider)} ({provider.id}): {provider.title}\n'
+    )
+    lines.append(f'Showing only changes introduced by {label(x)}.\n')
+    if provider.id not in completed:
+        lines.append(
+            f'Note: {label(provider)} is not completed; this patch is relative '
+            'to its canonical reference, not your workspace.\n'
+        )
+    changed = False
+    for relative, solution_file in sorted(tree.items()):
+        before = provider_tree.get(relative)
+        if before is not None and before.data == solution_file.data:
+            continue
+        changed = True
+        before_text = '' if before is None else solution_text(before.data, relative)
+        after_text = solution_text(solution_file.data, relative)
+        diff = list(difflib.unified_diff(
+            before_text.splitlines(keepends=True),
+            after_text.splitlines(keepends=True),
+            fromfile='/dev/null' if before is None else f'a/{relative}',
+            tofile=f'b/{relative}',
+            lineterm='\n',
+        ))
+        if not diff and before is None:
+            diff = ['--- /dev/null\n', f'+++ b/{relative}\n']
+        lines.append('\n')
+        lines.extend(diff)
+    if not changed:
+        die(f'Reference solution for {label(x)} introduces no changes')
+    return ''.join(lines)
 
 
 def build_workspace(x):

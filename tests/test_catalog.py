@@ -6,6 +6,7 @@ import tomllib
 import unittest
 
 from lib.catalog import Catalog, CatalogError, Exercise, Resources, Verification, Workspace
+from lib.workspace import WorkspaceError
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -299,6 +300,47 @@ class DerivedBaselineTests(unittest.TestCase):
         catalog = self.catalog((provider, consumer))
         with self.assertRaisesRegex(CatalogError, "module artifact conflicts"):
             catalog.validate_workspace_lineage(consumer)
+
+    def test_only_explicit_completion_keeps_full_solution_migration_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("provider", "completion", "derived"):
+                solution = root / name
+                solution.mkdir()
+                (solution / "Kbuild").write_text("obj-m += hello.o\n")
+                (solution / "main.c").write_text("int value;\n")
+
+            provider = _exercise("provider", "template")
+            provider = Exercise(**{
+                **provider.__dict__,
+                "resources": Resources("", "", "", "", "provider"),
+            })
+            completion = _exercise("completion", "completion")
+            completion = Exercise(**{
+                **completion.__dict__,
+                "workspace": Workspace(**{
+                    **completion.workspace.__dict__,
+                    "parent": "provider",
+                }),
+                "resources": Resources("", "", "", "", "completion"),
+            })
+            derived = _exercise("derived", "previous-required")
+            derived = Exercise(**{
+                **derived.__dict__,
+                "resources": Resources("", "", "", "", "derived"),
+            })
+
+            catalog = self.catalog((provider, completion))
+            catalog.root = root
+            self.assertEqual(
+                set(catalog.solution_tree(completion)),
+                {"Kbuild", "main.c"},
+            )
+
+            catalog = self.catalog((provider, derived))
+            catalog.root = root
+            with self.assertRaisesRegex(WorkspaceError, "byte-identical"):
+                catalog.solution_tree(derived)
 
 
 class ModuleArtifactValidationTests(unittest.TestCase):

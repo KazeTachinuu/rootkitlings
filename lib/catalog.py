@@ -8,6 +8,23 @@ from pathlib import Path, PurePosixPath
 import re
 import tomllib
 
+try:
+    from .solutions import (
+        SolutionTree,
+        full_solution_tree,
+        materialize_solution_tree,
+        overlay_solution_tree,
+    )
+    from .workspace import WorkspaceError
+except ImportError:  # scripts add lib/ directly to sys.path
+    from solutions import (
+        SolutionTree,
+        full_solution_tree,
+        materialize_solution_tree,
+        overlay_solution_tree,
+    )
+    from workspace import WorkspaceError
+
 
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 SERIAL_RE = re.compile(r"(?:L|M|C)[0-9]{2}\Z")
@@ -386,6 +403,12 @@ class Catalog:
                 self.validate_workspace_lineage(item, provider)
             self._validate_paths(item)
         self._validate_dag()
+        solution_cache: dict[str, SolutionTree] = {}
+        for item in self.exercises:
+            try:
+                self.solution_tree(item, solution_cache)
+            except WorkspaceError as exc:
+                raise CatalogError(f"{item.path}: invalid solution: {exc}") from exc
         for item in self.exercises:
             available = baseline | self.prerequisite_concepts(item)
             missing = set(item.requires) - available
@@ -487,6 +510,46 @@ class Catalog:
         if provider is not None:
             return self.module_artifact(provider)
         return self.default_module_artifact
+
+    def solution_tree(
+        self,
+        item: Exercise,
+        cache: dict[str, SolutionTree] | None = None,
+    ) -> SolutionTree:
+        """Return the recursively composed, validated reference solution."""
+        cache = {} if cache is None else cache
+        if item.id in cache:
+            return dict(cache[item.id])
+        solution = self.root / item.resources.solution
+        provider = self.baseline_provider(item)
+        if provider is None or item.workspace.baseline == "completion":
+            # Migration boundary: v2's six explicit-parent completions still
+            # store full trees. Delete this branch with those assets during the
+            # atomic 65-to-target route migration. New derived baselines never
+            # use it.
+            result = full_solution_tree(solution, item.workspace.files)
+        else:
+            result = overlay_solution_tree(
+                self.solution_tree(provider, cache),
+                solution,
+                provider.workspace.files,
+                item.workspace.files,
+            )
+        cache[item.id] = result
+        return dict(result)
+
+    def materialize_solution(
+        self,
+        item: Exercise,
+        destination_root: Path,
+        stable_id: str | None = None,
+    ) -> Path:
+        """Atomically materialize an exercise's fully composed solution tree."""
+        return materialize_solution_tree(
+            self.solution_tree(item),
+            destination_root,
+            stable_id or item.id,
+        )
 
     def baseline_provider(self, item: Exercise) -> Exercise | None:
         """Derive the sole workspace inheritance provider, if any."""

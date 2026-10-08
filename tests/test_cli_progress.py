@@ -139,6 +139,130 @@ class ProgressResetCLITests(unittest.TestCase):
         self.assertEqual(command[-2:], [str(workspace), str(artifact)])
         self.assertEqual(kwargs, {})
 
+    def test_template_solution_renders_recursive_paths_in_order(self) -> None:
+        exercise = SimpleNamespace(
+            id="template",
+            serial="L00",
+            title="Template lesson",
+            workspace=SimpleNamespace(baseline="template"),
+        )
+        tree = {
+            "status/main.c": SimpleNamespace(data=b"status\n"),
+            "core/main.c": SimpleNamespace(data=b"core\n"),
+            "Kbuild": SimpleNamespace(data=b"build\n"),
+        }
+        original_catalog = self.globals["CAT"]
+        try:
+            self.globals["CAT"] = SimpleNamespace(
+                solution_tree=lambda _exercise: tree,
+                baseline_provider=lambda _exercise: None,
+            )
+            output = self.globals["solution_output"](exercise, set())
+        finally:
+            self.globals["CAT"] = original_catalog
+        self.assertIn("Baseline: immutable template", output)
+        headings = (
+            "--- Kbuild ---",
+            "--- core/main.c ---",
+            "--- status/main.c ---",
+        )
+        positions = [output.index(value) for value in headings]
+        self.assertEqual(positions, sorted(positions))
+        self.assertNotIn("--- main.c ---", output)
+
+    def test_derived_solution_shows_only_delta_and_provider(self) -> None:
+        provider = SimpleNamespace(
+            id="provider",
+            serial="L00",
+            title="Provider lesson",
+        )
+        exercise = SimpleNamespace(
+            id="consumer",
+            serial="L01",
+            title="Consumer lesson",
+            workspace=SimpleNamespace(baseline="previous-required"),
+        )
+        provider_tree = {
+            "Kbuild": SimpleNamespace(data=b"unchanged sentinel\n"),
+            "core/main.c": SimpleNamespace(data=b"old\n"),
+        }
+        consumer_tree = {
+            "Kbuild": SimpleNamespace(data=b"unchanged sentinel\n"),
+            "core/main.c": SimpleNamespace(data=b"new\n"),
+            "include/api.h": SimpleNamespace(data=b"api\n"),
+        }
+        original_catalog = self.globals["CAT"]
+        try:
+            self.globals["CAT"] = SimpleNamespace(
+                solution_tree=lambda item: (
+                    provider_tree if item is provider else consumer_tree
+                ),
+                baseline_provider=lambda item: (
+                    provider if item is exercise else None
+                ),
+            )
+            output = self.globals["solution_output"](exercise, set())
+            completed = self.globals["solution_output"](
+                exercise,
+                {provider.id},
+            )
+        finally:
+            self.globals["CAT"] = original_catalog
+        self.assertIn("Baseline: L00 (provider): Provider lesson", output)
+        self.assertIn("not completed", output)
+        self.assertNotIn("not completed", completed)
+        self.assertNotIn("unchanged sentinel", output)
+        self.assertIn("--- a/core/main.c", output)
+        self.assertIn("+++ b/core/main.c", output)
+        self.assertIn("--- /dev/null", output)
+        self.assertIn("+++ b/include/api.h", output)
+
+    def test_explicit_completion_solution_remains_complete(self) -> None:
+        provider = SimpleNamespace(id="provider", serial="L00", title="Provider")
+        exercise = SimpleNamespace(
+            id="completion",
+            serial="L01",
+            title="Completion boundary",
+            workspace=SimpleNamespace(baseline="completion"),
+        )
+        tree = {"main.c": SimpleNamespace(data=b"complete\n")}
+        original_catalog = self.globals["CAT"]
+        try:
+            self.globals["CAT"] = SimpleNamespace(
+                solution_tree=lambda _exercise: tree,
+                baseline_provider=lambda _exercise: provider,
+            )
+            output = self.globals["solution_output"](exercise, set())
+        finally:
+            self.globals["CAT"] = original_catalog
+        self.assertIn("Baseline: L00 (provider): Provider", output)
+        self.assertIn("--- main.c ---", output)
+        self.assertNotIn("--- a/main.c", output)
+
+    def test_solution_disclosure_records_only_after_render(self) -> None:
+        exercise = self.globals["CAT"].ordered()[0]
+        original_output = self.globals["solution_output"]
+        try:
+            self.globals["solution_output"] = lambda *_args: self.globals["die"](
+                "composition failed"
+            )
+            with self.assertRaisesRegex(
+                self.globals["CLIError"],
+                "composition failed",
+            ):
+                self.globals["cmd_solution"]([exercise.serial])
+            with self.globals["STORE"].read_locked() as state:
+                self.assertNotIn(exercise.id, state.exercises)
+
+            future = self.globals["CAT"].ordered()[-1]
+            self.globals["solution_output"] = lambda *_args: "rendered\n"
+            with redirect_stdout(io.StringIO()):
+                self.globals["cmd_solution"]([future.serial])
+            with self.globals["STORE"].read_locked() as state:
+                self.assertTrue(state.exercises[future.id].solution_revealed)
+        finally:
+            self.globals["solution_output"] = original_output
+
     def test_start_records_template_and_inherited_baseline_provenance(self) -> None:
         first, second = (
             self.globals["CAT"].by_id[stable_id]

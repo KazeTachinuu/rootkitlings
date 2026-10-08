@@ -14,15 +14,21 @@ done
 
 runtime_rows()
 {
-    python3 - <<'PY'
+    mkdir -p "$work/solutions"
+    python3 - "$work/solutions" "${!requested[@]}" <<'PY'
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path.cwd() / "lib"))
 from catalog import Catalog
+destination = Path(sys.argv[1])
+requested = set(sys.argv[2:])
 catalog = Catalog(Path.cwd()); tools = {tool.id: tool.binary for tool in catalog.tools}
 for item in sorted(catalog.exercises, key=lambda value: (value.sequence < 0, value.sequence, value.id)):
+    if requested and item.id not in requested:
+        continue
     r, v = item.resources, item.verification
-    print("\x1f".join((item.id, item.serial, r.solution, r.check, r.host_check,
+    build = catalog.materialize_solution(item, destination, item.id)
+    print("\x1f".join((item.id, item.serial, str(build), r.check, r.host_check,
           catalog.module_artifact(item),
           str(v.timeout_seconds), ",".join(v.capabilities),
           ",".join(tools[value] for value in v.tools))))
@@ -30,10 +36,8 @@ PY
 }
 
 passed=0 failed=0 matched=0
-while IFS=$'\x1f' read -r id serial solution check host_check module_artifact timeout_seconds capabilities tools; do
-    (( $# == 0 )) || [[ -n ${requested[$id]:-} ]] || continue
+while IFS=$'\x1f' read -r id serial build check host_check module_artifact timeout_seconds capabilities tools; do
     (( ++matched ))
-    build=$work/$id; cp -a "$solution" "$build"
     printf '\n[*] %s (%s)\n' "$serial" "$id"
     output=; boot_args=()
     while IFS= read -r capability; do [[ -n $capability ]] && boot_args+=(--cap "$capability"); done < <(tr ',' '\n' <<< "$capabilities")
