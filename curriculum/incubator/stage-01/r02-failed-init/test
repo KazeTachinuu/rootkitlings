@@ -2,10 +2,10 @@
 set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r03-baseline.XXXXXX")
-work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r03-work.XXXXXX")
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r02-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r02-work.XXXXXX")
 trap 'rm -rf -- "$baseline" "$work"' EXIT
-cp -a "$HERE/../r02-module-lifecycle/solution/." "$baseline/"
+cp -a "$HERE/../r01-module-lifecycle/solution/." "$baseline/"
 cp -a "$baseline/." "$work/"
 for path in Kbuild core/main.c; do cp -p "$HERE/solution/$path" "$work/$path"; done
 
@@ -33,4 +33,3 @@ case $output in
 	*) printf '%s\n[x] wrong-errno fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
 esac
 printf '[+] wrong-errno fixture rejected in disposable guest\n'
-

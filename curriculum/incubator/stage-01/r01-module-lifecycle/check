@@ -21,7 +21,7 @@ for path in Kbuild core/main.c; do
 done
 [[ -d $KDIR ]] || die "kernel build directory not found: $KDIR"
 
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r02-check.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r01-check.XXXXXX")
 build=$scratch/build
 log=$build/build.log
 trap 'rm -rf -- "$scratch"' EXIT

@@ -23,4 +23,3 @@ module_exit(rk_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Rootkitlings module lifecycle");
-

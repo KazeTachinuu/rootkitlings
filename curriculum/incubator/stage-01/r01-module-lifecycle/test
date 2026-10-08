@@ -2,9 +2,13 @@
 set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r02-test.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r01-test.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
 cp -a "$HERE/solution/." "$work/"
+
+"$HERE/check" "$work"
+printf '[+] reference solution passed host and disposable-guest checks\n'
+
 cp "$HERE/fixtures/missing-exit-main.c" "$work/core/main.c"
 
 if output=$("$HERE/check" "$work" 2>&1); then

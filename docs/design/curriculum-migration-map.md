@@ -118,7 +118,7 @@ It should not become a mandatory collection of introductory micro-lessons.
 Before the required route, every learner must pass an unscored authorized-lab setup gate.
 The gate records authorization, scope, stop conditions, reset, and cleanup evidence, then proves that the diskless guest exposes neither the host filesystem nor a network device.
 It produces no course credit and teaches no kernel mechanism.
-Its current implementation source is `curriculum/incubator/stage-01/r01-authorized-lab`.
+Its containment probe is `vm/checks/containment`; the learner records the local acknowledgement with `./rootkitlings setup --accept`.
 Later networking checks may enable only capabilities declared by their exercise metadata; the gate verifies the safer default guest.
 
 ## Required route

@@ -25,7 +25,7 @@ for pair in "workspace:$workspace" "starting snapshot:$baseline"; do
 done
 [[ -d $KDIR ]] || die "kernel build directory not found: $KDIR"
 
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r03-check.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r02-check.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 copy_tree()
