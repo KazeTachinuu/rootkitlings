@@ -2,7 +2,7 @@
 
 These documents record the proposed next curriculum and the research behind it.
 They are implementation inputs, not learner documentation for the currently released route.
-The target has an unscored authorization and containment setup gate followed by 37 lessons, five milestones, and one capstone: 43 scored checkpoints.
+The target has an unscored authorization and containment setup gate followed by 37 lessons, four milestones, and one capstone: 42 scored checkpoints.
 
 - `curriculum-knowledge-graph-draft.md` inventories the complete knowledge dependency graph and primary sources.
 - `curriculum-migration-map.md` maps every current exercise to the proposed cumulative curriculum.

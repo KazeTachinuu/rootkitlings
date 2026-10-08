@@ -18,9 +18,9 @@ Each file appears only when its mechanism becomes active:
 | R02 Precise failed init | unchanged | Build-time failure input and exact preflight rejection |
 | R03 Owned state | add `include/rootkit.h`, `core/state.c` | Composite linking, opaque ownership boundary, heap lifetime, error-pointer contract |
 | R04 Procfs entry and rollback | add `interface/proc.c` | Real procfs publication and reverse partial-init unwind |
-| M00 Inspectable core | unchanged from R04 | Integrated failure, publication, cleanup, reload, and allocator evidence |
 
-The first milestone is **M00 (Inspectable core)** in both design and generated learner-facing serials.
+R04 closes Stage 1 with integrated failure, publication, cleanup, reload, and allocator evidence.
+There is no separate scored checkpoint that copies the unchanged R04 workspace and reruns the same checks.
 
 There is no separate “owned components” checkpoint.
 Composite Kbuild and private headers are supporting techniques taught when R03 uses them for real state ownership.
@@ -169,7 +169,7 @@ RK_FAIL_PROC_PUBLISH = 3,
 Value 3 selects `NULL` instead of calling `proc_create_single()` after state exists.
 It then follows the same branch as a real `proc_create_single()` allocation failure and returns `-ENOMEM`.
 Init preserves the selected error, destroys state, and returns it.
-The check requires exact rejection, absence of the module and proc entry, independent evidence that the state allocation was freed, and immediate successful value-0 publication, unload, disappearance, and reload.
+The check requires repeated exact rejection, absence of the module and proc entry, independent evidence that the state allocation was freed, and an independent value-0 publication, unload, disappearance, and reload cycle.
 
 ## Additive snapshot contract
 
@@ -183,9 +183,7 @@ R01 template: Kbuild, core/main.c
                 `-- R03 workspace: inherit both paths + add header/state
                      `-- R03 passed snapshot
                           `-- R04 workspace: inherit four paths + add status
-                               `-- R04 passed snapshot
-                                    `-- M00 workspace: inherit all five paths
-                                         `-- M00 passed snapshot
+                               `-- R04 passed snapshot: Stage 1 cumulative root
 ```
 
 An additive transition is explicit metadata, not inferred from directory contents.
@@ -212,13 +210,10 @@ Snapshot manifests remain content-intrinsic: canonical tree hash, declared relat
 Curriculum revision, provider identity, and the chosen baseline hash belong to learner state.
 Migration may retain a snapshot only through an explicit compatibility rule naming both stable IDs and certifying the path/build contract.
 
-## M00: integrated evidence
+## Stage 1 integrated evidence
 
-M00 adds no file or API.
-It uses the R04 completion with five declared paths: `Kbuild` plus four source/header files.
-The learner completes and tests the concrete acquisition/unwind paths already introduced.
-
-The check builds values 0 through 3 independently and requires:
+R04 checks the complete five-path module rather than deferring integration to an unchanged follow-up workspace.
+Its check builds values 0 through 3 independently and requires:
 
 - normal load, unload, absence, and immediate reload for value 0;
 - exact rejection before acquisition for value 1;

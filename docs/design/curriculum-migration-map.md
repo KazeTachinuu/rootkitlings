@@ -15,11 +15,11 @@ It is not successful merely because the learner has sampled many kernel APIs.
 The target curriculum contains:
 
 - 37 required mechanism lessons.
-- 5 cumulative integration milestones.
+- 4 cumulative integration milestones.
 - 1 final capstone.
 - 8 optional depth tracks.
 
-This produces 43 required checkpoints.
+This produces 42 required checkpoints.
 The number is a consequence of the dependency graph, not a quota.
 It may change if implementation proves that two units cannot be taught or tested independently.
 
@@ -73,24 +73,23 @@ Course-entry diagnostic
 +-- Authorized disposable-lab setup gate (mandatory, unscored)
 |
 +-- Stage 1: Module core
-|   +-- R01-R04
-|   `-- M00 Inspectable core
+|   `-- R01-R04
 |
 +-- Stage 2: Control and resident execution
 |   +-- R05-R12
-|   `-- M01 Configurable resident core
+|   `-- M00 Configurable resident core
 |
 +-- Stage 3: Identity, authorization and observation
 |   +-- R13-R19
-|   `-- M02 Authorized actions and telemetry
+|   `-- M01 Authorized actions and telemetry
 |
 +-- Stage 4: Views, concealment and detection
 |   +-- R20-R23
-|   `-- M03 Concealment with an evidence map
+|   `-- M02 Concealment with an evidence map
 |
 +-- Stage 5: Networking and durable state
 |   +-- R24-R32
-|   `-- M04 Remote resident agent
+|   `-- M03 Remote resident agent
 |
 `-- Stage 6: Authenticated operations
     +-- R33-R37
@@ -174,16 +173,9 @@ Knowledge already reached through one of those dependencies is not repeated.
 - Requires: R03.
 - Defensive evidence: the exact proc path and mode while loaded; agreement with
   module inventory; disappearance after unload or injected publication-boundary
-  failure; trace-correlated release of state; and immediate successful reload.
+  failure; trace-correlated release of state; repeated rejected loads; and an
+  independent repeated successful lifecycle.
 - Current sources: L08 and L09.
-
-#### M00 - Inspectable core
-
-- Requires: R04.
-
-Integrate R01-R04 into the cumulative multi-file module.
-The learner owns the top-level acquisition and unwind paths.
-The check injects failure at every stage, repeats load/unload, and verifies that no module, proc entry, or owned state remains.
 
 ### Stage 2: Control and resident execution
 
@@ -267,11 +259,11 @@ The check injects failure at every stage, repeats load/unload, and verifies that
 - Current sources: L19 and L23; L12's real pointer-error application is reinforced
   here.
 
-#### M01 - Configurable resident core
+#### M00 - Configurable resident core
 
 Merge the useful integration work of C00 and C01.
 The shared control plane manages configuration records and scheduler interval; periodic work updates status; the resident worker accepts a fixed wake event and stops cleanly.
-This is one extension of M00, not a fresh scaffold.
+This extends the cumulative R04 project, not a fresh scaffold.
 
 ### Stage 3: Identity, authorization and observation
 
@@ -341,7 +333,7 @@ This is one extension of M00, not a fresh scaffold.
   ordinary calls unchanged, and missed-instance reporting.
 - Current sources: L30 and L32.
 
-#### M02 - Authorized actions and telemetry
+#### M01 - Authorized actions and telemetry
 
 Merge C03 and C04.
 Add the one-use same-caller privilege action and a bounded event ring for selected file activity.
@@ -387,7 +379,7 @@ Spinlock ownership and ring overwrite semantics must be taught before or within 
 - Current source: L37 as the required implementation; L38 and L39 become comparative
   optional labs.
 
-#### M03 - Concealment with an evidence map
+#### M02 - Concealment with an evidence map
 
 Refactor C05 into the cumulative project.
 Hide the resident worker PID from proc root enumeration while preserving direct lookup, task evidence, scheduling, and control.
@@ -480,7 +472,7 @@ The milestone produces a machine-readable evidence card stating which view chang
   of newer foreign content, and file-integrity monitoring.
 - Current source: L48.
 
-#### M04 - Remote resident agent
+#### M03 - Remote resident agent
 
 Merge C07 and C08 into the cumulative project.
 The module connects only inside the declared lab network, accepts a small fixed command set such as `PING`, `INFO`, and a harmless bounded marker, exposes retry/error counters, unloads while blocked, and manages only its exact boot request.
@@ -539,7 +531,7 @@ This milestone does not expose a general shell.
 
 #### C00 - Operation Glasshouse: validate a rootkit through independent views
 
-The only final capstone extends the learner's own M04 project.
+The only final capstone extends the learner's own M03 project.
 It does not provide a fresh collection of duplicate implementations.
 
 The learner must:
@@ -620,8 +612,8 @@ This table is exhaustive.
 | L02 | Merge | R03 | Composite linking and the private header are taught with the heap state that uses them. |
 | L03 | Optional | E01 | High-value tool, but not a rootkit capability dependency. |
 | L04 | Refactor | R02 | Preserve exact failed-init semantics before rollback. |
-| L05 | Merge | M01 configuration | Parameter state is useful only when attached to a real scheduler/config subsystem. |
-| L06 | Merge | M01 configuration | Callback completes the same live-parameter mechanism. |
+| L05 | Merge | M00 configuration | Parameter state is useful only when attached to a real scheduler/config subsystem. |
+| L06 | Merge | M00 configuration | Callback completes the same live-parameter mechanism. |
 | L07 | Merge | R03 | Heap ownership belongs with real allocation error contracts. |
 | L08 | Merge | R04 | Reverse rollback is taught through the real procfs resource that needs it. |
 | L09 | Refactor | R04 | Publication lifetime supplies the concrete second-resource lifecycle. |
@@ -639,28 +631,28 @@ This table is exhaustive.
 | L21 | Optional | E04 | Completion is useful but has no required downstream consumer. |
 | L22 | Merge | R09 | Main invariant-protection lesson. |
 | L23 | Merge | R12 | Wait queue is part of the event-driven worker lifecycle. |
-| C00 | Merge | M01 | Configuration store is part of the resident core milestone. |
-| C01 | Merge | M01 | Scheduler belongs to the same configurable resident core. |
+| C00 | Merge | M00 | Configuration store is part of the resident core milestone. |
+| C01 | Merge | M00 | Scheduler belongs to the same configurable resident core. |
 | C02 | Optional | E04 | Strong concurrency synthesis, but not consumed by the required route. |
 | L24 | Refactor | R13 | Caller attribution remains explicit before credentials. |
 | L25 | Refactor | R14 | Credential vocabulary and namespaces require their own contract. |
 | L26 | Refactor | R15 | Transactional same-caller credential change is core. |
 | L27 | Move/refactor | R17 | Belongs immediately before instrumentation and must state version/ABI fragility. |
 | L28 | Merge | R16 | Randomness is taught through the one-use authorization state that needs it. |
-| C03 | Merge | M02 | Integrates privilege and one-use authorization into the cumulative rootkit. |
+| C03 | Merge | M01 | Integrates privilege and one-use authorization into the cumulative rootkit. |
 | L29 | Merge | R18 | Entry probe and hook-set rollback form one managed lifecycle. |
 | L30 | Merge | R19 | Return correlation remains required for later view filters. |
 | L31 | Optional | E05 | Fprobe is an alternate instrumentation API, not a new capability. |
 | L32 | Merge | R19 | Syscall ABI and no-fault argument copying complete return-aware probing. |
 | L33 | Merge | R18 | Partial hook rollback is essential but too thin as a separate task. |
-| C04 | Merge | M02 | Telemetry joins the authorized-action milestone. |
+| C04 | Merge | M01 | Telemetry joins the authorized-action milestone. |
 | L34 | Refactor | R21 | Precise one-view suppression with independent evidence. |
 | L35 | Merge | R21 | Sysfs artifacts provide the necessary cross-view and lifecycle evidence. |
 | L36 | Refactor | R22 | Central variable-record filter reused by process concealment. |
 | L37 | Refactor | R23 | Representative required rendered-result filter. |
 | L38 | Optional | E06 | Comparative read-view variant with no core consumer. |
 | L39 | Optional | E06 | Comparative seq-table variant with no core consumer. |
-| C05 | Refactor | M03 | Strong cumulative concealment and cross-view milestone. |
+| C05 | Refactor | M02 | Strong cumulative concealment and cross-view milestone. |
 | C06 | Optional | E06 | Duplicates control storage, filtering, and trigger mechanisms. |
 | L40 | Refactor | R26 | Netfilter lifecycle remains explicit after skb preparation. |
 | L41 | Merge | R27 | Classification is the useful result of packet observation. |
@@ -670,9 +662,9 @@ This table is exhaustive.
 | L45 | Optional | E07 | Fixed-function agent is safer and pedagogically richer than a required shell. |
 | L46 | Optional | E07 | Alternate ICMP carrier after required validated parsing. |
 | L47 | Refactor | R31 | Strong bounded protocol encoder used by authenticated signaling. |
-| C07 | Refactor | R30/M04 | Transport mechanics become a lesson; integration extends the learner's project. |
+| C07 | Refactor | R30/M03 | Transport mechanics become a lesson; integration extends the learner's project. |
 | L48 | Refactor | R32 | Guarded reversible file transaction remains core. |
-| C08 | Merge | M04 | Boot request joins the remote resident milestone; do not claim a reboot test that does not run. |
+| C08 | Merge | M03 | Boot request joins the remote resident milestone; do not claim a reboot test that does not run. |
 | L49 | Merge/optional | R33/E08 | XOR is an honest obfuscation demonstration, never encryption. |
 | L50 | Move/refactor | R36/E08 | AEAD follows hash and HMAC property progression. |
 | L51 | Refactor | R34 | Public digest precedes keyed authentication. |
@@ -726,7 +718,7 @@ tradecraft = ["concealment", "detection"]
 [workspace]
 mode = "single-file"            # single-file | project | cumulative
 template = "curriculum/directory-record-filter"
-baseline = "template"           # template | previous-required | previous-milestone
+baseline = "template"           # template | previous-required | cumulative-root | previous-milestone
 build = "."
 
 [verification]
@@ -739,6 +731,7 @@ cleanup_required = true
 Course-level metadata owns:
 
 - Required route and elective-track membership.
+- The stable ID of the cumulative project root.
 - Generated display serials (`L00`, `M00`, and `C00`).
 - Stage registry and order.
 - Concept registry and labels.
@@ -789,8 +782,9 @@ curriculum/
 ```
 
 - `start ID` materializes a workspace once and records its baseline hash.
-- R02 through R04 and M00 use `previous-required` to extend the immediately preceding required pass without storing parent IDs.
-- After Stage 1, each cumulative milestone starts from the exact previous passed milestone.
+- R02 through R04 use `previous-required` to extend the immediately preceding required pass without storing parent IDs.
+- Course metadata declares R04 as the cumulative root; M00 starts from its exact passed snapshot.
+- Each later cumulative milestone starts from the exact previous passed milestone.
 - `check ID` builds only that workspace and records build, boot, and test results.
 - A pass creates an immutable content-addressed snapshot.
 - Rechecking history never silently rebases later work.
@@ -858,7 +852,7 @@ Publish rounded quartile ranges only after a meaningful cohort has completed the
    from the single registry.
 4. Implement the mandatory unscored authorized-lab setup gate before exposing
    the required route.
-5. Build R01-R12 and M00-M01 first; validate the complete novice-to-resident-core
+5. Build R01-R12 and M00 first; validate the complete novice-to-resident-core
    journey before migrating later stages.
 6. Migrate identity, probes, and visibility with explicit context and cross-view
    contracts.

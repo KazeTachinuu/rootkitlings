@@ -10,8 +10,8 @@ Stage keys: `S1=module-core`, `S2=control-execution`, `S3=identity-observation`,
 
 Asset status: `adapt` means current material is useful but does not satisfy the new contract; `new` means no adequate target exercise exists; `reuse` means the existing contract is substantially sufficient.
 
-The scored route contains 37 required mechanism lessons, five cumulative milestones, and one final capstone.
-Aliases run from L00 through L36, M00 through M04, and C00.
+The scored route contains 37 required mechanism lessons, four cumulative milestones, and one final capstone.
+Aliases run from L00 through L36, M00 through M03, and C00.
 
 ## Mandatory setup gate
 
@@ -67,14 +67,14 @@ Later networking checks may enable only the capability declared by their exercis
 
 | Alias | Stable ID / title | Stage | Direct prerequisites | Teaches | Requires | Tradecraft | Sources | Assets |
 |---|---|---|---|---|---|---|---|---|
-| M00 | `inspectable-core` — Inspectable core | S1 | `proc-publication` | `inspectable-core-integration` | `component-ownership`, `resource-ownership`, `kernel-allocation`, `error-pointers`, `build-time-failure-injection`, `proc-entry`, `proc-publication-lifetime` | lifecycle, control, detection | L00–L02, L04, L07–L09, L12 | new |
-| M01 | `configurable-resident-core` — Configurable resident core | S2 | `inspectable-core`, `fixed-command-grammar`, `timer-workqueue-scheduler`, `event-driven-kernel-thread` | `resident-core-integration` | `fixed-command-grammar`, `configuration-store`, `deferred-work-lifecycle`, `worker-stop-lifecycle` | control, execution, lifecycle | C00, C01 | new |
-| M02 | `authorized-actions-telemetry` — Authorized actions and telemetry | S3 | `configurable-resident-core`, `one-use-authorization`, `return-aware-syscall-telemetry` | `spinlocked-event-ring`, `authorized-telemetry-integration` | `resident-core-integration`, `one-use-authorization`, `return-correlation` | privilege, instrumentation, detection | C03, C04 | new |
-| M03 | `concealment-evidence-map` — Concealment with an evidence map | S4 | `authorized-actions-telemetry`, `packed-directory-filter` | `ghost-process-view`, `machine-readable-evidence-map` | `authorized-telemetry-integration`, `directory-filtering`, `cross-view-evidence` | concealment, detection | C05 | new |
-| M04 | `remote-resident-agent` — Remote resident agent | S5 | `concealment-evidence-map`, `tcp-framing-cancellation`, `guarded-file-transaction` | `remote-agent-integration`, `boot-load-persistence` | `machine-readable-evidence-map`, `connect-back-agent`, `kernel-file-transactions` | control, networking, persistence, lifecycle | C07, C08 | new |
+| M00 | `configurable-resident-core` — Configurable resident core | S2 | `proc-publication`, `fixed-command-grammar`, `timer-workqueue-scheduler`, `event-driven-kernel-thread` | `resident-core-integration` | `resource-ownership`, `proc-publication-lifetime`, `fixed-command-grammar`, `configuration-store`, `deferred-work-lifecycle`, `worker-stop-lifecycle` | control, execution, lifecycle | C00, C01 | new |
+| M01 | `authorized-actions-telemetry` — Authorized actions and telemetry | S3 | `configurable-resident-core`, `one-use-authorization`, `return-aware-syscall-telemetry` | `spinlocked-event-ring`, `authorized-telemetry-integration` | `resident-core-integration`, `one-use-authorization`, `return-correlation` | privilege, instrumentation, detection | C03, C04 | new |
+| M02 | `concealment-evidence-map` — Concealment with an evidence map | S4 | `authorized-actions-telemetry`, `packed-directory-filter` | `ghost-process-view`, `machine-readable-evidence-map` | `authorized-telemetry-integration`, `directory-filtering`, `cross-view-evidence` | concealment, detection | C05 | new |
+| M03 | `remote-resident-agent` — Remote resident agent | S5 | `concealment-evidence-map`, `tcp-framing-cancellation`, `guarded-file-transaction` | `remote-agent-integration`, `boot-load-persistence` | `machine-readable-evidence-map`, `connect-back-agent`, `kernel-file-transactions` | control, networking, persistence, lifecycle | C07, C08 | new |
 | C00 | `operation-glasshouse` — Operation Glasshouse: validate a rootkit through independent views | S6 | `remote-resident-agent`, `authenticated-dns-signal` | `adversarial-validation` | `remote-agent-integration`, `authenticated-dns-signals`, `machine-readable-evidence-map` | lifecycle, control, privilege, instrumentation, concealment, networking, persistence, cryptography, detection | C10 plus C03/C05/C08/C09 behavior | new |
 
-Milestone workspace parents are `M00 → M01 → M02 → M03 → M04 → C00`.
+`proc-publication` is the cumulative project root.
+Milestone workspace parents are `proc-publication → M00 → M01 → M02 → M03 → C00`.
 Workspace inheritance is separate from knowledge prerequisites.
 
 ## Elective tracks
@@ -143,7 +143,6 @@ Add these genuinely new concepts:
 - `replay-resistant-state`
 - `aead-plaintext-gating`
 - `paired-network-detection`
-- `inspectable-core-integration`
 - `resident-core-integration`
 - `spinlocked-event-ring`
 - `authorized-telemetry-integration`
@@ -190,9 +189,9 @@ No complete target asset set currently exists for the redesigned route.
 
 - L07, L10, L20, L24, and L25 have no real standalone current exercise
   satisfying their contracts.
-- Every milestone and the final capstone require new cumulative templates,
-  checks, hints, and solutions.
-- M02 needs an explicitly taught or tightly guided spinlocked ring; the existing
+- Every milestone and the final capstone require new cumulative checks, hints,
+  and sparse solution overlays on the declared project lineage.
+- M01 needs an explicitly taught or tightly guided spinlocked ring; the existing
   C04 scaffold cannot silently supply that knowledge.
 - The authenticated DNS signal source lacks the required replay-safe state machine.
 - E02, E04, E05, and E08 substantially exceed their current source exercises.

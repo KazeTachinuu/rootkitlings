@@ -4,7 +4,7 @@ Status: approved design input; implementation in progress.
 
 The engine foundation is usable, but the repository does not yet model the target curriculum.
 It currently exposes 65 required checkpoints, no milestones, no electives, and no tracks.
-The target required route has 37 lessons, five milestones, and one capstone: 43 scored checkpoints.
+The target required route has 37 lessons, four milestones, and one capstone: 42 scored checkpoints.
 A mandatory authorization and containment setup gate sits before that route and carries no serial or completion credit.
 
 ## Requirements and progress
@@ -19,7 +19,7 @@ It records only a local acknowledgement tied to the relevant course revision and
 
 Acceptance requires explicit authorization, a disposable pinned guest, no persistent disk, production data, host mount, or network, at least two stop conditions, preflight rejection of weaker settings, a guest boundary probe, bounded shutdown, and removal of temporary guest state.
 Changing a relevant boundary setting invalidates the acknowledgement.
-Status and list output may report the gate separately but must not count it among the 43 scored checkpoints.
+Status and list output may report the gate separately but must not count it among the 42 scored checkpoints.
 Networking exercises may later enable only capabilities declared by their metadata; the gate verifies the default module-free guest, not a course-wide ban.
 
 `setup` shows the boundary and current state without recording acceptance.
@@ -100,11 +100,33 @@ Current metadata supports arbitrary `baseline = "completion"` plus an explicit p
 The only instances form an old six-edge L00–L08 chain.
 No item has `kind = "milestone"`.
 
-Stage 1 is one continuous construction path: R02 through R04 and M00 use `previous-required` so each checkpoint starts from the exact preceding required pass.
-Later milestones and the final capstone use `previous-milestone` so isolated lessons between integrations do not silently become cumulative providers.
+Stage 1 is one continuous construction path: R02 through R04 use `previous-required` so each checkpoint starts from the exact preceding required pass.
+R04 is the cumulative project root.
+The first milestone derives from that declared root; later milestones and the final capstone use `previous-milestone` so isolated lessons between integrations do not silently become cumulative providers.
 Arbitrary earlier completion parents are too permissive and duplicate route structure.
 
-Required schema:
+Required course schema:
+
+```toml
+cumulative_root = "proc-publication"
+```
+
+The value is a stable exercise ID, not a serial alias.
+It declares the one lesson snapshot from which the first cumulative milestone grows.
+
+Required workspace schemas:
+
+```toml
+[workspace]
+mode = "cumulative"
+baseline = "cumulative-root"
+files = ["Kbuild", "src/main.c"]
+editable = ["src/main.c"]
+build = "."
+```
+
+The first milestone alone uses `cumulative-root`.
+Later milestones use:
 
 ```toml
 [workspace]
@@ -115,8 +137,8 @@ editable = ["src/main.c"]
 build = "."
 ```
 
-Both derived baselines omit `workspace.parent` and `workspace.source`.
-The catalog derives the provider from `required_route`.
+All derived baselines omit `workspace.parent` and `workspace.source`.
+The catalog derives the provider from `required_route` and the course-level cumulative root.
 
 An inherited checkpoint may add files explicitly:
 
@@ -137,11 +159,14 @@ The field is required when files are added and forbidden when the file set is un
 
 Validation must enforce:
 
-- Exactly five required milestones and one required final capstone.
+- Exactly four required milestones and one required final capstone.
+- `cumulative_root` names an earlier required cumulative lesson and resolves to
+  its passed snapshot.
+- Only the first required milestone may use `cumulative-root`, and it must use it.
 - `previous-required` resolves to the immediate earlier item in `required_route`.
-- R02, R03, R04, and M00 use `previous-required`.
+- R02, R03, and R04 use `previous-required`.
 - Each cumulative milestone after M00 derives from the preceding milestone.
-- The final capstone derives from M04.
+- The final capstone derives from M03.
 - A previous-milestone baseline has an actual earlier milestone.
 - Provider and consumer have identical workspace mode and build root.
   Declared files are either identical or follow the explicit additive contract above.
@@ -172,7 +197,7 @@ Still pending:
 ### 4. Support explicit state migration
 
 Implementation: generic state and migration foundations are complete.
-The reviewed 65-to-43 mapping, workspace relocation, and route-specific migration orchestration remain pending.
+The reviewed 65-to-42 mapping, workspace relocation, and route-specific migration orchestration remain pending.
 
 The former exact-prefix rule conflicted with the requirement that a curriculum reorder not change the meaning of saved progress.
 Inserting a new checkpoint before completed stable IDs turns valid historical completion into a non-prefix set.
@@ -210,7 +235,7 @@ This permits sparse historical credit after a route insertion without changing s
 
 Still pending:
 
-- Encode and review the one-time 65-to-43 migration plan because many IDs are
+- Encode and review the one-time 65-to-42 migration plan because many IDs are
   merged or replaced.
 - Verify compatible snapshots and relocate/archive workspaces before committing
   the state replacement.
@@ -270,7 +295,7 @@ Completed changes:
 Tests:
 
 - Generated L/M/C serials are deterministic.
-- The required route contains exactly 37 lessons, five milestones, and one
+- The required route contains exactly 37 lessons, four milestones, and one
   capstone.
 - Alias generation is independent of filesystem discovery order.
 - Every elective belongs to exactly one of eight tracks.
@@ -281,7 +306,9 @@ Tests:
 
 Tests:
 
-- M02 resolves to M01's passed snapshot.
+- M01 resolves to M00's passed snapshot.
+- M00 resolves to the course-level cumulative root's passed snapshot.
+- A missing cumulative-root snapshot blocks the first milestone.
 - A missing previous-milestone snapshot blocks materialization.
 - An elective pass cannot affect the next required milestone baseline.
 - Incompatible cumulative file or build declarations fail catalog validation.
