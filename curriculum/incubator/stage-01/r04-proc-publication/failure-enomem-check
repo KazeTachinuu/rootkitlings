@@ -1,0 +1,17 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "State allocation rejection"
+
+for attempt in 1 2; do
+	if module_load_test /rootkitlings/rootkitlings.ko 12; then
+		_ok "attempt $attempt returned numeric ENOMEM"
+	else
+		_fail "attempt $attempt did not return ENOMEM"
+	fi
+	assert_absent /sys/module/rootkitlings
+	assert_absent /proc/rootkitlings
+done
+
+summary

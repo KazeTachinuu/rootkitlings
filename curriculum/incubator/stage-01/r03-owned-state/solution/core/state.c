@@ -10,7 +10,7 @@ struct rk_state {
 	bool active;
 };
 
-__must_check noinline struct rk_state *rk_state_create(void)
+__must_check struct rk_state *rk_state_create(void)
 {
 	struct rk_state *state;
 
@@ -25,7 +25,7 @@ __must_check noinline struct rk_state *rk_state_create(void)
 	return state;
 }
 
-noinline void rk_state_destroy(struct rk_state *state)
+void rk_state_destroy(struct rk_state *state)
 {
 	if (WARN_ON_ONCE(!state->active))
 		return;

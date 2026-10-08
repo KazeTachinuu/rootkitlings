@@ -1,0 +1,9 @@
+Check the path in this order:
+
+- `Kbuild` supplies a default and passes the selected number to C.
+- `#if` and `#error` reject every value outside 0 and 1.
+- Failure point 1 returns `-ECANCELED` directly from init.
+- Failure point 0 still returns 0 and uses the normal exit callback on unload.
+
+Do not call the exit callback from failed init; this lesson owns no resource to
+release.

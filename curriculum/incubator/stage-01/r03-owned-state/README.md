@@ -17,16 +17,16 @@ rk_state_create()       rk_state_destroy()
  kzalloc()                  kfree()
 ```
 
-## One pointer-shaped result
+## One return value
 
 `kzalloc(size, GFP_KERNEL)` returns zero-filled memory or `NULL`.
 The state constructor converts `NULL` to `ERR_PTR(-ENOMEM)` so every failure is carried in the returned pointer.
 The caller must use `IS_ERR()` before treating that value as an object and `PTR_ERR()` to recover the original negative error.
+An error pointer is encoded error information; it must never be dereferenced.
 
 The header only forward-declares `struct rk_state`.
 That makes the type **opaque**: other files may hold its pointer but only `core/state.c` knows its layout or calls `kfree()` for it.
 `__must_check` asks the compiler to warn when a caller ignores the constructor result.
-`noinline` keeps each ownership function as a distinct symbol that later checks can attribute precisely.
 
 Failed module initialization does not call the exit callback.
 If state creation fails, init must preserve the constructor's error and leave the stored pointer as `NULL`.
@@ -40,7 +40,9 @@ Starting from your passed module, this lesson adds `include/rootkit.h` and `core
 Edit all four declared files:
 
 - Extend `Kbuild` to link `core/main.o` and `core/state.o`, and add the `include` directory to compiler search paths.
-- In `include/rootkit.h`, define failure points 0 through 2, forward-declare `struct rk_state`, and declare the create/destroy API with `__must_check` and `noinline`.
+- In `include/rootkit.h`, define failure points 0 through 2, forward-declare
+  `struct rk_state`, and declare the create/destroy API with `__must_check` on
+  the constructor.
 - In `core/state.c`, keep the structure definition private, allocate it with `kzalloc(..., GFP_KERNEL)`, and make this file its sole allocator and releaser.
 - Make failure point 2 return `ERR_PTR(-ENOMEM)` through the same constructor path used for a real allocation failure.
 - In `core/main.c`, use `IS_ERR()` and `PTR_ERR()`, preserve the exact error, and clear the stored pointer after a failed create and after destruction.
@@ -60,7 +62,7 @@ The checker builds failure points 0, 1, and 2 without warnings and rejects an un
 In disposable guests, value 1 must return numeric `ECANCELED`, value 2 must return numeric `ENOMEM`, and both rejected loads must leave the module absent.
 Value 0 must load, unload, disappear from kernel inventory and sysfs, then load and unload again.
 
-The individual object-file symbol tables show that `core/state.o` defines the state functions and `core/main.o` consumes them.
+The individual object-file symbol tables show that `core/state.o` defines the state functions and `core/main.o` calls them.
 The private layout is absent from the shared header, so another component cannot allocate, free, or reach into state directly.
 
 ## Official references

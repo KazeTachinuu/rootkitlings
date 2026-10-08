@@ -68,16 +68,13 @@ A negative return value rejects the load; the module does not remain installed, 
 `module_exit()` registers the unload callback.
 It runs before the kernel releases a successfully loaded module.
 After successful initialization, the kernel may discard code marked `__init`.
-Code marked `__exit` is needed only when a module is removed; it is discarded when the same code is built into the kernel.
-
-This lifecycle brackets everything a rootkit does.
-Anything registered or started during initialization must be stopped and removed before the unload callback returns; otherwise the kernel could call code that is no longer loaded.
+Every resource created during init must be removed before the exit callback returns; otherwise the kernel could call code that is no longer loaded.
 
 These macros add static metadata to the module:
 
 ```c
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings module lifecycle");
+MODULE_DESCRIPTION("Rootkitlings kernel module");
 ```
 
 Tools such as `modinfo` can read this metadata without loading the module.
@@ -92,7 +89,7 @@ Edit only `Kbuild` and `core/main.c`:
 - Register a load callback that returns `0`.
 - Register an unload callback.
 - Set the license to `GPL`.
-- Set the description to `Rootkitlings module lifecycle`.
+- Set the description to `Rootkitlings kernel module`.
 
 The module must build without warnings.
 You may add kernel log messages for debugging, but messages do not prove that a module is loaded or cleaned up.

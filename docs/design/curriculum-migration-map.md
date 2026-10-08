@@ -63,7 +63,7 @@ Keep engine state, snapshot layout, future lesson sequencing, and maintainer tes
 Combining several API calls is valid when they form one observable mechanism.
 Build, insertion, initialization, removal, and exit therefore form one minimal module lifecycle.
 Composite linking and a private state interface belong in the first lesson that uses heap state.
-The status component belongs in the procfs publication lesson, where the first real published resource makes reverse rollback observable and reusable.
+The procfs interface component belongs in the publication lesson, where the first real published resource makes reverse rollback observable and reusable.
 
 ## Course shape
 
@@ -164,12 +164,12 @@ Knowledge already reached through one of those dependencies is not repeated.
   layout.
 - Current sources: L02, L07, and L12.
 
-#### R04 - Publish and roll back a procfs status resource
+#### R04 - Publish and roll back a procfs entry
 
 - Teaches: procfs publication lifetime and permission surface, acquisition order,
   single ownership, reverse unwind, pointer invalidation after release, and
   fail-at-each-stage testing using deterministic build-time failure injection.
-- Produces: the real `status` component, its procfs entry, and the top-level
+- Produces: the real procfs interface component, its entry, and the top-level
   state-then-publication lifecycle and rollback graph used by every milestone.
 - Requires: R03.
 - Defensive evidence: the exact proc path and mode while loaded; agreement with
@@ -187,7 +187,7 @@ The check injects failure at every stage, repeats load/unload, and verifies that
 
 ### Stage 2: Control and resident execution
 
-#### R05 - Implement correct procfs reads
+#### R05 - Expose a bounded procfs state snapshot
 
 - Teaches: read position, count, EOF, short reads, and `seq_file` where it removes
   irrelevant boilerplate.

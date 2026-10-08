@@ -1,0 +1,47 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Procfs publication lifetime"
+
+assert_not_loaded()
+{
+	assert_absent /sys/module/rootkitlings
+	assert_absent /proc/rootkitlings
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_fail "rootkitlings appears in /proc/modules"
+	else
+		_ok "rootkitlings is absent from /proc/modules"
+	fi
+}
+
+check_loaded()
+{
+	assert_loaded rootkitlings
+	assert_exists /proc/rootkitlings
+	mode=$(stat -c '%a' /proc/rootkitlings)
+	if [ "$mode" = 444 ]; then
+		_ok "/proc/rootkitlings mode is 0444"
+	else
+		_fail "/proc/rootkitlings mode: expected 0444, got $mode"
+	fi
+	assert_read /proc/rootkitlings active
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_ok "rootkitlings appears in /proc/modules"
+	else
+		_fail "rootkitlings is absent from /proc/modules"
+	fi
+}
+
+assert_not_loaded
+run_cycle()
+{
+	load rootkitlings.ko
+	check_loaded
+	unload rootkitlings
+	assert_not_loaded
+}
+run_cycle
+run_cycle
+
+summary

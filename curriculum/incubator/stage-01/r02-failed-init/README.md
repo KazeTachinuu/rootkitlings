@@ -1,9 +1,9 @@
-# Reject module initialization precisely
+# Reject initialization with a precise error
 
 A module becomes resident only if its load callback returns `0`.
 If initialization returns a negative Linux error number, the loader reports that error and the module never becomes loaded.
 
-A deterministic rejected path lets you verify the kernel's failed-initialization contract instead of waiting for an accidental failure.
+A controlled failure path lets you verify how the kernel handles rejected initialization instead of waiting for an accidental failure.
 
 ## One build, two deterministic paths
 
@@ -31,12 +31,12 @@ ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)
 ```
 
 Only values `0` and `1` are valid here.
-An unknown value must stop compilation rather than silently exercise the normal path.
+A preprocessor `#if` can test that range, and `#error` can stop compilation for an unknown value instead of silently selecting the normal path.
 
 `-ECANCELED` is the negative Linux error for a canceled operation.
 Returning it preserves a precise reason for rejection.
 Because failed initialization never installs the module, the kernel does not call its registered exit callback.
-That is part of the kernel lifecycle contract; module inventory proves that the module remained absent, not whether a callback ran.
+That is kernel behavior; module inventory proves that the module remained absent, not whether a callback ran.
 This module acquires no resource, so the rejected path has nothing to release.
 
 ## Your task

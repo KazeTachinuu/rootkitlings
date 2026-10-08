@@ -12,7 +12,7 @@ enum rk_fail_point {
 
 struct rk_state;
 
-__must_check noinline struct rk_state *rk_state_create(void);
-noinline void rk_state_destroy(struct rk_state *state);
+__must_check struct rk_state *rk_state_create(void);
+void rk_state_destroy(struct rk_state *state);
 
 #endif

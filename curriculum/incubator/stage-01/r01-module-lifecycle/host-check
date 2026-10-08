@@ -15,8 +15,8 @@ artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
 command -v modinfo >/dev/null || die "modinfo is required"
 command -v nm >/dev/null || die "nm is required"
 [[ $(modinfo -F license "$artifact") == GPL ]] || die "module license must be GPL"
-[[ $(modinfo -F description "$artifact") == 'Rootkitlings module lifecycle' ]] ||
-	die "module description must be: Rootkitlings module lifecycle"
+[[ $(modinfo -F description "$artifact") == 'Rootkitlings kernel module' ]] ||
+	die "module description must be: Rootkitlings kernel module"
 nm "$artifact" | grep -Eq ' [Tt] init_module$' || die "module is missing its init callback"
 nm "$artifact" | grep -Eq ' [Tt] cleanup_module$' || die "module is missing its exit callback"
 

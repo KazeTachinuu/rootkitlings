@@ -1,0 +1,6 @@
+Start with `Kbuild`: name `rootkitlings.o` as the module and list
+`core/main.o` as its only object.
+
+In `core/main.c`, write one init function that returns 0 and one exit function.
+Register them with `module_init()` and `module_exit()`, then add the required
+license and description.

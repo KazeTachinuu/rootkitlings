@@ -15,4 +15,4 @@ module_init(rk_init);
 module_exit(rk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings module lifecycle");
+MODULE_DESCRIPTION("Rootkitlings kernel module");

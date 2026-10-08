@@ -15,7 +15,7 @@ Each checkpoint changes learner-owned source, demonstrates an observable result,
 | R01 Module build and lifecycle (public L00) | Build `rootkitlings.ko`; add metadata and init/exit callbacks | Metadata, symbols, `/sys/module`, and module inventory agree | Unload removes both inventory views; immediate reload succeeds | `module-lifecycle`, `module-build` |
 | R02 Precise rejection | Add one controlled init rejection that preserves its negative errno | Loader reports the selected error and the module remains absent | Both inventory views stay absent; rebuilding without injection permits a clean load | `init-failure` |
 | R03 Owned kernel state | Add the real header and state component; allocate and release private state | Composite module links and state ownership is statically inspectable | Forced allocation failure preserves `-ENOMEM`, publishes nothing, and permits retry | `multi-file-module`, `kernel-allocation`, `error-pointer` |
-| R04 Procfs status and rollback | Publish a real procfs status resource after state acquisition | Proc path, mode, module inventory, and state allocation agree | Forced publication-boundary failure releases state; unload removes the proc entry; immediate retry succeeds | `initialization-rollback`, `proc-entry` |
+| R04 Procfs entry and rollback | Publish a real procfs entry after state acquisition | Proc path, mode, module inventory, and state allocation agree | Forced publication failure releases state; unload removes the proc entry; immediate retry succeeds | `initialization-rollback`, `proc-entry` |
 | M00 Inspectable core | Integrate and explain the complete acquisition and unwind paths | The cumulative module and proc status load repeatedly and every owner is inspectable | Every failure point leaves no module, proc entry, or owned state behind | First generated milestone |
 
 ## Setup-gate acceptance contract
@@ -53,7 +53,7 @@ core/main.c
 
 R02 inherits those paths and introduces precise build-time failure selection.
 R03 additively introduces `include/rootkit.h` and `core/state.c` when the header and state owner become real.
-R04 additively introduces `status/status.c` when the procfs resource and reverse rollback become real.
+R04 additively introduces `interface/proc.c` when the procfs resource and reverse rollback become real.
 M00 inherits the R04 completion without adding a file or hidden implementation.
 
 No checkpoint ships an empty future translation unit or an unused ownership API.
@@ -67,7 +67,7 @@ Migration must map completion and compatible snapshots explicitly; it must not r
 
 M00 is ready to author when the cumulative R01–R04 checks and overlays exist together:
 
-- `core/state.c` owns heap state and `status/status.c` owns one real proc entry;
+- `core/state.c` owns heap state and `interface/proc.c` owns one real proc entry;
 - `core/main.c` owns activation and reverse teardown order but not either resource;
 - R02 introduces preflight rejection, R03 adds state allocation failure, and R04 adds an explicitly synthetic publication-boundary failure plus reverse unwind;
 - tracefs correlates the opaque state-allocation token with its destructor free while procfs and module inventory independently expose publication and cleanup;
