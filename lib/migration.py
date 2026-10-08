@@ -28,6 +28,7 @@ class CurriculumContract:
     ids: frozenset[str]
     route: tuple[str, ...]
     prerequisites: Mapping[str, frozenset[str]]
+    baseline_providers: Mapping[str, str | None] | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,7 @@ def apply_migration(
             source_contract.route,
             source_contract.revision,
             source_contract.prerequisites,
+            _providers(source_contract),
         )
     except StateError as exc:
         raise MigrationError(f"source state violates its contract: {exc}") from exc
@@ -140,7 +142,11 @@ def apply_migration(
                     "snapshot compatibility verification failed: "
                     f"{compatible_source} -> {destination}"
                 )
-        exercises[destination] = _merge_history(records, compatible_source)
+        exercises[destination] = _merge_history(
+            records,
+            compatible_source,
+            _providers(destination_contract)[destination],
+        )
 
     result = LearnerState(
         destination_contract.revision,
@@ -154,6 +160,7 @@ def apply_migration(
             destination_contract.route,
             destination_contract.revision,
             destination_contract.prerequisites,
+            _providers(destination_contract),
         )
     except StateError as exc:
         raise MigrationError(f"migrated state violates destination contract: {exc}") from exc
@@ -213,6 +220,7 @@ def _validate_contract(contract: CurriculumContract) -> None:
             contract.route,
             contract.revision,
             contract.prerequisites,
+            _providers(contract),
         )
     except StateError as exc:
         raise MigrationError(f"invalid curriculum contract: {exc}") from exc
@@ -338,6 +346,7 @@ def _direct_destination(
 def _merge_history(
     records: tuple[tuple[str, ExerciseState], ...],
     compatible_source: str | None,
+    destination_provider: str | None,
 ) -> ExerciseState:
     result = ExerciseState(
         attempts=sum(record.attempts for _, record in records),
@@ -350,7 +359,16 @@ def _merge_history(
         result.baseline_hash = compatible.baseline_hash
         result.workspace_hash = compatible.workspace_hash
         result.passed_snapshot = compatible.passed_snapshot
+        result.baseline_provider = (
+            (destination_provider or "") if compatible.baseline_hash else ""
+        )
     return result
+
+
+def _providers(contract: CurriculumContract) -> Mapping[str, str | None]:
+    if contract.baseline_providers is None:
+        return {stable_id: None for stable_id in contract.ids}
+    return contract.baseline_providers
 
 
 def _trusted_directory(path: Path, label: str) -> Path:

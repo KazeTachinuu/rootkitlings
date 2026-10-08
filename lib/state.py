@@ -5,15 +5,17 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 import fcntl
+import hashlib
 import os
 from pathlib import Path
 import re
+import stat
 import tempfile
 import tomllib
 from typing import Iterator, Mapping
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 
 
@@ -28,6 +30,7 @@ class ExerciseState:
     passed_snapshot: str = ""
     attempts: int = 0
     solution_revealed: bool = False
+    baseline_provider: str = ""
 
 
 @dataclass
@@ -62,8 +65,11 @@ class LearnerState:
         route: tuple[str, ...],
         revision: str,
         prerequisites: Mapping[str, frozenset[str]],
+        baseline_providers: Mapping[str, str | None],
     ) -> None:
-        _validate_contract(valid_ids, route, revision, prerequisites)
+        _validate_contract(
+            valid_ids, route, revision, prerequisites, baseline_providers
+        )
         if self.curriculum_revision != revision:
             raise StateError(
                 f"curriculum revision mismatch: state={self.curriculum_revision!r}, active={revision!r}"
@@ -89,6 +95,22 @@ class LearnerState:
             for value in (item.baseline_hash, item.workspace_hash, item.passed_snapshot):
                 if value and not re.fullmatch(r"[0-9a-f]{64}", value):
                     raise StateError(f"invalid content hash for {stable_id}: {value!r}")
+            expected_provider = baseline_providers[stable_id] or ""
+            if item.baseline_hash:
+                if item.baseline_provider != expected_provider:
+                    raise StateError(
+                        f"baseline provider mismatch for {stable_id}: "
+                        f"state={item.baseline_provider!r}, expected={expected_provider!r}"
+                    )
+                if expected_provider and expected_provider not in self.completed:
+                    raise StateError(
+                        f"baseline provider for {stable_id} is not completion-available: "
+                        f"{expected_provider}"
+                    )
+            elif item.baseline_provider:
+                raise StateError(
+                    f"baseline provider without baseline hash for {stable_id}"
+                )
 
 
 def new_state(
@@ -96,8 +118,9 @@ def new_state(
     valid_ids: set[str],
     revision: str,
     prerequisites: Mapping[str, frozenset[str]],
+    baseline_providers: Mapping[str, str | None],
 ) -> LearnerState:
-    _validate_contract(valid_ids, route, revision, prerequisites)
+    _validate_contract(valid_ids, route, revision, prerequisites, baseline_providers)
     return LearnerState(revision, route)
 
 
@@ -106,6 +129,7 @@ def _validate_contract(
     route: tuple[str, ...],
     revision: str,
     prerequisites: Mapping[str, frozenset[str]],
+    baseline_providers: Mapping[str, str | None],
 ) -> None:
     if not revision or "\n" in revision or "\r" in revision:
         raise StateError("curriculum revision must be a non-empty single-line string")
@@ -117,6 +141,17 @@ def _validate_contract(
         raise StateError(f"route contains unknown IDs: {sorted(set(route) - valid_ids)}")
     if set(prerequisites) != valid_ids:
         raise StateError("prerequisite map must cover every stable ID exactly")
+    if set(baseline_providers) != valid_ids:
+        raise StateError("baseline provider map must cover every stable ID exactly")
+    for stable_id, provider in baseline_providers.items():
+        if provider is None:
+            continue
+        if provider not in valid_ids or provider == stable_id:
+            raise StateError(f"invalid baseline provider for {stable_id}: {provider!r}")
+        if provider not in prerequisites[stable_id]:
+            raise StateError(
+                f"baseline provider for {stable_id} must be a completion dependency"
+            )
     positions = {stable_id: index for index, stable_id in enumerate(route)}
     visiting: set[str] = set()
     visited: set[str] = set()
@@ -154,16 +189,27 @@ def load_state(
     route: tuple[str, ...],
     revision: str,
     prerequisites: Mapping[str, frozenset[str]],
+    baseline_providers: Mapping[str, str | None],
 ) -> LearnerState:
     """Load and validate state, returning new empty state when the file is absent."""
     path = Path(path)
+    if path.parent.is_symlink():
+        raise StateError(f"learner state parent must not be a symlink: {path.parent}")
+    if path.is_symlink():
+        raise StateError(f"learner state must not be a symlink: {path}")
     if not path.exists():
-        return new_state(route, valid_ids, revision, prerequisites)
+        return new_state(
+            route, valid_ids, revision, prerequisites, baseline_providers
+        )
+    if not path.is_file():
+        raise StateError(f"learner state must be a regular file: {path}")
     try:
-        state = parse_state(path.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as exc:
+        state = parse_state(_read_regular_bytes(path).decode("utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
         raise StateError(f"cannot read learner state: {exc}") from exc
-    state.validate(valid_ids, route, revision, prerequisites)
+    state.validate(
+        valid_ids, route, revision, prerequisites, baseline_providers
+    )
     return state
 
 
@@ -180,16 +226,23 @@ def parse_state(content: str) -> LearnerState:
     if not isinstance(data["curriculum_revision"], str):
         raise StateError("curriculum_revision must be a string")
     saved_route = _string_array(data["route"], "route")
+    if not saved_route:
+        raise StateError("saved route must be non-empty")
     completed = set(_string_array(data["completed"], "completed"))
     raw_exercises = data["exercises"]
     if not isinstance(raw_exercises, dict):
         raise StateError("exercises must be a table")
     exercises: dict[str, ExerciseState] = {}
-    fields = {"baseline_hash", "workspace_hash", "passed_snapshot", "attempts", "solution_revealed"}
+    fields = {
+        "baseline_hash", "baseline_provider", "workspace_hash",
+        "passed_snapshot", "attempts", "solution_revealed",
+    }
     for stable_id, raw in raw_exercises.items():
         if not isinstance(raw, dict) or set(raw) != fields:
             raise StateError(f"exercise state fields mismatch for {stable_id}")
-        if any(not isinstance(raw[key], str) for key in ("baseline_hash", "workspace_hash", "passed_snapshot")):
+        if any(not isinstance(raw[key], str) for key in (
+            "baseline_hash", "baseline_provider", "workspace_hash", "passed_snapshot"
+        )):
             raise StateError(f"exercise hashes must be strings for {stable_id}")
         attempts = raw["attempts"]
         revealed = raw["solution_revealed"]
@@ -198,10 +251,81 @@ def parse_state(content: str) -> LearnerState:
         if not isinstance(revealed, bool):
             raise StateError(f"solution_revealed must be boolean for {stable_id}")
         exercises[stable_id] = ExerciseState(
-            raw["baseline_hash"], raw["workspace_hash"], raw["passed_snapshot"], attempts, revealed
+            baseline_hash=raw["baseline_hash"],
+            baseline_provider=raw["baseline_provider"],
+            workspace_hash=raw["workspace_hash"],
+            passed_snapshot=raw["passed_snapshot"],
+            attempts=attempts,
+            solution_revealed=revealed,
         )
     state = LearnerState(data["curriculum_revision"], saved_route, completed, exercises)
     _validate_structural_state(state)
+    return state
+
+
+def migrate_v2_state(
+    content: str,
+    valid_ids: set[str],
+    route: tuple[str, ...],
+    revision: str,
+    prerequisites: Mapping[str, frozenset[str]],
+    baseline_providers: Mapping[str, str | None],
+) -> LearnerState:
+    """Explicitly upgrade current-v2 state using authoritative catalog lineage."""
+    try:
+        data = tomllib.loads(content)
+    except tomllib.TOMLDecodeError as exc:
+        raise StateError(f"cannot parse learner state: {exc}") from exc
+    if data.get("schema_version") != 2 or isinstance(data.get("schema_version"), bool):
+        raise StateError("state is not schema_version 2")
+    if set(data) != {
+        "schema_version", "curriculum_revision", "route", "completed", "exercises"
+    }:
+        raise StateError("v2 state has missing or unknown top-level fields")
+    if not isinstance(data["curriculum_revision"], str):
+        raise StateError("v2 curriculum_revision must be a string")
+    saved_route = _string_array(data["route"], "route")
+    if not saved_route:
+        raise StateError("v2 saved route must be non-empty")
+    completed = set(_string_array(data["completed"], "completed"))
+    raw_exercises = data["exercises"]
+    if not isinstance(raw_exercises, dict):
+        raise StateError("exercises must be a table")
+    fields = {
+        "baseline_hash", "workspace_hash", "passed_snapshot", "attempts",
+        "solution_revealed",
+    }
+    exercises: dict[str, ExerciseState] = {}
+    for stable_id, raw in raw_exercises.items():
+        if not isinstance(raw, dict) or set(raw) != fields:
+            raise StateError(f"v2 exercise state fields mismatch for {stable_id}")
+        if any(not isinstance(raw[key], str) for key in (
+            "baseline_hash", "workspace_hash", "passed_snapshot"
+        )):
+            raise StateError(f"v2 exercise hashes must be strings for {stable_id}")
+        if isinstance(raw["attempts"], bool) or not isinstance(raw["attempts"], int):
+            raise StateError(f"v2 attempts must be an integer for {stable_id}")
+        if not isinstance(raw["solution_revealed"], bool):
+            raise StateError(f"v2 solution_revealed must be boolean for {stable_id}")
+        record = ExerciseState(
+            baseline_hash=raw["baseline_hash"],
+            workspace_hash=raw["workspace_hash"],
+            passed_snapshot=raw["passed_snapshot"],
+            attempts=raw["attempts"],
+            solution_revealed=raw["solution_revealed"],
+        )
+        if record.baseline_hash:
+            record.baseline_provider = baseline_providers.get(stable_id) or ""
+        exercises[stable_id] = record
+    if not set(saved_route) <= valid_ids:
+        raise StateError("v2 saved route contains unknown stable IDs")
+    state = LearnerState(
+        data["curriculum_revision"], route, completed, exercises
+    )
+    _validate_structural_state(state)
+    state.validate(
+        valid_ids, route, revision, prerequisites, baseline_providers
+    )
     return state
 
 
@@ -221,6 +345,10 @@ def _validate_structural_state(state: LearnerState) -> None:
         for value in (item.baseline_hash, item.workspace_hash, item.passed_snapshot):
             if value and not re.fullmatch(r"[0-9a-f]{64}", value):
                 raise StateError(f"invalid content hash for {stable_id}: {value!r}")
+        if item.baseline_provider and not ID_RE.fullmatch(item.baseline_provider):
+            raise StateError(
+                f"invalid baseline provider for {stable_id}: {item.baseline_provider!r}"
+            )
 
 
 def _string_array(value: object, name: str) -> tuple[str, ...]:
@@ -247,6 +375,7 @@ def dump_state(state: LearnerState) -> str:
             "",
             f"[exercises.{_quote(stable_id)}]",
             f"baseline_hash = {_quote(item.baseline_hash)}",
+            f"baseline_provider = {_quote(item.baseline_provider)}",
             f"workspace_hash = {_quote(item.workspace_hash)}",
             f"passed_snapshot = {_quote(item.passed_snapshot)}",
             f"attempts = {item.attempts}",
@@ -265,11 +394,29 @@ def _array(*groups: object) -> str:
 
 
 def _atomic_write(path: Path, content: str) -> None:
+    _atomic_write_bytes(path, content.encode("utf-8"))
+
+
+def _read_regular_bytes(path: Path) -> bytes:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise StateError(f"cannot safely open learner state: {path}") from exc
+    with os.fdopen(descriptor, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise StateError(f"learner state must be a regular file: {path}")
+        return stream.read()
+
+
+def _atomic_write_bytes(path: Path, content: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink():
+        raise StateError(f"refusing to replace symlink: {path}")
     fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary = Path(temporary_name)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
+        with os.fdopen(fd, "wb") as stream:
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
@@ -294,6 +441,7 @@ class StateStore:
         route: tuple[str, ...],
         revision: str,
         prerequisites: Mapping[str, frozenset[str]],
+        baseline_providers: Mapping[str, str | None],
     ):
         self.path = Path(path)
         self.valid_ids = set(valid_ids)
@@ -303,12 +451,77 @@ class StateStore:
             stable_id: frozenset(values)
             for stable_id, values in prerequisites.items()
         }
+        self.baseline_providers = dict(baseline_providers)
         _validate_contract(
             self.valid_ids,
             self.route,
             self.revision,
             self.prerequisites,
+            self.baseline_providers,
         )
+
+    def migrate_v2(self, archive_root: Path) -> bool:
+        """Atomically archive and upgrade an existing schema-v2 state file."""
+        if self.path.is_symlink():
+            raise StateError(f"learner state must not be a symlink: {self.path}")
+        if not self.path.exists():
+            return False
+        if not self.path.is_file():
+            raise StateError(f"learner state must be a regular file: {self.path}")
+        if self.path.parent.is_symlink():
+            raise StateError(
+                f"learner state parent must not be a symlink: {self.path.parent}"
+            )
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        archive_root = Path(archive_root)
+        if archive_root.is_symlink():
+            raise StateError(
+                f"state migration archive must not be a symlink: {archive_root}"
+            )
+        if archive_root.exists() and not archive_root.is_dir():
+            raise StateError(
+                f"state migration archive must be a directory: {archive_root}"
+            )
+        lock_path = self.path.with_name(self.path.name + ".lock")
+        with lock_path.open("a+b") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                original = _read_regular_bytes(self.path)
+                try:
+                    data = tomllib.loads(original.decode("utf-8"))
+                except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+                    raise StateError(f"cannot read learner state: {exc}") from exc
+                if data.get("schema_version") == SCHEMA_VERSION:
+                    return False
+                state = migrate_v2_state(
+                    original.decode("utf-8"),
+                    self.valid_ids,
+                    self.route,
+                    self.revision,
+                    self.prerequisites,
+                    self.baseline_providers,
+                )
+                archive_root.mkdir(parents=True, exist_ok=True)
+                if archive_root.is_symlink() or not archive_root.is_dir():
+                    raise StateError(
+                        "state migration archive must be an existing real directory: "
+                        f"{archive_root}"
+                    )
+                digest = hashlib.sha256(original).hexdigest()
+                archive = archive_root / f"state-schema-v2-{digest}.toml"
+                if archive.is_symlink():
+                    raise StateError(
+                        f"state migration archive must not be a symlink: {archive}"
+                    )
+                if archive.exists():
+                    if not archive.is_file() or archive.read_bytes() != original:
+                        raise StateError(f"state migration archive mismatch: {archive}")
+                else:
+                    _atomic_write_bytes(archive, original)
+                _atomic_write(self.path, dump_state(state))
+                return True
+            finally:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
     @contextmanager
     def locked(self) -> Iterator[LearnerState]:
@@ -322,6 +535,7 @@ class StateStore:
                 self.route,
                 self.revision,
                 self.prerequisites,
+                self.baseline_providers,
             )
             try:
                 yield state
@@ -333,6 +547,7 @@ class StateStore:
                     self.route,
                     self.revision,
                     self.prerequisites,
+                    self.baseline_providers,
                 )
                 _atomic_write(self.path, dump_state(state))
             finally:
@@ -352,6 +567,7 @@ class StateStore:
                     self.route,
                     self.revision,
                     self.prerequisites,
+                    self.baseline_providers,
                 )
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)

@@ -277,11 +277,15 @@ Tests:
 - Route insertion preserves prerequisite-closed historical completion.
 - An unknown source revision fails with a precise migration error.
 
-### Lineage adoption blockers
+### Lineage provenance
 
-Derived baseline selection identifies the expected provider but does not yet prove snapshot provenance.
+Implementation: complete in learner-state schema version 3.
+
 Snapshot manifests are keyed by the intrinsic tree hash, so adding provider identity or curriculum revision to them would create identity collisions for identical content.
-The pending v3 learner-state schema must instead record `baseline_provider` beside `baseline_hash`, and restore/materialization must validate that provider ID and the state's curriculum revision while the snapshot manifest remains content-intrinsic.
+Learner state records `baseline_provider` beside `baseline_hash`, while snapshot manifests remain content-intrinsic.
+Template baselines store an empty provider; inherited baselines store the exact catalog-derived stable ID.
+State validation rejects missing, unknown, mismatched, or incomplete providers.
+The explicit schema-v2 migration archives the original bytes, derives provenance once from the authoritative catalog, writes schema version 3 atomically, and never falls back to inference when loading version-3 state.
 
 The learner build path also currently assumes the module artifact is `hello.ko`, while the target cumulative module is `rootkitlings.ko`.
 The course registry should define one authoritative default module artifact, with an exercise-level override only where needed, rather than duplicating the same output name across every exercise.

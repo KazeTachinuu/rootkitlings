@@ -244,6 +244,49 @@ class MigrationTests(unittest.TestCase):
         )
         self.assertEqual(verified.exercises["foundation"].passed_snapshot, HASH_A)
 
+    def test_compatible_snapshot_records_destination_provider_provenance(self) -> None:
+        source_contract = CurriculumContract(
+            "old",
+            frozenset({"base", "child"}),
+            ("base", "child"),
+            {"base": frozenset(), "child": frozenset({"base"})},
+            {"base": None, "child": "base"},
+        )
+        destination_contract = CurriculumContract(
+            "new",
+            frozenset({"base", "child"}),
+            ("base", "child"),
+            {"base": frozenset(), "child": frozenset({"base"})},
+            {"base": None, "child": "base"},
+        )
+        source = LearnerState(
+            "old",
+            ("base", "child"),
+            {"base", "child"},
+            {
+                "base": ExerciseState(HASH_A, HASH_A, HASH_A),
+                "child": ExerciseState(
+                    HASH_B, HASH_B, HASH_B,
+                    baseline_provider="base",
+                ),
+            },
+        )
+        plan = MigrationPlan(
+            "old",
+            "new",
+            {},
+            frozenset(),
+            compatible_snapshots=(SnapshotCompatibility("child", "child"),),
+        )
+        migrated = apply_migration(
+            source,
+            plan,
+            source_contract,
+            destination_contract,
+            lambda *_arguments: True,
+        )
+        self.assertEqual(migrated.exercises["child"].baseline_provider, "base")
+
     def test_file_migration_archives_exact_bytes_before_replacement(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

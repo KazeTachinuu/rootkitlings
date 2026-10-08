@@ -1,0 +1,92 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+ROOT=$HERE
+while [[ ! -f $ROOT/course.toml ]]; do
+	parent=$(dirname "$ROOT")
+	[[ $parent != "$ROOT" ]] || die "cannot find repository root from: $HERE"
+	ROOT=$parent
+done
+
+(( $# == 2 )) || die "usage: ${0##*/} WORKSPACE STARTING_SNAPSHOT"
+workspace=$(realpath -e -- "$1") || die "workspace not found: $1"
+baseline=$(realpath -e -- "$2") || die "starting snapshot not found: $2"
+for pair in "workspace:$workspace" "starting snapshot:$baseline"; do
+	label=${pair%%:*}; directory=${pair#*:}
+	[[ -d $directory && ! -L $directory ]] || die "$label must be a real directory"
+	for path in Kbuild core/main.c; do
+		[[ -f $directory/$path && ! -L $directory/$path ]] || die "$label is missing regular file: $path"
+	done
+done
+[[ -d $KDIR ]] || die "kernel build directory not found: $KDIR"
+
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r03-check.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+copy_tree()
+{
+	local source=$1 destination=$2
+	mkdir -p "$destination/core"
+	cp -p "$source/Kbuild" "$destination/Kbuild"
+	cp -p "$source/core/main.c" "$destination/core/main.c"
+}
+
+build_variant()
+{
+	local source=$1 name=$2 point=$3
+	local destination=$scratch/$name log=$scratch/$name.log
+	copy_tree "$source" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
+		cat "$log" >&2
+		die "$name build failed"
+	fi
+	if grep -q 'warning:' "$log"; then cat "$log" >&2; die "$name builds with warnings"; fi
+	[[ -f $destination/rootkitlings.ko ]] || die "$name did not produce rootkitlings.ko"
+}
+
+build_variant "$baseline" baseline 0
+build_variant "$workspace" success 0
+build_variant "$workspace" rejected 1
+
+for field in license description; do
+	[[ $(modinfo -F "$field" "$scratch/success/rootkitlings.ko") == \
+		$(modinfo -F "$field" "$scratch/baseline/rootkitlings.ko") ]] ||
+		die "the inherited module $field changed"
+done
+mapfile -t linked < "$scratch/success/rootkitlings.mod"
+[[ ${linked[*]} == './core/main.o' ]] || die "the module must still link only core/main.o"
+
+unknown=$scratch/unknown
+copy_tree "$workspace" "$unknown"
+if make -s -C "$KDIR" M="$unknown" W=1 ROOTKITLINGS_FAIL_POINT=99 \
+	modules >"$scratch/unknown.log" 2>&1; then
+	die "unknown failure-point value compiled successfully"
+fi
+grep -Fq 'unknown ROOTKITLINGS_FAIL_POINT' "$scratch/unknown.log" || {
+	cat "$scratch/unknown.log" >&2
+	die "unknown failure point failed for the wrong reason"
+}
+printf '[+] inherited metadata and build-time failure selection verified\n'
+
+run_guest()
+{
+	local check=$1 module=$2 expected=$3 output
+	if ! output=$("$ROOT/vm/boot" --check "$check" "$module" 2>&1); then
+		printf '%s\n' "$output" >&2
+		die "disposable guest did not complete"
+	fi
+	printf '%s\n' "$output"
+	grep -Fq "$expected" <<< "$output" || die "guest did not report: $expected"
+	grep -Fq '[+] PASSED' <<< "$output" || die "guest checks did not pass"
+}
+
+run_guest "$HERE/failed-guest-check" "$scratch/rejected/rootkitlings.ko" \
+	'loader reported ECANCELED'
+run_guest "$HERE/../support/module-lifecycle-check" "$scratch/success/rootkitlings.ko" \
+	'results: 15 passed, 0 failed'

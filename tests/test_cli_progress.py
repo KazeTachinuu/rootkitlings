@@ -32,6 +32,7 @@ class ProgressResetCLITests(unittest.TestCase):
             self.globals["ROUTE"],
             self.globals["CAT"].revision,
             self.globals["COMPLETION_DEPENDENCIES"],
+            self.globals["BASELINE_PROVIDERS"],
         )
         self.globals["setup"]()
 
@@ -49,6 +50,52 @@ class ProgressResetCLITests(unittest.TestCase):
         with redirect_stdout(output):
             self.globals["cmd_progress_reset"](arguments)
         return output.getvalue()
+
+    def test_start_records_template_and_inherited_baseline_provenance(self) -> None:
+        first, second = (
+            self.globals["CAT"].by_id[stable_id]
+            for stable_id in self.globals["ROUTE"][:2]
+        )
+        with redirect_stdout(io.StringIO()):
+            self.globals["cmd_start"]([first.serial])
+        with self.globals["STORE"].locked() as state:
+            first_record = state.exercises[first.id]
+            self.assertEqual(first_record.baseline_provider, "")
+            state.completed.add(first.id)
+            first_record.passed_snapshot = first_record.baseline_hash
+        with redirect_stdout(io.StringIO()):
+            self.globals["cmd_start"]([second.serial])
+        with self.globals["STORE"].read_locked() as state:
+            self.assertEqual(
+                state.exercises[second.id].baseline_provider,
+                first.id,
+            )
+        self.globals["record_attempt"](second, False)
+        with self.globals["STORE"].read_locked() as state:
+            self.assertEqual(
+                state.exercises[second.id].baseline_provider,
+                first.id,
+            )
+
+    def test_restore_preserves_baseline_provider(self) -> None:
+        first, second = (
+            self.globals["CAT"].by_id[stable_id]
+            for stable_id in self.globals["ROUTE"][:2]
+        )
+        with redirect_stdout(io.StringIO()):
+            self.globals["cmd_start"]([first.serial])
+        with self.globals["STORE"].locked() as state:
+            record = state.exercises[first.id]
+            state.completed.add(first.id)
+            record.passed_snapshot = record.baseline_hash
+        with redirect_stdout(io.StringIO()):
+            self.globals["cmd_start"]([second.serial])
+            self.globals["cmd_restore"]([second.serial])
+        with self.globals["STORE"].read_locked() as state:
+            self.assertEqual(
+                state.exercises[second.id].baseline_provider,
+                first.id,
+            )
 
     def test_required_reset_archives_and_clears_suffix_only(self) -> None:
         route = self.globals["ROUTE"]

@@ -1,0 +1,24 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Precise failed initialization"
+
+if output=$(insmod /rootkitlings/rootkitlings.ko 2>&1); then
+	_fail "failure-point module loaded unexpectedly"
+else
+	case $output in
+		*"Operation canceled"*) _ok "loader reported ECANCELED" ;;
+		*) _fail "loader did not report ECANCELED: $output" ;;
+	esac
+fi
+
+assert_absent /sys/module/rootkitlings
+if grep -q '^rootkitlings ' /proc/modules; then
+	_fail "rootkitlings appears in /proc/modules after rejected init"
+else
+	_ok "rootkitlings is absent from /proc/modules"
+fi
+
+summary
+

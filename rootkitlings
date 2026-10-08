@@ -70,12 +70,19 @@ COMPLETION_DEPENDENCIES = {
     exercise.id: frozenset(CAT.completion_dependencies(exercise))
     for exercise in CAT.exercises
 }
+BASELINE_PROVIDERS = {
+    exercise.id: (
+        provider.id if (provider := CAT.baseline_provider(exercise)) else None
+    )
+    for exercise in CAT.exercises
+}
 STORE = StateStore(
     STATE,
     set(CAT.by_id),
     ROUTE,
     CAT.revision,
     COMPLETION_DEPENDENCIES,
+    BASELINE_PROVIDERS,
 )
 
 
@@ -84,6 +91,7 @@ def setup():
         path.mkdir(parents=True, exist_ok=True)
         if path.is_symlink():
             die(f'Runtime directory must not be a symlink: {path.relative_to(ROOT)}')
+    STORE.migrate_v2(ARCHIVE)
 
 
 def label(item):
@@ -211,6 +219,8 @@ def cmd_start(a):
         else:
             materialize_workspace(x, s)
             r.baseline_hash, _ = create_snapshot(p, PASSED, x.workspace.files)
+            provider = CAT.baseline_provider(x)
+            r.baseline_provider = provider.id if provider else ''
             r.workspace_hash = canonical_tree_hash(p, x.workspace.files)
         head(f'{label(x)}: {x.title}')
         for q in x.workspace.editable:
@@ -292,6 +302,8 @@ def cmd_build(a):
                 PASSED,
                 x.workspace.files,
             )
+            provider = CAT.baseline_provider(x)
+            record.baseline_provider = provider.id if provider else ''
             record.workspace_hash = canonical_tree_hash(
                 workspace,
                 x.workspace.files,
