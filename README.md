@@ -15,6 +15,7 @@ Run `./rootkitlings prereq L00` for the canonical course-entry list.
 
 ```sh
 make doctor
+./rootkitlings setup
 ./rootkitlings setup --accept
 ./rootkitlings read L00
 ./rootkitlings start L00
@@ -23,7 +24,8 @@ $EDITOR .rootkitlings/work/module-lifecycle/hello.c
 ```
 
 `make doctor` reports missing kernel artifacts, tools, and module dependencies.
-`setup --accept` records your authorization assertion and verifies the disposable guest boundary.
+`setup` shows the authorization and guest boundary.
+`setup --accept` verifies that boundary, then records the local acknowledgement.
 KVM is optional.
 
 ## Work
@@ -64,7 +66,7 @@ They combine ownership, failure handling, concurrency, and defensive observation
 ## Workspace
 
 ```text
-course.toml              route, aliases, and controlled vocabularies
+course.toml              route and controlled vocabularies
 lings/                   focused lesson contracts and metadata
 capstones/               integration contracts and metadata
 curriculum/templates/    immutable starting code

@@ -11,7 +11,7 @@ A mandatory authorization and containment setup gate sits before that route and 
 
 ### 0. Require the unscored setup gate
 
-Implementation: pending.
+Implementation: complete.
 
 The setup gate is outside the exercise catalog and required route.
 It grants no completion, has no learner solution, and must pass before commands that build or execute course work.
@@ -21,6 +21,10 @@ Acceptance requires explicit authorization, a disposable pinned guest, no persis
 Changing a relevant boundary setting invalidates the acknowledgement.
 Status and list output may report the gate separately but must not count it among the 44 scored checkpoints.
 Networking exercises may later enable only capabilities declared by their metadata; the gate verifies the default module-free guest, not a course-wide ban.
+
+`setup` shows the boundary and current state without recording acceptance.
+`setup --accept` runs the host diagnostic and module-free containment probe before writing a private local stamp tied to the policy, course revision, host kernel, and exact VM boundary inputs.
+`start`, `build`, `check`, `run`, and `gdb` require a current stamp; reading and recovery commands remain available.
 
 ### 1. Generate aliases from canonical course order
 
@@ -173,7 +177,7 @@ Still pending:
 ### 4. Support explicit state migration
 
 Implementation: generic state and migration foundations are complete.
-The reviewed 65-to-44 plan, workspace relocation, and CLI orchestration remain pending.
+The reviewed 65-to-44 mapping, workspace relocation, and route-specific migration orchestration remain pending.
 
 The former exact-prefix rule conflicted with the requirement that a curriculum reorder not change the meaning of saved progress.
 Inserting a new checkpoint before completed stable IDs turns valid historical completion into a non-prefix set.

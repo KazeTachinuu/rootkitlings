@@ -1,7 +1,7 @@
 KDIR ?= /lib/modules/$(shell uname -r)/build
 MODULE_DIR ?=
 
-.PHONY: all help module clean compile-db test-solutions doctor validate validate-quick vm tools
+.PHONY: all help module clean compile-db test-solutions doctor validate validate-quick tools
 
 .DEFAULT_GOAL := help
 
@@ -11,12 +11,12 @@ help:
 	@printf '%s\n' \
 		'Rootkitlings maintainer targets:' \
 		'  tools           Build guest-side verification tools' \
+		'  clean           Remove generated verification tools' \
 		'  doctor          Check host dependencies' \
 		'  validate        Run the full repository validation' \
 		'  validate-quick  Run static validation only' \
 		'  test-solutions  Build and test reference solutions' \
-		'  compile-db      Generate compile_commands.json' \
-		'  vm              Build and boot L00'
+		'  compile-db      Generate compile_commands.json'
 
 module:
 	@test -n "$(MODULE_DIR)" || { echo 'MODULE_DIR is required' >&2; exit 2; }
@@ -37,26 +37,16 @@ tools/module_load_test: tools/module_load_test.c
 	$(CC) -static -o $@ $<
 
 clean:
-	@workspace_id=$$("$(CURDIR)/scripts/catalog" query L00 id); \
-	workspace="$(CURDIR)/.rootkitlings/work/$$workspace_id"; \
-	if [ -d "$$workspace" ]; then "$(CURDIR)/rootkitlings" clean L00; fi
 	$(RM) tools/cred_trigger_test tools/icmp_send tools/ioctl_test tools/module_load_test
 
 doctor:
 	@"$(CURDIR)/scripts/doctor"
-	@printf '%s\n' 'Next: ./rootkitlings setup --accept'
+	@printf '%s\n' 'Next: ./rootkitlings setup'
 
 compile-db:
 	@"$(CURDIR)/rootkitlings" start L00
 	bear -- "$(CURDIR)/rootkitlings" build L00
 	@python3 scripts/expand-compile-db
-
-vm: tools
-	@"$(CURDIR)/rootkitlings" start L00
-	@"$(CURDIR)/rootkitlings" build L00
-	@workspace_id=$$("$(CURDIR)/scripts/catalog" query L00 id); \
-	module_artifact=$$("$(CURDIR)/scripts/catalog" query L00 module_artifact); \
-	"$(CURDIR)/vm/boot" "$(CURDIR)/.rootkitlings/work/$$workspace_id/$$module_artifact"
 
 validate:
 	@"$(CURDIR)/scripts/validate"
