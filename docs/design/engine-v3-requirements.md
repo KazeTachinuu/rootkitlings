@@ -288,6 +288,20 @@ Completed changes:
   rebase operation.
 - Remove the unused lower-level `restart_workspace()` primitive.
 
+### Exact prerequisite output
+
+Implementation: selective assumption rendering and redundant-edge validation are complete; final target metadata still needs an asset-by-asset knowledge audit.
+
+`prerequisites` contains direct exercise gates only.
+The catalog rejects duplicate edges and an edge already implied through another direct prerequisite.
+
+`requires` contains every concept or general competency the learner applies in that checkpoint but does not learn there.
+An entry in the course-level `assumptions` registry is not displayed globally; its competency text appears only when the exercise names that concept in `requires`.
+The CLI never dumps transitive concept closure by default.
+
+This keeps `prereq` exhaustive for the selected task without repeating the whole course or attaching networking knowledge to L00.
+Broad assumption bundles must be split when final assets need only part of the bundle; metadata must not use prose placeholders such as `baseline assumptions` or `baseline networking`.
+
 ## Dependency-ordered implementation and tests
 
 ### 1. Course registry and catalog ordering

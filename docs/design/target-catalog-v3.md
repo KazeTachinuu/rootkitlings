@@ -5,6 +5,7 @@ Status: approved design input; not yet the public route.
 This document translates the curriculum migration map into an exact target catalog.
 Stable IDs are semantic; aliases are presentation-only.
 Direct prerequisites deliberately omit transitive duplicates.
+`Requires` names only knowledge applied by that checkpoint and not taught there; it never stands for every concept reachable through prerequisite closure.
 
 Stage keys: `S1=module-core`, `S2=control-execution`, `S3=identity-observation`, `S4=views-detection`, `S5=network-state`, `S6=authenticated-operations`, and `E=electives`.
 
@@ -21,13 +22,36 @@ This gate is outside lesson aliases, prerequisites, completion counts, and the c
 It does not claim to prove legal authorization; the learner remains responsible for using only systems they are permitted to test.
 Later networking checks may enable only the capability declared by their exercise metadata; that exception does not weaken the default guest boundary.
 
+## Entry knowledge
+
+These are general competencies learned outside the course.
+They appear in `prereq` only where first needed, through the same `requires` field as course-taught concepts.
+
+| ID | Required competency | First use |
+|---|---|---|
+| `c-functions-and-errors` | Read small C functions, control flow, return values, and compiler diagnostics. | L00 |
+| `shell-and-paths` | Run commands, navigate paths, and edit files in a POSIX-like shell. | L00 |
+| `host-guest-kernel-boundary` | Distinguish the host from the disposable guest and userspace from kernel space. | L00 |
+| `c-preprocessor` | Read macro calls, compile-time definitions, conditional compilation, and `#error`. | L01 |
+| `c-pointers-and-structs` | Work with pointers, `NULL`, struct declarations, arrays, and function declarations. | L02 |
+| `linux-process-basics` | Recognize processes, threads, PIDs, signals, and the current executing task. | L12 |
+| `linux-identity-basics` | Recognize users, groups, real/effective IDs, and namespaces as distinct identity contexts. | L13 |
+| `ipv4-packet-basics` | Recognize the IPv4 header and distinguish ICMP, TCP, and UDP payloads. | L23 |
+| `transport-endpoint-basics` | Recognize addresses, ports, stream sockets, and datagram sockets. | L28 |
+| `dns-name-basics` | Read a dot-separated DNS name as a sequence of labels. | L30 |
+| `linux-file-permission-basics` | Understand paths, ownership, permission bits, and file descriptors. | L31 |
+| `file-descriptor-basics` | Understand open file descriptors and userspace read, write, and ioctl calls. | E02 |
+
+Final metadata must be checked against each completed asset.
+An unused general competency is omitted rather than attached to L00 as a course-wide bundle.
+
 ## Required lessons
 
 | Alias | Stable ID / title | Stage | Direct prerequisites | Teaches | Requires | Tradecraft | Current sources | Assets |
 |---|---|---|---|---|---|---|---|---|
-| L00 | `module-build-lifecycle` — Build, load, inspect, and unload a module | S1 | — | `module-lifecycle`, `module-build`, `module-inspection` | baseline assumptions | lifecycle, detection | L00, L01 | adapt |
-| L01 | `precise-init-failure` — Reject initialization with a precise error | S1 | `module-build-lifecycle` | `init-failure`, `errno-propagation`, `build-time-failure-injection` | `module-lifecycle` | lifecycle, detection | L04 | adapt |
-| L02 | `owned-kernel-state` — Build and own private heap state | S1 | `precise-init-failure` | `multi-file-modules`, `component-ownership`, `kernel-allocation`, `error-pointers`, `pointer-invalidation` | `module-build`, `init-failure`, `errno-propagation`, `build-time-failure-injection` | lifecycle, detection | L02, L07, L12 | adapt |
+| L00 | `module-build-lifecycle` — Build, load, inspect, and unload a module | S1 | — | `module-lifecycle`, `module-build`, `module-inspection` | `c-functions-and-errors`, `shell-and-paths`, `host-guest-kernel-boundary` | lifecycle, detection | L00, L01 | adapt |
+| L01 | `precise-init-failure` — Reject initialization with a precise error | S1 | `module-build-lifecycle` | `init-failure`, `errno-propagation`, `build-time-failure-injection` | `module-lifecycle`, `c-preprocessor` | lifecycle, detection | L04 | adapt |
+| L02 | `owned-kernel-state` — Build and own private heap state | S1 | `precise-init-failure` | `multi-file-modules`, `component-ownership`, `kernel-allocation`, `error-pointers`, `pointer-invalidation` | `module-build`, `init-failure`, `errno-propagation`, `build-time-failure-injection`, `c-pointers-and-structs` | lifecycle, detection | L02, L07, L12 | adapt |
 | L03 | `proc-publication` — Publish and roll back a procfs entry | S1 | `owned-kernel-state` | `initialization-rollback`, `resource-ownership`, `proc-entry`, `proc-publication-lifetime` | `init-failure`, `errno-propagation`, `component-ownership`, `kernel-allocation`, `error-pointers`, `pointer-invalidation`, `build-time-failure-injection` | lifecycle, control, detection | L08, L09 | adapt |
 | L04 | `proc-read-contract` — Expose a bounded procfs state snapshot | S2 | `proc-publication` | `proc-read`, `bounded-read-contract` | `proc-entry` | control, detection | L10 | adapt |
 | L05 | `bounded-write-transaction` — Accept a bounded userspace write transaction | S2 | `proc-publication` | `proc-write`, `bounded-user-copy`, `copy-validate-commit` | `init-failure`, `proc-entry` | control | L11 | adapt |
@@ -37,8 +61,8 @@ Later networking checks may enable only the capability declared by their exercis
 | L09 | `execution-context` — Choose a legal execution context | S2 | `proc-publication` | `execution-context`, `sleepability`, `atomic-context-rules` | `resource-ownership` | lifecycle, execution | fragments only | new |
 | L10 | `timer-workqueue-scheduler` — Defer timer work into process context | S2 | `state-invariant-selection`, `execution-context` | `kernel-timers`, `workqueues`, `deferred-work-lifecycle` | `state-invariant-selection`, `execution-context` | execution, lifecycle | L17, L18 | adapt |
 | L11 | `event-driven-kernel-thread` — Run and stop an event-driven kernel thread | S2 | `state-invariant-selection`, `execution-context` | `kernel-threads`, `wait-queues`, `worker-stop-lifecycle` | `error-pointers`, `state-invariant-selection`, `execution-context` | execution, lifecycle | L19, L23, part of L12 | adapt |
-| L12 | `current-task-attribution` — Attribute an operation to the current task | S3 | `proc-read-contract` | `current-task`, `task-attribution` | `proc-read` | instrumentation, detection | L24 | adapt |
-| L13 | `linux-credential-model` — Interpret Linux credentials correctly | S3 | `current-task-attribution` | `task-credentials`, `namespace-id-translation` | `current-task` | privilege, detection | L25 | adapt |
+| L12 | `current-task-attribution` — Attribute an operation to the current task | S3 | `proc-read-contract` | `current-task`, `task-attribution` | `proc-read`, `linux-process-basics` | instrumentation, detection | L24 | adapt |
+| L13 | `linux-credential-model` — Interpret Linux credentials correctly | S3 | `current-task-attribution` | `task-credentials`, `namespace-id-translation` | `current-task`, `linux-identity-basics` | privilege, detection | L25 | adapt |
 | L14 | `transactional-credential-replacement` — Replace credentials transactionally | S3 | `bounded-write-transaction`, `linux-credential-model` | `credential-replacement` | `kernel-allocation`, `copy-validate-commit`, `task-credentials` | privilege | L26 | adapt |
 | L15 | `one-use-authorization` — Authorize a one-use action with fresh state | S3 | `state-invariant-selection`, `transactional-credential-replacement` | `kernel-randomness`, `one-use-authorization`, `replay-rejection` | `mutex-protected-invariants`, `credential-replacement` | privilege, control, cryptography | L28, C03 state machine | adapt |
 | L16 | `pinned-symbol-resolution` — Resolve symbols under a pinned ABI contract | S3 | `execution-context` | `symbol-resolution`, `kernel-abi-contract` | `component-ownership`, `execution-context` | instrumentation, lifecycle | L27 | adapt |
@@ -48,15 +72,15 @@ Later networking checks may enable only the capability declared by their exercis
 | L20 | `module-view-suppression` — Alter one module view without claiming invisibility | S4 | `owned-configuration-store`, `cross-view-evidence` | `module-list-hiding`, `sysfs-artifacts`, `reversible-view-suppression` | `kernel-lists`, `cross-view-evidence` | concealment, detection | L34, L35 | adapt |
 | L21 | `packed-directory-filter` — Filter packed directory records safely | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `directory-filtering`, `packed-record-validation` | `kernel-allocation`, `syscall-argument-decoding`, `cross-view-evidence` | concealment, detection | L36 | adapt |
 | L22 | `bounded-rendered-filter` — Filter a bounded rendered result | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `read-view-filtering`, `bounded-rendered-filter` | `kretprobes`, `cross-view-evidence` | concealment, detection | L37 | adapt |
-| L23 | `hostile-packet-lengths` — Parse hostile packet lengths before touching payload | S5 | `execution-context` | `packet-length-validation`, `network-byte-order-policy` | `execution-context`, baseline networking | networking, detection | fragments in L41/L42/L44/L46 | new |
+| L23 | `hostile-packet-lengths` — Parse hostile packet lengths before touching payload | S5 | `execution-context` | `packet-length-validation`, `network-byte-order-policy` | `execution-context`, `ipv4-packet-basics` | networking, detection | fragments in L41/L42/L44/L46 | new |
 | L24 | `safe-skb-access` — Read an sk_buff without assuming linear storage | S5 | `hostile-packet-lengths` | `skb-safe-access`, `nonlinear-packet-access` | `packet-length-validation` | networking | hidden in current scaffolds | new |
 | L25 | `netfilter-observer` — Register a non-disruptive Netfilter observer | S5 | `safe-skb-access` | `netfilter-hooks`, `accept-by-default-observation` | `resource-ownership`, `execution-context`, `skb-safe-access` | networking, instrumentation, detection | L40 | adapt |
 | L26 | `validated-packet-classification` — Classify only fully validated packets | S5 | `netfilter-observer` | `packet-classification`, `malformed-input-state-preservation` | `netfilter-hooks`, `skb-safe-access` | networking, detection | L41, predicate portion of L42 | adapt |
 | L27 | `writable-packet-mutation` — Mutate a writable packet and repair checksum state | S5 | `validated-packet-classification` | `packet-redirection`, `packet-copy-on-write`, `checksum-repair` | `packet-classification` | networking | L44 | adapt |
-| L28 | `kernel-socket-ownership` — Own a kernel socket from creation through release | S5 | `execution-context` | `kernel-sockets`, `socket-lifecycle` | `resource-ownership`, `execution-context` | networking, lifecycle, detection | L43 | adapt |
+| L28 | `kernel-socket-ownership` — Own a kernel socket from creation through release | S5 | `execution-context` | `kernel-sockets`, `socket-lifecycle` | `resource-ownership`, `execution-context`, `transport-endpoint-basics` | networking, lifecycle, detection | L43 | adapt |
 | L29 | `tcp-framing-cancellation` — Frame and cancel a TCP client correctly | S5 | `event-driven-kernel-thread`, `kernel-socket-ownership` | `tcp-framing`, `blocked-io-cancellation`, `connect-back-agent` | `worker-stop-lifecycle`, `socket-lifecycle` | networking, control, execution | transport portion of C07 | adapt |
-| L30 | `bounded-dns-wire-name` — Encode and decode a bounded DNS wire name | S5 | `hostile-packet-lengths` | `dns-wire-encoding` | `packet-length-validation`, baseline networking | networking | L47 | adapt |
-| L31 | `guarded-file-transaction` — Apply and conditionally roll back a file transaction | S5 | `execution-context` | `kernel-file-transactions`, `foreign-file-ownership` | `kernel-allocation`, `resource-ownership`, `execution-context` | persistence, lifecycle, detection | L48 | adapt |
+| L30 | `bounded-dns-wire-name` — Encode and decode a bounded DNS wire name | S5 | `hostile-packet-lengths` | `dns-wire-encoding` | `packet-length-validation`, `dns-name-basics` | networking | L47 | adapt |
+| L31 | `guarded-file-transaction` — Apply and conditionally roll back a file transaction | S5 | `execution-context` | `kernel-file-transactions`, `foreign-file-ownership` | `kernel-allocation`, `resource-ownership`, `execution-context`, `linux-file-permission-basics` | persistence, lifecycle, detection | L48 | adapt |
 | L32 | `protection-property-selection` — Choose the protection property before the primitive | S6 | `bounded-dns-wire-name` | `protection-property-selection`, `xor-obfuscation`, `traffic-analysis-limits` | `dns-wire-encoding` | cryptography, detection | L49 demonstration | adapt |
 | L33 | `sha256-verification` — Compute and verify SHA-256 correctly | S6 | `protection-property-selection` | `kernel-crypto-api`, `sha256-verification` | `kernel-allocation`, `protection-property-selection` | cryptography, detection | L51 | adapt |
 | L34 | `authenticated-replay-safe-message` — Authenticate a message and reject replay | S6 | `one-use-authorization`, `sha256-verification` | `hmac-authentication`, `replay-resistant-state` | `replay-rejection`, `kernel-crypto-api`, `sha256-verification` | cryptography, control, detection | L52 plus missing replay policy | adapt |
@@ -85,8 +109,8 @@ Their member exercises remain ordinary elective lessons; a track is a named, ord
 | Alias | Stable ID / title | Kind/status | Direct prerequisites | Teaches | Requires | Tradecraft | Sources | Assets |
 |---|---|---|---|---|---|---|---|---|
 | E01 | `kernel-debugging-track` — Kernel debugging | track/elective | `module-build-lifecycle` | `kernel-debugging` | `module-build` | instrumentation, detection | L03 | reuse/adapt only for new naming |
-| E02 | `binary-control-abi-track` — Alternate binary control ABI | track/elective | `bounded-write-transaction` | `character-devices`, `ioctl-dispatch`, `versioned-uapi`, `compat-ioctl` | `bounded-user-copy` | control | L14, L15 | adapt; versioned/compat contract is new |
-| E03 | `usermode-helper-boundary-track` — Fixed userspace-helper boundary | track/elective | `proc-publication` | `usermode-helper` | `resource-ownership` | execution, detection | L16 | adapt; remove false proc-write dependency |
+| E02 | `binary-control-abi-track` — Alternate binary control ABI | track/elective | `bounded-write-transaction` | `character-devices`, `ioctl-dispatch`, `versioned-uapi`, `compat-ioctl` | `bounded-user-copy`, `file-descriptor-basics` | control | L14, L15 | adapt; versioned/compat contract is new |
+| E03 | `usermode-helper-boundary-track` — Fixed userspace-helper boundary | track/elective | `proc-publication` | `usermode-helper` | `resource-ownership`, `linux-process-basics` | execution, detection | L16 | adapt; remove false proc-write dependency |
 | E04 | `advanced-concurrency-diagnostics-track` — Advanced concurrency and diagnostics | track/elective | `event-driven-kernel-thread` | `completions`, `dead-man-watchdog`, `lock-ordering`, `memory-ordering`, `reference-counting`, `kernel-concurrency-diagnostics` | `state-invariant-selection`, `worker-stop-lifecycle` | lifecycle, execution, detection | L21, C02, portions L20/L23 | new beyond partial sources |
 | E05 | `alternate-instrumentation-track` — Alternate instrumentation | track/elective | `managed-kprobe` | `fprobes`, `ftrace`, `tracepoints`, `defensive-bpf-comparison` | `managed-hook-lifecycle` | instrumentation, detection | L31 | new beyond fprobe material |
 | E06 | `alternate-views-storage-track` — Alternate views and hidden storage | track/elective | `packed-directory-filter`, `bounded-rendered-filter` | `log-view-filtering`, `socket-row-filtering`, `sealed-dead-drop` | `directory-filtering`, `bounded-rendered-filter`, `cross-view-evidence` | concealment, detection | L38, L39, C06 | adapt |
@@ -97,6 +121,18 @@ Their member exercises remain ordinary elective lessons; a track is a named, ord
 
 Add these genuinely new concepts:
 
+- `c-functions-and-errors`
+- `shell-and-paths`
+- `host-guest-kernel-boundary`
+- `c-preprocessor`
+- `c-pointers-and-structs`
+- `linux-process-basics`
+- `linux-identity-basics`
+- `ipv4-packet-basics`
+- `transport-endpoint-basics`
+- `dns-name-basics`
+- `linux-file-permission-basics`
+- `file-descriptor-basics`
 - `module-inspection`
 - `component-ownership`
 - `errno-propagation`
@@ -166,6 +202,9 @@ Add these genuinely new concepts:
 
 Deprecate or reclassify these current product/API-shaped concepts:
 
+- The broad `c-programming`, `unix-shell`, `linux-processes-and-files`, and
+  `networking-fundamentals` assumptions are replaced by the narrower entry
+  competencies above.
 - `multi-file-modules` remains a mechanism but is taught with
   `component-ownership` inside `owned-kernel-state`.
 - `one-time-root-trigger` becomes `one-use-authorization`.
