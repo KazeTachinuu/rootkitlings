@@ -44,7 +44,8 @@ SETUP_POLICY_TEXT = (
     'I am authorized to use this local lab. I will stop on unexpected host '
     'access, containment drift, or a kernel fault. The default guest is '
     'disposable, has no host mount, persistent disk, production data, or '
-    'network beyond loopback; later networking is metadata-declared.'
+    'network beyond loopback. Later networking lessons enable only the access '
+    'they need.'
 )
 DOCTOR_TIMEOUT = 30
 SETUP_PROBE_TIMEOUT = 60
@@ -173,16 +174,18 @@ def cmd_setup(a):
         return
     if a != ['--accept']:
         die('Usage: rootkitlings setup [--accept]')
-    info('Checking host tools and the default guest boundary')
+    info('Checking host tools')
     doctor = run(
         [str(ROOT / 'scripts/doctor')],
         timeout=DOCTOR_TIMEOUT,
         capture=True,
     )
-    if doctor.stdout:
-        print(doctor.stdout, end='')
     if doctor.returncode:
+        if doctor.stdout:
+            print(doctor.stdout, end='')
         die('Setup failed: scripts/doctor did not pass')
+    done('Host tools ready')
+    info('Checking the disposable guest boundary')
     containment = run(
         [
             str(ROOT / 'vm/boot'),
@@ -192,20 +195,30 @@ def cmd_setup(a):
         timeout=SETUP_PROBE_TIMEOUT,
         capture=True,
     )
-    if containment.stdout:
-        print(containment.stdout, end='')
     if containment.returncode or '[+] PASSED' not in (containment.stdout or ''):
+        if containment.stdout:
+            print(containment.stdout, end='')
         die('Setup failed: disposable guest containment check did not pass')
+    done('Guest boundary verified')
     write_setup_stamp(
         SETUP_STAMP,
         expected_setup_stamp(),
         checks_passed=True,
     )
     done('Setup ready')
+    info('Next: ./rootkitlings read L00')
 
 
 def label(item):
     return item.serial or item.id
+
+
+def kind_label(item):
+    return {
+        'lesson': 'Lesson',
+        'milestone': 'Milestone',
+        'capstone': 'Capstone',
+    }.get(item.kind, 'Exercise')
 
 
 def shown(p):
@@ -353,7 +366,11 @@ def cmd_read(a):
         run([viewer, '--style=plain', '--paging=never', '--language=markdown', str(p)])
     else:
         print(p.read_text(), end='')
-    info(f'Start: ./rootkitlings start {label(x)}')
+    workspace = wp(x)
+    if workspace.is_dir() and not workspace.is_symlink():
+        info(f'Next: ./rootkitlings check {label(x)}')
+    else:
+        info(f'Next: ./rootkitlings start {label(x)}')
 
 
 def cmd_hint(a):
@@ -641,7 +658,7 @@ def cmd_status(a):
     else:
         print(
             f'Setup   required ({setup_reason(gate.reason)}); '
-            'run ./rootkitlings setup --accept'
+            'run ./rootkitlings setup'
         )
     with STORE.read_locked() as s:
         x = current(s)
@@ -650,7 +667,7 @@ def cmd_status(a):
         if not x:
             print('Status  Course complete')
             return
-        print(f'Lesson  {label(x)}')
+        print(f'{kind_label(x):<10}{label(x)}')
         print(f'Title   {x.title}')
         print(f'Stage   {CAT.section(x)}')
         print(f'Difficulty {x.difficulty}')
@@ -676,7 +693,7 @@ def cmd_list(a):
         print(f'Course  {completed}/{len(ROUTE)} required complete\n')
         stage = None
         xs = CAT.ordered() + sorted(
-            (x for x in CAT.exercises if x.status != 'required'),
+            (x for x in CAT.exercises if x.status == 'elective'),
             key=lambda x: (x.stage, x.title),
         )
         for x in xs:
@@ -687,12 +704,16 @@ def cmd_list(a):
                 state = 'passed'
             elif x.id == s.current:
                 state = 'current'
-            elif x.status == 'elective':
-                state = 'elective'
+            elif x.status == 'elective' and all(
+                prerequisite in s.completed for prerequisite in x.prerequisites
+            ):
+                state = 'optional'
             else:
                 state = 'locked'
             print(f'  {state:<8} {label(x):<4} {x.title} [{x.difficulty}]')
-        print()
+        print('\nStates: passed, current, optional, locked')
+        if s.current:
+            print(f'Next: ./rootkitlings read {label(CAT.by_id[s.current])}')
 
 
 def cmd_prereq(a):
@@ -719,6 +740,7 @@ def cmd_prereq(a):
         print('\nKnowledge used')
         for c in x.requires:
             print(f'  - {CAT.concept_label(c)}')
+    info(f'Next: ./rootkitlings read {label(x)}')
 
 
 def cmd_restore(a):
