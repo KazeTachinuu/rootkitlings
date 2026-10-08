@@ -86,7 +86,8 @@ Current metadata supports arbitrary `baseline = "completion"` plus an explicit p
 The only instances form an old six-edge L00–L08 chain.
 No item has `kind = "milestone"`.
 
-The target requires five cumulative milestones and one final capstone, with each cumulative checkpoint based on the exact previous passed milestone.
+Stage 1 is one continuous construction path: R03 through R05 and M00 use `previous-required` so each checkpoint starts from the exact preceding required pass.
+Later milestones and the final capstone use `previous-milestone` so isolated lessons between integrations do not silently become cumulative providers.
 Arbitrary earlier completion parents are too permissive and duplicate route structure.
 
 Required schema:
@@ -100,16 +101,36 @@ editable = ["src/main.c"]
 build = "."
 ```
 
-Remove `workspace.parent` for this baseline.
+Both derived baselines omit `workspace.parent` and `workspace.source`.
 The catalog derives the provider from `required_route`.
+
+An inherited checkpoint may add files explicitly:
+
+```toml
+[workspace]
+mode = "cumulative"
+baseline = "previous-required"
+additions = "curriculum/additions/owned-state"
+files = ["Kbuild", "include/rootkit.h", "core/main.c", "core/state.c"]
+editable = ["Kbuild", "include/rootkit.h", "core/main.c", "core/state.c"]
+build = "."
+```
+
+`additions` is valid only for an inherited baseline.
+Provider mode and build root must match the consumer, provider files must be a subset of consumer files, and the additions directory must contain exactly the newly declared regular files.
+Existing paths always come from the verified provider snapshot; additions cannot replace, remove, or rename inherited paths.
+The field is required when files are added and forbidden when the file set is unchanged.
 
 Validation must enforce:
 
 - Exactly five required milestones and one required final capstone.
+- `previous-required` resolves to the immediate earlier item in `required_route`.
+- R03, R04, R05, and M00 use `previous-required`.
 - Each cumulative milestone after M00 derives from the preceding milestone.
 - The final capstone derives from M04.
 - A previous-milestone baseline has an actual earlier milestone.
-- Parent and child have compatible declared file sets and build roots.
+- Provider and consumer have identical workspace mode and build root.
+  Declared files are either identical or follow the explicit additive contract above.
 - Electives cannot use or modify the required cumulative lineage.
 - An elective may consume a milestone snapshot read-only, but its passed
   snapshot must never become a required milestone baseline.
@@ -117,6 +138,7 @@ Validation must enforce:
   cumulative integration.
 
 CLI `baseline()` must ask the catalog for the derived baseline provider rather than reading an exercise-local parent.
+Workspace materialization must atomically combine verified provider files with the immutable additions directory and must never source an inherited path from the additions tree.
 
 ### 4. Support explicit state migration
 
@@ -234,6 +256,10 @@ Tests:
 - A missing previous-milestone snapshot blocks materialization.
 - An elective pass cannot affect the next required milestone baseline.
 - Incompatible cumulative file or build declarations fail catalog validation.
+- Additive cumulative declarations require an exact additions tree and reject
+  removal, replacement, links, special files, and undeclared extras.
+- Atomic materialization copies inherited files from the verified provider
+  snapshot and new files from additions, preserving executable-bit class.
 - Rechecking an old milestone does not rebase an already-created later
   workspace.
 
@@ -250,6 +276,15 @@ Tests:
 - Migration failure leaves the original state byte-for-byte intact.
 - Route insertion preserves prerequisite-closed historical completion.
 - An unknown source revision fails with a precise migration error.
+
+### Lineage adoption blockers
+
+Derived baseline selection identifies the expected provider but does not yet prove snapshot provenance.
+Snapshot manifests are keyed by the intrinsic tree hash, so adding provider identity or curriculum revision to them would create identity collisions for identical content.
+The pending v3 learner-state schema must instead record `baseline_provider` beside `baseline_hash`, and restore/materialization must validate that provider ID and the state's curriculum revision while the snapshot manifest remains content-intrinsic.
+
+The learner build path also currently assumes the module artifact is `hello.ko`, while the target cumulative module is `rootkitlings.ko`.
+The course registry should define one authoritative default module artifact, with an exercise-level override only where needed, rather than duplicating the same output name across every exercise.
 
 ### 4. Track-aware CLI behavior
 

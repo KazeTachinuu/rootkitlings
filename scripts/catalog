@@ -103,6 +103,7 @@ def main() -> int:
                         "editable": list(item.workspace.editable), "build": item.workspace.build,
                         "baseline": item.workspace.baseline,
                         "parent": item.workspace.parent or None,
+                        "additions": item.workspace.additions or None,
                     },
                     "resources": {
                         "readme": item.resources.readme, "check": item.resources.check,

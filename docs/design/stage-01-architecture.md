@@ -1,135 +1,231 @@
 # Stage 1 cumulative architecture
 
 Status: accepted architecture decision for the Stage 1 incubation route.
-It does not change the public route or authorize implementation outside the incubator.
+It does not change the public route.
 
-## Decision summary
+## Decision
 
-Stage 1 grows one module through R02–R06 and then checks it at the first milestone.
-The migration map calls that milestone M01; the generated public serial will be M00 because it is the first milestone.
-This document uses **M00 (Inspectable core)** below.
+Stage 1 grows one `rootkitlings.ko` module without predeclared placeholder files or temporary APIs.
+Each file appears only when its mechanism becomes active:
 
-The cumulative tree has five files from R02 onward, one component owns each resource, build-time failure injection is deterministic, status publication waits for Stage 2, and allocator tracepoints provide evidence independent of module logs.
+| Checkpoint | Declared workspace paths | Mechanism introduced |
+|---|---|---|
+| R02 Module lifecycle | `Kbuild`, `core/main.c` | External build, metadata, load, unload |
+| R03 Precise failed init | unchanged | Build-time failure input and exact preflight rejection |
+| R04 Owned state | add `include/rootkit.h`, `core/state.c` | Composite linking, opaque ownership boundary, heap lifetime, error-pointer contract |
+| R05 Reverse rollback | add `status/status.c` | Second owned resource and reverse partial-init unwind |
+| M00 Inspectable core | unchanged from R05 | Integrated failure, cleanup, reload, and allocator evidence |
 
-## Fixed cumulative tree
+The migration map's first milestone is named M01 conceptually; generated milestone serials begin at M00.
+This document uses **M00 (Inspectable core)**.
 
-R02 creates the complete file set:
+There is no separate “owned components” checkpoint.
+Composite Kbuild and private headers are supporting techniques taught when R04 uses them for real state ownership.
+
+## Stable module identity
+
+The artifact basename and module inventory name are stable Stage 1 ABI constants:
 
 ```text
-Kbuild
-include/rootkit.h
-core/main.c
-core/state.c
-status/status.c
+rootkitlings.ko
+/sys/module/rootkitlings
+rootkitlings in /proc/modules
 ```
 
-Every R02, R03, R04, R05, R06, and M00 workspace declares exactly these paths and `build = "."`.
-Files that are not yet pedagogically active contain the smallest warning-free private stub; later lessons replace a stub but never add, remove, or rename a declared file.
-This constraint makes completion snapshots byte-addressable and compatible without teaching filesystem migration in the middle of the stage.
-
-`Kbuild` always produces `rootkitlings.ko` from the three objects.
-The artifact basename and resulting module inventory name `rootkitlings` are stable cumulative ABI constants:
+R02 builds one object:
 
 ```make
 obj-m += rootkitlings.o
-rootkitlings-y := core/main.o core/state.o status/status.o
+rootkitlings-y := core/main.o
+```
+
+R04 changes the existing Kbuild when the state component becomes real:
+
+```make
+obj-m += rootkitlings.o
+rootkitlings-y := core/main.o core/state.o
 ccflags-y += -I$(src)/include
+```
+
+R05 appends the real status object:
+
+```make
+rootkitlings-y := core/main.o core/state.o status/status.o
+```
+
+No earlier lesson ships an empty state/status translation unit, declares an unused ownership API, or asks the learner to implement a function that is replaced before it is consumed.
+
+## R02: module lifecycle
+
+R02 owns only `Kbuild` and `core/main.c`.
+`core/main.c` registers successful init and exit callbacks and declares the GPL license and `Rootkitlings module lifecycle` description.
+
+Independent evidence is the warning-free external build, static metadata and lifecycle symbols, successful insertion, agreement between `/proc/modules` and `/sys/module/rootkitlings`, disappearance after removal, and immediate reload.
+Module logs may aid diagnosis but never prove presence or cleanup.
+
+## R03: precise failed initialization
+
+R03 keeps the two R02 paths and introduces deterministic build-time failure injection.
+Kbuild supplies an overridable default:
+
+```make
+ROOTKITLINGS_FAIL_POINT ?= 0
 ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)
 ```
 
-The implementation must provide a default of `0` when `ROOTKITLINGS_FAIL_POINT` is unset.
-Concretely, `Kbuild` sets `ROOTKITLINGS_FAIL_POINT ?= 0` before using it in `ccflags-y`.
-Checks choose a value on the external-module build command line; learners do not edit source between failure cases.
+`core/main.c` defines only the values needed so far:
 
-## Permanent ownership and API
+```c
+enum rk_fail_point {
+	RK_FAIL_NONE = 0,
+	RK_FAIL_PREFLIGHT = 1,
+};
+```
 
-This is a specific module architecture, not a generic resource framework.
+Unknown values fail compilation.
+Value 1 makes init return `-ECANCELED` before acquiring any resource.
+Value 0 preserves the R02 successful lifecycle.
 
-### `core/main.c`
+The check performs clean external-module builds for both values.
+For value 1 it requires loader rejection, the exact errno class, absence from `/proc/modules` and `/sys/module/rootkitlings`, and no cleanup claim based on an exit log.
+It then rebuilds with value 0 and requires immediate successful load and unload.
 
-`core/main.c` owns only module activation order.
-It calls the concrete component entry points in this order:
+Failed init performs no teardown because R03 owns no resource.
+The kernel does not invoke the registered exit callback after failed initialization; later checkpoints must unwind acquired resources inside init before returning an error.
 
-1. preflight rejection;
-2. `rk_state_create()`;
-3. `rk_status_create(state)`.
+## R04: owned heap state
 
-On failure or unload it destroys successfully created components in exact reverse order.
-It never allocates, frees, or publishes a component's storage itself.
-Failed module initialization performs its unwind locally because `module_exit` is not called after failed init.
+R04 adds `include/rootkit.h` and `core/state.c` through additive inheritance.
+It immediately uses both files; neither is a scaffold for future work.
 
-### `core/state.c`
-
-`core/state.c` defines the private `struct rk_state`, owns its single allocation, and exports only the Stage 1 functions declared in `include/rootkit.h`:
+The header exposes an incomplete type and the permanent state API:
 
 ```c
 struct rk_state;
 
-noinline struct rk_state *rk_state_create(void);
+__must_check noinline struct rk_state *rk_state_create(void);
 noinline void rk_state_destroy(struct rk_state *state);
 ```
 
-The successful return transfers one live state object to `core/main.c`, which holds the pointer solely to sequence component lifetime.
-`rk_state_destroy()` is the only function that frees it.
-The caller sets its local pointer to `NULL` immediately after destruction; the API does not promise that destroying `NULL` is useful or repeatable.
+`core/state.c` alone defines `struct rk_state` and owns its allocation.
+`rk_state_create()` uses `kzalloc()`.
+It converts allocator `NULL` to `ERR_PTR(-ENOMEM)` so callers receive one pointer-shaped result contract.
+`rk_state_destroy()` is the only function that calls `kfree()` for that object.
 
-### `status/status.c`
+`core/main.c` holds the returned pointer only to sequence lifetime.
+It consumes the result with `IS_ERR()` and `PTR_ERR()`, preserves the original errno, and sets its local pointer to `NULL` immediately after destruction.
+The private struct layout remains incomplete to consumers.
 
-`status/status.c` defines the private `struct rk_status`, owns its single allocation, and exports:
+R04 extends the failure enum:
+
+```c
+RK_FAIL_STATE_ALLOC = 2,
+```
+
+Value 2 deterministically follows the same constructor path as `kzalloc()` returning `NULL`, producing `ERR_PTR(-ENOMEM)`.
+The check requires the exact `-ENOMEM` loader failure, no module artifact, no observed state allocation, and a successful value-0 load/unload immediately afterward.
+
+The ownership functions become `noinline` when introduced because M00 attributes allocator call sites to their exact ELF symbol ranges.
+
+## R05: second resource and reverse rollback
+
+R05 additively introduces `status/status.c` and immediately links and calls it.
+The header gains the permanent status API:
 
 ```c
 struct rk_status;
 
-noinline struct rk_status *rk_status_create(const struct rk_state *state);
+__must_check noinline struct rk_status *rk_status_create(const struct rk_state *state);
 noinline void rk_status_destroy(struct rk_status *status);
 ```
 
-The status object may retain a non-owning state pointer only while the state outlives it.
-Consequently status is destroyed before state on every path.
-No other file frees status storage, and status never frees or mutates the state object.
-All four ownership functions are `noinline` so allocator call sites remain inside their ELF symbol ranges for independent tracing.
+`status/status.c` alone defines `struct rk_status`, owns its allocation, and may retain a non-owning state pointer.
+State must therefore outlive status.
 
-### `include/rootkit.h`
+The concrete acquisition order is:
 
-The header owns forward declarations, the four concrete lifecycle prototypes, and the failure-point constants.
-It exposes neither component layouts nor a callback table, generic resource descriptor, registration framework, linked list, lock, or userspace interface.
-Those mechanisms belong to later lessons.
+```text
+preflight -> state -> status
+```
 
-## Build-time failure-injection ABI
+Every failure and normal unload use the exact reverse order for resources that were successfully acquired:
 
-Failure injection is a build ABI, not a module parameter or command channel.
-That avoids teaching parameter callbacks or input parsing before their lessons.
+```text
+status -> state
+```
 
-`ROOTKITLINGS_FAIL_POINT` has these stable integer values throughout Stage 1:
+`core/main.c` owns this ordering but never allocates or frees component storage itself.
+Failed module initialization performs its unwind locally because `module_exit` is not called after failed init.
 
-| Value | Name | Injection and required result |
-|---:|---|---|
-| 0 | `RK_FAIL_NONE` | Normal activation |
-| 1 | `RK_FAIL_PREFLIGHT` | `core/main.c` rejects before acquisition with `-ECANCELED` |
-| 2 | `RK_FAIL_STATE_ALLOC` | `kzalloc()` returns `NULL`; `rk_state_create()` converts it to `ERR_PTR(-ENOMEM)` and init preserves `PTR_ERR()` |
-| 3 | `RK_FAIL_STATUS_CREATE` | `rk_status_create()` returns `ERR_PTR(-EUCLEAN)`; init preserves `PTR_ERR()` and destroys state |
+R05 adds:
 
-Checks perform a clean external-module rebuild for each value.
-They assert the exact loader exit class, module absence in `/proc/modules` and `/sys/module/rootkitlings`, and successful immediate load/unload after rebuilding with value 0.
-The check must reject an unknown value at compile time so an accidental spelling cannot silently exercise the normal path.
+```c
+RK_FAIL_STATUS_CREATE = 3,
+```
 
-R04 introduces value 1 and the failed-init rule.
-R05 implements the state allocation and value 2; `core/main.c` consumes its pointer-shaped result with `IS_ERR()` and `PTR_ERR()`.
-R06 implements the status allocation and value 3, then completes the concrete state-then-status acquisition and status-then-state unwind.
-The distinction is deliberate: `kzalloc()` reports raw failure as `NULL`, but the state constructor presents a pointer-shaped-error API and preserves the converted `-ENOMEM`.
+Value 3 makes `rk_status_create()` return `ERR_PTR(-EUCLEAN)` after state exists.
+Init preserves `PTR_ERR()`, destroys state, and returns the original error.
+The check requires exact rejection, absence of the module, independent evidence that the state allocation was freed, and immediate successful value-0 load/unload.
 
-## Status publication waits for Stage 2
+The status constructor and destructor are `noinline` from their first implementation for the same allocator-evidence reason as the state pair.
 
-Stage 1 has an internal status component but no procfs, sysfs, debugfs, character-device, parameter, or other userspace publication.
-Its purpose is to establish component ownership and a dependent lifetime without smuggling publication, read-position, permissions, or bounded-read contracts into Stage 1.
+## Additive snapshot contract
 
-R03 proves the component split through composite linking and symbol/static inspection.
-R05 proves state lifetime; R06 adds status and proves two-resource reverse unwind through build-time failure injection and allocator tracing.
-R07 in Stage 2 is the first lesson allowed to publish status, using procfs with its own ownership and cleanup contract.
+The exact lineage is:
 
-The ordinary module artifact in `/sys/module/rootkitlings` is kernel-provided load evidence, not a learner-authored status channel.
+```text
+R02 template: Kbuild, core/main.c
+ `-- R02 passed snapshot
+      `-- R03 workspace: inherit both paths unchanged in shape
+           `-- R03 passed snapshot
+                `-- R04 workspace: inherit both paths + add header/state
+                     `-- R04 passed snapshot
+                          `-- R05 workspace: inherit four paths + add status
+                               `-- R05 passed snapshot
+                                    `-- M00 workspace: inherit all five paths
+                                         `-- M00 passed snapshot
+```
 
-## Independent allocation and cleanup evidence
+An additive transition is explicit metadata, not inferred from directory contents.
+It names the immediate provider and an immutable additions directory.
+Materialization obeys these rules:
+
+- verify the provider's passed snapshot and recorded hash before copying;
+- copy every provider-declared file byte-for-byte with its executable class;
+- require the consumer's inherited path set to equal the provider's path set;
+- copy only newly declared paths from the immutable additions directory;
+- reject a new path that already exists, a missing addition, a symlink, special
+  file, undeclared extra, removal, rename, or changed build root;
+- record provider stable ID and snapshot hash in learner state when the consumer
+  workspace is first created;
+- never rebase an existing consumer when its provider is rechecked or restored.
+
+For a non-additive step, consumer and provider path sets are identical.
+For an additive step, the consumer set is exactly the disjoint union of inherited paths and declared additions.
+
+Reference solutions may be stored as replacement overlays containing only learner-edited or newly added files.
+They are maintainer packaging, not learner baseline reconstruction and not an engine fallback when a required passed snapshot is absent.
+
+Snapshot manifests remain content-intrinsic: canonical tree hash, declared relative paths, file hashes, and executable classes.
+Curriculum revision, provider identity, and the chosen baseline hash belong to learner state.
+Migration may retain a snapshot only through an explicit compatibility rule naming both stable IDs and certifying the path/build contract.
+
+## M00: integrated evidence
+
+M00 adds no file or API.
+It uses the R05 completion with five declared paths: `Kbuild` plus four source/header files.
+The learner completes and tests the concrete acquisition/unwind paths already introduced.
+
+The check builds values 0 through 3 independently and requires:
+
+- normal load, unload, absence, and immediate reload for value 0;
+- exact rejection before acquisition for value 1;
+- exact state allocation failure for value 2;
+- exact status failure plus state rollback for value 3;
+- module absence after every rejected load;
+- no warning and compile-time rejection of unknown failure values.
+
+## Independent allocator evidence
 
 Module log messages are explanatory output only.
 They are never accepted as proof that an allocation occurred or was freed.
@@ -140,93 +236,47 @@ values both while loaded and after unload.
 The `ptr` token is opaque and must not be described as a dereferenceable or disclosed kernel address.
 Its textual value remains stable across paired allocation and free events and is suitable only for equality correlation within one trace run.
 
-Before boot, the host-side checker reads `rootkitlings.ko`'s ELF symbol table and `.text` section.
-It records the `.text`-relative value and size of all four ownership functions and rejects missing, zero-sized, overlapping, or wrong-section symbols.
-Distinct ranges enforce the functions' `noinline` contract.
-The orchestration layer renders those eight numeric constants into its temporary guest-check copy before `vm/boot` packages it; it does not modify the learner workspace.
-These are static expectations from the exact module copied into the guest, not learner log output.
+Before boot, the host checker reads the exact `rootkitlings.ko` ELF symbol table and `.text` section.
+It records the `.text`-relative value and nonzero size of `rk_state_create`, `rk_state_destroy`, `rk_status_create`, and `rk_status_destroy`.
+It rejects missing, overlapping, or wrong-section symbols.
+Distinct ranges enforce the `noinline` contract.
+The host renders those eight numeric constants into a temporary guest-check copy without modifying the learner workspace.
 
-The M00 guest check then uses two trace phases:
+The guest check:
 
-1. mount tracefs, verify the two event formats contain `call_site` and `ptr`,
-   save their enable state, disable them, and clear the trace;
-2. enable `kmalloc`, load the value-0 module, read
-   `/sys/module/rootkitlings/sections/.text`, and combine that runtime base with every
-   host-derived ELF offset and size;
-3. while the module remains loaded, stop tracing and require exactly one
-   `kmalloc` raw call-site address inside the calculated `rk_state_create`
-   range and one inside the `rk_status_create` range, recording each opaque,
-   nonzero `ptr` token;
-4. disable `kmalloc`, enable `kfree`, clear the live trace buffer, unload the
-   module, disable tracing, and only then read the free-phase trace;
-5. for each recorded allocation pointer, require exactly one `kfree` with the
-   same pointer and a raw call-site address inside its precomputed
-   `rk_state_destroy` or `rk_status_destroy` runtime range;
-6. confirm the module is absent, remove checker-owned captures, clear the trace,
-   and restore both event enable files to their original state.
+1. mounts tracefs, verifies the two event formats contain `call_site` and `ptr`,
+   saves their enable state, disables them, and clears the trace;
+2. enables `kmalloc`, loads the value-0 module, reads
+   `/sys/module/rootkitlings/sections/.text`, and combines that runtime base
+   with each host-derived offset and size;
+3. stops tracing while the module remains loaded and requires one `kmalloc`
+   raw call site inside each constructor range, recording its opaque nonzero
+   pointer token;
+4. disables `kmalloc`, enables `kfree`, clears the trace, unloads the module,
+   disables tracing, and reads the free-phase trace;
+5. requires one matching `kfree` token from the corresponding destructor range
+   for each recorded allocation;
+6. confirms module absence, removes checker captures, clears the trace, and
+   restores the original event enable state.
 
-The constructor address range assigns each opaque pointer token to the expected owner.
-The exact token match proves that the observed allocation was passed to `kfree`; the precomputed runtime function range attributes that free to the corresponding destructor.
-A learner cannot satisfy either fact by printing a claimed address.
-
-Tracepoint availability, ELF symbol/section data, the loaded `.text` base, and parseable raw call-site values are pinned-lab prerequisites.
-If any prerequisite is absent, or a post-unload call site is not a parseable address in the recorded destructor range, the runtime check fails with an environment-prerequisite or evidence error as appropriate.
-It is not reported as a curriculum pass and does not fall back to module logs.
-A static or documentation-only validation job may mark the runtime check as not run, but route completion may not.
-
-This evidence is scoped honestly: it proves that the two opaque constructor-attributed pointer tokens observed in that run were later passed to `kfree` from the expected destructor address ranges.
+This proves only that the two constructor-attributed tokens observed in that run were later passed to `kfree` from their expected destructor ranges.
 It is not a general leak detector and does not prove absence of every possible kernel leak.
-Kmemleak or a diagnostic kernel may be added to maintainer CI later, but neither is required by this Stage 1 learner contract.
 
-## Snapshot lineage and compatibility
+Tracepoint availability, required event fields, ELF symbol data, the loaded `.text` base, and parseable raw call sites are pinned-lab prerequisites.
+Missing prerequisites fail runtime verification; they are not replaced by logs.
+A static documentation job may report the runtime check as not run, but route completion may not.
 
-The exact lineage is:
+## Status publication boundary
 
-```text
-R02 immutable template
- `-- R02 passed snapshot
-      `-- R03 starting snapshot
-           `-- R03 passed snapshot
-                `-- R04 starting snapshot
-                     `-- R04 passed snapshot
-                          `-- R05 starting snapshot
-                               `-- R05 passed snapshot
-                                    `-- R06 starting snapshot
-                                         `-- R06 passed snapshot
-                                              `-- M00 starting snapshot
-                                                   `-- M00 passed snapshot
-```
+Stage 1 publishes no learner-authored procfs, sysfs, debugfs, parameter, or device interface.
+The kernel-provided `/sys/module/rootkitlings` artifact is load evidence, not a status channel.
+Procfs publication, permissions, and read semantics begin in Stage 2.
 
-R02 is the only template-backed kernel workspace in Stage 1.
-R03–R06 use completion inheritance from the immediately preceding required checkpoint.
-M00 uses the passed R06 snapshot as its starting baseline; the engine's `previous-milestone` rule begins with the next cumulative milestone because no earlier milestone exists for M00.
+## Check safety
 
-Compatibility is exact, not inferred:
-
-- all seven checkpoints declare the same five relative files and build root;
-- a passed snapshot contains only those declared source files plus its manifest,
-  never build output;
-- the snapshot manifest records provider stable ID, curriculum revision, file
-  modes, and canonical tree hash;
-- a consumer records the exact provider snapshot hash when its workspace is
-  first materialized;
-- rechecking or restoring an earlier provider never rebases an existing
-  consumer workspace;
-- missing, tampered, differently declared, or revision-incompatible snapshots
-  block materialization with a precise error;
-- migration may retain a snapshot only through an explicit compatibility rule
-  naming both stable IDs and certifying this file/build contract.
-
-R02–R06 remain individually passable because each completion is a warning-free module with inactive future files, not a partial tree that depends on hidden solution content.
-M00 adds no source file and no unexplained helper; it asks the learner to complete and test the concrete acquisition/unwind paths already introduced.
-
-## Check boundaries
-
-Stage 1 checks may use external-module build output, ELF/module metadata, loader status, `/proc/modules`, `/sys/module`, tracefs allocator events, and immediate reload as independent evidence.
-They may inspect module logs for diagnostics, but a log line never satisfies an ownership, allocation, unwind, or cleanup assertion.
-
-Checks must restore trace event state, unload any successfully loaded module, clear temporary trace data, and power down the disposable guest even after an assertion fails.
-No check enables networking, mounts a host directory, writes outside its disposable guest, or targets a host kernel.
+Checks build on the host but never insert a module into the host kernel.
+Runtime checks use the disposable, diskless guest without networking or host mounts.
+They restore trace event state, unload any successfully loaded module, remove temporary captures, and power down the guest even after a failed assertion.
 
 ## Source basis
 
@@ -235,4 +285,5 @@ This decision follows the official kernel documentation already collected for th
 - [Building external modules](https://docs.kernel.org/kbuild/modules.html)
 - [Driver basics and module lifecycle](https://docs.kernel.org/driver-api/basics.html)
 - [Kernel memory allocation](https://docs.kernel.org/core-api/memory-allocation.html)
+- [Error pointers](https://docs.kernel.org/core-api/kernel-api.html#error-pointers)
 - [Tracing guide](https://docs.kernel.org/trace/index.html)

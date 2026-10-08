@@ -17,6 +17,7 @@ from lib.workspace import (
     canonical_tree_hash,
     create_snapshot,
     materialize,
+    materialize_inherited,
     restore_workspace,
     verify_snapshot,
 )
@@ -65,8 +66,8 @@ except CatalogError as error:
     raise SystemExit(1)
 
 ROUTE = tuple(CAT.required_route)
-PREREQUISITES = {
-    exercise.id: frozenset(exercise.prerequisites)
+COMPLETION_DEPENDENCIES = {
+    exercise.id: frozenset(CAT.completion_dependencies(exercise))
     for exercise in CAT.exercises
 }
 STORE = StateStore(
@@ -74,7 +75,7 @@ STORE = StateStore(
     set(CAT.by_id),
     ROUTE,
     CAT.revision,
-    PREREQUISITES,
+    COMPLETION_DEPENDENCIES,
 )
 
 
@@ -146,12 +147,28 @@ def snap(content_hash):
 
 
 def baseline(x, state):
-    if x.workspace.baseline == 'template':
+    provider = CAT.baseline_provider(x)
+    if provider is None:
         return ROOT / x.workspace.source
-    r = state.exercises.get(x.workspace.parent)
+    r = state.exercises.get(provider.id)
     if not r or not r.passed_snapshot:
-        die(f'{label(x)} needs a passed snapshot from {x.workspace.parent}')
+        die(f'{label(x)} needs a passed snapshot from {label(provider)}')
     return snap(r.passed_snapshot)
+
+
+def materialize_workspace(x, state):
+    source = baseline(x, state)
+    provider = CAT.baseline_provider(x)
+    if provider is not None and x.workspace.additions:
+        return materialize_inherited(
+            source,
+            ROOT / x.workspace.additions,
+            WORK,
+            x.id,
+            provider.workspace.files,
+            x.workspace.files,
+        )
+    return materialize(source, WORK, x.id, x.workspace.files)
 
 
 def one(a, command):
@@ -192,7 +209,7 @@ def cmd_start(a):
             if not r.baseline_hash:
                 die(f'Workspace exists without recorded baseline: {p.relative_to(ROOT)}')
         else:
-            materialize(baseline(x, s), WORK, x.id, x.workspace.files)
+            materialize_workspace(x, s)
             r.baseline_hash, _ = create_snapshot(p, PASSED, x.workspace.files)
             r.workspace_hash = canonical_tree_hash(p, x.workspace.files)
         head(f'{label(x)}: {x.title}')
@@ -269,7 +286,7 @@ def cmd_build(a):
                     f'{workspace.relative_to(ROOT)}'
                 )
         else:
-            materialize(baseline(x, s), WORK, x.id, x.workspace.files)
+            materialize_workspace(x, s)
             record.baseline_hash, _ = create_snapshot(
                 workspace,
                 PASSED,
@@ -500,9 +517,7 @@ def progress_reset_ids(selected):
         for exercise in CAT.exercises:
             if exercise.status == 'required' or exercise.id in affected:
                 continue
-            dependencies = set(exercise.prerequisites)
-            if exercise.workspace.parent:
-                dependencies.add(exercise.workspace.parent)
+            dependencies = set(CAT.completion_dependencies(exercise))
             if dependencies & affected:
                 affected.add(exercise.id)
                 changed = True

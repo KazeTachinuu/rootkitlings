@@ -16,6 +16,7 @@ from lib.workspace import (
     clean_paths,
     create_snapshot,
     materialize,
+    materialize_inherited,
     restore_workspace,
     verify_snapshot,
 )
@@ -198,6 +199,75 @@ class WorkspaceTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkspaceError, "already exists"):
             materialize(self.template, self.work, "module-core", self.files)
 
+    def test_materialize_normalizes_snapshot_style_modes_for_learning(self) -> None:
+        (self.template / "Kbuild").chmod(0o444)
+        (self.template / "src/main.c").chmod(0o555)
+        workspace = materialize(self.template, self.work, "module-core", self.files)
+        self.assertEqual(stat.S_IMODE((workspace / "Kbuild").stat().st_mode), 0o644)
+        self.assertEqual(
+            stat.S_IMODE((workspace / "src/main.c").stat().st_mode),
+            0o755,
+        )
+
+    def test_inherited_materialization_combines_verified_snapshot_and_additions(self) -> None:
+        provider = materialize(self.template, self.work, "module-core", self.files)
+        _, snapshot = create_snapshot(provider, self.passed, self.files)
+        additions = self.root / "additions"
+        (additions / "status").mkdir(parents=True)
+        (additions / "status/status.c").write_text("int status;\n")
+        (additions / "status/status.c").chmod(0o555)
+        workspace = materialize_inherited(
+            snapshot,
+            additions,
+            self.work,
+            "proc-status",
+            self.files,
+            (*self.files, "status/status.c"),
+        )
+        self.assertEqual((workspace / "src/main.c").read_text(), "int value = 1;\n")
+        self.assertEqual((workspace / "status/status.c").read_text(), "int status;\n")
+        self.assertEqual(
+            stat.S_IMODE((workspace / "src/main.c").stat().st_mode),
+            0o644,
+        )
+        self.assertEqual(
+            stat.S_IMODE((workspace / "status/status.c").stat().st_mode),
+            0o755,
+        )
+
+    def test_inherited_materialization_rejects_missing_or_extra_additions(self) -> None:
+        provider = materialize(self.template, self.work, "module-core", self.files)
+        _, snapshot = create_snapshot(provider, self.passed, self.files)
+        additions = self.root / "bad-additions"
+        additions.mkdir()
+        (additions / "wrong.c").write_text("wrong\n")
+        with self.assertRaisesRegex(WorkspaceError, "contain exactly"):
+            materialize_inherited(
+                snapshot,
+                additions,
+                self.work,
+                "proc-status",
+                self.files,
+                (*self.files, "new.c"),
+            )
+
+    def test_inherited_materialization_rejects_empty_directory(self) -> None:
+        provider = materialize(self.template, self.work, "module-core", self.files)
+        _, snapshot = create_snapshot(provider, self.passed, self.files)
+        additions = self.root / "additions-with-empty"
+        additions.mkdir()
+        (additions / "new.c").write_text("new\n")
+        (additions / "empty").mkdir()
+        with self.assertRaisesRegex(WorkspaceError, "parent directories"):
+            materialize_inherited(
+                snapshot,
+                additions,
+                self.work,
+                "proc-status",
+                self.files,
+                (*self.files, "new.c"),
+            )
+
     def test_paths_symlinks_and_special_files_are_rejected(self) -> None:
         with self.assertRaisesRegex(WorkspaceError, "unsafe relative"):
             canonical_tree_hash(self.template, ("../outside",))
@@ -259,12 +329,18 @@ class WorkspaceTests(unittest.TestCase):
             archive_workspace(workspace, self.archive, "module-core")
 
     def test_restore_archives_then_restores_baseline(self) -> None:
+        (self.template / "src/main.c").chmod(0o755)
         workspace = materialize(self.template, self.work, "module-core", self.files)
         baseline_hash, baseline = create_snapshot(workspace, self.passed, self.files)
         (workspace / "src/main.c").write_text("learner edit\n")
         restored, archived = restore_workspace(self.work, self.archive, "module-core", baseline, self.files)
         self.assertEqual(canonical_tree_hash(restored, self.files), baseline_hash)
         self.assertEqual((archived / "src/main.c").read_text(), "learner edit\n")
+        self.assertEqual(
+            stat.S_IMODE((restored / "src/main.c").stat().st_mode),
+            0o755,
+        )
+        self.assertEqual(stat.S_IMODE((restored / "Kbuild").stat().st_mode), 0o644)
 
     def test_archive_and_remove_is_safe_when_some_workspaces_are_absent(self) -> None:
         workspace = materialize(self.template, self.work, "module-core", self.files)

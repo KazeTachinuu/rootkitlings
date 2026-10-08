@@ -31,7 +31,7 @@ class ProgressResetCLITests(unittest.TestCase):
             set(self.globals["CAT"].by_id),
             self.globals["ROUTE"],
             self.globals["CAT"].revision,
-            self.globals["PREREQUISITES"],
+            self.globals["COMPLETION_DEPENDENCIES"],
         )
         self.globals["setup"]()
 
@@ -122,6 +122,7 @@ class ProgressResetCLITests(unittest.TestCase):
             self.globals["CAT"] = SimpleNamespace(
                 by_id={item.id: item for item in (required, elective, descendant, unrelated)},
                 exercises=(required, elective, descendant, unrelated),
+                completion_dependencies=lambda item: item.prerequisites,
             )
             self.globals["ROUTE"] = ("required",)
             affected = self.globals["progress_reset_ids"](elective)
@@ -129,6 +130,62 @@ class ProgressResetCLITests(unittest.TestCase):
             self.globals["CAT"] = original_catalog
             self.globals["ROUTE"] = original_route
         self.assertEqual(affected, {"elective", "descendant"})
+
+    def test_derived_baseline_requires_provider_snapshot(self) -> None:
+        provider = SimpleNamespace(id="provider", serial="L00")
+        exercise = SimpleNamespace(id="consumer", serial="L01")
+        state = SimpleNamespace(exercises={})
+        original_catalog = self.globals["CAT"]
+        try:
+            self.globals["CAT"] = SimpleNamespace(
+                baseline_provider=lambda _exercise: provider
+            )
+            with self.assertRaisesRegex(
+                self.globals["CLIError"],
+                "needs a passed snapshot from L00",
+            ):
+                self.globals["baseline"](exercise, state)
+        finally:
+            self.globals["CAT"] = original_catalog
+
+    def test_additive_baseline_uses_catalog_provider_and_additions(self) -> None:
+        provider = SimpleNamespace(
+            id="provider",
+            serial="L00",
+            workspace=SimpleNamespace(files=("main.c",)),
+        )
+        exercise = SimpleNamespace(
+            id="consumer",
+            workspace=SimpleNamespace(
+                files=("main.c", "status.c"),
+                additions="curriculum/additions/consumer",
+            ),
+        )
+        state = SimpleNamespace(
+            exercises={"provider": SimpleNamespace(passed_snapshot="a" * 64)}
+        )
+        calls = []
+        original_catalog = self.globals["CAT"]
+        original_snapshot = self.globals["snap"]
+        original_materialize = self.globals["materialize_inherited"]
+        try:
+            self.globals["CAT"] = SimpleNamespace(
+                baseline_provider=lambda _exercise: provider
+            )
+            self.globals["snap"] = lambda _hash: Path("/verified/snapshot")
+            self.globals["materialize_inherited"] = (
+                lambda *arguments: calls.append(arguments) or Path("/workspace")
+            )
+            result = self.globals["materialize_workspace"](exercise, state)
+        finally:
+            self.globals["CAT"] = original_catalog
+            self.globals["snap"] = original_snapshot
+            self.globals["materialize_inherited"] = original_materialize
+        self.assertEqual(result, Path("/workspace"))
+        self.assertEqual(calls[0][0], Path("/verified/snapshot"))
+        self.assertEqual(calls[0][1], ROOT / "curriculum/additions/consumer")
+        self.assertEqual(calls[0][4], ("main.c",))
+        self.assertEqual(calls[0][5], ("main.c", "status.c"))
 
 
 if __name__ == "__main__":

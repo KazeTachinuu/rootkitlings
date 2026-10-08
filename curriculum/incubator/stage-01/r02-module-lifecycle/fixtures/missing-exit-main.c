@@ -10,5 +10,4 @@ static int __init rk_init(void)
 module_init(rk_init);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings inspectable core");
-
+MODULE_DESCRIPTION("Rootkitlings module lifecycle");

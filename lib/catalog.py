@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path, PurePosixPath
 import re
 import tomllib
@@ -15,20 +16,20 @@ DIFFICULTIES = {"intro", "standard", "advanced", "challenge"}
 KINDS = {"lesson", "milestone", "capstone"}
 STATUSES = {"required", "elective", "retired"}
 WORKSPACE_MODES = {"cumulative", "single-file", "project"}
-BASELINES = {"template", "completion"}
+BASELINES = {"template", "completion", "previous-required", "previous-milestone"}
 TOP_FIELDS = {
     "schema_version", "id", "title", "stage", "kind", "status",
     "tradecraft", "difficulty", "prerequisites", "teaches", "requires",
     "workspace", "resources", "verification",
 }
-WORKSPACE_FIELDS = {"mode", "source", "files", "editable", "build", "baseline", "parent"}
 RESOURCE_FIELDS = {"readme", "check", "host_check", "hint", "solution"}
 VERIFICATION_FIELDS = {"timeout_seconds", "capabilities", "tools", "cleanup_required"}
 QUERY_FIELDS = {
     "id", "path", "serial", "sequence", "title", "stage", "kind",
     "status", "tradecraft", "difficulty", "prerequisites", "teaches", "requires",
     "workspace_mode", "workspace_source", "workspace_files", "workspace_editable",
-    "workspace_build", "workspace_baseline", "workspace_parent", "readme", "check",
+    "workspace_build", "workspace_baseline", "workspace_parent",
+    "workspace_additions", "readme", "check",
     "host_check", "hint", "solution", "verification_timeout", "verification_capabilities",
     "verification_tools", "verification_cleanup",
 }
@@ -72,6 +73,7 @@ class Workspace:
     build: str
     baseline: str
     parent: str
+    additions: str = ""
 
 
 @dataclass(frozen=True)
@@ -124,7 +126,9 @@ class Exercise:
             "workspace_editable": self.workspace.editable,
             "workspace_build": self.workspace.build,
             "workspace_baseline": self.workspace.baseline,
-            "workspace_parent": self.workspace.parent, "readme": self.resources.readme,
+            "workspace_parent": self.workspace.parent,
+            "workspace_additions": self.workspace.additions,
+            "readme": self.resources.readme,
             "check": self.resources.check, "host_check": self.resources.host_check,
             "hint": self.resources.hint, "solution": self.resources.solution,
             "verification_timeout": self.verification.timeout_seconds,
@@ -241,10 +245,16 @@ class Catalog:
             raise CatalogError(f"{path}: workspace must be a table")
         baseline = _token(value, "baseline", path)
         common = {"mode", "files", "editable", "build", "baseline"}
-        expected = common | ({"source"} if baseline == "template" else {"parent"})
+        if baseline == "template":
+            expected = common | {"source"}
+        elif baseline == "completion":
+            expected = common | {"parent"} | ({"additions"} if "additions" in value else set())
+        else:
+            expected = common | ({"additions"} if "additions" in value else set())
         _exact_fields(value, expected, path / "workspace")
         source = value.get("source", "")
         parent = value.get("parent", "")
+        additions = value.get("additions", "")
         if baseline == "template":
             if not source or parent:
                 raise CatalogError(f"{path}: template baseline requires source and forbids parent")
@@ -252,11 +262,17 @@ class Catalog:
             if source or not parent:
                 raise CatalogError(f"{path}: completion baseline requires parent and forbids source")
             _identifier(parent, path)
+        elif baseline in {"previous-required", "previous-milestone"}:
+            if source or parent:
+                raise CatalogError(
+                    f"{path}: derived baseline forbids source and parent"
+                )
         return Workspace(
             mode=_token(value, "mode", path), source=_optional_path(source, path, self.root),
             files=tuple(_relative_list(value, "files", path)),
             editable=tuple(_relative_list(value, "editable", path)),
             build=_workspace_build(value["build"], path), baseline=baseline, parent=parent,
+            additions=_optional_path(additions, path, self.root),
         )
 
     def _resources(self, value, path):
@@ -340,17 +356,18 @@ class Catalog:
                     raise CatalogError(f"{item.path}: unknown prerequisite {dependency!r}")
                 if item.id in route_positions and route_positions.get(dependency, -1) >= route_positions[item.id]:
                     raise CatalogError(f"{item.path}: prerequisite {dependency!r} is not earlier in required_route")
-            if item.workspace.parent:
-                if item.workspace.parent not in actual or item.workspace.parent == item.id:
-                    raise CatalogError(f"{item.path}: invalid workspace parent")
-                if route_positions.get(item.workspace.parent, -1) >= route_positions.get(item.id, -1):
-                    raise CatalogError(f"{item.path}: completion parent must be earlier in required_route")
-                parent_workspace = self.by_id[item.workspace.parent].workspace
-                if (item.workspace.files != parent_workspace.files or
-                        item.workspace.build != parent_workspace.build):
-                    raise CatalogError(
-                        f"{item.path}: completion workspace files/build must match parent exactly"
-                    )
+            provider = self.baseline_provider(item)
+            if provider:
+                if item.workspace.baseline == "completion":
+                    if (
+                        item.id not in route_positions
+                        or provider.id not in route_positions
+                        or route_positions[provider.id] >= route_positions[item.id]
+                    ):
+                        raise CatalogError(
+                            f"{item.path}: completion parent must be earlier in required_route"
+                        )
+                self.validate_workspace_lineage(item, provider)
             self._validate_paths(item)
         self._validate_dag()
         for item in self.exercises:
@@ -392,6 +409,12 @@ class Catalog:
             build = source if item.workspace.build == "." else source / item.workspace.build
             if not build.is_dir():
                 raise CatalogError(f"{item.path}: workspace build directory is missing")
+        if item.workspace.additions:
+            additions = self.root / item.workspace.additions
+            if additions.is_symlink() or not additions.is_dir():
+                raise CatalogError(
+                    f"{item.path}: workspace additions must be a real directory"
+                )
         if not set(item.workspace.editable) <= set(item.workspace.files):
             raise CatalogError(f"{item.path}: editable paths must be listed in workspace files")
         if not item.verification.cleanup_required:
@@ -406,9 +429,7 @@ class Catalog:
                 return
             visiting.add(exercise_id)
             item = self.by_id[exercise_id]
-            dependencies = list(item.prerequisites)
-            if item.workspace.parent:
-                dependencies.append(item.workspace.parent)
+            dependencies = list(self.completion_dependencies(item))
             for parent in dependencies:
                 visit(parent)
             visiting.remove(exercise_id); visited.add(exercise_id)
@@ -441,6 +462,100 @@ class Catalog:
 
     def ordered(self) -> list[Exercise]:
         return [self.by_id[value] for value in self.required_route]
+
+    def baseline_provider(self, item: Exercise) -> Exercise | None:
+        """Derive the sole workspace inheritance provider, if any."""
+        baseline = item.workspace.baseline
+        if baseline == "template":
+            return None
+        if baseline == "completion":
+            try:
+                return self.by_id[item.workspace.parent]
+            except KeyError as exc:
+                raise CatalogError(
+                    f"{item.path}: unknown completion parent {item.workspace.parent!r}"
+                ) from exc
+        if item.id not in self.required_route:
+            raise CatalogError(
+                f"{item.path}: {baseline} is only valid on the required route"
+            )
+        position = self.required_route.index(item.id)
+        earlier = self.required_route[:position]
+        if baseline == "previous-required":
+            if not earlier:
+                raise CatalogError(f"{item.path}: no previous required baseline provider")
+            return self.by_id[earlier[-1]]
+        if baseline == "previous-milestone":
+            if item.kind not in {"milestone", "capstone"}:
+                raise CatalogError(
+                    f"{item.path}: previous-milestone requires milestone or capstone kind"
+                )
+            for stable_id in reversed(earlier):
+                candidate = self.by_id[stable_id]
+                if candidate.kind == "milestone":
+                    return candidate
+            raise CatalogError(f"{item.path}: no previous milestone baseline provider")
+        raise CatalogError(f"{item.path}: unknown workspace baseline {baseline!r}")
+
+    def completion_dependencies(self, item: Exercise) -> tuple[str, ...]:
+        """Return prerequisites plus lineage needed to credit completion."""
+        result = list(item.prerequisites)
+        provider = self.baseline_provider(item)
+        if provider and provider.id not in result:
+            result.append(provider.id)
+        return tuple(result)
+
+    def validate_workspace_lineage(
+        self,
+        item: Exercise,
+        provider: Exercise | None = None,
+    ) -> None:
+        """Validate inherited workspace shape against its derived provider."""
+        provider = provider or self.baseline_provider(item)
+        if provider is None:
+            return
+        if item.workspace.mode != "cumulative":
+            raise CatalogError(
+                f"{item.path}: inherited baseline requires cumulative workspace mode"
+            )
+        if (
+            item.workspace.mode != provider.workspace.mode
+            or item.workspace.build != provider.workspace.build
+        ):
+            raise CatalogError(
+                f"{item.path}: inherited workspace mode/build must match provider "
+                f"{provider.id!r} exactly"
+            )
+        provider_files = set(provider.workspace.files)
+        consumer_files = set(item.workspace.files)
+        if not provider_files <= consumer_files:
+            removed = sorted(provider_files - consumer_files)
+            raise CatalogError(
+                f"{item.path}: inherited workspace cannot remove or rename provider "
+                f"files: {removed}"
+            )
+        new_files = consumer_files - provider_files
+        additions = item.workspace.additions
+        if new_files and not additions:
+            raise CatalogError(
+                f"{item.path}: inherited workspace adds files but has no additions directory"
+            )
+        if not new_files and additions:
+            raise CatalogError(
+                f"{item.path}: workspace additions are forbidden when no files are added"
+            )
+        if additions:
+            additions_root = self.root / additions
+            if additions_root.is_symlink() or not additions_root.is_dir():
+                raise CatalogError(
+                    f"{item.path}: workspace additions must be an existing real directory"
+                )
+            actual = _regular_tree(additions_root, item.path, new_files)
+            if actual != new_files:
+                raise CatalogError(
+                    f"{item.path}: additions directory mismatch "
+                    f"(missing={sorted(new_files-actual)}, unknown={sorted(actual-new_files)})"
+                )
 
     def prerequisite_exercises(self, item: Exercise) -> tuple[Exercise, ...]:
         ids = self.prerequisite_ids(item)
@@ -602,6 +717,43 @@ def _workspace_build(value, path):
     if candidate.is_absolute() or any(part in {"", ".", ".."} for part in candidate.parts):
         raise CatalogError(f"{path}: unsafe workspace build path {value!r}")
     return candidate.as_posix()
+
+
+def _regular_tree(
+    root: Path,
+    owner: Path,
+    expected_files: set[str],
+) -> set[str]:
+    """Return an additions tree's files, rejecting links and special entries."""
+    files: set[str] = set()
+    directories: set[str] = set()
+    for directory, names, filenames in os.walk(root, followlinks=False):
+        directory_path = Path(directory)
+        for name in names:
+            path = directory_path / name
+            if path.is_symlink() or not path.is_dir():
+                raise CatalogError(
+                    f"{owner}: workspace additions contain a symlink or special directory"
+                )
+            directories.add(path.relative_to(root).as_posix())
+        for name in filenames:
+            path = directory_path / name
+            if path.is_symlink() or not path.is_file():
+                raise CatalogError(
+                    f"{owner}: workspace additions contain a symlink or special file"
+                )
+            files.add(path.relative_to(root).as_posix())
+    expected_directories = {
+        parent.as_posix()
+        for value in expected_files
+        for parent in PurePosixPath(value).parents
+        if parent != PurePosixPath(".")
+    }
+    if directories != expected_directories:
+        raise CatalogError(
+            f"{owner}: additions directory contains stray or empty directories"
+        )
+    return files
 
 
 def _unique(items, field):

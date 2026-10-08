@@ -1,34 +1,119 @@
-# R02 — Build, load, inspect, and unload a module
+# Build, load, and unload a kernel module
 
-You are starting the permanent rootkit source tree.
-In this exercise you own its external-module build, lifecycle callbacks, and static identity.
-The other files are deliberately inert placeholders for later Stage 1 work.
+Most programs run in **userspace**, isolated from the operating system.
+A kernel module runs inside the Linux kernel with kernel privileges.
+Drivers use modules to add functionality.
+A loadable-module rootkit uses the same mechanism to run code in the kernel.
+
+A bug in a module can crash or corrupt the whole kernel.
+This exercise loads code only in the disposable test VM, never in the host kernel.
+
+## From source to a running module
+
+Linux cannot load a C source file directly.
+The kernel build system compiles it into an object and links a loadable kernel object, whose filename ends in `.ko`:
+
+```text
+core/main.c
+     |
+     | Kbuild
+     v
+core/main.o ----> rootkitlings.ko
+                       |
+                       | insmod
+                       v
+                 load callback
+                       |
+                       | rmmod
+                       v
+                unload callback
+```
+
+This is an **external module**: its source lives outside the kernel source tree, but it is built against the target kernel's headers and configuration.
+The build command identifies the module workspace with `M=<workspace>`.
+
+`Kbuild` names the module and its object:
+
+```make
+obj-m += rootkitlings.o
+rootkitlings-y := core/main.o
+```
+
+`obj-m` declares `rootkitlings.ko` as a loadable module.
+`rootkitlings-y` lists the objects linked into it.
+
+## Module lifecycle
+
+A module has no `main()` function.
+The kernel calls registered callbacks when it accepts and removes the module:
+
+```c
+static int __init rk_init(void)
+{
+	return 0;
+}
+
+static void __exit rk_exit(void)
+{
+}
+
+module_init(rk_init);
+module_exit(rk_exit);
+```
+
+`module_init()` registers the load callback.
+Returning `0` tells the loader that initialization succeeded.
+A negative return value rejects the load; the module does not remain installed, and its exit callback is not called.
+
+`module_exit()` registers the unload callback.
+It runs before the kernel releases a successfully loaded module.
+The `__init` and `__exit` annotations tell the kernel when those functions are needed.
+
+This lifecycle brackets everything a rootkit does.
+Anything registered or started during initialization must be stopped and removed before the unload callback returns; otherwise the kernel could call code that is no longer loaded.
+
+These macros add static metadata to the module:
+
+```c
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Rootkitlings module lifecycle");
+```
+
+Tools such as `modinfo` can read this metadata without loading the module.
+`insmod rootkitlings.ko` asks the kernel to load the file.
+`rmmod rootkitlings` asks it to remove the loaded module by name.
 
 ## Your task
 
-Edit `Kbuild` and `core/main.c` so that:
+Edit only `Kbuild` and `core/main.c`:
 
-- `Kbuild` produces `rootkitlings.ko` from `core/main.o`, `core/state.o`, and
-  `status/status.o`, includes `include/`, and defines the Stage 1 failure-point
-  build value with a default of zero;
-- `core/main.c` registers successful init and exit callbacks;
-- the module declares GPL licensing and the description
-  `Rootkitlings inspectable core`;
-- the supplied header and inactive component files remain unchanged; they are
-  fixed cumulative placeholders, not work for this lesson.
+- Build `rootkitlings.ko` from `core/main.o`.
+- Register a load callback that returns `0`.
+- Register an unload callback.
+- Set the license to `GPL`.
+- Set the description to `Rootkitlings module lifecycle`.
 
-Build warnings are failures.
-You may log for your own diagnosis, but the checker does not treat a log message as proof of lifecycle or cleanup.
+The module must build without warnings.
+You may add kernel log messages for debugging, but messages do not prove that a module is loaded or cleaned up.
 
-## Check
+## Check and observe
 
 From the repository root, run:
 
 ```bash
-curriculum/incubator/stage-01/r02-module-lifecycle/check path/to/workspace
+./rootkitlings check
 ```
 
-The host phase verifies the inactive files, performs clean warning-enabled builds, checks the failure-point build input, and inspects the resulting module metadata and lifecycle symbols.
-The disposable guest then proves that kernel inventory and `/sys/module/rootkitlings` agree after load, disappear after unload, and work again on an immediate reload.
+The host phase builds the module and inspects its metadata and lifecycle symbols.
+The guest phase loads it and checks two kernel-maintained views: `/proc/modules` and `/sys/module/rootkitlings`.
+It then unloads the module, proves both views disappeared, and immediately repeats the load/unload cycle.
 
-Success leaves no loaded module or persistent guest state.
+After the check, the module is unloaded and the disposable guest is destroyed.
+
+These same artifacts are visible to defenders: the `.ko` exposes metadata and symbols before loading, and a loaded module appears in kernel inventory and sysfs.
+Kernel logs may outlive the module, so they are useful diagnostics but not cleanup evidence.
+
+## Official references
+
+- [Building external modules](https://docs.kernel.org/kbuild/modules.html)
+- [Driver basics: `module_init()` and `module_exit()`](https://docs.kernel.org/driver-api/basics.html#c.module_init)

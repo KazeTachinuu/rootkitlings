@@ -1,0 +1,2 @@
+obj-m += other.o
+other-y := core/main.o

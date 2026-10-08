@@ -2,8 +2,6 @@
 #include <linux/init.h>
 #include <linux/module.h>
 
-#include "rootkit.h"
-
 static int __init rk_init(void)
 {
 	/* TODO: make this the module's successful initialization callback. */

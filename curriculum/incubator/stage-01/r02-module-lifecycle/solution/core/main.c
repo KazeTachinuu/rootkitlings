@@ -2,8 +2,6 @@
 #include <linux/init.h>
 #include <linux/module.h>
 
-#include "rootkit.h"
-
 static int __init rk_init(void)
 {
 	return 0;
@@ -17,4 +15,4 @@ module_init(rk_init);
 module_exit(rk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings inspectable core");
+MODULE_DESCRIPTION("Rootkitlings module lifecycle");

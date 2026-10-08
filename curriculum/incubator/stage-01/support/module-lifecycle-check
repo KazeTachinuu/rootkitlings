@@ -2,7 +2,7 @@
 # shellcheck source=/dev/null
 . /lib/check.sh
 
-begin "R02 module lifecycle"
+begin "Module lifecycle"
 
 assert_inventory_present()
 {

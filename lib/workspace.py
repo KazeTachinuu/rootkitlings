@@ -93,13 +93,23 @@ def canonical_tree_hash(root: Path, declared_files: Iterable[str]) -> str:
     return digest.hexdigest()
 
 
-def _copy_declared(source: Path, destination: Path, paths: tuple[PurePosixPath, ...]) -> None:
+def _copy_declared(
+    source: Path,
+    destination: Path,
+    paths: tuple[PurePosixPath, ...],
+    *,
+    learner_writable: bool = False,
+) -> None:
     for relative in paths:
         source_file = _regular_file(source, relative)
         target = destination.joinpath(*relative.parts)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(source_file.read_bytes())
-        target.chmod(source_file.stat().st_mode & 0o777)
+        executable = bool(source_file.stat().st_mode & 0o111)
+        if learner_writable:
+            target.chmod(0o755 if executable else 0o644)
+        else:
+            target.chmod(source_file.stat().st_mode & 0o777)
 
 
 def materialize(template: Path, work_root: Path, stable_id: str, declared_files: Iterable[str]) -> Path:
@@ -113,7 +123,51 @@ def materialize(template: Path, work_root: Path, stable_id: str, declared_files:
     paths = _declared(declared_files)
     temporary = Path(tempfile.mkdtemp(prefix=f".{stable_id}.", dir=work_root))
     try:
-        _copy_declared(template, temporary, paths)
+        _copy_declared(template, temporary, paths, learner_writable=True)
+        os.replace(temporary, destination)
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+    return destination
+
+
+def materialize_inherited(
+    snapshot: Path,
+    additions: Path,
+    work_root: Path,
+    stable_id: str,
+    provider_files: Iterable[str],
+    consumer_files: Iterable[str],
+) -> Path:
+    """Atomically combine a verified snapshot with an exact additions tree."""
+    stable_id = _stable_id(stable_id)
+    snapshot = _real_directory(Path(snapshot), "provider snapshot")
+    additions = _real_directory(Path(additions), "additions")
+    work_root = _real_directory(Path(work_root), "workspace root")
+    verify_snapshot(snapshot)
+    inherited = _declared(provider_files)
+    declared = _declared(consumer_files)
+    inherited_set = set(inherited)
+    declared_set = set(declared)
+    snapshot_files = set(_scan_regular_tree(snapshot)) - {MANIFEST}
+    if snapshot_files != {path.as_posix() for path in inherited}:
+        raise WorkspaceError(
+            "provider snapshot does not exactly match provider declared files"
+        )
+    if not inherited_set < declared_set:
+        raise WorkspaceError(
+            "inherited materialization requires a strict additive file set"
+        )
+    new_paths = tuple(sorted(declared_set - inherited_set, key=lambda item: item.as_posix()))
+    expected_additions = {path.as_posix() for path in new_paths}
+    _validate_additions_tree(additions, expected_additions)
+    destination = work_root / stable_id
+    if destination.exists() or destination.is_symlink():
+        raise WorkspaceError(f"workspace already exists: {destination}")
+    temporary = Path(tempfile.mkdtemp(prefix=f".{stable_id}.", dir=work_root))
+    try:
+        _copy_declared(snapshot, temporary, inherited, learner_writable=True)
+        _copy_declared(additions, temporary, new_paths, learner_writable=True)
         os.replace(temporary, destination)
     finally:
         if temporary.exists():
@@ -136,6 +190,27 @@ def _scan_regular_tree(root: Path) -> tuple[str, ...]:
                 raise WorkspaceError(f"workspace contains a symlink or special file: {path}")
             files.append(path.relative_to(root).as_posix())
     return tuple(sorted(files))
+
+
+def _validate_additions_tree(root: Path, expected_files: set[str]) -> None:
+    actual_files = set(_scan_regular_tree(root))
+    actual_directories: set[str] = set()
+    for directory, names, _ in os.walk(root, followlinks=False):
+        directory_path = Path(directory)
+        for name in names:
+            actual_directories.add(
+                (directory_path / name).relative_to(root).as_posix()
+            )
+    expected_directories = {
+        parent.as_posix()
+        for value in expected_files
+        for parent in PurePosixPath(value).parents
+        if parent != PurePosixPath(".")
+    }
+    if actual_files != expected_files or actual_directories != expected_directories:
+        raise WorkspaceError(
+            "additions tree must contain exactly the new files and their parent directories"
+        )
 
 
 def archive_workspace(workspace: Path, archive_root: Path, stable_id: str) -> Path:
@@ -176,7 +251,7 @@ def _replace_workspace(source: Path, work_root: Path, stable_id: str, declared_f
     temporary = Path(tempfile.mkdtemp(prefix=f".{stable_id}.restore.", dir=work_root))
     previous = None
     try:
-        _copy_declared(source, temporary, paths)
+        _copy_declared(source, temporary, paths, learner_writable=True)
         if destination.exists():
             previous = work_root / f".{stable_id}.previous.{os.getpid()}"
             os.replace(destination, previous)

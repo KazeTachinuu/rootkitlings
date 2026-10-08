@@ -1,6 +1,2 @@
-ROOTKITLINGS_FAIL_POINT ?= 0
-
 obj-m += rootkitlings.o
-rootkitlings-y := core/main.o core/state.o status/status.o
-ccflags-y += -I$(src)/include
-ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)
+rootkitlings-y := core/main.o

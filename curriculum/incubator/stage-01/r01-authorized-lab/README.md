@@ -1,4 +1,4 @@
-# R01 — Work inside an authorized disposable lab
+# Work inside an authorized disposable lab
 
 Kernel code has machine-wide privilege.
 Before writing any, define the machine you are allowed to affect and prove that the course VM does not expose the host filesystem or network.
@@ -22,7 +22,7 @@ Do not put credentials, tokens, customer names, production hostnames, or other s
 From the repository root, run:
 
 ```bash
-curriculum/incubator/stage-01/r01-authorized-lab/check path/to/lab.toml
+./rootkitlings check
 ```
 
 The check rejects incomplete or weakened containment declarations, then boots the existing diskless VM with no network device.
