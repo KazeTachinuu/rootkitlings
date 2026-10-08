@@ -28,9 +28,9 @@ Networking exercises may later enable only capabilities declared by their metada
 
 ### 1. Generate aliases from canonical course order
 
-Implementation: complete for the current required route.
+Implementation: complete in the catalog engine.
 `Catalog` now generates L/M/C serials from canonical route order and kind; `course.toml` no longer stores an alias table.
-Track ordering and elective positions remain pending because no elective exercises are public yet.
+When elective tracks are declared, the catalog generates their E-series labels and the canonical display order without storing either in metadata.
 
 Completed:
 
@@ -40,38 +40,27 @@ Completed:
   - milestones: `M00` onward;
   - capstones: `C00` onward.
 
-Pending with elective-track adoption:
-
 - Generate track labels separately as `E01` onward.
   `E` identifies a track,
   not an exercise.
 - Define canonical all-exercise order as:
   1. `required_route`;
   2. elective track members in track order and member order.
-- Reject exercises absent from both the required route and exactly one elective
-  track.
+- Reject required or elective exercises that are absent from their declared
+  route or track.
 - Replace `sequence` with an unambiguous canonical display position, or expose
   `route_position` and `track_position` separately.
 
 ### 2. Add authoritative elective tracks
 
-Although the catalog accepts `status = "elective"`, current metadata contains none.
-There is no track registry, track membership, ordering, label, or CLI filtering.
-
-Additionally:
-
-- `Catalog.ordered()` returns required items only.
-- Catalog export consequently omits electives.
-- CLI appends non-required exercises sorted by stage and title, losing
-  pedagogical track order.
-- CLI treats every non-required status, including `retired`, as an
-  elective-like runnable item.
+Implementation: registry, generated labels, membership validation, API, export, and learner list grouping are complete.
+The live course metadata has no elective exercises yet; the eight target tracks and their lesson assets remain to be added during route adoption.
 
 Required course schema:
 
 ```toml
 [[elective_tracks]]
-id = "kernel-debugging"
+id = "kernel-debugging-track"
 label = "Kernel debugging"
 members = ["qemu-gdb-debugging"]
 ```
@@ -98,6 +87,12 @@ Required APIs:
 - CLI `list` renders the required journey followed by named optional tracks.
 
 The current elective availability rule—direct prerequisites must be completed—is otherwise a reasonable base.
+
+Still pending with target metadata adoption:
+
+- Populate all eight reviewed tracks and their member exercises.
+- Validate that elective dependency edges follow canonical reachable order.
+- Reject execution commands for any retained `status = "retired"` metadata.
 
 ### 3. Derive cumulative milestone ancestry
 

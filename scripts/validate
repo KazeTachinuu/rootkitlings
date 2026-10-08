@@ -17,7 +17,7 @@ import sys
 sys.path.insert(0, str(Path.cwd() / "lib"))
 from catalog import Catalog
 catalog = Catalog(Path.cwd())
-for item in sorted(catalog.exercises, key=lambda value: (value.sequence < 0, value.sequence, value.id)):
+for item in catalog.display_order():
     print("\x1f".join((item.id, item.workspace.baseline, item.workspace.source,
           ",".join(item.workspace.files), item.workspace.build)))
 PY

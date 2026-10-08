@@ -69,7 +69,10 @@ def main() -> int:
             )
         elif args.command == "prerequisite-closure":
             item = catalog.resolve(args.selector)
-            emit(tuple(value.serial for value in catalog.prerequisite_exercises(item)))
+            emit(tuple(
+                value.serial or value.id
+                for value in catalog.prerequisite_exercises(item)
+            ))
         elif args.command == "concept-closure":
             concept_ids = catalog.all_concepts(catalog.resolve(args.selector))
             for value in sorted(concept_ids):
@@ -87,17 +90,25 @@ def main() -> int:
         elif args.command == "concept-label":
             print(catalog.concept_label(args.concept))
         elif args.command == "list":
-            for item in catalog.ordered():
+            for item in catalog.display_order():
                 if args.difficulty and item.difficulty != args.difficulty:
                     continue
                 if args.concept and args.concept not in item.teaches and args.concept not in item.requires:
                     continue
-                print(f"{item.serial}\t{item.path}\t{item.title}")
+                print(f"{item.serial or item.id}\t{item.path}\t{item.title}")
         elif args.command == "export":
             records = []
-            for item in catalog.ordered():
+            for item in catalog.display_order():
+                track = catalog.track_for(item)
                 records.append({
                     "id": item.id, "serial": item.serial, "sequence": item.sequence,
+                    "route_position": (
+                        item.route_position if item.route_position >= 0 else None
+                    ),
+                    "track_id": track.id if track else None,
+                    "track_position": (
+                        item.track_position if item.track_position >= 0 else None
+                    ),
                     "path": item.path.as_posix(), "title": item.title,
                     "stage": item.stage, "kind": item.kind, "status": item.status,
                     "tradecraft": list(item.tradecraft), "difficulty": item.difficulty,
@@ -139,6 +150,16 @@ def main() -> int:
             print(json.dumps({
                 "revision": catalog.revision,
                 "default_module_artifact": catalog.default_module_artifact,
+                "elective_tracks": [
+                    {
+                        "id": track.id,
+                        "serial": track.serial,
+                        "position": track.position,
+                        "label": track.label,
+                        "members": list(track.members),
+                    }
+                    for track in catalog.elective_tracks
+                ],
                 "exercises": records,
             }, indent=2))
     except CatalogError as exc:

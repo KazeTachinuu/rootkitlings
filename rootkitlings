@@ -724,11 +724,7 @@ def cmd_list(a):
         completed = len(set(ROUTE) & s.completed)
         print(f'Course  {completed}/{len(ROUTE)} required complete\n')
         stage = None
-        xs = CAT.ordered() + sorted(
-            (x for x in CAT.exercises if x.status == 'elective'),
-            key=lambda x: (x.stage, x.title),
-        )
-        for x in xs:
+        for x in CAT.required():
             if x.stage != stage:
                 print(CAT.section(x))
                 stage = x.stage
@@ -736,13 +732,28 @@ def cmd_list(a):
                 state = 'passed'
             elif x.id == s.current:
                 state = 'current'
-            elif x.status == 'elective' and all(
-                prerequisite in s.completed for prerequisite in x.prerequisites
-            ):
-                state = 'optional'
             else:
                 state = 'locked'
             print(f'  {state:<8} {label(x):<4} {x.title} [{x.difficulty}]')
+        if CAT.elective_tracks:
+            print('\nOptional tracks')
+        for track in CAT.elective_tracks:
+            print(f'{track.serial} {track.label}')
+            for exercise_id in track.members:
+                x = CAT.by_id[exercise_id]
+                if x.id in s.completed:
+                    state = 'passed'
+                elif all(
+                    prerequisite in s.completed
+                    for prerequisite in x.prerequisites
+                ):
+                    state = 'optional'
+                else:
+                    state = 'locked'
+                print(
+                    f'  {state:<8} {label(x):<4} '
+                    f'{x.title} [{x.difficulty}]'
+                )
         print('\nStates: passed, current, optional, locked')
         if s.current:
             print(f'Next: ./rootkitlings read {label(CAT.by_id[s.current])}')

@@ -6,8 +6,8 @@ import tomllib
 import unittest
 
 from lib.catalog import (
-    Catalog, CatalogError, Exercise, Resources, Verification, VerificationCase,
-    Workspace,
+    Catalog, CatalogError, ElectiveTrack, Exercise, Resources, Verification,
+    VerificationCase, Workspace, _elective_track_rows,
 )
 from lib.workspace import WorkspaceError
 
@@ -78,6 +78,7 @@ class GeneratedSerialTests(unittest.TestCase):
         self.assertIsNone(
             data["exercises"][0]["workspace"]["module_artifact_override"]
         )
+        self.assertEqual(data["elective_tracks"], [])
         self.assertEqual(
             data["exercises"][0]["verification"]["cases"],
             [{
@@ -89,6 +90,91 @@ class GeneratedSerialTests(unittest.TestCase):
                 "build_output_contains": "",
             }],
         )
+
+
+class ElectiveTrackTests(unittest.TestCase):
+    def exercise(self, stable_id: str, status: str) -> Exercise:
+        item = _exercise(stable_id, "template")
+        return Exercise(**{**item.__dict__, "status": status})
+
+    def catalog(
+        self,
+        exercises: tuple[Exercise, ...],
+        tracks: tuple[ElectiveTrack, ...],
+    ) -> Catalog:
+        catalog = Catalog.__new__(Catalog)
+        catalog.exercises = list(exercises)
+        catalog.by_id = {item.id: item for item in exercises}
+        catalog.elective_tracks = catalog._generate_track_aliases(tracks)
+        catalog.track_aliases = {
+            track.serial: track.id for track in catalog.elective_tracks
+        }
+        return catalog
+
+    def test_absent_registry_is_an_empty_backward_compatible_value(self) -> None:
+        self.assertEqual(_elective_track_rows({}), [])
+        self.assertEqual(Catalog(ROOT).elective_tracks, ())
+
+    def test_track_aliases_come_only_from_registry_order(self) -> None:
+        tracks = (
+            ElectiveTrack("debugging-track", "Kernel debugging", ("debugging",)),
+            ElectiveTrack("abi-track", "Binary control ABI", ("ioctl",)),
+        )
+        catalog = self.catalog((), tracks)
+        self.assertEqual(
+            [(track.serial, track.position) for track in catalog.elective_tracks],
+            [("E01", 0), ("E02", 1)],
+        )
+        self.assertEqual(
+            catalog.track_aliases,
+            {"E01": "debugging-track", "E02": "abi-track"},
+        )
+
+    def test_parser_rejects_empty_and_duplicate_members(self) -> None:
+        for members, message in (([], "must not be empty"), (["one", "one"], "duplicate")):
+            with self.subTest(members=members):
+                with self.assertRaisesRegex(CatalogError, message):
+                    _elective_track_rows({
+                        "elective_tracks": [{
+                            "id": "debugging-track",
+                            "label": "Kernel debugging",
+                            "members": members,
+                        }]
+                    })
+
+    def test_each_elective_belongs_to_exactly_one_track(self) -> None:
+        required = self.exercise("required", "required")
+        elective = self.exercise("debugging", "elective")
+        track = ElectiveTrack(
+            "debugging-track", "Kernel debugging", ("debugging",)
+        )
+        catalog = self.catalog((required, elective), (track,))
+        catalog._validate_elective_tracks(set(catalog.by_id))
+
+        catalog = self.catalog((required, elective), ())
+        with self.assertRaisesRegex(CatalogError, "membership mismatch"):
+            catalog._validate_elective_tracks(set(catalog.by_id))
+
+        duplicate = ElectiveTrack(
+            "second-track", "Second track", ("debugging",)
+        )
+        catalog = self.catalog((required, elective), (track, duplicate))
+        with self.assertRaisesRegex(CatalogError, "only one"):
+            catalog._validate_elective_tracks(set(catalog.by_id))
+
+    def test_track_members_must_exist_and_be_elective(self) -> None:
+        required = self.exercise("required", "required")
+        wrong_status = ElectiveTrack(
+            "wrong-track", "Wrong status", ("required",)
+        )
+        catalog = self.catalog((required,), (wrong_status,))
+        with self.assertRaisesRegex(CatalogError, "status='elective'"):
+            catalog._validate_elective_tracks(set(catalog.by_id))
+
+        unknown = ElectiveTrack("unknown-track", "Unknown", ("missing",))
+        catalog = self.catalog((required,), (unknown,))
+        with self.assertRaisesRegex(CatalogError, "unknown exercise"):
+            catalog._validate_elective_tracks(set(catalog.by_id))
 
 
 class VerificationCaseTests(unittest.TestCase):
@@ -287,6 +373,31 @@ class DerivedBaselineTests(unittest.TestCase):
         catalog = self.catalog((first, second), (elective,))
         self.assertEqual(catalog.baseline_provider(second), first)
         self.assertEqual(catalog.completion_dependencies(second), ("first",))
+
+    def test_direct_prerequisites_reject_duplicates_and_transitive_edges(self) -> None:
+        first = _exercise("first", "template")
+        second = Exercise(**{
+            **_exercise("second", "template").__dict__,
+            "prerequisites": ("first",),
+        })
+        duplicate = Exercise(**{
+            **_exercise("duplicate", "template").__dict__,
+            "prerequisites": ("second", "second"),
+        })
+        catalog = self.catalog((first, second, duplicate))
+        with self.assertRaisesRegex(CatalogError, "duplicate prerequisites"):
+            catalog._validate_direct_prerequisites()
+
+        redundant = Exercise(**{
+            **_exercise("redundant", "template").__dict__,
+            "prerequisites": ("first", "second"),
+        })
+        catalog = self.catalog((first, second, redundant))
+        with self.assertRaisesRegex(
+            CatalogError,
+            "prerequisite 'first' is already implied by 'second'",
+        ):
+            catalog._validate_direct_prerequisites()
 
     def test_previous_milestone_ignores_intervening_lessons_and_electives(self) -> None:
         milestone = _exercise("milestone", "template", kind="milestone")
