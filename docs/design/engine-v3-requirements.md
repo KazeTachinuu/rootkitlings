@@ -177,7 +177,7 @@ Still pending:
 ### 4. Support explicit state migration
 
 Implementation: generic state and migration foundations are complete.
-The reviewed 65-to-44 mapping, workspace relocation, and route-specific migration orchestration remain pending.
+The reviewed 65-to-43 mapping, workspace relocation, and route-specific migration orchestration remain pending.
 
 The former exact-prefix rule conflicted with the requirement that a curriculum reorder not change the meaning of saved progress.
 Inserting a new checkpoint before completed stable IDs turns valid historical completion into a non-prefix set.
@@ -215,7 +215,7 @@ This permits sparse historical credit after a route insertion without changing s
 
 Still pending:
 
-- Encode and review the one-time 65-to-44 migration plan because many IDs are
+- Encode and review the one-time 65-to-43 migration plan because many IDs are
   merged or replaced.
 - Verify compatible snapshots and relocate/archive workspaces before committing
   the state replacement.

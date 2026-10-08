@@ -123,6 +123,9 @@ Later networking checks may enable only capabilities declared by their exercise 
 
 ## Required route
 
+Each `Requires` line names direct dependencies only.
+Knowledge already reached through one of those dependencies is not repeated.
+
 ### Stage 1: Module core
 
 #### R01 - Build, load, inspect, and unload a module
@@ -199,7 +202,7 @@ The check injects failure at every stage, repeats load/unload, and verifies that
 - Teaches: `__user` pointers, bounds before copy, local termination,
   copy-validate-commit, and rejection without mutation.
 - Produces: a root-only control ingress.
-- Requires: R02 and R04.
+- Requires: R04.
 - Defensive evidence: empty, oversized, malformed, embedded-NUL, and valid inputs.
 - Current source: L11.
 
@@ -208,7 +211,7 @@ The check injects failure at every stage, repeats load/unload, and verifies that
 - Teaches: enumerated verbs, bounded typed arguments, exact matching, and unknown
   command rejection.
 - Produces: a fixed-function control plane; never arbitrary command execution.
-- Requires: R03 and R06.
+- Requires: R06.
 - Defensive evidence: rejected prefixes, trailing data, overflow, and invalid
   state transitions.
 - Current source: parsing work currently embedded in C00 and several later
@@ -219,7 +222,7 @@ The check injects failure at every stage, repeats load/unload, and verifies that
 - Teaches: intrusive lists, allocation ownership, iteration, bounded growth, safe
   deletion, and complete purge.
 - Produces: the rootkit configuration registry.
-- Requires: R03 and R06.
+- Requires: R06.
 - Defensive evidence: insertion order, capacity bound, rejection without partial
   insertion, and empty state after unload.
 - Current source: L13.
@@ -229,7 +232,7 @@ The check injects failure at every stage, repeats load/unload, and verifies that
 - Teaches: atomic scalar operations versus mutex-protected multi-field invariants,
   lock scope, and unlock on every exit.
 - Produces: race-safe configuration and counters.
-- Requires: R06 and R08.
+- Requires: R08.
 - Defensive evidence: deterministic stress result and invariant-preserving errors.
 - Current sources: L20 and L22.
 
@@ -258,7 +261,7 @@ The check injects failure at every stage, repeats load/unload, and verifies that
 - Teaches: thread creation and pointer errors, wait queues, condition-loop waiting,
   publish-before-wake, stop checks, wakeup, and join.
 - Produces: the resident worker.
-- Requires: R03, R09, and R10.
+- Requires: R09 and R10.
 - Defensive evidence: task inventory, event consumption, stop while blocked, and
   disappearance after unload.
 - Current sources: L19 and L23; L12's real pointer-error application is reinforced
@@ -294,7 +297,7 @@ This is one extension of M00, not a fresh scaffold.
 
 - Teaches: prepare, populate, commit, abort, and same-caller effect.
 - Produces: one bounded privilege action.
-- Requires: R03, R06, and R14.
+- Requires: R06 and R14.
 - Defensive evidence: wrong command has no effect; the exact writing process changes;
   failed preparation leaves credentials unchanged.
 - Current source: L26.
@@ -313,7 +316,7 @@ This is one extension of M00, not a fresh scaffold.
 - Teaches: exported versus internal symbols, configuration gates, architecture call
   ABI, kernel-version coupling, and the narrow temporary-probe resolver.
 - Produces: an explicit compatibility boundary for later instrumentation.
-- Requires: R03 and R10.
+- Requires: R10.
 - Defensive evidence: resolved address, configuration/version manifest, and absence
   of the temporary probe afterward.
 - Current source: L27, moved from general introspection to immediately before probes.
@@ -323,7 +326,7 @@ This is one extension of M00, not a fresh scaffold.
 - Teaches: registration, bounded handlers, per-hook ownership, unregister-before-free,
   and rollback of a partially registered hook set.
 - Produces: entry telemetry.
-- Requires: R04 and R17.
+- Requires: R17.
 - Defensive evidence: probe registry, event counter, forced second-hook failure, and
   complete removal.
 - Current sources: L29 and L33.
@@ -333,7 +336,7 @@ This is one extension of M00, not a fresh scaffold.
 - Teaches: kretprobe entry/return state, `maxactive` and missed instances, syscall
   wrapper registers, no-fault bounded copying, and architecture limitations.
 - Produces: attributable syscall telemetry.
-- Requires: R06, R17, and R18.
+- Requires: R06 and R18.
 - Defensive evidence: success/failure return classes, exact matching argument,
   ordinary calls unchanged, and missed-instance reporting.
 - Current sources: L30 and L32.
@@ -369,7 +372,7 @@ Spinlock ownership and ring overwrite semantics must be taught before or within 
 - Teaches: validation of minimum and full record extent, name termination, forward
   progress, overlap-safe compaction, and returned-length correction.
 - Produces: reusable directory-enumeration filtering.
-- Requires: R03, R19, and R20.
+- Requires: R19 and R20.
 - Defensive evidence: direct lookup, unrelated directories, malformed records, and
   restoration after unload.
 - Current source: L36.
@@ -415,7 +418,7 @@ The milestone produces a machine-readable evidence card stating which view chang
 - Teaches: hook points, namespaces, priorities, verdicts, registration lifetime, and
   accept-by-default behavior.
 - Produces: a packet observation point.
-- Requires: R04, R10, and R25.
+- Requires: R25.
 - Defensive evidence: hook inventory/counters, unchanged traffic, and removal.
 - Current source: L40.
 
@@ -443,7 +446,7 @@ The milestone produces a machine-readable evidence card stating which view chang
 - Teaches: namespace-aware creation, connect/send/receive errors, datagram exactness,
   shutdown, release, and visibility in socket tables.
 - Produces: a kernel-owned endpoint.
-- Requires: R04 and R10.
+- Requires: R10.
 - Defensive evidence: socket inventory and disappearance after failure or unload.
 - Current source: L43, refactored so the title and implementation agree on the
   actual socket family and type.
@@ -472,7 +475,7 @@ The milestone produces a machine-readable evidence card stating which view chang
 - Teaches: exact original image, bounded kernel file I/O, foreign-file ownership,
   compare-before-restore, and context/deadlock constraints.
 - Produces: a guarded durable boot-request edit.
-- Requires: R03, R04, and R10.
+- Requires: R10.
 - Defensive evidence: byte-for-byte restoration, sentinel protection, preservation
   of newer foreign content, and file-integrity monitoring.
 - Current source: L48.
@@ -500,7 +503,7 @@ This milestone does not expose a general shell.
 - Teaches: Kernel Crypto API `shash` lifecycle, descriptor sizing, known-answer
   vectors, comparison, and why a public digest is not authentication.
 - Produces: integrity verification against a trusted fingerprint.
-- Requires: R03 and R33.
+- Requires: R33.
 - Defensive evidence: known-answer accept/reject cases and keyless forgery model.
 - Current source: L51.
 
@@ -519,7 +522,7 @@ This milestone does not expose a general shell.
 - Teaches: transform/request/scatterlist lifetime, AAD, unique nonces, tag layout,
   asynchronous completion, `-EBADMSG`, and secret-erasure limits.
 - Produces: an optional confidential transport envelope.
-- Requires: R03 and R35.
+- Requires: R35.
 - Defensive evidence: known-answer vector, nonce discipline, tag/ciphertext tamper,
   and no plaintext consumption on failure.
 - Current source: L50, moved after the simpler hash and MAC property progression.
@@ -529,7 +532,7 @@ This milestone does not expose a general shell.
 - Teaches: composition of bounded DNS encoding, HMAC/freshness, socket ownership,
   and a paired detection hypothesis.
 - Produces: one local authenticated status signal, not a general command tunnel.
-- Requires: R20, R29, R31, and R35.
+- Requires: R20, R29, and R35.
 - Defensive evidence: independent packet decode and tag verification, replay
   rejection, and documented DNS anomaly indicators.
 - Current sources: C09 and the bounded keyed-label idea from L53.
