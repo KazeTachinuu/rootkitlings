@@ -242,8 +242,9 @@ The failure-point-3 guest check:
    saves their enable state, disables them, and clears the trace;
 2. enables both events and performs the rejected load;
 3. confirms the exact error and absence of the module and proc entry;
-4. requires a nonzero pointer token from a raw module allocation call site and a
-   matching token from a raw module free call site;
+4. filters to the numeric loader task and requires exactly one nonzero pointer
+   token from a raw module allocation call site and the same token from exactly
+   one raw module free call site;
 5. removes checker captures, clears the trace, and restores the original event
    state.
 

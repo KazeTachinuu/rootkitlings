@@ -67,8 +67,8 @@ check_attempt()
 	: > /tmp/rk-frees
 	while IFS= read -r line; do
 		case "$line" in
-			*' kmalloc: '*) kind=alloc ;;
-			*' kfree: '*) kind=free ;;
+			*module_load_tes-*' kmalloc: '*) kind=alloc ;;
+			*module_load_tes-*' kfree: '*) kind=free ;;
 			*) continue ;;
 		esac
 		call_site=
@@ -101,20 +101,20 @@ check_attempt()
 	done < /tmp/rk-trace
 
 	matched=
-	while read -r alloc_ptr _; do
-		[ -n "$alloc_ptr" ] || continue
-		while read -r free_ptr _; do
-			if [ "$free_ptr" = "$alloc_ptr" ] && [ "$alloc_ptr" != 0000000000000000 ]; then
-				matched=$alloc_ptr
-				break 2
-			fi
-		done < /tmp/rk-frees
-	done < /tmp/rk-allocs
+	alloc_count=$(wc -l < /tmp/rk-allocs)
+	free_count=$(wc -l < /tmp/rk-frees)
+	if [ "$alloc_count" -eq 1 ] && [ "$free_count" -eq 1 ]; then
+		read -r alloc_ptr _ < /tmp/rk-allocs
+		read -r free_ptr _ < /tmp/rk-frees
+		if [ "$alloc_ptr" = "$free_ptr" ] && [ "$alloc_ptr" != 0000000000000000 ]; then
+			matched=$alloc_ptr
+		fi
+	fi
 
 	if [ -n "$matched" ]; then
 		_ok "attempt $attempt freed module state during rollback"
 	else
-		_fail "attempt $attempt has no matching allocation and rollback free"
+		_fail "attempt $attempt lacks one matching module allocation and rollback free"
 		printf '    parsed allocations:\n'
 		head -n 12 /tmp/rk-allocs
 		printf '    parsed frees:\n'
