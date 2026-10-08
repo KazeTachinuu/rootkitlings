@@ -20,6 +20,7 @@ from lib.setup_gate import (
     write_setup_stamp,
 )
 from lib.state import StateStore, StateError
+from lib.verification import VerificationError, build_verification_cases
 from lib.workspace import (
     WorkspaceError,
     archive_and_remove_workspaces,
@@ -461,8 +462,12 @@ def build_workspace(x):
     return artifact
 
 
-def run_host_check(x, artifact):
-    return run([str(ROOT / x.resources.host_check), str(bd(x)), str(artifact)])
+def run_host_check(x, build_directory, artifact):
+    return run([
+        str(ROOT / x.resources.host_check),
+        str(build_directory),
+        str(artifact),
+    ])
 
 
 def cmd_build(a):
@@ -540,31 +545,51 @@ def cmd_check(a):
         x = resolve(one(a, 'check'), s)
         available(x, s)
     try:
-        m = build_workspace(x)
-    except CLIError:
+        workspace = need(x)
+        cases = CAT.verification_cases(x)
+        with build_verification_cases(
+            ROOT,
+            workspace,
+            x.workspace.files,
+            x.workspace.build,
+            CAT.module_artifact(x),
+            cases,
+            check_timeout(x),
+        ) as outcomes:
+            for index, outcome in enumerate(outcomes, 1):
+                head(f'Check {index}/{len(outcomes)}: {outcome.case.label}')
+                if outcome.artifact is None:
+                    done('Build rejected as required')
+                    continue
+                if (
+                    x.resources.host_check
+                    and run_host_check(
+                        x,
+                        outcome.build_root,
+                        outcome.artifact,
+                    ).returncode
+                ):
+                    die(f'Source and artifact checks failed for {label(x)}')
+                result = run(
+                    [
+                        str(ROOT / 'vm/boot'),
+                        *bootargs(x),
+                        '--check',
+                        str(ROOT / outcome.case.check),
+                        str(outcome.artifact),
+                    ],
+                    timeout=check_timeout(x),
+                    capture=True,
+                )
+                if result.stdout:
+                    print(result.stdout, end='')
+                if result.returncode or '[+] PASSED' not in (result.stdout or ''):
+                    die(f'Guest check failed: {outcome.case.label}')
+    except (CLIError, VerificationError):
         record_attempt(x, False)
-        raise
-    if x.resources.host_check and run_host_check(x, m).returncode:
-        record_attempt(x, False)
-        die(f'Source and artifact checks failed for {label(x)}')
-    r = run(
-        [
-            str(ROOT / 'vm/boot'),
-            *bootargs(x),
-            '--check',
-            str(ROOT / x.resources.check),
-            str(m),
-        ],
-        timeout=check_timeout(x),
-        capture=True,
-    )
-    if r.stdout:
-        print(r.stdout, end='')
-    passed = r.returncode == 0 and '[+] PASSED' in (r.stdout or '')
-    record_attempt(x, passed)
-    if not passed:
         info(f'Hint: ./rootkitlings hint {label(x)}')
-        die(f'{label(x)} failed')
+        raise
+    record_attempt(x, True)
     done(f'Passed {label(x)}.')
     with STORE.read_locked() as s:
         next_item = current(s)
@@ -844,6 +869,12 @@ def main(a):
 if __name__ == '__main__':
     try:
         raise SystemExit(main(sys.argv[1:]))
-    except (CLIError, SetupGateError, StateError, WorkspaceError) as error:
+    except (
+        CLIError,
+        SetupGateError,
+        StateError,
+        VerificationError,
+        WorkspaceError,
+    ) as error:
         print(f'{R}Error:{N} {error}', file=sys.stderr)
         raise SystemExit(1)

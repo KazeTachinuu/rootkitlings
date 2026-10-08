@@ -177,16 +177,18 @@ class VerificationCaseTests(unittest.TestCase):
                 "expect_build": "fail", "check": "check",
                 "build_output_contains": "error",
             },
-            {
-                "id": "failure", "label": "Failure", "build_variables": {},
-                "expect_build": "fail", "check": "",
-                "build_output_contains": "",
-            },
         )
         for case in cases:
             with self.subTest(case=case):
                 with self.assertRaises(CatalogError):
                     self.parse([case])
+
+        failure = self.parse([{
+            "id": "failure", "label": "Failure", "build_variables": {},
+            "expect_build": "fail", "check": "",
+            "build_output_contains": "",
+        }])
+        self.assertEqual(failure.cases[0].build_output_contains, "")
 
     def test_catalog_validation_requires_case_check_to_exist(self) -> None:
         catalog = Catalog(ROOT)

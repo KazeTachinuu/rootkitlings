@@ -396,10 +396,9 @@ class Catalog:
                 raise CatalogError(
                     f"{case_path}: successful case forbids build_output_contains"
                 )
-        elif check or not output.strip():
+        elif check:
             raise CatalogError(
-                f"{case_path}: failed case forbids a guest check and requires "
-                "build_output_contains"
+                f"{case_path}: failed case forbids a guest check"
             )
         return VerificationCase(
             case_id, label, tuple(sorted(normalized)), expect_build, check, output

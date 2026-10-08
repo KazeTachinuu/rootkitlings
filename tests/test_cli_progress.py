@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import io
 from pathlib import Path
 import runpy
@@ -273,12 +273,82 @@ class LearnerCLITests(unittest.TestCase):
                 lambda command, **kwargs: calls.append((command, kwargs))
                 or SimpleNamespace(returncode=0)
             )
-            self.globals["run_host_check"](exercise, artifact)
+            self.globals["run_host_check"](exercise, workspace, artifact)
         finally:
             self.globals["run"] = original_run
         command, kwargs = calls[0]
         self.assertEqual(command[-2:], [str(workspace), str(artifact)])
         self.assertEqual(kwargs, {})
+
+    def test_check_runs_each_declarative_case_and_records_one_attempt(self) -> None:
+        exercise = self.globals["CAT"].ordered()[0]
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.globals["cmd_start"]([exercise.serial])
+        build_root = self.globals["WORK"] / exercise.id
+        artifact = build_root / self.globals["CAT"].module_artifact(exercise)
+        artifact.write_bytes(b"module")
+        success = SimpleNamespace(
+            id="normal",
+            label="Normal load",
+            check=exercise.resources.check,
+        )
+        rejection = SimpleNamespace(
+            id="invalid",
+            label="Invalid build setting",
+            check="",
+        )
+        outcomes = (
+            SimpleNamespace(
+                case=success,
+                build_root=build_root,
+                artifact=artifact,
+                output="",
+            ),
+            SimpleNamespace(
+                case=rejection,
+                build_root=build_root,
+                artifact=None,
+                output="rejected",
+            ),
+        )
+
+        @contextmanager
+        def fake_builds(*_args, **_kwargs):
+            yield outcomes
+
+        originals = {
+            name: self.globals[name]
+            for name in (
+                "build_verification_cases",
+                "run",
+                "run_host_check",
+                "record_attempt",
+            )
+        }
+        attempts = []
+        guest_runs = []
+        try:
+            self.globals["build_verification_cases"] = fake_builds
+            self.globals["run_host_check"] = (
+                lambda *_args: SimpleNamespace(returncode=0)
+            )
+            self.globals["run"] = (
+                lambda command, **_kwargs: guest_runs.append(command)
+                or SimpleNamespace(returncode=0, stdout="[+] PASSED\n")
+            )
+            self.globals["record_attempt"] = (
+                lambda item, passed: attempts.append((item.id, passed))
+            )
+            output = io.StringIO()
+            with redirect_stdout(output), redirect_stderr(io.StringIO()):
+                self.globals["cmd_check"]([exercise.serial])
+        finally:
+            self.globals.update(originals)
+        self.assertIn("Check 1/2: Normal load", output.getvalue())
+        self.assertIn("Check 2/2: Invalid build setting", output.getvalue())
+        self.assertIn("Build rejected as required", output.getvalue())
+        self.assertEqual(len(guest_runs), 1)
+        self.assertEqual(attempts, [(exercise.id, True)])
 
     def test_template_solution_renders_recursive_paths_in_order(self) -> None:
         exercise = SimpleNamespace(
