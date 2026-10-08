@@ -47,6 +47,15 @@ class LearnerState:
             raise StateError(f"invalid stable ID: {stable_id!r}")
         return self.exercises.setdefault(stable_id, ExerciseState())
 
+    def clear_progress(self, stable_ids: set[str]) -> None:
+        """Forget completion and per-exercise state for an explicit ID set."""
+        invalid = {item for item in stable_ids if not ID_RE.fullmatch(item)}
+        if invalid:
+            raise StateError(f"invalid stable IDs: {sorted(invalid)}")
+        self.completed.difference_update(stable_ids)
+        for stable_id in stable_ids:
+            self.exercises.pop(stable_id, None)
+
     def validate(self, valid_ids: set[str], route: tuple[str, ...], revision: str) -> None:
         _validate_contract(valid_ids, route, revision)
         if self.curriculum_revision != revision:

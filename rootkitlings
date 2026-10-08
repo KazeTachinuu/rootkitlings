@@ -13,11 +13,11 @@ from lib.catalog import Catalog, CatalogError
 from lib.state import StateStore, StateError
 from lib.workspace import (
     WorkspaceError,
+    archive_and_remove_workspaces,
     canonical_tree_hash,
     create_snapshot,
     materialize,
-    reset_workspace,
-    restart_workspace,
+    restore_workspace,
     verify_snapshot,
 )
 
@@ -34,7 +34,7 @@ class CLIError(RuntimeError):
 
 
 def color(code):
-    if sys.stderr.isatty() and not os.getenv('NO_COLOR'):
+    if (sys.stdout.isatty() or sys.stderr.isatty()) and not os.getenv('NO_COLOR'):
         return f'\33[{code}m'
     return ''
 
@@ -47,7 +47,7 @@ def die(message):
 
 
 def head(message):
-    print(f'{B}{message}{N}', file=sys.stderr)
+    print(f'{B}{message}{N}')
 
 
 def info(message):
@@ -55,7 +55,7 @@ def info(message):
 
 
 def done(message):
-    print(f'{G}Done:{N} {message}', file=sys.stderr)
+    print(f'{G}Done:{N} {message}')
 
 
 try:
@@ -389,9 +389,9 @@ def cmd_status(a):
     with STORE.read_locked() as s:
         x = current(s)
         completed = len(set(ROUTE) & s.completed)
-        print(f'\nCourse  {completed}/{len(ROUTE)} required complete')
+        print(f'Course  {completed}/{len(ROUTE)} required complete')
         if not x:
-            print('Status  Required route complete\n')
+            print('Status  Required route complete')
             return
         print(f'ID      {label(x)} ({x.id})')
         print(f'Title   {x.title}')
@@ -403,14 +403,15 @@ def cmd_status(a):
         if x.tradecraft:
             print('Tradecraft ' + ', '.join(tag_labels[value] for value in x.tradecraft))
         edit_paths = ', '.join(shown(wp(x) / p) for p in x.workspace.editable)
-        print(f'Edit    {edit_paths}\nNext    ./rootkitlings read\n')
+        print(f'Edit    {edit_paths}')
+        print('Next    ./rootkitlings read')
 
 
 def cmd_list(a):
     none(a, 'list')
     with STORE.read_locked() as s:
         completed = len(set(ROUTE) & s.completed)
-        print(f'\nCourse  {completed}/{len(ROUTE)} required complete\n')
+        print(f'Course  {completed}/{len(ROUTE)} required complete\n')
         stage = None
         xs = CAT.ordered() + sorted(
             (x for x in CAT.exercises if x.status != 'required'),
@@ -456,29 +457,61 @@ def cmd_prereq(a):
             print(f'  - {CAT.concept_label(c)}')
 
 
-def cmd_reset(a, restart=False):
+def cmd_restore(a):
     with STORE.locked() as s:
-        x = resolve(one(a, 'restart' if restart else 'reset'), s)
+        x = resolve(one(a, 'restore'), s)
         need(x)
         r = s.exercises.get(x.id)
         if not r or not r.baseline_hash:
             die(f'{label(x)} has no recorded baseline')
-        if restart:
-            if x.workspace.baseline != 'template':
-                die(f'{label(x)} uses a completion baseline; use reset')
-            restored, arch = restart_workspace(
-                WORK, ARCHIVE, x.id, ROOT / x.workspace.source, x.workspace.files
-            )
-            baseline_hash, _ = create_snapshot(restored, PASSED, x.workspace.files)
-            r.baseline_hash = baseline_hash
-            r.workspace_hash = baseline_hash
-        else:
-            restored, arch = reset_workspace(
-                WORK, ARCHIVE, x.id, snap(r.baseline_hash), x.workspace.files
-            )
-            r.workspace_hash = canonical_tree_hash(restored, x.workspace.files)
+        restored, arch = restore_workspace(
+            WORK,
+            ARCHIVE,
+            x.id,
+            snap(r.baseline_hash),
+            x.workspace.files,
+        )
+        r.workspace_hash = canonical_tree_hash(restored, x.workspace.files)
     done(f'Archived work at {shown(arch)}')
     done(f'Restored {label(x)}')
+
+
+def progress_reset_ids(selected):
+    if selected is None:
+        affected = set(CAT.by_id)
+    elif selected.id in ROUTE:
+        affected = set(ROUTE[ROUTE.index(selected.id):])
+    else:
+        affected = {selected.id}
+
+    changed = True
+    while changed:
+        changed = False
+        for exercise in CAT.exercises:
+            if exercise.status == 'required' or exercise.id in affected:
+                continue
+            dependencies = set(exercise.prerequisites)
+            if exercise.workspace.parent:
+                dependencies.add(exercise.workspace.parent)
+            if dependencies & affected:
+                affected.add(exercise.id)
+                changed = True
+    return affected
+
+
+def cmd_progress_reset(a):
+    if len(a) != 1:
+        die('Usage: rootkitlings progress-reset EXERCISE | --all')
+    reset_all = a[0] == '--all'
+    with STORE.locked() as s:
+        selected = None if reset_all else resolve(a[0], s)
+        affected = progress_reset_ids(selected)
+        archives = archive_and_remove_workspaces(WORK, ARCHIVE, affected)
+        s.clear_progress(affected)
+    for stable_id, archive in sorted(archives.items()):
+        done(f'Archived {stable_id} at {shown(archive)}')
+    scope = 'all learner progress' if reset_all else f'{label(selected)} and its dependents'
+    done(f'Reset {scope}')
 
 
 def cmd_clean(a):
@@ -493,18 +526,17 @@ def cmd_clean(a):
 
 def usage():
     print(
-        '''
-rootkitlings <COMMAND> [EXERCISE]
+        '''rootkitlings <COMMAND> [EXERCISE]
 
   read start build check hint solution run gdb status list prereq
   build     Compile the selected workspace without checking it
-  reset     Archive work and restore its starting baseline
-  restart   Archive work and restore its pristine template
+  restore   Archive work and restore its starting baseline
+  progress-reset EXERCISE | --all
+              Archive affected work and reset learner progress
   clean     Remove selected workspace build outputs
   help      Show this help
 
-Selectors accept stable IDs or serials. Commands accept unique prefixes.
-'''
+Selectors accept stable IDs or serials. Commands accept unique prefixes.'''
     )
 
 
@@ -520,8 +552,8 @@ CMDS = {
     'status': cmd_status,
     'list': cmd_list,
     'prereq': cmd_prereq,
-    'reset': cmd_reset,
-    'restart': lambda a: cmd_reset(a, True),
+    'restore': cmd_restore,
+    'progress-reset': cmd_progress_reset,
     'clean': cmd_clean,
     'help': lambda a: (none(a, 'help'), usage()),
 }

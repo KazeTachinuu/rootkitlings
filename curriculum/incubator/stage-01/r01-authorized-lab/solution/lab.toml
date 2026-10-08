@@ -1,0 +1,15 @@
+schema_version = 1
+lab_id = "rootkitlings-local-qemu"
+owner = "local-course-lab-owner"
+authorization_reference = "owner-approved disposable training VM"
+permitted_guest = "rootkitlings diskless QEMU guest"
+prohibited_targets = ["production systems", "third-party systems"]
+stop_conditions = ["unexpected host resource access", "guest containment differs from the manifest"]
+cleanup_evidence = "QEMU powers down and its temporary initramfs directory is removed"
+
+[containment]
+disposable = true
+network = "none"
+host_filesystem = "not-mounted"
+production_data = false
+

@@ -10,13 +10,13 @@ import unittest
 from lib.state import ExerciseState, StateError, StateStore, dump_state, load_state, new_state
 from lib.workspace import (
     WorkspaceError,
+    archive_and_remove_workspaces,
     archive_workspace,
     canonical_tree_hash,
     clean_paths,
     create_snapshot,
     materialize,
-    reset_workspace,
-    restart_workspace,
+    restore_workspace,
     verify_snapshot,
 )
 
@@ -87,6 +87,15 @@ class StateTests(unittest.TestCase):
         self.assertEqual(state.current, "module-core")
         serialized = dump_state(state)
         self.assertIn('completed = ["optional-probe"]', serialized)
+
+    def test_clear_progress_removes_only_selected_state(self) -> None:
+        state = new_state(ROUTE, IDS, REVISION)
+        state.completed.update(IDS)
+        for stable_id in IDS:
+            state.exercise(stable_id).attempts = 1
+        state.clear_progress({"proc-status", "optional-probe"})
+        self.assertEqual(state.completed, {"module-core"})
+        self.assertEqual(set(state.exercises), {"module-core"})
 
     def test_required_completion_must_be_an_exact_prefix(self) -> None:
         state = new_state(ROUTE, IDS, REVISION)
@@ -236,23 +245,28 @@ class WorkspaceTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkspaceError, "undeclared"):
             archive_workspace(workspace, self.archive, "module-core")
 
-    def test_reset_archives_then_restores_baseline(self) -> None:
+    def test_restore_archives_then_restores_baseline(self) -> None:
         workspace = materialize(self.template, self.work, "module-core", self.files)
         baseline_hash, baseline = create_snapshot(workspace, self.passed, self.files)
         (workspace / "src/main.c").write_text("learner edit\n")
-        restored, archived = reset_workspace(self.work, self.archive, "module-core", baseline, self.files)
+        restored, archived = restore_workspace(self.work, self.archive, "module-core", baseline, self.files)
         self.assertEqual(canonical_tree_hash(restored, self.files), baseline_hash)
         self.assertEqual((archived / "src/main.c").read_text(), "learner edit\n")
 
-    def test_restart_uses_template_not_baseline(self) -> None:
+    def test_archive_and_remove_is_safe_when_some_workspaces_are_absent(self) -> None:
         workspace = materialize(self.template, self.work, "module-core", self.files)
-        baseline_dir = self.root / "baseline"
-        (baseline_dir / "src").mkdir(parents=True)
-        (baseline_dir / "Kbuild").write_text("obj-m += hello.o\n")
-        (baseline_dir / "src/main.c").write_text("baseline variant\n")
         (workspace / "src/main.c").write_text("learner edit\n")
-        restarted, _ = restart_workspace(self.work, self.archive, "module-core", self.template, self.files)
-        self.assertEqual((restarted / "src/main.c").read_text(), "int value = 1;\n")
+        archives = archive_and_remove_workspaces(
+            self.work,
+            self.archive,
+            ("module-core", "optional-probe"),
+        )
+        self.assertEqual(set(archives), {"module-core"})
+        self.assertFalse(workspace.exists())
+        self.assertEqual(
+            (archives["module-core"] / "src/main.c").read_text(),
+            "learner edit\n",
+        )
 
     def test_clean_removes_only_declared_outputs(self) -> None:
         workspace = materialize(self.template, self.work, "module-core", self.files)
@@ -269,7 +283,7 @@ class WorkspaceTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkspaceError, "symlink"):
             clean_paths(workspace, ("output",))
 
-    def test_reset_rejects_workspace_symlink(self) -> None:
+    def test_restore_rejects_workspace_symlink(self) -> None:
         outside = self.root / "outside"
         outside.mkdir()
         (outside / "Kbuild").write_text("outside")
@@ -277,7 +291,7 @@ class WorkspaceTests(unittest.TestCase):
         (outside / "src/main.c").write_text("outside")
         (self.work / "module-core").symlink_to(outside, target_is_directory=True)
         with self.assertRaisesRegex(WorkspaceError, "must not be a symlink"):
-            reset_workspace(self.work, self.archive, "module-core", self.template, self.files)
+            restore_workspace(self.work, self.archive, "module-core", self.template, self.files)
 
 
 if __name__ == "__main__":

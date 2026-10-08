@@ -754,7 +754,7 @@ Tradecraft is a cross-cutting classification, not another directory tree.
 Tags are added only when they drive filtering, display, or validation.
 They must not restate `teaches` with different spelling.
 
-## Learner workspace and reset model
+## Learner workspace, restoration, and progress reset model
 
 Canonical templates and references are immutable during normal learner work.
 
@@ -763,9 +763,13 @@ Canonical templates and references are immutable during normal learner work.
 +-- state.toml
 +-- work/<stable-id>/
 +-- passed/<content-hash>/
-+-- archive/<timestamp>-<stable-id>/
+`-- archive/<stable-id>-<content-hash>/
+
+curriculum/
++-- templates/<stable-id>/
 +-- support/<stable-id>/
-`-- solutions/<stable-id>/
++-- solutions/<stable-id>/
+`-- incubator/<stage>/
 ```
 
 - `start ID` materializes a workspace once and records its baseline hash.
@@ -773,10 +777,10 @@ Canonical templates and references are immutable during normal learner work.
 - `check ID` builds only that workspace and records build, boot, and test results.
 - A pass creates an immutable content-addressed snapshot.
 - Rechecking history never silently rebases later work.
-- `reset ID` archives current work and restores its recorded starting baseline.
-- `restart ID` restores the pristine template when that operation is meaningful.
+- `restore ID` archives current work and restores its recorded starting baseline.
 - `clean ID` removes build output only.
-- Progress reset is a separate destructive command with an explicit scope.
+- `progress-reset ID` archives affected work and resets that checkpoint and its
+  dependents; `progress-reset --all` explicitly resets all learner progress.
 
 State records stable IDs and completed IDs, not a numeric cursor.
 All state writes must be atomic.
@@ -831,7 +835,7 @@ Publish rounded quartile ranges only after a meaningful cohort has completed the
 ## Implementation order
 
 1. Preserve the current work in a reviewed checkpoint before structural migration.
-2. Implement stable-ID state, isolated workspaces, reset, and migration-free v2
+2. Implement stable-ID state, isolated workspaces, restoration, and migration-free v2
    metadata foundations.
 3. Make the route, serials, stages, concepts, tags, checks, and references derive
    from the single registry.
@@ -846,5 +850,5 @@ Publish rounded quartile ranges only after a meaningful cohort has completed the
 10. Remove the old 65-count assumptions, numeric state, editable canonical
     scaffolds, inferred workspace modes, duplicate paths, and obsolete directories.
 
-No compatibility layer or parallel legacy curriculum remains after the migration.
+No compatibility layer or parallel curriculum remains after the migration.
 The repository should finish with one route, one schema, one state model, and one learner workspace model.

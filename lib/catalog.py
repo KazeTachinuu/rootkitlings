@@ -138,12 +138,13 @@ class Exercise:
 class Catalog:
     def __init__(self, root: Path):
         self.root = root.resolve()
-        (self.revision, self.exercise_roots, self.required_route, self.aliases, self.tradecraft_tags,
+        (self.revision, self.exercise_roots, self.required_route, self.tradecraft_tags,
          self.capabilities, self.tools, self.assumptions, self.sections,
          self.concepts) = self._read_course()
         self.concept_by_id = {item.id: item for item in self.concepts}
         raw = self._read_exercises()
         self.by_id = {item.id: item for item in raw}
+        self.aliases = self._generate_aliases()
         reverse_alias = {exercise_id: alias for alias, exercise_id in self.aliases.items()}
         positions = {exercise_id: position for position, exercise_id in enumerate(self.required_route)}
         self.exercises = [
@@ -161,7 +162,7 @@ class Catalog:
             raise CatalogError(f"cannot parse course.toml: {exc}") from exc
         allowed = {
             "schema_version", "revision", "exercise_roots", "required_route",
-            "aliases", "tradecraft_tags", "capabilities", "tools", "assumptions",
+            "tradecraft_tags", "capabilities", "tools", "assumptions",
             "sections", "concepts",
         }
         _exact_fields(data, allowed, Path("course.toml"))
@@ -173,20 +174,33 @@ class Catalog:
             if not (self.root / root).is_dir():
                 raise CatalogError(f"course.toml: exercise root must be a directory: {root}")
         route = tuple(_id_list(data, "required_route", Path("course.toml")))
-        aliases = data["aliases"]
-        if not isinstance(aliases, dict) or not aliases:
-            raise CatalogError("course.toml: aliases must be a non-empty table")
-        for alias, exercise_id in aliases.items():
-            if not SERIAL_RE.fullmatch(alias) or not isinstance(exercise_id, str) or not ID_RE.fullmatch(exercise_id):
-                raise CatalogError(f"course.toml: invalid alias {alias!r} = {exercise_id!r}")
         assumptions = tuple(_rows(data, "assumptions", {"concept", "competency"}, Assumption, "concept"))
         sections = tuple(_rows(data, "sections", {"id", "label"}, Section, "id"))
         concepts = tuple(_rows(data, "concepts", {"id", "label"}, Concept, "id"))
         tradecraft_tags = tuple(_rows(data, "tradecraft_tags", {"id", "label"}, Concept, "id"))
         capabilities = tuple(_rows(data, "capabilities", {"id", "label"}, Concept, "id"))
         tools = tuple(_tool_rows(data, self.root))
-        return (revision, roots, route, dict(aliases), tradecraft_tags, capabilities, tools,
+        return (revision, roots, route, tradecraft_tags, capabilities, tools,
                 assumptions, sections, concepts)
+
+    def _generate_aliases(self) -> dict[str, str]:
+        prefixes = {"lesson": "L", "milestone": "M", "capstone": "C"}
+        counters = {kind: 0 for kind in prefixes}
+        aliases = {}
+        for exercise_id in self.required_route:
+            item = self.by_id.get(exercise_id)
+            if item is None:
+                raise CatalogError(f"required_route contains unknown ID: {exercise_id}")
+            if item.kind not in prefixes:
+                raise CatalogError(
+                    f"{item.path}: required exercise has unsupported kind {item.kind!r}"
+                )
+            serial = f"{prefixes[item.kind]}{counters[item.kind]:02d}"
+            counters[item.kind] += 1
+            if not SERIAL_RE.fullmatch(serial):
+                raise CatalogError(f"generated serial is out of range: {serial}")
+            aliases[serial] = exercise_id
+        return aliases
 
     def _read_exercises(self) -> list[Exercise]:
         files = sorted(
@@ -274,9 +288,8 @@ class Catalog:
         required = {item.id for item in self.exercises if item.status == "required"}
         if route != required:
             raise CatalogError(f"required_route mismatch (missing={sorted(required-route)}, unknown={sorted(route-required)})")
-        alias_values = list(self.aliases.values())
-        if len(alias_values) != len(set(alias_values)) or set(alias_values) != actual:
-            raise CatalogError("course.toml: serial aliases must cover every exercise exactly once")
+        if set(self.aliases.values()) != route:
+            raise CatalogError("generated serial aliases must cover the required route")
         section_ids = {item.id for item in self.sections}
         if len(section_ids) != len(self.sections):
             raise CatalogError("course.toml: duplicate section ids")
@@ -403,11 +416,28 @@ class Catalog:
             visit(exercise_id)
 
     def resolve(self, selector: str) -> Exercise:
-        exercise_id = self.aliases.get(selector, selector)
-        try:
+        normalized = selector.upper()
+        exercise_id = self.aliases.get(normalized, selector)
+        if exercise_id in self.by_id:
             return self.by_id[exercise_id]
-        except KeyError as exc:
-            raise CatalogError(f"unknown exercise: {selector}") from exc
+        matches = {
+            stable_id
+            for alias, stable_id in self.aliases.items()
+            if alias.startswith(normalized)
+        }
+        matches.update(
+            stable_id for stable_id in self.by_id if stable_id.startswith(selector)
+        )
+        if len(matches) == 1:
+            return self.by_id[matches.pop()]
+        if matches:
+            labels = sorted(
+                self.by_id[stable_id].serial or stable_id for stable_id in matches
+            )
+            raise CatalogError(
+                f"ambiguous exercise {selector!r}; matches: {', '.join(labels)}"
+            )
+        raise CatalogError(f"unknown exercise: {selector}")
 
     def ordered(self) -> list[Exercise]:
         return [self.by_id[value] for value in self.required_route]

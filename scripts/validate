@@ -57,11 +57,10 @@ def directories(path): return {entry.relative_to(root) for entry in path.iterdir
 for label, actual, declared in (("template", directories(root/"curriculum/templates"), templates), ("solution", directories(root/"curriculum/solutions"), solutions), ("support", directories(root/"curriculum/support"), support)):
     for path in sorted(actual-declared): failures.append(f"orphaned {label} directory: {path}")
     for path in sorted(declared-actual): failures.append(f"missing {label} directory: {path}")
-for base in (root/"lings", root/"capstones"):
+for exercise_root in catalog.exercise_roots:
+    base = root / exercise_root
     for path in base.rglob("*"):
         if path.is_file() and (path.name == "Kbuild" or path.suffix in {".c", ".h"}): failures.append(f"scaffold source remains in documentation directory: {path.relative_to(root)}")
-for obsolete in (root/".rootkitlings/support", root/".rootkitlings/solutions"):
-    if obsolete.exists(): failures.append(f"obsolete shipped asset directory remains: {obsolete.relative_to(root)}")
 tracked = subprocess.run(["git", "ls-files", "--", ".rootkitlings"], check=True, text=True, stdout=subprocess.PIPE).stdout.splitlines()
 for path in tracked:
     if (root / path).is_file(): failures.append(f"shipped file remains under .rootkitlings: {path}")
@@ -118,6 +117,6 @@ build_assets()
 
 check_catalog_assets
 check_scripts
-python3 -m unittest tests.test_state_workspace
+python3 -m unittest discover -s tests
 if (( BUILD_ASSETS )); then build_assets; fi
 printf '[+] validation passed\n'

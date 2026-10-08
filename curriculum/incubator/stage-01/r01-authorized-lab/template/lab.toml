@@ -1,0 +1,15 @@
+schema_version = 1
+lab_id = "TODO-local-lab-name"
+owner = "TODO-lab-owner"
+authorization_reference = "TODO-where-authorization-is-recorded"
+permitted_guest = "TODO-exact-disposable-guest"
+prohibited_targets = ["production systems", "third-party systems"]
+stop_conditions = ["TODO-first-stop-condition", "TODO-second-stop-condition"]
+cleanup_evidence = "TODO-how-shutdown-and-discarded-state-are-confirmed"
+
+[containment]
+disposable = true
+network = "none"
+host_filesystem = "not-mounted"
+production_data = false
+

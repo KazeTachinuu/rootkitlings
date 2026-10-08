@@ -193,8 +193,8 @@ def _replace_workspace(source: Path, work_root: Path, stable_id: str, declared_f
     return destination
 
 
-def reset_workspace(work_root: Path, archive_root: Path, stable_id: str, baseline: Path,
-                    declared_files: Iterable[str]) -> tuple[Path, Path]:
+def restore_workspace(work_root: Path, archive_root: Path, stable_id: str, baseline: Path,
+                      declared_files: Iterable[str]) -> tuple[Path, Path]:
     """Archive current work, then restore its recorded starting baseline."""
     work_root = _real_directory(Path(work_root), "workspace root")
     workspace = work_root / _stable_id(stable_id)
@@ -202,10 +202,29 @@ def reset_workspace(work_root: Path, archive_root: Path, stable_id: str, baselin
     return _replace_workspace(baseline, work_root, stable_id, declared_files), archive
 
 
-def restart_workspace(work_root: Path, archive_root: Path, stable_id: str, template: Path,
-                      declared_files: Iterable[str]) -> tuple[Path, Path]:
-    """Archive current work, then restore the pristine template."""
-    return reset_workspace(work_root, archive_root, stable_id, template, declared_files)
+def archive_and_remove_workspaces(work_root: Path, archive_root: Path,
+                                  stable_ids: Iterable[str]) -> dict[str, Path]:
+    """Archive every present workspace, then remove them as one recoverable set."""
+    work_root = _real_directory(Path(work_root), "workspace root")
+    archive_root = _real_directory(Path(archive_root), "archive root")
+    stable_ids = tuple(sorted({_stable_id(value) for value in stable_ids}))
+    workspaces: dict[str, Path] = {}
+    archives: dict[str, Path] = {}
+    for stable_id in stable_ids:
+        workspace = work_root / stable_id
+        if workspace.is_symlink():
+            raise WorkspaceError(f"workspace must not be a symlink: {workspace}")
+        if not workspace.exists():
+            continue
+        if not workspace.is_dir():
+            raise WorkspaceError(f"workspace must be a directory: {workspace}")
+        workspaces[stable_id] = workspace
+        archives[stable_id] = archive_workspace(workspace, archive_root, stable_id)
+    for workspace in workspaces.values():
+        _scan_regular_tree(workspace)
+    for workspace in workspaces.values():
+        shutil.rmtree(workspace)
+    return archives
 
 
 def clean_paths(workspace: Path, generated_paths: Iterable[str]) -> None:

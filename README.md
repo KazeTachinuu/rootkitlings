@@ -37,6 +37,8 @@ read the contract -> edit the printed path -> check in a clean VM
 `check` builds with warnings enabled, boots a fresh guest, exercises live behavior, and verifies cleanup.
 
 If you get stuck, `hint` gives a conceptual nudge and `solution` shows the reference implementation.
+`restore` archives edits and restores an exercise's starting files without changing progress.
+`progress-reset` is the separate, explicit command for resetting course progress.
 Run `./rootkitlings help` for the complete command list and `./rootkitlings list` for the metadata-backed route.
 
 ## Course

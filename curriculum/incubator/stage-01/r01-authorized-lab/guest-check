@@ -1,0 +1,49 @@
+#!/bin/sh
+. /lib/check.sh
+
+begin "R01 authorized disposable lab"
+
+assert_not_contains()
+{
+	path=$1
+	unexpected=$2
+	case $(cat "$path") in
+		*"$unexpected"*) _fail "$path contains prohibited text: $unexpected" ;;
+		*) _ok "$path does not contain: $unexpected" ;;
+	esac
+}
+
+assert_loopback_only()
+{
+	for interface in /sys/class/net/*; do
+		name=${interface##*/}
+		if [ "$name" != lo ]; then
+			_fail "unexpected guest network interface: $name"
+			return
+		fi
+	done
+	_ok "loopback is the only guest network interface"
+}
+
+assert_no_host_disk()
+{
+	for device in /dev/sd? /dev/vd? /dev/nvme?n?; do
+		if [ -e "$device" ]; then
+			_fail "unexpected guest disk device: $device"
+			return
+		fi
+	done
+	_ok "no host-style disk device is exposed"
+}
+
+assert_exists /proc/1/status
+assert_exists /sys/kernel
+assert_contains /proc/cmdline "rootkitlings=check"
+assert_not_contains /proc/cmdline "rootkitlings=network"
+assert_not_contains /proc/mounts " 9p "
+assert_not_contains /proc/mounts " virtiofs "
+assert_not_contains /proc/mounts " nfs "
+assert_loopback_only
+assert_no_host_disk
+
+summary

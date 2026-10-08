@@ -1,0 +1,272 @@
+# Rootkitlings engine v3 requirements
+
+Status: approved design input; implementation in progress.
+
+The engine foundation is usable, but the repository does not yet model the target curriculum.
+It currently exposes 65 required checkpoints, no milestones, no electives, and no tracks.
+
+## Requirements and progress
+
+### 1. Generate aliases from canonical course order
+
+Implementation: complete for the current required route.
+`Catalog` now generates L/M/C serials from canonical route order and kind; `course.toml` no longer stores an alias table.
+Track ordering and elective positions remain pending because no elective exercises are public yet.
+
+Completed:
+
+- Remove `[aliases]`.
+- Generate exercise serials by canonical course order and `kind`:
+  - lessons: `L00` onward;
+  - milestones: `M00` onward;
+  - capstones: `C00` onward.
+
+Pending with elective-track adoption:
+
+- Generate track labels separately as `E01` onward.
+  `E` identifies a track,
+  not an exercise.
+- Define canonical all-exercise order as:
+  1. `required_route`;
+  2. elective track members in track order and member order.
+- Reject exercises absent from both the required route and exactly one elective
+  track.
+- Replace `sequence` with an unambiguous canonical display position, or expose
+  `route_position` and `track_position` separately.
+
+### 2. Add authoritative elective tracks
+
+Although the catalog accepts `status = "elective"`, current metadata contains none.
+There is no track registry, track membership, ordering, label, or CLI filtering.
+
+Additionally:
+
+- `Catalog.ordered()` returns required items only.
+- Catalog export consequently omits electives.
+- CLI appends non-required exercises sorted by stage and title, losing
+  pedagogical track order.
+- CLI treats every non-required status, including `retired`, as an
+  elective-like runnable item.
+
+Required course schema:
+
+```toml
+[[elective_tracks]]
+id = "kernel-debugging"
+label = "Kernel debugging"
+members = ["qemu-gdb-debugging"]
+```
+
+Required validation:
+
+- Track IDs and labels are unique.
+- Track member order is stable and duplicate-free.
+- Every member exists and has `status = "elective"`.
+- Every elective belongs to exactly one track.
+- Required and retired exercises cannot belong to tracks.
+- Elective prerequisites are reachable without making an elective block the
+  required route.
+- Retired exercises cannot be started, built, run, or checked.
+
+Required APIs:
+
+- `catalog.required()`
+- `catalog.elective_tracks`
+- `catalog.track_for(exercise)`
+- `catalog.display_order()`
+- Export required and elective entries, including track ID, label, and
+  position.
+- CLI `list` renders the required journey followed by named optional tracks.
+
+The current elective availability rule—direct prerequisites must be completed—is otherwise a reasonable base.
+
+### 3. Derive cumulative milestone ancestry
+
+Current metadata supports arbitrary `baseline = "completion"` plus an explicit parent.
+The only instances form an old six-edge L00–L08 chain.
+No item has `kind = "milestone"`.
+
+The target requires five cumulative milestones and one final capstone, with each cumulative checkpoint based on the exact previous passed milestone.
+Arbitrary earlier completion parents are too permissive and duplicate route structure.
+
+Required schema:
+
+```toml
+[workspace]
+mode = "cumulative"
+baseline = "previous-milestone"
+files = ["Kbuild", "src/main.c"]
+editable = ["src/main.c"]
+build = "."
+```
+
+Remove `workspace.parent` for this baseline.
+The catalog derives the provider from `required_route`.
+
+Validation must enforce:
+
+- Exactly five required milestones and one required final capstone.
+- Each cumulative milestone after M00 derives from the preceding milestone.
+- The final capstone derives from M04.
+- A previous-milestone baseline has an actual earlier milestone.
+- Parent and child have compatible declared file sets and build roots.
+- Electives cannot use or modify the required cumulative lineage.
+- An elective may consume a milestone snapshot read-only, but its passed
+  snapshot must never become a required milestone baseline.
+- Required atomic lessons use immutable templates unless explicitly part of
+  cumulative integration.
+
+CLI `baseline()` must ask the catalog for the derived baseline provider rather than reading an exercise-local parent.
+
+### 4. Support explicit state migration
+
+State uses stable IDs correctly, but loading rejects any revision or route difference.
+Thus the 65-to-46 migration makes every existing state unusable.
+
+The exact-prefix rule also conflicts with the requirement that a curriculum reorder not change the meaning of saved progress.
+Inserting a new checkpoint before completed stable IDs turns valid historical completion into a non-prefix set.
+
+Required state design:
+
+- Parse saved state before validating it against the active catalog.
+- Add explicit, versioned migration definitions; never infer migrations.
+- Migration definitions include:
+  - source revision;
+  - destination revision;
+  - stable-ID rename and removal mappings;
+  - completion-credit rules for merged checkpoints, normally `all_of`;
+  - workspace and snapshot compatibility declarations.
+- Perform migration under the state lock.
+- Archive the original state before atomic replacement.
+- Preserve attempts and disclosure records for unchanged IDs.
+- Clear baseline, workspace, and passed hashes unless the migration explicitly
+  certifies identical declared files and semantics.
+- Never grant a merged checkpoint from only one incomplete source component.
+
+For reorder and insertion resilience, replace the exact-prefix invariant with:
+
+- completed IDs must exist;
+- completed exercises must be prerequisite-closed;
+- `current` remains the first incomplete required-route ID;
+- normal CLI gating still prevents completing future required items.
+
+This permits sparse historical credit after a route insertion without changing stable-ID meaning.
+
+The one-time 65-to-46 conversion needs a reviewed migration map because many IDs are merged or replaced.
+A revision string change alone is insufficient.
+
+### 5. Separate workspace restoration from progress reset
+
+Implementation: complete for the current engine, with temporary-runtime coverage.
+
+Implemented commands:
+
+- `restore ID`: archive current work and restore the recorded starting
+  baseline.
+- `clean ID`: remove build outputs only.
+- `progress-reset ID`: explicitly remove progress beginning at that checkpoint.
+- `progress-reset --all`: explicitly clear course progress.
+
+A required-route progress reset at an ID must:
+
+- Archive affected workspaces.
+- Remove completion for that ID and all later required checkpoints.
+- Remove dependent elective completions.
+- Clear affected workspace, baseline, and passed references from state.
+- Leave immutable content-addressed snapshots as unreferenced archives unless
+  a separate garbage-collection command is deliberately invoked.
+- Preserve earlier attempts and history unless the command explicitly offers a
+  stronger scope.
+
+An elective progress reset removes that elective and its elective descendants.
+
+### 6. Remove learner-facing `restart`
+
+Implementation: complete.
+
+Under one curriculum revision, templates are immutable.
+For a template-backed workspace, its recorded starting snapshot must equal the pristine template for the lifetime of that revision.
+Therefore `reset` and `restart` restore the same content under normal operation.
+
+The removed `restart` command differed only if canonical templates drifted, at which point it silently replaced `baseline_hash`.
+Curriculum revision migration must control that situation.
+
+Completed changes:
+
+- Remove the learner-facing `restart` command.
+- Rename workspace `reset` to `restore`.
+- Handle intentional rebasing only through an explicit curriculum migration or
+  rebase operation.
+- Remove the unused lower-level `restart_workspace()` primitive.
+
+## Dependency-ordered implementation and tests
+
+### 1. Course registry and catalog ordering
+
+Tests:
+
+- Generated L/M/C serials are deterministic.
+- The required route contains exactly 40 lessons, five milestones, and one
+  capstone.
+- Alias generation is independent of filesystem discovery order.
+- Every elective belongs to exactly one of eight tracks.
+- Export includes all required and elective exercises.
+- Retired entries are excluded from runnable and display routes.
+
+### 2. Milestone baseline semantics
+
+Tests:
+
+- M02 resolves to M01's passed snapshot.
+- A missing previous-milestone snapshot blocks materialization.
+- An elective pass cannot affect the next required milestone baseline.
+- Incompatible cumulative file or build declarations fail catalog validation.
+- Rechecking an old milestone does not rebase an already-created later
+  workspace.
+
+### 3. State migration framework
+
+Tests:
+
+- Same-ID revision migration preserves completion and history.
+- Renames preserve mapped history.
+- `all_of` merge credit requires every source checkpoint.
+- Removed IDs are archived rather than silently retained.
+- Incompatible workspace hashes are cleared.
+- Compatible hashes are retained only after snapshot verification.
+- Migration failure leaves the original state byte-for-byte intact.
+- Route insertion preserves prerequisite-closed historical completion.
+- An unknown source revision fails with a precise migration error.
+
+### 4. Track-aware CLI behavior
+
+Tests:
+
+- The required route never waits for an elective.
+- A locked elective reports its missing prerequisites.
+- Elective chains unlock correctly.
+- Retired work is not runnable.
+- `list` groups exercises by required route and elective track.
+- Stable IDs and generated serials resolve identically.
+
+### 5. Restore and progress reset
+
+Tests:
+
+- `restore` archives edits and restores the recorded baseline without changing
+  completion.
+- Resetting required progress truncates downstream required credit.
+- Dependent elective credit is removed.
+- Earlier progress remains.
+- `--all` clears state only after explicit confirmation and scope.
+- An interrupted progress reset leaves state and work recoverable.
+
+### 6. Remove learner-facing restart
+
+Tests:
+
+- No command, help output, or learner documentation exposes `restart`.
+- Template drift within one revision is detected as catalog or repository
+  inconsistency rather than silently rebasing.
+- Revision migration is the only operation allowed to establish a new template
+  baseline.
