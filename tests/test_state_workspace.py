@@ -24,10 +24,15 @@ from lib.workspace import (
 IDS = {"module-core", "proc-status", "optional-probe"}
 ROUTE = ("module-core", "proc-status")
 REVISION = "v2-test"
+PREREQUISITES = {
+    "module-core": frozenset(),
+    "proc-status": frozenset({"module-core"}),
+    "optional-probe": frozenset({"module-core"}),
+}
 
 
 def _increment_attempts(state_path: str, count: int) -> None:
-    store = StateStore(Path(state_path), IDS, ROUTE, REVISION)
+    store = StateStore(Path(state_path), IDS, ROUTE, REVISION, PREREQUISITES)
     for _ in range(count):
         with store.locked() as state:
             state.exercise("module-core").attempts += 1
@@ -35,7 +40,7 @@ def _increment_attempts(state_path: str, count: int) -> None:
 
 class StateTests(unittest.TestCase):
     def test_new_state_derives_current(self) -> None:
-        state = new_state(ROUTE, IDS, REVISION)
+        state = new_state(ROUTE, IDS, REVISION, PREREQUISITES)
         self.assertEqual(state.current, "module-core")
         state.completed.add("module-core")
         self.assertEqual(state.current, "proc-status")
@@ -45,12 +50,12 @@ class StateTests(unittest.TestCase):
     def test_round_trip_is_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "state.toml"
-            store = StateStore(path, IDS, ROUTE, REVISION)
+            store = StateStore(path, IDS, ROUTE, REVISION, PREREQUISITES)
             with store.locked() as state:
                 state.completed.add("module-core")
                 state.exercises["proc-status"] = ExerciseState(attempts=2, solution_revealed=True)
             first = path.read_bytes()
-            loaded = load_state(path, IDS, ROUTE, REVISION)
+            loaded = load_state(path, IDS, ROUTE, REVISION, PREREQUISITES)
             self.assertEqual(loaded.current, "proc-status")
             self.assertEqual(loaded.exercises["proc-status"].attempts, 2)
             with store.locked():
@@ -61,7 +66,7 @@ class StateTests(unittest.TestCase):
     def test_failed_locked_update_is_not_written(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "state.toml"
-            store = StateStore(path, IDS, ROUTE, REVISION)
+            store = StateStore(path, IDS, ROUTE, REVISION, PREREQUISITES)
             with self.assertRaisesRegex(RuntimeError, "stop"):
                 with store.locked() as state:
                     state.completed.add("module-core")
@@ -69,27 +74,27 @@ class StateTests(unittest.TestCase):
             self.assertFalse(path.exists())
 
     def test_revision_route_and_unknown_id_are_rejected(self) -> None:
-        state = new_state(ROUTE, IDS, REVISION)
+        state = new_state(ROUTE, IDS, REVISION, PREREQUISITES)
         with self.assertRaisesRegex(StateError, "revision mismatch"):
-            state.validate(IDS, ROUTE, "other")
-        with self.assertRaisesRegex(StateError, "route differs"):
-            state.validate(IDS, tuple(reversed(ROUTE)), REVISION)
+            state.validate(IDS, ROUTE, "other", PREREQUISITES)
+        with self.assertRaisesRegex(StateError, "not earlier"):
+            state.validate(IDS, tuple(reversed(ROUTE)), REVISION, PREREQUISITES)
         state.exercises["unknown"] = ExerciseState()
         with self.assertRaisesRegex(StateError, "unknown stable IDs"):
-            state.validate(IDS, ROUTE, REVISION)
+            state.validate(IDS, ROUTE, REVISION, PREREQUISITES)
 
     def test_elective_access_and_completion_are_supported(self) -> None:
-        state = new_state(ROUTE, IDS, REVISION)
+        state = new_state(ROUTE, IDS, REVISION, PREREQUISITES)
         elective = state.exercise("optional-probe")
         elective.attempts = 1
-        state.completed.add("optional-probe")
-        state.validate(IDS, ROUTE, REVISION)
-        self.assertEqual(state.current, "module-core")
+        state.completed.update({"module-core", "optional-probe"})
+        state.validate(IDS, ROUTE, REVISION, PREREQUISITES)
+        self.assertEqual(state.current, "proc-status")
         serialized = dump_state(state)
-        self.assertIn('completed = ["optional-probe"]', serialized)
+        self.assertIn('completed = ["module-core", "optional-probe"]', serialized)
 
     def test_clear_progress_removes_only_selected_state(self) -> None:
-        state = new_state(ROUTE, IDS, REVISION)
+        state = new_state(ROUTE, IDS, REVISION, PREREQUISITES)
         state.completed.update(IDS)
         for stable_id in IDS:
             state.exercise(stable_id).attempts = 1
@@ -97,16 +102,24 @@ class StateTests(unittest.TestCase):
         self.assertEqual(state.completed, {"module-core"})
         self.assertEqual(set(state.exercises), {"module-core"})
 
-    def test_required_completion_must_be_an_exact_prefix(self) -> None:
-        state = new_state(ROUTE, IDS, REVISION)
+    def test_required_completion_must_be_prerequisite_closed(self) -> None:
+        state = new_state(ROUTE, IDS, REVISION, PREREQUISITES)
         state.completed.add("proc-status")
-        with self.assertRaisesRegex(StateError, "exact prefix"):
-            state.validate(IDS, ROUTE, REVISION)
+        with self.assertRaisesRegex(StateError, "lacks prerequisites"):
+            state.validate(IDS, ROUTE, REVISION, PREREQUISITES)
+
+    def test_route_insertion_preserves_closed_completion(self) -> None:
+        inserted_route = ("module-core", "optional-probe", "proc-status")
+        state = new_state(ROUTE, IDS, REVISION, PREREQUISITES)
+        state.completed.update({"module-core", "proc-status"})
+        state.route = inserted_route
+        state.validate(IDS, inserted_route, REVISION, PREREQUISITES)
+        self.assertEqual(state.current, "optional-probe")
 
     def test_read_locked_does_not_create_or_rewrite_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "state.toml"
-            store = StateStore(path, IDS, ROUTE, REVISION)
+            store = StateStore(path, IDS, ROUTE, REVISION, PREREQUISITES)
             with store.read_locked() as state:
                 self.assertEqual(state.current, "module-core")
             self.assertFalse(path.exists())
@@ -118,16 +131,16 @@ class StateTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), before)
 
     def test_invalid_hash_and_unknown_toml_field_are_rejected(self) -> None:
-        state = new_state(ROUTE, IDS, REVISION)
+        state = new_state(ROUTE, IDS, REVISION, PREREQUISITES)
         state.exercise("module-core").workspace_hash = "bad"
         with self.assertRaisesRegex(StateError, "invalid content hash"):
-            state.validate(IDS, ROUTE, REVISION)
+            state.validate(IDS, ROUTE, REVISION, PREREQUISITES)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "state.toml"
-            content = dump_state(new_state(ROUTE, IDS, REVISION))
+            content = dump_state(new_state(ROUTE, IDS, REVISION, PREREQUISITES))
             path.write_text(content.replace("\n[exercises]\n", "\nextra = 1\n\n[exercises]\n"))
             with self.assertRaisesRegex(StateError, "top-level fields"):
-                load_state(path, IDS, ROUTE, REVISION)
+                load_state(path, IDS, ROUTE, REVISION, PREREQUISITES)
 
     def test_lock_serializes_concurrent_updates(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -136,7 +149,7 @@ class StateTests(unittest.TestCase):
                 futures = [executor.submit(_increment_attempts, str(path), 12) for _ in range(3)]
                 for future in futures:
                     future.result(timeout=10)
-            state = load_state(path, IDS, ROUTE, REVISION)
+            state = load_state(path, IDS, ROUTE, REVISION, PREREQUISITES)
             self.assertEqual(state.exercise("module-core").attempts, 36)
             leftovers = list(path.parent.glob(".state.toml.*"))
             self.assertEqual(leftovers, [])

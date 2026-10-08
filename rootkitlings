@@ -65,7 +65,17 @@ except CatalogError as error:
     raise SystemExit(1)
 
 ROUTE = tuple(CAT.required_route)
-STORE = StateStore(STATE, set(CAT.by_id), ROUTE, CAT.revision)
+PREREQUISITES = {
+    exercise.id: frozenset(exercise.prerequisites)
+    for exercise in CAT.exercises
+}
+STORE = StateStore(
+    STATE,
+    set(CAT.by_id),
+    ROUTE,
+    CAT.revision,
+    PREREQUISITES,
+)
 
 
 def setup():

@@ -24,9 +24,9 @@ Verification timeouts remain machine limits, not claims about learning time.
 | L00 | `authorized-kernel-lab` — Work inside an authorized disposable lab | S1 | — | `authorized-lab-boundary`, `guest-reset-cleanup` | baseline assumptions | lifecycle, detection | none | new |
 | L01 | `module-build-lifecycle` — Build, load, inspect, and unload a module | S1 | `authorized-kernel-lab` | `module-lifecycle`, `module-build`, `module-inspection` | `authorized-lab-boundary` | lifecycle, detection | L00, L01 | adapt |
 | L02 | `component-ownership` — Split a module into owned components | S1 | `module-build-lifecycle` | `multi-file-modules`, `component-ownership` | `module-build` | lifecycle | L02 | adapt |
-| L03 | `precise-init-failure` — Reject initialization with a precise error | S1 | `module-build-lifecycle` | `init-failure`, `errno-propagation` | `module-lifecycle` | lifecycle, detection | L04 | adapt |
-| L04 | `resource-rollback` — Own resources and roll back in reverse order | S1 | `component-ownership`, `precise-init-failure` | `initialization-rollback`, `resource-ownership` | `component-ownership`, `init-failure` | lifecycle, detection | L08 | adapt |
-| L05 | `owned-kernel-state` — Own heap state and pointer-shaped failures | S1 | `resource-rollback` | `kernel-allocation`, `error-pointers`, `pointer-invalidation` | `initialization-rollback` | lifecycle | L07, L12 | adapt |
+| L03 | `precise-init-failure` — Reject initialization with a precise error | S1 | `module-build-lifecycle` | `init-failure`, `errno-propagation`, `build-time-failure-injection` | `module-lifecycle` | lifecycle, detection | L04 | adapt |
+| L04 | `owned-kernel-state` — Own heap state and pointer-shaped failures | S1 | `component-ownership`, `precise-init-failure` | `kernel-allocation`, `error-pointers`, `pointer-invalidation` | `component-ownership`, `init-failure`, `errno-propagation`, `build-time-failure-injection` | lifecycle, detection | L07, L12 | adapt |
+| L05 | `resource-rollback` — Own resources and roll back in reverse order | S1 | `owned-kernel-state` | `initialization-rollback`, `resource-ownership` | `kernel-allocation`, `error-pointers`, `pointer-invalidation`, `build-time-failure-injection` | lifecycle, detection | L08 | adapt |
 | L06 | `proc-publication` — Publish and remove a procfs status endpoint | S2 | `resource-rollback` | `proc-entry`, `proc-publication-lifetime` | `initialization-rollback` | control, detection | L09 | adapt |
 | L07 | `proc-read-contract` — Implement correct procfs reads | S2 | `proc-publication` | `proc-read`, `bounded-read-contract` | `proc-entry` | control, detection | L10 | adapt |
 | L08 | `bounded-write-transaction` — Accept a bounded userspace write transaction | S2 | `precise-init-failure`, `proc-publication` | `proc-write`, `bounded-user-copy`, `copy-validate-commit` | `init-failure`, `proc-entry` | control | L11 | adapt |
@@ -66,7 +66,7 @@ Verification timeouts remain machine limits, not claims about learning time.
 
 | Alias | Stable ID / title | Stage | Direct prerequisites | Teaches | Requires | Tradecraft | Sources | Assets |
 |---|---|---|---|---|---|---|---|---|
-| M00 | `inspectable-core` — Inspectable core | S1 | `owned-kernel-state` | `inspectable-core-integration` | `component-ownership`, `resource-ownership`, `kernel-allocation`, `error-pointers` | lifecycle, detection | L00–L02, L04, L07, L08, L12 | new |
+| M00 | `inspectable-core` — Inspectable core | S1 | `resource-rollback` | `inspectable-core-integration` | `component-ownership`, `resource-ownership`, `kernel-allocation`, `error-pointers`, `build-time-failure-injection` | lifecycle, detection | L00–L02, L04, L07, L08, L12 | new |
 | M01 | `configurable-resident-core` — Configurable resident core | S2 | `inspectable-core`, `fixed-command-grammar`, `owned-configuration-store`, `timer-workqueue-scheduler`, `event-driven-kernel-thread` | `resident-core-integration` | `fixed-command-grammar`, `configuration-store`, `deferred-work-lifecycle`, `worker-stop-lifecycle` | control, execution, lifecycle | C00, C01 | new |
 | M02 | `authorized-actions-telemetry` — Authorized actions and telemetry | S3 | `configurable-resident-core`, `one-use-authorization`, `return-aware-syscall-telemetry` | `spinlocked-event-ring`, `authorized-telemetry-integration` | `resident-core-integration`, `one-use-authorization`, `return-correlation` | privilege, instrumentation, detection | C03, C04 | new |
 | M03 | `concealment-evidence-map` — Concealment with an evidence map | S4 | `authorized-actions-telemetry`, `packed-directory-filter`, `cross-view-evidence` | `ghost-process-view`, `machine-readable-evidence-map` | `authorized-telemetry-integration`, `directory-filtering`, `cross-view-evidence` | concealment, detection | C05 | new |
@@ -103,6 +103,7 @@ Add these genuinely new concepts:
 - `errno-propagation`
 - `resource-ownership`
 - `pointer-invalidation`
+- `build-time-failure-injection`
 - `proc-publication-lifetime`
 - `bounded-read-contract`
 - `copy-validate-commit`

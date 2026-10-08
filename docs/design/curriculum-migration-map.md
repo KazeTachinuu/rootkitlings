@@ -126,35 +126,38 @@ It should not become a mandatory collection of introductory micro-lessons.
 
 #### R04 - Reject initialization with a precise error
 
-- Teaches: negative errno, propagation, failed-init semantics, and the distinction
-  between rejection and later teardown.
+- Teaches: negative errno, propagation, failed-init semantics, the distinction
+  between rejection and later teardown, and build-time failure injection through
+  the first fixed failure point.
 - Produces: a component with a deliberate, diagnosable activation failure.
 - Requires: R02.
 - Defensive evidence: failed load, absent module, exact error, and proof that exit
   did not run.
 - Current source: L04.
 
-#### R05 - Own resources and roll back in reverse order
-
-- Teaches: acquisition order, single ownership, reverse unwind, idempotent cleanup,
-  and fail-at-each-stage testing.
-- Produces: the top-level lifecycle and rollback graph used by every milestone.
-- Requires: R03 and R04.
-- Defensive evidence: no published object after any injected failure and immediate
-  successful reload.
-- Current source: L08.
-
-#### R06 - Own heap state and interpret pointer-shaped failures
+#### R05 - Own heap state and interpret pointer-shaped failures
 
 - Teaches: allocation lifetime, `NULL`, `ERR_PTR`, `IS_ERR`, `PTR_ERR`, and
   invalidation after release.
 - Produces: dynamically owned core state with an injected allocation failure.
-- Requires: R04 and R05.
+- Requires: R03 and R04, including the build-time failure-injection contract.
 - Defensive evidence: forced allocation failure, exact error propagation, clean
   retry, and no stale published pointer.
 - Current sources: L07 and L12.
 
+#### R06 - Own resources and roll back in reverse order
+
+- Teaches: acquisition order, single ownership, reverse unwind, idempotent cleanup,
+  and fail-at-each-stage testing using deterministic build-time failure injection.
+- Produces: the top-level lifecycle and rollback graph used by every milestone.
+- Requires: R05.
+- Defensive evidence: no published object after any injected failure and immediate
+  successful reload.
+- Current source: L08.
+
 #### M01 - Inspectable core
+
+- Requires: R06.
 
 Integrate R02-R06 into the permanent multi-file rootkit.
 The learner owns the top-level acquisition and unwind paths.
@@ -166,7 +169,7 @@ The check injects failure at every stage, repeats load/unload, and verifies that
 
 - Teaches: procfs publication lifetime and permission surface.
 - Produces: an overt status endpoint.
-- Requires: R05.
+- Requires: R06.
 - Defensive evidence: exact path, mode, owner, open handles, and disappearance on
   unload.
 - Current source: L09.
@@ -206,7 +209,7 @@ The check injects failure at every stage, repeats load/unload, and verifies that
 - Teaches: intrusive lists, allocation ownership, iteration, bounded growth, safe
   deletion, and complete purge.
 - Produces: the rootkit configuration registry.
-- Requires: R06 and R09.
+- Requires: R05 and R09.
 - Defensive evidence: insertion order, capacity bound, rejection without partial
   insertion, and empty state after unload.
 - Current source: L13.
@@ -225,7 +228,7 @@ The check injects failure at every stage, repeats load/unload, and verifies that
 - Teaches: process, timer/softirq, probe, and other atomic contexts; sleepability;
   faultability; allocation flags; and legal synchronization.
 - Produces: the context decision table used by all asynchronous and hook code.
-- Requires: R05.
+- Requires: R06.
 - Defensive evidence: context assertions and diagnostic-kernel failures.
 - Current source: missing as an explicit lesson; fragments exist across concurrency,
   instrumentation, and networking scaffolds.
@@ -245,7 +248,7 @@ The check injects failure at every stage, repeats load/unload, and verifies that
 - Teaches: thread creation and pointer errors, wait queues, condition-loop waiting,
   publish-before-wake, stop checks, wakeup, and join.
 - Produces: the resident worker.
-- Requires: R06, R12, and R13.
+- Requires: R05, R12, and R13.
 - Defensive evidence: task inventory, event consumption, stop while blocked, and
   disappearance after unload.
 - Current sources: L19 and L23; L12's real pointer-error application is reinforced
@@ -281,7 +284,7 @@ This is one extension of M01, not a fresh scaffold.
 
 - Teaches: prepare, populate, commit, abort, and same-caller effect.
 - Produces: one bounded privilege action.
-- Requires: R06, R09, and R17.
+- Requires: R05, R09, and R17.
 - Defensive evidence: wrong command has no effect; the exact writing process changes;
   failed preparation leaves credentials unchanged.
 - Current source: L26.
@@ -310,7 +313,7 @@ This is one extension of M01, not a fresh scaffold.
 - Teaches: registration, bounded handlers, per-hook ownership, unregister-before-free,
   and rollback of a partially registered hook set.
 - Produces: entry telemetry.
-- Requires: R05 and R20.
+- Requires: R06 and R20.
 - Defensive evidence: probe registry, event counter, forced second-hook failure, and
   complete removal.
 - Current sources: L29 and L33.
@@ -356,7 +359,7 @@ Spinlock ownership and ring overwrite semantics must be taught before or within 
 - Teaches: validation of minimum and full record extent, name termination, forward
   progress, overlap-safe compaction, and returned-length correction.
 - Produces: reusable directory-enumeration filtering.
-- Requires: R06, R22, and R23.
+- Requires: R05, R22, and R23.
 - Defensive evidence: direct lookup, unrelated directories, malformed records, and
   restoration after unload.
 - Current source: L36.
@@ -402,7 +405,7 @@ The milestone produces a machine-readable evidence card stating which view chang
 - Teaches: hook points, namespaces, priorities, verdicts, registration lifetime, and
   accept-by-default behavior.
 - Produces: a packet observation point.
-- Requires: R05, R13, and R28.
+- Requires: R06, R13, and R28.
 - Defensive evidence: hook inventory/counters, unchanged traffic, and removal.
 - Current source: L40.
 
@@ -430,7 +433,7 @@ The milestone produces a machine-readable evidence card stating which view chang
 - Teaches: namespace-aware creation, connect/send/receive errors, datagram exactness,
   shutdown, release, and visibility in socket tables.
 - Produces: a kernel-owned endpoint.
-- Requires: R05 and R13.
+- Requires: R06 and R13.
 - Defensive evidence: socket inventory and disappearance after failure or unload.
 - Current source: L43, refactored so the title and implementation agree on the
   actual socket family and type.
@@ -487,7 +490,7 @@ This milestone does not expose a general shell.
 - Teaches: Kernel Crypto API `shash` lifecycle, descriptor sizing, known-answer
   vectors, comparison, and why a public digest is not authentication.
 - Produces: integrity verification against a trusted fingerprint.
-- Requires: R06 and R36.
+- Requires: R05 and R36.
 - Defensive evidence: known-answer accept/reject cases and keyless forgery model.
 - Current source: L51.
 
@@ -506,7 +509,7 @@ This milestone does not expose a general shell.
 - Teaches: transform/request/scatterlist lifetime, AAD, unique nonces, tag layout,
   asynchronous completion, `-EBADMSG`, and secret-erasure limits.
 - Produces: an optional confidential transport envelope.
-- Requires: R06 and R38.
+- Requires: R05 and R38.
 - Defensive evidence: known-answer vector, nonce discipline, tag/ciphertext tamper,
   and no plaintext consumption on failure.
 - Current source: L50, moved after the simpler hash and MAC property progression.
@@ -606,12 +609,12 @@ This table is exhaustive.
 | L04 | Refactor | R04 | Preserve exact failed-init semantics before rollback. |
 | L05 | Merge | M02 configuration | Parameter state is useful only when attached to a real scheduler/config subsystem. |
 | L06 | Merge | M02 configuration | Callback completes the same live-parameter mechanism. |
-| L07 | Merge | R06 | Heap ownership belongs with real allocation error contracts. |
-| L08 | Refactor | R05 | Core lifecycle invariant reused everywhere. |
+| L07 | Merge | R05 | Heap ownership belongs with real allocation error contracts. |
+| L08 | Refactor | R06 | Core lifecycle invariant reused everywhere. |
 | L09 | Refactor | R07 | Publication lifetime remains distinct from read semantics. |
 | L10 | Refactor | R08 | Teach the complete read contract, preferably with framework support. |
 | L11 | Keep/refactor | R09 | Critical userspace trust-boundary transaction. |
-| L12 | Merge | R06/R15 | Pointer errors are taught where allocation and kthread creation return them. |
+| L12 | Merge | R05/R15 | Pointer errors are taught where allocation and kthread creation return them. |
 | L13 | Keep/refactor | R11 | Required configuration-store substrate. |
 | L14 | Merge | E02 | Device registration alone is an incomplete optional ABI. |
 | L15 | Merge | E02 | Valuable alternate typed control plane, not required for the proc-based core. |

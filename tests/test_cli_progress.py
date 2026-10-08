@@ -31,6 +31,7 @@ class ProgressResetCLITests(unittest.TestCase):
             set(self.globals["CAT"].by_id),
             self.globals["ROUTE"],
             self.globals["CAT"].revision,
+            self.globals["PREREQUISITES"],
         )
         self.globals["setup"]()
 

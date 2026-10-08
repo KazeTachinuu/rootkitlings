@@ -1,0 +1,2 @@
+# TODO: build rootkitlings.ko from all three permanent Stage 1 objects.
+# TODO: add include/ and the ROOTKITLINGS_FAIL_POINT build definition.

@@ -1,6 +1,6 @@
 # Stage 1 implementation slice
 
-Status: incubation design and R01 vertical slice.
+Status: incubation design with R01 and R02 vertical slices.
 Nothing here changes the public course route.
 
 ## Outcome
@@ -11,12 +11,12 @@ Each checkpoint changes learner owned state, has an independently observable suc
 | Unit | Learner-owned change | Observable success | Negative and cleanup evidence | Reused stable IDs |
 |---|---|---|---|---|
 | R01 Authorized lab | Complete the authorization, scope, stop, containment, and cleanup manifest | Diskless guest boots and reports the expected boundary | Incomplete or weakened scope is rejected before boot; no network or host mount; guest powers down and temporary state disappears | New material in `curriculum/incubator/stage-01/r01-authorized-lab` |
-| R02 Module lifecycle | Write metadata and init/exit behavior in the permanent core | Module loads; metadata, symbols, `/sys/module`, inventory, and logs agree | Unload removes the sysfs/inventory artifact and records exit | `module-lifecycle`, `module-build` |
+| R02 Module lifecycle | Write metadata and init/exit behavior in the permanent core | Module loads; static metadata, symbols, `/sys/module`, and module inventory agree | Unload removes the sysfs and inventory artifacts; an immediate reload succeeds | `module-lifecycle`, `module-build` |
 | R03 Owned components | Define the shared contract and split permanent `core` and `status` objects | Composite module links and exposes the intended component symbols | Omit one object or violate the header contract and the build fails without a load attempt | `multi-file-module` as a mechanism reference; its calculator scaffold is not reused |
-| R04 Precise rejection | Add one controlled init rejection returning its original negative errno | Load reports the selected error and the module remains absent | Exit marker is absent after failed init; disabling injection permits a clean load | `init-failure` |
-| R05 Reverse rollback | Implement top-level acquisition and reverse unwind for every acquired component | Normal load/unload succeeds repeatedly | Fail each acquisition point; no object remains, then immediate retry succeeds | `initialization-rollback` |
-| R06 Heap and pointer failures | Move core state to owned heap storage and handle both `NULL` and pointer-shaped errors at their APIs | State is allocated, published only after initialization, and released on unload | Inject allocation failure and pointer error; preserve exact errno, publish nothing, invalidate released pointers, and retry cleanly | `kernel-allocation`, `error-pointer` |
-| M01 Inspectable core | Integrate R02–R06 by writing the top-level acquisition table and unwind paths | Permanent multi-file module loads repeatedly and every component is statically inspectable | Inject every stage failure, repeat load/unload, and independently verify no module, sysfs object, allocation marker, or stale log claim remains | Solutions inform the contract but are not copied into a milestone scaffold |
+| R04 Precise rejection | Add one controlled init rejection returning its original negative errno | Loader reports the selected error and the module remains absent | `/proc/modules` and `/sys/module` stay absent; rebuilding without injection permits an immediate clean load | `init-failure` |
+| R05 Owned kernel state | Implement state allocation, convert `kzalloc()`'s `NULL` to `ERR_PTR(-ENOMEM)`, and consume it with `IS_ERR()`/`PTR_ERR()` | State allocation is attributed to its constructor and released on unload | Inject allocation failure; preserve `-ENOMEM`, publish nothing, and retry cleanly | `kernel-allocation`, `error-pointer` |
+| R06 Resource rollback | Add status allocation and own the final state-then-status acquisition and status-then-state unwind | Both owned allocations are attributed and released on normal unload | Fail status creation with `ERR_PTR(-EUCLEAN)`; state is freed, no module remains, and immediate retry succeeds | `initialization-rollback` |
+| M00 Inspectable core (migration-map M01) | Integrate R02–R06 by writing the top-level acquisition table and unwind paths | Permanent multi-file module loads repeatedly and every component is statically inspectable | Inject every stage failure, repeat load/unload, and correlate each owned allocation's opaque pointer token with its tracefs free event | Solutions inform the contract but are not copied into a milestone scaffold |
 
 ## R01 implementation contract
 
@@ -38,7 +38,9 @@ A learner must not copy it as a substitute for permission.
 
 ## Cumulative source contract
 
-R02 begins the permanent source tree; R03 changes it to this logical shape:
+The accepted [Stage 1 cumulative architecture](stage-01-architecture.md) resolves file ownership, APIs, build-time failure injection, status publication, allocator evidence, and snapshot compatibility.
+
+R02 begins with the complete permanent source tree:
 
 ```text
 Kbuild
@@ -48,27 +50,35 @@ core/state.c
 status/status.c
 ```
 
-R04 and R06 add failure-producing operations behind the shared contract.
-R05 owns the only top-level acquisition/unwind graph.
-M01 does not start from a new template: it consumes the recorded completion of R06 and asks the learner to finish integration and failure testing.
+Inactive files begin as warning-free private stubs so the declared file set and build root never change across completion inheritance.
+R04 introduces the build-time-failure-injection ABI with the preflight point.
+R05 adds the state allocation point and pointer-error contract.
+R06 adds the status point and owns the final top-level acquisition/unwind graph.
+M00 does not start from a new template: it consumes the recorded completion of R06 and asks the learner to finish integration and failure testing.
+
+The migration map's M01 is the first generated milestone and therefore has public serial M00.
+It publishes no learner-authored status interface; procfs publication remains R07 in Stage 2.
 
 The current stable-ID material remains the teaching reference.
 Migration code must map completion snapshots forward; it must not infer a cumulative baseline from the current standalone exercise directories.
 
-## Why an M01 scaffold is not included yet
+## M00 scaffold readiness
 
-A sound cumulative scaffold requires decisions not made by the migration map:
+The former architecture blockers are resolved in the linked decision:
 
-- the public component API and which object owns the shared state;
-- the exact acquisition stages and stable failure-injection interface;
-- whether status publication is deferred until Stage 2 or represented only by
-  internal inspection in M01;
-- which independent allocation evidence is available without adding a new
-  debugfs/procfs interface too early;
-- snapshot migration semantics from R02 through R06.
+- `core/state.c` and `status/status.c` each own one concrete allocation;
+- `core/main.c` owns only activation and reverse teardown order;
+- R04 introduces the fixed build-time-failure-injection ABI, R05 adds state
+  allocation failure, and R06 adds status failure and reverse unwind;
+- status publication waits for the Stage 2 procfs lesson;
+- tracefs assigns opaque pointer tokens to raw call sites inside precomputed
+  constructor ranges, then correlates each token with a post-unload free inside
+  its destructor range, independently of logs;
+- R02 creates the fixed five-file tree and every later checkpoint inherits the
+  immediately preceding passed snapshot through M00.
 
-Inventing those choices in a source skeleton would make later checks dictate an accidental architecture.
-Before authoring M01 assets, record an architecture decision for these five points, then implement R02–R06 as cumulative deltas and write M01 against the R06 completion snapshot.
+M00 source and checks may now be authored, but only together with the cumulative R02–R06 deltas.
+A standalone M00 scaffold would bypass the completion lineage and remains prohibited.
 
 ## Acceptance tests before route adoption
 
@@ -76,9 +86,9 @@ Before authoring M01 assets, record an architecture decision for these five poin
 - R01 example solution passes and the guest exits within its timeout.
 - A manifest enabling networking, persistence, a host mount, or production data
   is rejected without invoking QEMU.
-- Every future R02–R06 check has a positive control, a negative control, and an
+- Every future R03–R06 check has a positive control, a negative control, and an
   independent cleanup assertion.
-- M01 injects each declared failure point individually and reloads immediately
+- M00 injects each declared failure point individually and reloads immediately
   after every failure.
 - The complete Stage 1 workspace builds with `W=1` and no warning.
 - The public route remains unchanged until state migration and cumulative

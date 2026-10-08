@@ -1,0 +1,44 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "R02 module lifecycle"
+
+assert_inventory_present()
+{
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_ok "rootkitlings is present in /proc/modules"
+	else
+		_fail "rootkitlings is absent from /proc/modules"
+	fi
+}
+
+assert_inventory_absent()
+{
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_fail "rootkitlings remains in /proc/modules"
+	else
+		_ok "rootkitlings is absent from /proc/modules"
+	fi
+}
+
+assert_absent /sys/module/rootkitlings
+assert_inventory_absent
+
+load rootkitlings.ko
+assert_loaded rootkitlings
+assert_inventory_present
+
+unload rootkitlings
+assert_absent /sys/module/rootkitlings
+assert_inventory_absent
+
+load rootkitlings.ko
+assert_loaded rootkitlings
+assert_inventory_present
+
+unload rootkitlings
+assert_absent /sys/module/rootkitlings
+assert_inventory_absent
+
+summary

@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 import tempfile
 import tomllib
-from typing import Iterator
+from typing import Iterator, Mapping
 
 
 SCHEMA_VERSION = 2
@@ -56,8 +56,14 @@ class LearnerState:
         for stable_id in stable_ids:
             self.exercises.pop(stable_id, None)
 
-    def validate(self, valid_ids: set[str], route: tuple[str, ...], revision: str) -> None:
-        _validate_contract(valid_ids, route, revision)
+    def validate(
+        self,
+        valid_ids: set[str],
+        route: tuple[str, ...],
+        revision: str,
+        prerequisites: Mapping[str, frozenset[str]],
+    ) -> None:
+        _validate_contract(valid_ids, route, revision, prerequisites)
         if self.curriculum_revision != revision:
             raise StateError(
                 f"curriculum revision mismatch: state={self.curriculum_revision!r}, active={revision!r}"
@@ -71,9 +77,12 @@ class LearnerState:
             elective_completed = self.completed - set(route)
             if not elective_completed <= valid_ids:
                 raise StateError(f"state contains unknown stable IDs: {sorted(elective_completed - valid_ids)}")
-        required_completed = tuple(item for item in route if item in self.completed)
-        if required_completed != route[:len(required_completed)]:
-            raise StateError("completed required-route IDs must form an exact prefix")
+        for stable_id in self.completed:
+            missing = set(prerequisites[stable_id]) - self.completed
+            if missing:
+                raise StateError(
+                    f"completion for {stable_id!r} lacks prerequisites: {sorted(missing)}"
+                )
         for stable_id, item in self.exercises.items():
             if item.attempts < 0:
                 raise StateError(f"negative attempt count for {stable_id}")
@@ -82,12 +91,22 @@ class LearnerState:
                     raise StateError(f"invalid content hash for {stable_id}: {value!r}")
 
 
-def new_state(route: tuple[str, ...], valid_ids: set[str], revision: str) -> LearnerState:
-    _validate_contract(valid_ids, route, revision)
+def new_state(
+    route: tuple[str, ...],
+    valid_ids: set[str],
+    revision: str,
+    prerequisites: Mapping[str, frozenset[str]],
+) -> LearnerState:
+    _validate_contract(valid_ids, route, revision, prerequisites)
     return LearnerState(revision, route)
 
 
-def _validate_contract(valid_ids: set[str], route: tuple[str, ...], revision: str) -> None:
+def _validate_contract(
+    valid_ids: set[str],
+    route: tuple[str, ...],
+    revision: str,
+    prerequisites: Mapping[str, frozenset[str]],
+) -> None:
     if not revision or "\n" in revision or "\r" in revision:
         raise StateError("curriculum revision must be a non-empty single-line string")
     if not route or len(route) != len(set(route)):
@@ -96,17 +115,64 @@ def _validate_contract(valid_ids: set[str], route: tuple[str, ...], revision: st
         raise StateError("stable IDs must be lowercase slug tokens")
     if not set(route) <= valid_ids:
         raise StateError(f"route contains unknown IDs: {sorted(set(route) - valid_ids)}")
+    if set(prerequisites) != valid_ids:
+        raise StateError("prerequisite map must cover every stable ID exactly")
+    positions = {stable_id: index for index, stable_id in enumerate(route)}
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(stable_id: str) -> None:
+        if stable_id in visiting:
+            raise StateError(f"prerequisite cycle at {stable_id}")
+        if stable_id in visited:
+            return
+        visiting.add(stable_id)
+        dependencies = prerequisites[stable_id]
+        unknown = set(dependencies) - valid_ids
+        if unknown:
+            raise StateError(f"unknown prerequisites for {stable_id}: {sorted(unknown)}")
+        if stable_id in dependencies:
+            raise StateError(f"self prerequisite at {stable_id}")
+        if stable_id in positions:
+            for dependency in dependencies:
+                if dependency not in positions or positions[dependency] >= positions[stable_id]:
+                    raise StateError(
+                        f"required prerequisite {dependency!r} is not earlier than {stable_id!r}"
+                    )
+        for dependency in dependencies:
+            visit(dependency)
+        visiting.remove(stable_id)
+        visited.add(stable_id)
+
+    for stable_id in valid_ids:
+        visit(stable_id)
 
 
-def load_state(path: Path, valid_ids: set[str], route: tuple[str, ...], revision: str) -> LearnerState:
+def load_state(
+    path: Path,
+    valid_ids: set[str],
+    route: tuple[str, ...],
+    revision: str,
+    prerequisites: Mapping[str, frozenset[str]],
+) -> LearnerState:
     """Load and validate state, returning new empty state when the file is absent."""
     path = Path(path)
     if not path.exists():
-        return new_state(route, valid_ids, revision)
+        return new_state(route, valid_ids, revision, prerequisites)
     try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        state = parse_state(path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise StateError(f"cannot read learner state: {exc}") from exc
+    state.validate(valid_ids, route, revision, prerequisites)
+    return state
+
+
+def parse_state(content: str) -> LearnerState:
+    """Parse and structurally validate state without binding it to a catalog."""
+    try:
+        data = tomllib.loads(content)
+    except tomllib.TOMLDecodeError as exc:
+        raise StateError(f"cannot parse learner state: {exc}") from exc
     if set(data) != {"schema_version", "curriculum_revision", "route", "completed", "exercises"}:
         raise StateError("state has missing or unknown top-level fields")
     if data["schema_version"] != SCHEMA_VERSION or isinstance(data["schema_version"], bool):
@@ -135,8 +201,26 @@ def load_state(path: Path, valid_ids: set[str], route: tuple[str, ...], revision
             raw["baseline_hash"], raw["workspace_hash"], raw["passed_snapshot"], attempts, revealed
         )
     state = LearnerState(data["curriculum_revision"], saved_route, completed, exercises)
-    state.validate(valid_ids, route, revision)
+    _validate_structural_state(state)
     return state
+
+
+def _validate_structural_state(state: LearnerState) -> None:
+    if not state.curriculum_revision or any(
+        value in state.curriculum_revision for value in ("\n", "\r")
+    ):
+        raise StateError("curriculum revision must be a non-empty single-line string")
+    identifiers = set(state.route) | state.completed | set(state.exercises)
+    if any(not ID_RE.fullmatch(item) for item in identifiers):
+        raise StateError("state contains invalid stable IDs")
+    if not state.route or len(state.route) != len(set(state.route)):
+        raise StateError("saved route must be non-empty and contain unique IDs")
+    for stable_id, item in state.exercises.items():
+        if item.attempts < 0:
+            raise StateError(f"negative attempt count for {stable_id}")
+        for value in (item.baseline_hash, item.workspace_hash, item.passed_snapshot):
+            if value and not re.fullmatch(r"[0-9a-f]{64}", value):
+                raise StateError(f"invalid content hash for {stable_id}: {value!r}")
 
 
 def _string_array(value: object, name: str) -> tuple[str, ...]:
@@ -203,12 +287,28 @@ def _atomic_write(path: Path, content: str) -> None:
 class StateStore:
     """Coordinate state access through a sibling advisory lock file."""
 
-    def __init__(self, path: Path, valid_ids: set[str], route: tuple[str, ...], revision: str):
+    def __init__(
+        self,
+        path: Path,
+        valid_ids: set[str],
+        route: tuple[str, ...],
+        revision: str,
+        prerequisites: Mapping[str, frozenset[str]],
+    ):
         self.path = Path(path)
         self.valid_ids = set(valid_ids)
         self.route = tuple(route)
         self.revision = revision
-        _validate_contract(self.valid_ids, self.route, self.revision)
+        self.prerequisites = {
+            stable_id: frozenset(values)
+            for stable_id, values in prerequisites.items()
+        }
+        _validate_contract(
+            self.valid_ids,
+            self.route,
+            self.revision,
+            self.prerequisites,
+        )
 
     @contextmanager
     def locked(self) -> Iterator[LearnerState]:
@@ -216,13 +316,24 @@ class StateStore:
         lock_path = self.path.with_name(self.path.name + ".lock")
         with lock_path.open("a+b") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-            state = load_state(self.path, self.valid_ids, self.route, self.revision)
+            state = load_state(
+                self.path,
+                self.valid_ids,
+                self.route,
+                self.revision,
+                self.prerequisites,
+            )
             try:
                 yield state
             except Exception:
                 raise
             else:
-                state.validate(self.valid_ids, self.route, self.revision)
+                state.validate(
+                    self.valid_ids,
+                    self.route,
+                    self.revision,
+                    self.prerequisites,
+                )
                 _atomic_write(self.path, dump_state(state))
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
@@ -235,6 +346,12 @@ class StateStore:
         with lock_path.open("a+b") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_SH)
             try:
-                yield load_state(self.path, self.valid_ids, self.route, self.revision)
+                yield load_state(
+                    self.path,
+                    self.valid_ids,
+                    self.route,
+                    self.revision,
+                    self.prerequisites,
+                )
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)

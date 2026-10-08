@@ -1,0 +1,58 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r02-test.XXXXXX")
+trap 'rm -rf -- "$work"' EXIT
+cp -a "$HERE/solution/." "$work/"
+cp "$HERE/fixtures/missing-exit-main.c" "$work/core/main.c"
+
+if output=$("$HERE/check" "$work" 2>&1); then
+	printf '%s\n' "$output" >&2
+	printf '[x] missing-exit fixture unexpectedly passed\n' >&2
+	exit 1
+fi
+case $output in
+	*"module is missing its exit callback"*) ;;
+	*) printf '%s\n[x] fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
+esac
+printf '[+] missing-exit fixture rejected before guest boot\n'
+
+cp -a "$HERE/solution/." "$work/"
+cp "$HERE/fixtures/omitted-component-Kbuild" "$work/Kbuild"
+if output=$("$HERE/check" "$work" 2>&1); then
+	printf '%s\n' "$output" >&2
+	printf '[x] omitted-component fixture unexpectedly passed\n' >&2
+	exit 1
+fi
+case $output in
+	*"must link core/main.o, core/state.o, and status/status.o"*) ;;
+	*) printf '%s\n[x] component fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
+esac
+printf '[+] omitted-component fixture rejected before guest boot\n'
+
+cp -a "$HERE/solution/." "$work/"
+cp "$HERE/fixtures/active-state.c" "$work/core/state.c"
+if output=$("$HERE/check" "$work" 2>&1); then
+	printf '%s\n' "$output" >&2
+	printf '[x] active-state fixture unexpectedly passed\n' >&2
+	exit 1
+fi
+case $output in
+	*"core/state.c must remain the supplied inactive R02 scaffold"*) ;;
+	*) printf '%s\n[x] active-state fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
+esac
+printf '[+] active-state fixture rejected before build\n'
+
+cp -a "$HERE/solution/." "$work/"
+cp "$HERE/fixtures/hardcoded-failure-Kbuild" "$work/Kbuild"
+if output=$("$HERE/check" "$work" 2>&1); then
+	printf '%s\n' "$output" >&2
+	printf '[x] hardcoded-failure fixture unexpectedly passed\n' >&2
+	exit 1
+fi
+case $output in
+	*"must pass an externally selected failure point"*) ;;
+	*) printf '%s\n[x] hardcoded-failure fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
+esac
+printf '[+] hardcoded-failure fixture rejected before guest boot\n'

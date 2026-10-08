@@ -1,0 +1,77 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+ROOT=$HERE
+while [[ ! -f $ROOT/course.toml ]]; do
+	parent=$(dirname "$ROOT")
+	[[ $parent != "$ROOT" ]] || die "cannot find repository root from: $HERE"
+	ROOT=$parent
+done
+
+(( $# == 1 )) || die "usage: ${0##*/} WORKSPACE"
+workspace=$(realpath -e -- "$1") || die "workspace not found: $1"
+[[ -d $workspace && ! -L $workspace ]] || die "workspace must be a real directory"
+for path in Kbuild include/rootkit.h core/main.c core/state.c status/status.c; do
+	[[ -f $workspace/$path && ! -L $workspace/$path ]] || die "missing regular file: $path"
+done
+for path in include/rootkit.h core/state.c status/status.c; do
+	cmp -s "$workspace/$path" "$HERE/template/$path" ||
+		die "$path must remain the supplied inactive R02 scaffold"
+done
+[[ -d $KDIR ]] || die "kernel build directory not found: $KDIR"
+
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r02-check.XXXXXX")
+build=$scratch/build
+unsupported=$scratch/unsupported
+log=$build/build.log
+unsupported_log=$unsupported/build.log
+trap 'rm -rf -- "$scratch"' EXIT
+
+copy_workspace()
+{
+	destination=$1
+	mkdir -p "$destination/include" "$destination/core" "$destination/status"
+	for path in Kbuild include/rootkit.h core/main.c core/state.c status/status.c; do
+		cp -p "$workspace/$path" "$destination/$path"
+	done
+}
+
+copy_workspace "$build"
+if ! make -s -C "$KDIR" M="$build" W=1 modules >"$log" 2>&1; then
+	cat "$log" >&2
+	die "module build failed"
+fi
+if grep -q 'warning:' "$log"; then cat "$log" >&2; die "module builds with warnings"; fi
+
+module=$build/rootkitlings.ko
+[[ -f $module ]] || die "Kbuild did not produce rootkitlings.ko"
+mapfile -t linked_objects < "$build/rootkitlings.mod"
+expected_objects=(./core/main.o ./core/state.o ./status/status.o)
+[[ ${linked_objects[*]} == "${expected_objects[*]}" ]] ||
+	die "rootkitlings.ko must link core/main.o, core/state.o, and status/status.o in that order"
+command -v modinfo >/dev/null || die "modinfo is required"
+command -v nm >/dev/null || die "nm is required"
+[[ $(modinfo -F license "$module") == GPL ]] || die "module license must be GPL"
+[[ $(modinfo -F description "$module") == 'Rootkitlings inspectable core' ]] ||
+	die "module description must be: Rootkitlings inspectable core"
+nm "$module" | grep -Eq ' [Tt] init_module$' || die "module is missing its init callback"
+nm "$module" | grep -Eq ' [Tt] cleanup_module$' || die "module is missing its exit callback"
+printf '[+] warning-free build, metadata, and lifecycle symbols verified\n'
+
+copy_workspace "$unsupported"
+if make -s -C "$KDIR" M="$unsupported" W=1 ROOTKITLINGS_FAIL_POINT=99 \
+	modules >"$unsupported_log" 2>&1; then
+	die "Kbuild must pass an externally selected failure point to the compiler"
+fi
+grep -Fq 'R02 supports only the inactive failure point' "$unsupported_log" || {
+	cat "$unsupported_log" >&2
+	die "failure-point override was rejected for the wrong reason"
+}
+printf '[+] default and externally selected failure-point builds verified\n'
+
+"$ROOT/vm/boot" --check "$HERE/guest-check" "$module"

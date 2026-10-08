@@ -120,13 +120,13 @@ CLI `baseline()` must ask the catalog for the derived baseline provider rather t
 
 ### 4. Support explicit state migration
 
-State uses stable IDs correctly, but loading rejects any revision or route difference.
-Thus the 65-to-46 migration makes every existing state unusable.
+Implementation: generic state and migration foundations are complete.
+The reviewed 65-to-46 plan, workspace relocation, and CLI orchestration remain pending.
 
-The exact-prefix rule also conflicts with the requirement that a curriculum reorder not change the meaning of saved progress.
+The former exact-prefix rule conflicted with the requirement that a curriculum reorder not change the meaning of saved progress.
 Inserting a new checkpoint before completed stable IDs turns valid historical completion into a non-prefix set.
 
-Required state design:
+Completed state design:
 
 - Parse saved state before validating it against the active catalog.
 - Add explicit, versioned migration definitions; never infer migrations.
@@ -142,8 +142,13 @@ Required state design:
 - Clear baseline, workspace, and passed hashes unless the migration explicitly
   certifies identical declared files and semantics.
 - Never grant a merged checkpoint from only one incomplete source component.
+- Validate source and destination state against explicit curriculum contracts.
+- Keep completion evidence separate from attempt/disclosure history merging.
+- Permit each source history to feed only one destination.
+- Require an explicit verifier before retaining compatible snapshot hashes.
+- Reject symlinked or non-private state/archive directory boundaries.
 
-For reorder and insertion resilience, replace the exact-prefix invariant with:
+For reorder and insertion resilience, completion validation now enforces:
 
 - completed IDs must exist;
 - completed exercises must be prerequisite-closed;
@@ -152,7 +157,15 @@ For reorder and insertion resilience, replace the exact-prefix invariant with:
 
 This permits sparse historical credit after a route insertion without changing stable-ID meaning.
 
-The one-time 65-to-46 conversion needs a reviewed migration map because many IDs are merged or replaced.
+Still pending:
+
+- Encode and review the one-time 65-to-46 migration plan because many IDs are
+  merged or replaced.
+- Verify compatible snapshots and relocate/archive workspaces before committing
+  the state replacement.
+- Wire revision mismatch handling to the migration orchestrator with precise
+  recovery output.
+
 A revision string change alone is insufficient.
 
 ### 5. Separate workspace restoration from progress reset
