@@ -4,12 +4,24 @@
 
 begin "State allocation rejection"
 
-assert_absent /sys/module/rootkitlings
-if module_load_test /rootkitlings/rootkitlings.ko 12; then
-	_ok "state creation returned numeric ENOMEM"
-else
-	_fail "state creation did not return ENOMEM"
-fi
-assert_absent /sys/module/rootkitlings
+assert_not_loaded()
+{
+	assert_absent /sys/module/rootkitlings
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_fail "rootkitlings appears in /proc/modules"
+	else
+		_ok "rootkitlings is absent from /proc/modules"
+	fi
+}
+
+assert_not_loaded
+for attempt in 1 2; do
+	if module_load_test /rootkitlings/rootkitlings.ko 12; then
+		_ok "attempt $attempt returned numeric ENOMEM"
+	else
+		_fail "attempt $attempt did not return ENOMEM"
+	fi
+	assert_not_loaded
+done
 
 summary

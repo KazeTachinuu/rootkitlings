@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/bug.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
@@ -26,6 +27,8 @@ __must_check noinline struct rk_state *rk_state_create(void)
 
 noinline void rk_state_destroy(struct rk_state *state)
 {
+	if (WARN_ON_ONCE(!state->active))
+		return;
 	state->active = false;
 	kfree(state);
 }

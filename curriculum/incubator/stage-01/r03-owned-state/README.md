@@ -31,6 +31,8 @@ That makes the type **opaque**: other files may hold its pointer but only `core/
 Failed module initialization does not call the exit callback.
 If state creation fails, init must preserve the constructor's error and leave the stored pointer as `NULL`.
 Normal unload destroys the state and immediately sets that pointer to `NULL`, so later code cannot accidentally reuse released memory.
+The private `active` flag is an ownership invariant: creation marks the object active, and destruction checks that state before clearing it and releasing the allocation.
+The warning is a defensive assertion, not evidence that cleanup succeeded.
 
 ## Your task
 
@@ -58,7 +60,7 @@ The checker builds failure points 0, 1, and 2 without warnings and rejects an un
 In disposable guests, value 1 must return numeric `ECANCELED`, value 2 must return numeric `ENOMEM`, and both rejected loads must leave the module absent.
 Value 0 must load, unload, disappear from kernel inventory and sysfs, then load and unload again.
 
-The `.ko` symbol table independently shows which object defines the state functions.
+The individual object-file symbol tables show that `core/state.o` defines the state functions and `core/main.o` consumes them.
 The private layout is absent from the shared header, so another component cannot allocate, free, or reach into state directly.
 
 ## Official references
