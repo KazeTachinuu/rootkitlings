@@ -22,7 +22,7 @@ module:
 	@test -n "$(MODULE_DIR)" || { echo 'MODULE_DIR is required' >&2; exit 2; }
 	$(MAKE) -C "$(KDIR)" M="$(MODULE_DIR)" W=1 modules
 
-tools: tools/cred_trigger_test tools/icmp_send tools/ioctl_test
+tools: tools/cred_trigger_test tools/icmp_send tools/ioctl_test tools/module_load_test
 
 tools/cred_trigger_test: tools/cred_trigger_test.c
 	$(CC) -static -o $@ $<
@@ -33,11 +33,14 @@ tools/icmp_send: tools/icmp_send.c
 tools/ioctl_test: tools/ioctl_test.c
 	$(CC) -static -o $@ $<
 
+tools/module_load_test: tools/module_load_test.c
+	$(CC) -static -o $@ $<
+
 clean:
 	@workspace_id=$$("$(CURDIR)/scripts/catalog" query L00 id); \
 	workspace="$(CURDIR)/.rootkitlings/work/$$workspace_id"; \
 	if [ -d "$$workspace" ]; then "$(CURDIR)/rootkitlings" clean L00; fi
-	$(RM) tools/cred_trigger_test tools/icmp_send tools/ioctl_test
+	$(RM) tools/cred_trigger_test tools/icmp_send tools/ioctl_test tools/module_load_test
 
 doctor:
 	@"$(CURDIR)/scripts/doctor"

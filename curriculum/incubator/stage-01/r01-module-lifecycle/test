@@ -4,14 +4,24 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r01-test.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
-cp -a "$HERE/solution/." "$work/"
+KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
 
-"$HERE/check" "$work"
+build_and_check()
+{
+	make -s -C "$KDIR" M="$work" clean
+	make -s -C "$KDIR" M="$work" W=1 modules
+	"$HERE/host-check" "$work" "$work/rootkitlings.ko"
+}
+
+cp -a "$HERE/solution/." "$work/"
+build_and_check
+"$HERE/../../../../vm/boot" --check "$HERE/../support/module-lifecycle-check" \
+	"$work/rootkitlings.ko"
 printf '[+] reference solution passed host and disposable-guest checks\n'
 
 cp "$HERE/fixtures/missing-exit-main.c" "$work/core/main.c"
 
-if output=$("$HERE/check" "$work" 2>&1); then
+if output=$(build_and_check 2>&1); then
 	printf '%s\n' "$output" >&2
 	printf '[x] missing-exit fixture unexpectedly passed\n' >&2
 	exit 1
@@ -24,20 +34,20 @@ printf '[+] missing-exit fixture rejected before guest boot\n'
 
 cp -a "$HERE/solution/." "$work/"
 cp "$HERE/fixtures/wrong-module-Kbuild" "$work/Kbuild"
-if output=$("$HERE/check" "$work" 2>&1); then
+if output=$(build_and_check 2>&1); then
 	printf '%s\n' "$output" >&2
 	printf '[x] wrong-module fixture unexpectedly passed\n' >&2
 	exit 1
 fi
 case $output in
-	*"Kbuild did not produce rootkitlings.ko"*) ;;
+	*"artifact not found:"*) ;;
 	*) printf '%s\n[x] component fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
 esac
 printf '[+] wrong-module fixture rejected before guest boot\n'
 
 cp -a "$HERE/solution/." "$work/"
 cp "$HERE/fixtures/wrong-description-main.c" "$work/core/main.c"
-if output=$("$HERE/check" "$work" 2>&1); then
+if output=$(build_and_check 2>&1); then
 	printf '%s\n' "$output" >&2
 	printf '[x] wrong-description fixture unexpectedly passed\n' >&2
 	exit 1

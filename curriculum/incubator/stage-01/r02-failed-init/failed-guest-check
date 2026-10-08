@@ -4,20 +4,27 @@
 
 begin "Precise failed initialization"
 
-if output=$(insmod /rootkitlings/rootkitlings.ko 2>&1); then
-	_fail "failure-point module loaded unexpectedly"
-else
-	case $output in
-		*"Operation canceled"*) _ok "loader reported ECANCELED" ;;
-		*) _fail "loader did not report ECANCELED: $output" ;;
-	esac
-fi
+assert_inventory_absent()
+{
+	assert_absent /sys/module/rootkitlings
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_fail "rootkitlings appears in /proc/modules"
+	else
+		_ok "rootkitlings is absent from /proc/modules"
+	fi
+}
 
-assert_absent /sys/module/rootkitlings
-if grep -q '^rootkitlings ' /proc/modules; then
-	_fail "rootkitlings appears in /proc/modules after rejected init"
-else
-	_ok "rootkitlings is absent from /proc/modules"
-fi
+assert_inventory_absent
+
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	if output=$(module_load_test /rootkitlings/rootkitlings.ko 2>&1); then
+		_ok "attempt $attempt returned numeric ECANCELED"
+	else
+		_fail "attempt $attempt did not return ECANCELED: $output"
+	fi
+	assert_inventory_absent
+	attempt=$((attempt + 1))
+done
 
 summary

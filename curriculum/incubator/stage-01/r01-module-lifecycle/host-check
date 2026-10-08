@@ -1,0 +1,23 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR ARTIFACT_PATH"
+build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
+artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
+
+[[ -d $build_dir && ! -L $build_dir ]] || die "build directory must be a real directory"
+[[ -f $artifact && ! -L $artifact ]] || die "artifact must be a regular file"
+[[ $artifact == "$build_dir/rootkitlings.ko" ]] ||
+	die "expected artifact at: $build_dir/rootkitlings.ko"
+
+command -v modinfo >/dev/null || die "modinfo is required"
+command -v nm >/dev/null || die "nm is required"
+[[ $(modinfo -F license "$artifact") == GPL ]] || die "module license must be GPL"
+[[ $(modinfo -F description "$artifact") == 'Rootkitlings module lifecycle' ]] ||
+	die "module description must be: Rootkitlings module lifecycle"
+nm "$artifact" | grep -Eq ' [Tt] init_module$' || die "module is missing its init callback"
+nm "$artifact" | grep -Eq ' [Tt] cleanup_module$' || die "module is missing its exit callback"
+
+printf '[+] module artifact, metadata, and lifecycle entry points verified\n'
