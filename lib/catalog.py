@@ -12,6 +12,7 @@ import tomllib
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 SERIAL_RE = re.compile(r"(?:L|M|C)[0-9]{2}\Z")
 TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
+MODULE_ARTIFACT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.ko\Z")
 DIFFICULTIES = {"intro", "standard", "advanced", "challenge"}
 KINDS = {"lesson", "milestone", "capstone"}
 STATUSES = {"required", "elective", "retired"}
@@ -29,7 +30,8 @@ QUERY_FIELDS = {
     "status", "tradecraft", "difficulty", "prerequisites", "teaches", "requires",
     "workspace_mode", "workspace_source", "workspace_files", "workspace_editable",
     "workspace_build", "workspace_baseline", "workspace_parent",
-    "workspace_additions", "readme", "check",
+    "workspace_additions", "workspace_module_artifact",
+    "readme", "check",
     "host_check", "hint", "solution", "verification_timeout", "verification_capabilities",
     "verification_tools", "verification_cleanup",
 }
@@ -74,6 +76,7 @@ class Workspace:
     baseline: str
     parent: str
     additions: str = ""
+    module_artifact: str = ""
 
 
 @dataclass(frozen=True)
@@ -128,6 +131,7 @@ class Exercise:
             "workspace_baseline": self.workspace.baseline,
             "workspace_parent": self.workspace.parent,
             "workspace_additions": self.workspace.additions,
+            "workspace_module_artifact": self.workspace.module_artifact,
             "readme": self.resources.readme,
             "check": self.resources.check, "host_check": self.resources.host_check,
             "hint": self.resources.hint, "solution": self.resources.solution,
@@ -142,7 +146,8 @@ class Exercise:
 class Catalog:
     def __init__(self, root: Path):
         self.root = root.resolve()
-        (self.revision, self.exercise_roots, self.required_route, self.tradecraft_tags,
+        (self.revision, self.default_module_artifact, self.exercise_roots,
+         self.required_route, self.tradecraft_tags,
          self.capabilities, self.tools, self.assumptions, self.sections,
          self.concepts) = self._read_course()
         self.concept_by_id = {item.id: item for item in self.concepts}
@@ -165,7 +170,8 @@ class Catalog:
         except (OSError, tomllib.TOMLDecodeError) as exc:
             raise CatalogError(f"cannot parse course.toml: {exc}") from exc
         allowed = {
-            "schema_version", "revision", "exercise_roots", "required_route",
+            "schema_version", "revision", "default_module_artifact",
+            "exercise_roots", "required_route",
             "tradecraft_tags", "capabilities", "tools", "assumptions",
             "sections", "concepts",
         }
@@ -173,6 +179,9 @@ class Catalog:
         if data["schema_version"] != 2 or isinstance(data["schema_version"], bool):
             raise CatalogError("course.toml: schema_version must be integer 2")
         revision = _string(data, "revision", Path("course.toml"))
+        default_module_artifact = _module_artifact(
+            data["default_module_artifact"], Path("course.toml")
+        )
         roots = tuple(_path_list(data, "exercise_roots", Path("course.toml"), self.root))
         for root in roots:
             if not (self.root / root).is_dir():
@@ -184,8 +193,8 @@ class Catalog:
         tradecraft_tags = tuple(_rows(data, "tradecraft_tags", {"id", "label"}, Concept, "id"))
         capabilities = tuple(_rows(data, "capabilities", {"id", "label"}, Concept, "id"))
         tools = tuple(_tool_rows(data, self.root))
-        return (revision, roots, route, tradecraft_tags, capabilities, tools,
-                assumptions, sections, concepts)
+        return (revision, default_module_artifact, roots, route, tradecraft_tags,
+                capabilities, tools, assumptions, sections, concepts)
 
     def _generate_aliases(self) -> dict[str, str]:
         prefixes = {"lesson": "L", "milestone": "M", "capstone": "C"}
@@ -245,6 +254,8 @@ class Catalog:
             raise CatalogError(f"{path}: workspace must be a table")
         baseline = _token(value, "baseline", path)
         common = {"mode", "files", "editable", "build", "baseline"}
+        if "module_artifact" in value:
+            common.add("module_artifact")
         if baseline == "template":
             expected = common | {"source"}
         elif baseline == "completion":
@@ -255,6 +266,7 @@ class Catalog:
         source = value.get("source", "")
         parent = value.get("parent", "")
         additions = value.get("additions", "")
+        module_artifact = value.get("module_artifact", "")
         if baseline == "template":
             if not source or parent:
                 raise CatalogError(f"{path}: template baseline requires source and forbids parent")
@@ -273,6 +285,10 @@ class Catalog:
             editable=tuple(_relative_list(value, "editable", path)),
             build=_workspace_build(value["build"], path), baseline=baseline, parent=parent,
             additions=_optional_path(additions, path, self.root),
+            module_artifact=(
+                _module_artifact(module_artifact, path / "workspace")
+                if module_artifact else ""
+            ),
         )
 
     def _resources(self, value, path):
@@ -463,6 +479,15 @@ class Catalog:
     def ordered(self) -> list[Exercise]:
         return [self.by_id[value] for value in self.required_route]
 
+    def module_artifact(self, item: Exercise) -> str:
+        """Resolve the module output name from its sparse workspace contract."""
+        if item.workspace.module_artifact:
+            return item.workspace.module_artifact
+        provider = self.baseline_provider(item)
+        if provider is not None:
+            return self.module_artifact(provider)
+        return self.default_module_artifact
+
     def baseline_provider(self, item: Exercise) -> Exercise | None:
         """Derive the sole workspace inheritance provider, if any."""
         baseline = item.workspace.baseline
@@ -536,6 +561,14 @@ class Catalog:
             )
         new_files = consumer_files - provider_files
         additions = item.workspace.additions
+        if (
+            item.workspace.module_artifact
+            and item.workspace.module_artifact != self.module_artifact(provider)
+        ):
+            raise CatalogError(
+                f"{item.path}: inherited workspace module artifact conflicts with "
+                f"provider {provider.id!r}"
+            )
         if new_files and not additions:
             raise CatalogError(
                 f"{item.path}: inherited workspace adds files but has no additions directory"
@@ -717,6 +750,18 @@ def _workspace_build(value, path):
     if candidate.is_absolute() or any(part in {"", ".", ".."} for part in candidate.parts):
         raise CatalogError(f"{path}: unsafe workspace build path {value!r}")
     return candidate.as_posix()
+
+
+def _module_artifact(value, path):
+    if not isinstance(value, str) or not MODULE_ARTIFACT_RE.fullmatch(value):
+        raise CatalogError(
+            f"{path}: module artifact must be a portable .ko basename"
+        )
+    if value.startswith("-") or ".." in value:
+        raise CatalogError(
+            f"{path}: module artifact must be a portable .ko basename"
+        )
+    return value
 
 
 def _regular_tree(

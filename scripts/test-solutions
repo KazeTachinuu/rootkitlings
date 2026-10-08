@@ -23,13 +23,14 @@ catalog = Catalog(Path.cwd()); tools = {tool.id: tool.binary for tool in catalog
 for item in sorted(catalog.exercises, key=lambda value: (value.sequence < 0, value.sequence, value.id)):
     r, v = item.resources, item.verification
     print("\x1f".join((item.id, item.serial, r.solution, r.check, r.host_check,
+          catalog.module_artifact(item),
           str(v.timeout_seconds), ",".join(v.capabilities),
           ",".join(tools[value] for value in v.tools))))
 PY
 }
 
 passed=0 failed=0 matched=0
-while IFS=$'\x1f' read -r id serial solution check host_check timeout_seconds capabilities tools; do
+while IFS=$'\x1f' read -r id serial solution check host_check module_artifact timeout_seconds capabilities tools; do
     (( $# == 0 )) || [[ -n ${requested[$id]:-} ]] || continue
     (( ++matched ))
     build=$work/$id; cp -a "$solution" "$build"
@@ -41,8 +42,8 @@ while IFS=$'\x1f' read -r id serial solution check host_check timeout_seconds ca
         make --quiet "$tool"; boot_args+=(--tool "$tool")
     done < <(tr ',' '\n' <<< "$tools")
     if make --quiet module MODULE_DIR="$build" &&
-        { [[ -z $host_check ]] || "$host_check" "$build"; } &&
-        output=$(timeout --foreground "$timeout_seconds" vm/boot "${boot_args[@]}" --check "$check" "$build/hello.ko" </dev/null 2>&1) &&
+        { [[ -z $host_check ]] || "$host_check" "$build" "$build/$module_artifact"; } &&
+        output=$(timeout --foreground "$timeout_seconds" vm/boot "${boot_args[@]}" --check "$check" "$build/$module_artifact" </dev/null 2>&1) &&
         [[ $output == *"[+] PASSED"* ]]; then
         printf '%s\n[+] %s passed\n' "$output" "$id"; (( ++passed ))
     else

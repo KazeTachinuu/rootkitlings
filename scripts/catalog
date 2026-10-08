@@ -14,6 +14,8 @@ sys.path.insert(0, str(ROOT / "lib"))
 
 from catalog import Catalog, CatalogError, QUERY_FIELDS  # noqa: E402
 
+CATALOG_QUERY_FIELDS = QUERY_FIELDS | {"module_artifact"}
+
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser()
@@ -27,7 +29,7 @@ def parser() -> argparse.ArgumentParser:
     resolve.add_argument("selector", help="stable ID or serial alias (L00, M00, or C00)")
     query = commands.add_parser("query")
     query.add_argument("selector", help="stable ID or serial alias (L00, M00, or C00)")
-    query.add_argument("field", choices=sorted(QUERY_FIELDS))
+    query.add_argument("field", choices=sorted(CATALOG_QUERY_FIELDS))
     prerequisite_closure = commands.add_parser("prerequisite-closure")
     prerequisite_closure.add_argument("selector", help="stable ID or serial alias")
     concept_closure = commands.add_parser("concept-closure")
@@ -60,7 +62,11 @@ def main() -> int:
             print(catalog.resolve(args.selector).path)
         elif args.command == "query":
             item = catalog.resolve(args.selector)
-            emit(item.value(args.field))
+            emit(
+                catalog.module_artifact(item)
+                if args.field == "module_artifact"
+                else item.value(args.field)
+            )
         elif args.command == "prerequisite-closure":
             item = catalog.resolve(args.selector)
             emit(tuple(value.serial for value in catalog.prerequisite_exercises(item)))
@@ -104,6 +110,8 @@ def main() -> int:
                         "baseline": item.workspace.baseline,
                         "parent": item.workspace.parent or None,
                         "additions": item.workspace.additions or None,
+                        "module_artifact": catalog.module_artifact(item),
+                        "module_artifact_override": item.workspace.module_artifact or None,
                     },
                     "resources": {
                         "readme": item.resources.readme, "check": item.resources.check,
@@ -117,7 +125,11 @@ def main() -> int:
                         "cleanup_required": item.verification.cleanup_required,
                     },
                 })
-            print(json.dumps({"revision": catalog.revision, "exercises": records}, indent=2))
+            print(json.dumps({
+                "revision": catalog.revision,
+                "default_module_artifact": catalog.default_module_artifact,
+                "exercises": records,
+            }, indent=2))
     except CatalogError as exc:
         print(f"[x] {exc}", file=sys.stderr)
         return 1

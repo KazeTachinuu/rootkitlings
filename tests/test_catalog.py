@@ -1,4 +1,6 @@
 from pathlib import Path
+import json
+import subprocess
 import tempfile
 import tomllib
 import unittest
@@ -47,6 +49,32 @@ class GeneratedSerialTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"ambiguous exercise 'C0'.*C00.*C09"):
             self.catalog.resolve("C0")
 
+    def test_catalog_query_and_export_resolve_default_module_artifact(self) -> None:
+        query = subprocess.run(
+            [str(ROOT / "scripts/catalog"), "query", "L00", "module_artifact"],
+            cwd=ROOT,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(query.stdout, "hello.ko\n")
+        exported = subprocess.run(
+            [str(ROOT / "scripts/catalog"), "export"],
+            cwd=ROOT,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        data = json.loads(exported.stdout)
+        self.assertEqual(data["default_module_artifact"], "hello.ko")
+        self.assertEqual(
+            data["exercises"][0]["workspace"]["module_artifact"],
+            "hello.ko",
+        )
+        self.assertIsNone(
+            data["exercises"][0]["workspace"]["module_artifact_override"]
+        )
+
 
 def _exercise(
     stable_id: str,
@@ -56,6 +84,7 @@ def _exercise(
     files: tuple[str, ...] = ("Kbuild", "main.c"),
     build: str = ".",
     additions: str = "",
+    module_artifact: str = "",
 ) -> Exercise:
     workspace = Workspace(
         mode="cumulative",
@@ -66,6 +95,7 @@ def _exercise(
         baseline=baseline,
         parent="",
         additions=additions,
+        module_artifact=module_artifact,
     )
     resources = Resources("README", "check", "", "hint", "solution")
     verification = Verification(30, (), (), True)
@@ -93,6 +123,7 @@ class DerivedBaselineTests(unittest.TestCase):
         catalog.required_route = tuple(item.id for item in route)
         catalog.exercises = list(route) + list(extras)
         catalog.by_id = {item.id: item for item in catalog.exercises}
+        catalog.default_module_artifact = "hello.ko"
         return catalog
 
     def test_previous_required_is_immediate_required_route_item(self) -> None:
@@ -240,6 +271,61 @@ class DerivedBaselineTests(unittest.TestCase):
         catalog = self.catalog((provider, unnecessary))
         with self.assertRaisesRegex(CatalogError, "forbidden when no files"):
             catalog.validate_workspace_lineage(unnecessary)
+
+    def test_module_artifact_uses_default_override_and_provider(self) -> None:
+        defaulted = _exercise("defaulted", "template")
+        overridden = _exercise(
+            "overridden",
+            "template",
+            module_artifact="rootkitlings.ko",
+        )
+        inherited = _exercise("inherited", "previous-required")
+        catalog = self.catalog((overridden, inherited), (defaulted,))
+        self.assertEqual(catalog.module_artifact(defaulted), "hello.ko")
+        self.assertEqual(catalog.module_artifact(overridden), "rootkitlings.ko")
+        self.assertEqual(catalog.module_artifact(inherited), "rootkitlings.ko")
+
+    def test_inherited_module_artifact_cannot_conflict(self) -> None:
+        provider = _exercise(
+            "provider",
+            "template",
+            module_artifact="rootkitlings.ko",
+        )
+        consumer = _exercise(
+            "consumer",
+            "previous-required",
+            module_artifact="other.ko",
+        )
+        catalog = self.catalog((provider, consumer))
+        with self.assertRaisesRegex(CatalogError, "module artifact conflicts"):
+            catalog.validate_workspace_lineage(consumer)
+
+
+class ModuleArtifactValidationTests(unittest.TestCase):
+    def test_rejects_unsafe_or_non_module_names(self) -> None:
+        from lib.catalog import _module_artifact
+
+        for value in (
+            "hello",
+            "../hello.ko",
+            "dir/hello.ko",
+            "dir\\hello.ko",
+            "..hello.ko",
+            "-hello.ko",
+            "hello ko.ko",
+            "",
+        ):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(CatalogError, "portable .ko basename"):
+                    _module_artifact(value, Path("test"))
+
+    def test_accepts_portable_module_names(self) -> None:
+        from lib.catalog import _module_artifact
+
+        self.assertEqual(
+            _module_artifact("rootkitlings_test-1.ko", Path("test")),
+            "rootkitlings_test-1.ko",
+        )
 
 
 if __name__ == "__main__":

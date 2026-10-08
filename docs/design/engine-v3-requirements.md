@@ -287,8 +287,11 @@ Template baselines store an empty provider; inherited baselines store the exact 
 State validation rejects missing, unknown, mismatched, or incomplete providers.
 The explicit schema-v2 migration archives the original bytes, derives provenance once from the authoritative catalog, writes schema version 3 atomically, and never falls back to inference when loading version-3 state.
 
-The learner build path also currently assumes the module artifact is `hello.ko`, while the target cumulative module is `rootkitlings.ko`.
-The course registry should define one authoritative default module artifact, with an exercise-level override only where needed, rather than duplicating the same output name across every exercise.
+The catalog defines `default_module_artifact = "hello.ko"` once in `course.toml`.
+A template workspace may set a sparse `module_artifact` override, such as `rootkitlings.ko` for the cumulative module.
+Inherited workspaces derive the provider's effective artifact and reject conflicting overrides.
+Artifact values are portable `.ko` basenames; paths, traversal, whitespace, and option-like names are invalid.
+`Catalog.module_artifact(exercise)` is the sole resolver exposed to build and verification consumers.
 
 ### 4. Track-aware CLI behavior
 

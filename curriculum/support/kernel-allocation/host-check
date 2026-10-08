@@ -1,7 +1,13 @@
 #!/usr/bin/bash
 set -Eeuo pipefail
 
-module=${1:?usage: host-check BUILD_DIR}/hello.ko
+(( $# == 2 )) || { printf '[x] usage: host-check BUILD_DIR ARTIFACT_PATH\n' >&2; exit 2; }
+build=$1
+module=$2
+[[ -d $build && -f $module && ! -L $module ]] || {
+	printf '[x] build directory and module artifact must be regular paths\n' >&2
+	exit 2
+}
 undefined=$(nm -u "$module")
 grep -Eq '[[:space:]](__kmalloc|kmalloc_caches)$' <<<"$undefined" || {
 	printf '[x] module has no kmalloc dependency\n' >&2

@@ -1,5 +1,6 @@
 schema_version = 2
 revision = "2026.10-catalog-v2"
+default_module_artifact = "hello.ko"
 exercise_roots = ["lings", "capstones"]
 
 required_route = [

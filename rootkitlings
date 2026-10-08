@@ -264,6 +264,16 @@ def cmd_solution(a):
 
 def build_workspace(x):
     need(x)
+    build_directory = bd(x)
+    if build_directory.is_symlink() or not build_directory.is_dir():
+        die(f'Unsafe build directory: {shown(build_directory)}')
+    artifact = build_directory / CAT.module_artifact(x)
+    if artifact.is_symlink():
+        die(f'Expected artifact must not be a symlink: {shown(artifact)}')
+    if artifact.exists():
+        if not artifact.is_file():
+            die(f'Expected artifact path is not a regular file: {shown(artifact)}')
+        artifact.unlink()
     r = run([
         'make',
         '-C',
@@ -275,10 +285,13 @@ def build_workspace(x):
     ])
     if r.returncode:
         die(f'Build failed for {label(x)}')
-    m = bd(x) / 'hello.ko'
-    if not m.is_file():
-        die(f'Build produced no {m.relative_to(ROOT)}')
-    return m
+    if artifact.is_symlink() or not artifact.is_file():
+        die(f'Build produced no fresh regular artifact: {shown(artifact)}')
+    return artifact
+
+
+def run_host_check(x, artifact):
+    return run([str(ROOT / x.resources.host_check), str(bd(x)), str(artifact)])
 
 
 def cmd_build(a):
@@ -360,9 +373,7 @@ def cmd_check(a):
     except CLIError:
         record_attempt(x, False)
         raise
-    if x.resources.host_check and run(
-        [str(ROOT / x.resources.host_check), str(bd(x))]
-    ).returncode:
+    if x.resources.host_check and run_host_check(x, m).returncode:
         record_attempt(x, False)
         die(f'Host check failed for {label(x)}')
     r = run(

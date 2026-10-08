@@ -51,6 +51,94 @@ class ProgressResetCLITests(unittest.TestCase):
             self.globals["cmd_progress_reset"](arguments)
         return output.getvalue()
 
+    def _build_exercise(self, stable_id="artifact-test", host_check=""):
+        return SimpleNamespace(
+            id=stable_id,
+            serial="L99",
+            workspace=SimpleNamespace(build=".", module_artifact="hello.ko"),
+            resources=SimpleNamespace(host_check=host_check),
+        )
+
+    def test_build_uses_override_and_removes_exact_stale_artifact(self) -> None:
+        exercise = self._build_exercise()
+        workspace = self.globals["WORK"] / exercise.id
+        workspace.mkdir()
+        artifact = workspace / "rootkitlings.ko"
+        artifact.write_bytes(b"stale")
+        original_catalog = self.globals["CAT"]
+        original_run = self.globals["run"]
+        observed = []
+
+        def fake_run(_command, **_kwargs):
+            observed.append(not artifact.exists())
+            artifact.write_bytes(b"fresh")
+            return SimpleNamespace(returncode=0)
+
+        try:
+            self.globals["CAT"] = SimpleNamespace(
+                module_artifact=lambda _exercise: "rootkitlings.ko"
+            )
+            self.globals["run"] = fake_run
+            result = self.globals["build_workspace"](exercise)
+        finally:
+            self.globals["CAT"] = original_catalog
+            self.globals["run"] = original_run
+        self.assertEqual(result, artifact)
+        self.assertEqual(artifact.read_bytes(), b"fresh")
+        self.assertEqual(observed, [True])
+
+    def test_failed_build_cannot_reuse_stale_artifact(self) -> None:
+        exercise = self._build_exercise()
+        workspace = self.globals["WORK"] / exercise.id
+        workspace.mkdir()
+        artifact = workspace / "hello.ko"
+        artifact.write_bytes(b"stale")
+        original_run = self.globals["run"]
+        try:
+            self.globals["run"] = lambda _command, **_kwargs: SimpleNamespace(
+                returncode=1
+            )
+            with self.assertRaisesRegex(self.globals["CLIError"], "Build failed"):
+                self.globals["build_workspace"](exercise)
+        finally:
+            self.globals["run"] = original_run
+        self.assertFalse(artifact.exists())
+
+    def test_build_rejects_symlink_and_special_artifact_paths(self) -> None:
+        exercise = self._build_exercise()
+        workspace = self.globals["WORK"] / exercise.id
+        workspace.mkdir()
+        artifact = workspace / "hello.ko"
+        target = workspace / "outside"
+        target.write_bytes(b"outside")
+        artifact.symlink_to(target)
+        with self.assertRaisesRegex(self.globals["CLIError"], "symlink"):
+            self.globals["build_workspace"](exercise)
+        artifact.unlink()
+        artifact.mkdir()
+        with self.assertRaisesRegex(self.globals["CLIError"], "regular file"):
+            self.globals["build_workspace"](exercise)
+
+    def test_host_check_receives_build_and_exact_artifact_abi(self) -> None:
+        exercise = self._build_exercise(host_check="support/host-check")
+        workspace = self.globals["WORK"] / exercise.id
+        workspace.mkdir()
+        artifact = workspace / "rootkitlings.ko"
+        artifact.write_bytes(b"module")
+        original_run = self.globals["run"]
+        calls = []
+        try:
+            self.globals["run"] = (
+                lambda command, **kwargs: calls.append((command, kwargs))
+                or SimpleNamespace(returncode=0)
+            )
+            self.globals["run_host_check"](exercise, artifact)
+        finally:
+            self.globals["run"] = original_run
+        command, kwargs = calls[0]
+        self.assertEqual(command[-2:], [str(workspace), str(artifact)])
+        self.assertEqual(kwargs, {})
+
     def test_start_records_template_and_inherited_baseline_provenance(self) -> None:
         first, second = (
             self.globals["CAT"].by_id[stable_id]

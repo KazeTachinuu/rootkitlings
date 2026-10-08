@@ -51,7 +51,8 @@ vm: tools
 	@"$(CURDIR)/rootkitlings" start L00
 	@"$(CURDIR)/rootkitlings" build L00
 	@workspace_id=$$("$(CURDIR)/scripts/catalog" query L00 id); \
-	"$(CURDIR)/vm/boot" "$(CURDIR)/.rootkitlings/work/$$workspace_id/hello.ko"
+	module_artifact=$$("$(CURDIR)/scripts/catalog" query L00 module_artifact); \
+	"$(CURDIR)/vm/boot" "$(CURDIR)/.rootkitlings/work/$$workspace_id/$$module_artifact"
 
 validate:
 	@"$(CURDIR)/scripts/validate"
