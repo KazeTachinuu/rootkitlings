@@ -1,95 +1,87 @@
 # Stage 1 implementation slice
 
-Status: incubation design with R01 and R02 vertical slices.
-Nothing here changes the public course route.
+Status: accepted Stage 1 design; implementation and route migration remain pending.
+Nothing here changes the public course route yet.
 
 ## Outcome
 
-Stage 1 establishes a contained lab and then grows one inspectable, multi-file module with explicit ownership and rollback.
-Each checkpoint changes learner owned state, has an independently observable success, and proves rejection or cleanup as well as the happy path.
+A mandatory setup gate establishes authorization and containment before the scored course begins.
+Stage 1 then grows one inspectable multi-file module through four mechanisms and one milestone.
+Each checkpoint changes learner-owned source, demonstrates an observable result, and proves rejection or cleanup as well as success.
 
 | Unit | Learner-owned change | Observable success | Negative and cleanup evidence | Reused stable IDs |
 |---|---|---|---|---|
-| R01 Authorized lab | Complete the authorization, scope, stop, containment, and cleanup manifest | Diskless guest boots and reports the expected boundary | Incomplete or weakened scope is rejected before boot; no network or host mount; guest powers down and temporary state disappears | New material in `curriculum/incubator/stage-01/r01-authorized-lab` |
-| R02 Module lifecycle | Write metadata and init/exit behavior in the permanent core | Module loads; static metadata, symbols, `/sys/module`, and module inventory agree | Unload removes the sysfs and inventory artifacts; an immediate reload succeeds | `module-lifecycle`, `module-build` |
-| R03 Owned components | Define the shared contract and split permanent `core` and `status` objects | Composite module links and exposes the intended component symbols | Omit one object or violate the header contract and the build fails without a load attempt | `multi-file-module` as a mechanism reference; its calculator scaffold is not reused |
-| R04 Precise rejection | Add one controlled init rejection returning its original negative errno | Loader reports the selected error and the module remains absent | `/proc/modules` and `/sys/module` stay absent; rebuilding without injection permits an immediate clean load | `init-failure` |
-| R05 Owned kernel state | Implement state allocation, convert `kzalloc()`'s `NULL` to `ERR_PTR(-ENOMEM)`, and consume it with `IS_ERR()`/`PTR_ERR()` | State allocation is attributed to its constructor and released on unload | Inject allocation failure; preserve `-ENOMEM`, publish nothing, and retry cleanly | `kernel-allocation`, `error-pointer` |
-| R06 Resource rollback | Add status allocation and own the final state-then-status acquisition and status-then-state unwind | Both owned allocations are attributed and released on normal unload | Fail status creation with `ERR_PTR(-EUCLEAN)`; state is freed, no module remains, and immediate retry succeeds | `initialization-rollback` |
-| M00 Inspectable core (migration-map M01) | Integrate R02–R06 by writing the top-level acquisition table and unwind paths | Permanent multi-file module loads repeatedly and every component is statically inspectable | Inject every stage failure, repeat load/unload, and correlate each owned allocation's opaque pointer token with its tracefs free event | Solutions inform the contract but are not copied into a milestone scaffold |
+| Setup gate (unscored) | Confirm authorization, scope, stop conditions, and disposable-lab settings | Pinned diskless guest boots inside the declared boundary | Unsafe settings stop before boot; guest shutdown removes temporary state | New setup flow, not an exercise |
+| R01 Module build and lifecycle (public L00) | Build `rootkitlings.ko`; add metadata and init/exit callbacks | Metadata, symbols, `/sys/module`, and module inventory agree | Unload removes both inventory views; immediate reload succeeds | `module-lifecycle`, `module-build` |
+| R02 Precise rejection | Add one controlled init rejection that preserves its negative errno | Loader reports the selected error and the module remains absent | Both inventory views stay absent; rebuilding without injection permits a clean load | `init-failure` |
+| R03 Owned kernel state | Add the real header and state component; allocate and release private state | Composite module links and state ownership is statically inspectable | Forced allocation failure preserves `-ENOMEM`, publishes nothing, and permits retry | `multi-file-module`, `kernel-allocation`, `error-pointer` |
+| R04 Resource rollback | Add the real status component and state-then-status acquisition | Both owned allocations are attributed and released on unload | Forced status failure releases state in reverse order and permits immediate retry | `initialization-rollback` |
+| M00 Inspectable core | Integrate and explain the complete acquisition and unwind paths | The cumulative module loads repeatedly and every owner is inspectable | Every failure point leaves no module or owned allocation behind | First generated milestone |
 
-## R01 implementation contract
+## Setup-gate acceptance contract
 
-The R01 template is intentionally not kernel source.
-The learner must make a real decision about authorization and stop criteria before privileged code is introduced.
-Its checker performs two phases:
+The setup gate is mandatory but unscored.
+It must pass before `start`, `build`, `check`, `run`, or `gdb` can execute course work.
+It does not appear in the required route and grants no completion credit.
 
-1. Parse an exact TOML schema and reject placeholders, missing negative scope,
-   fewer than two stop conditions, or any attempt to enable a network, host
-   mount, persistent guest, or production data.
-2. Boot the existing QEMU initramfs without a module, disk, or network.
-   A guest
-   check verifies the kernel interfaces used by later checks and rejects 9p,
-   virtiofs, NFS, and the networking kernel command-line mode. QEMU shutdown and
-   `vm/boot`'s temporary-directory trap provide cleanup evidence.
+Acceptance requires:
 
-The example solution is a nonsensitive local-course declaration, not evidence of authorization for another environment.
-A learner must not copy it as a substitute for permission.
+- an explicit statement that the learner is authorized to use the local lab;
+- a disposable pinned guest with no persistent disk, production data, host mount, or network;
+- at least two clear stop conditions and an understood cleanup action;
+- a preflight rejection before QEMU starts when any boundary is weakened;
+- a guest probe that confirms the expected kernel interfaces and the absence of forbidden mounts and networking;
+- shutdown within the timeout and removal of temporary guest state.
+
+Later networking exercises may enable only their declared guest capability.
+The setup gate verifies the safer default; it does not claim that every course check is offline.
+
+The gate stores only the minimum local acknowledgement needed to avoid repeating a successful preflight.
+It has no reference solution because authorization cannot be copied from an example.
+Changing the relevant VM or scope settings invalidates the acknowledgement and requires the gate again.
 
 ## Cumulative source contract
 
-The accepted [Stage 1 cumulative architecture](stage-01-architecture.md) resolves file ownership, APIs, build-time failure injection, status publication, allocator evidence, and snapshot compatibility.
+The accepted [Stage 1 cumulative architecture](stage-01-architecture.md) defines file ownership, failure injection, allocator evidence, and snapshot compatibility.
 
-R02 begins with the complete permanent source tree:
+R01 begins with only:
 
 ```text
 Kbuild
-include/rootkit.h
 core/main.c
-core/state.c
-status/status.c
 ```
 
-Inactive files begin as warning-free private stubs so the declared file set and build root never change across completion inheritance.
-R04 introduces the build-time-failure-injection ABI with the preflight point.
-R05 adds the state allocation point and pointer-error contract.
-R06 adds the status point and owns the final top-level acquisition/unwind graph.
-M00 does not start from a new template: it consumes the recorded completion of R06 and asks the learner to finish integration and failure testing.
+R02 inherits those paths and introduces precise build-time failure selection.
+R03 additively introduces `include/rootkit.h` and `core/state.c` when the header and state owner become real.
+R04 additively introduces `status/status.c` when the second resource becomes real.
+M00 inherits the R04 completion without adding a file or hidden implementation.
 
-The migration map's M01 is the first generated milestone and therefore has public serial M00.
-It publishes no learner-authored status interface; procfs publication remains R07 in Stage 2.
+No checkpoint ships an empty future translation unit or an unused ownership API.
+The public module artifact is `rootkitlings.ko` from R01 onward.
+Stage 1 publishes no learner-authored status interface; procfs remains a Stage 2 mechanism.
 
-The current stable-ID material remains the teaching reference.
-Migration code must map completion snapshots forward; it must not infer a cumulative baseline from the current standalone exercise directories.
+The current stable-ID exercises remain source material until migration.
+Migration must map completion and compatible snapshots explicitly; it must not reconstruct a baseline from standalone exercise directories.
 
-## M00 scaffold readiness
+## M00 readiness
 
-The former architecture blockers are resolved in the linked decision:
+M00 is ready to author when the cumulative R01–R04 checks and overlays exist together:
 
 - `core/state.c` and `status/status.c` each own one concrete allocation;
-- `core/main.c` owns only activation and reverse teardown order;
-- R04 introduces the fixed build-time-failure-injection ABI, R05 adds state
-  allocation failure, and R06 adds status failure and reverse unwind;
-- status publication waits for the Stage 2 procfs lesson;
-- tracefs assigns opaque pointer tokens to raw call sites inside precomputed
-  constructor ranges, then correlates each token with a post-unload free inside
-  its destructor range, independently of logs;
-- R02 creates the fixed five-file tree and every later checkpoint inherits the
-  immediately preceding passed snapshot through M00.
+- `core/main.c` owns activation and reverse teardown order but not component storage;
+- R02 introduces preflight rejection, R03 adds state allocation failure, and R04 adds status failure and reverse unwind;
+- tracefs attributes opaque allocation tokens to constructor symbol ranges and correlates them with destructor frees without trusting module logs;
+- every workspace inherits the immediately preceding required snapshot;
+- sparse reference overlays compose to the same complete tree used by checks.
 
-M00 source and checks may now be authored, but only together with the cumulative R02–R06 deltas.
-A standalone M00 scaffold would bypass the completion lineage and remains prohibited.
+A standalone M00 scaffold would bypass the learning and snapshot lineage and is prohibited.
 
 ## Acceptance tests before route adoption
 
-- R01 template is rejected because placeholders remain.
-- R01 example solution passes and the guest exits within its timeout.
-- A manifest enabling networking, persistence, a host mount, or production data
-  is rejected without invoking QEMU.
-- Every future R03–R06 check has a positive control, a negative control, and an
-  independent cleanup assertion.
-- M00 injects each declared failure point individually and reloads immediately
-  after every failure.
+- The setup gate rejects missing authorization, unsafe scope, default networking, persistence, host mounts, or production data before boot.
+- Its guest probe exits within the timeout and leaves no temporary guest state.
+- R01–R04 each have a positive control, a negative control, and independent cleanup evidence.
+- Additive transitions reject missing, extra, linked, or special files.
+- M00 injects every declared failure point separately and reloads immediately after each failure.
 - The complete Stage 1 workspace builds with `W=1` and no warning.
-- The public route remains unchanged until state migration and cumulative
-  snapshot tests pass.
+- The public route remains unchanged until state migration and cumulative snapshot tests pass.

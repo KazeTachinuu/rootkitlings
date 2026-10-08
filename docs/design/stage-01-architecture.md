@@ -5,22 +5,25 @@ It does not change the public route.
 
 ## Decision
 
+Before Stage 1, every learner passes a mandatory, unscored setup gate.
+The gate confirms authorization, the disposable guest boundary, networking disabled by default, no host mounts, stop conditions, and cleanup after shutdown.
+It creates no exercise completion, serial, score, or reusable solution and is not R01.
+
 Stage 1 grows one `rootkitlings.ko` module without predeclared placeholder files or temporary APIs.
 Each file appears only when its mechanism becomes active:
 
 | Checkpoint | Declared workspace paths | Mechanism introduced |
 |---|---|---|
-| R02 Module lifecycle | `Kbuild`, `core/main.c` | External build, metadata, load, unload |
-| R03 Precise failed init | unchanged | Build-time failure input and exact preflight rejection |
-| R04 Owned state | add `include/rootkit.h`, `core/state.c` | Composite linking, opaque ownership boundary, heap lifetime, error-pointer contract |
-| R05 Reverse rollback | add `status/status.c` | Second owned resource and reverse partial-init unwind |
-| M00 Inspectable core | unchanged from R05 | Integrated failure, cleanup, reload, and allocator evidence |
+| R01 Module build and lifecycle (public L00) | `Kbuild`, `core/main.c` | External build, metadata, load, unload |
+| R02 Precise failed init | unchanged | Build-time failure input and exact preflight rejection |
+| R03 Owned state | add `include/rootkit.h`, `core/state.c` | Composite linking, opaque ownership boundary, heap lifetime, error-pointer contract |
+| R04 Reverse rollback | add `status/status.c` | Second owned resource and reverse partial-init unwind |
+| M00 Inspectable core | unchanged from R04 | Integrated failure, cleanup, reload, and allocator evidence |
 
-The migration map's first milestone is named M01 conceptually; generated milestone serials begin at M00.
-This document uses **M00 (Inspectable core)**.
+The first milestone is **M00 (Inspectable core)** in both design and generated learner-facing serials.
 
 There is no separate “owned components” checkpoint.
-Composite Kbuild and private headers are supporting techniques taught when R04 uses them for real state ownership.
+Composite Kbuild and private headers are supporting techniques taught when R03 uses them for real state ownership.
 
 ## Stable module identity
 
@@ -32,14 +35,14 @@ rootkitlings.ko
 rootkitlings in /proc/modules
 ```
 
-R02 builds one object:
+R01 builds one object:
 
 ```make
 obj-m += rootkitlings.o
 rootkitlings-y := core/main.o
 ```
 
-R04 changes the existing Kbuild when the state component becomes real:
+R03 changes the existing Kbuild when the state component becomes real:
 
 ```make
 obj-m += rootkitlings.o
@@ -47,7 +50,7 @@ rootkitlings-y := core/main.o core/state.o
 ccflags-y += -I$(src)/include
 ```
 
-R05 appends the real status object:
+R04 appends the real status object:
 
 ```make
 rootkitlings-y := core/main.o core/state.o status/status.o
@@ -55,17 +58,17 @@ rootkitlings-y := core/main.o core/state.o status/status.o
 
 No earlier lesson ships an empty state/status translation unit, declares an unused ownership API, or asks the learner to implement a function that is replaced before it is consumed.
 
-## R02: module lifecycle
+## R01: module build and lifecycle
 
-R02 owns only `Kbuild` and `core/main.c`.
+R01 owns only `Kbuild` and `core/main.c`.
 `core/main.c` registers successful init and exit callbacks and declares the GPL license and `Rootkitlings module lifecycle` description.
 
 Independent evidence is the warning-free external build, static metadata and lifecycle symbols, successful insertion, agreement between `/proc/modules` and `/sys/module/rootkitlings`, disappearance after removal, and immediate reload.
 Module logs may aid diagnosis but never prove presence or cleanup.
 
-## R03: precise failed initialization
+## R02: precise failed initialization
 
-R03 keeps the two R02 paths and introduces deterministic build-time failure injection.
+R02 keeps the two R01 paths and introduces deterministic build-time failure injection.
 Kbuild supplies an overridable default:
 
 ```make
@@ -84,18 +87,18 @@ enum rk_fail_point {
 
 Unknown values fail compilation.
 Value 1 makes init return `-ECANCELED` before acquiring any resource.
-Value 0 preserves the R02 successful lifecycle.
+Value 0 preserves the R01 successful lifecycle.
 
 The check performs clean external-module builds for both values.
 For value 1 it requires loader rejection, the exact errno class, absence from `/proc/modules` and `/sys/module/rootkitlings`, and no cleanup claim based on an exit log.
 It then rebuilds with value 0 and requires immediate successful load and unload.
 
-Failed init performs no teardown because R03 owns no resource.
+Failed init performs no teardown because R02 owns no resource.
 The kernel does not invoke the registered exit callback after failed initialization; later checkpoints must unwind acquired resources inside init before returning an error.
 
-## R04: owned heap state
+## R03: owned heap state
 
-R04 adds `include/rootkit.h` and `core/state.c` through additive inheritance.
+R03 adds `include/rootkit.h` and `core/state.c` through additive inheritance.
 It immediately uses both files; neither is a scaffold for future work.
 
 The header exposes an incomplete type and the permanent state API:
@@ -116,7 +119,7 @@ It converts allocator `NULL` to `ERR_PTR(-ENOMEM)` so callers receive one pointe
 It consumes the result with `IS_ERR()` and `PTR_ERR()`, preserves the original errno, and sets its local pointer to `NULL` immediately after destruction.
 The private struct layout remains incomplete to consumers.
 
-R04 extends the failure enum:
+R03 extends the failure enum:
 
 ```c
 RK_FAIL_STATE_ALLOC = 2,
@@ -127,9 +130,9 @@ The check requires the exact `-ENOMEM` loader failure, no module artifact, no ob
 
 The ownership functions become `noinline` when introduced because M00 attributes allocator call sites to their exact ELF symbol ranges.
 
-## R05: second resource and reverse rollback
+## R04: second resource and reverse rollback
 
-R05 additively introduces `status/status.c` and immediately links and calls it.
+R04 additively introduces `status/status.c` and immediately links and calls it.
 The header gains the permanent status API:
 
 ```c
@@ -157,7 +160,7 @@ status -> state
 `core/main.c` owns this ordering but never allocates or frees component storage itself.
 Failed module initialization performs its unwind locally because `module_exit` is not called after failed init.
 
-R05 adds:
+R04 adds:
 
 ```c
 RK_FAIL_STATUS_CREATE = 3,
@@ -174,14 +177,14 @@ The status constructor and destructor are `noinline` from their first implementa
 The exact lineage is:
 
 ```text
-R02 template: Kbuild, core/main.c
- `-- R02 passed snapshot
-      `-- R03 workspace: inherit both paths unchanged in shape
-           `-- R03 passed snapshot
-                `-- R04 workspace: inherit both paths + add header/state
-                     `-- R04 passed snapshot
-                          `-- R05 workspace: inherit four paths + add status
-                               `-- R05 passed snapshot
+R01 template: Kbuild, core/main.c
+ `-- R01 passed snapshot
+      `-- R02 workspace: inherit both paths unchanged in shape
+           `-- R02 passed snapshot
+                `-- R03 workspace: inherit both paths + add header/state
+                     `-- R03 passed snapshot
+                          `-- R04 workspace: inherit four paths + add status
+                               `-- R04 passed snapshot
                                     `-- M00 workspace: inherit all five paths
                                          `-- M00 passed snapshot
 ```
@@ -213,7 +216,7 @@ Migration may retain a snapshot only through an explicit compatibility rule nami
 ## M00: integrated evidence
 
 M00 adds no file or API.
-It uses the R05 completion with five declared paths: `Kbuild` plus four source/header files.
+It uses the R04 completion with five declared paths: `Kbuild` plus four source/header files.
 The learner completes and tests the concrete acquisition/unwind paths already introduced.
 
 The check builds values 0 through 3 independently and requires:
