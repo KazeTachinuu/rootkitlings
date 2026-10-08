@@ -1,0 +1,15 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Preflight rejection"
+
+assert_absent /sys/module/rootkitlings
+if module_load_test /rootkitlings/rootkitlings.ko 125; then
+	_ok "module init returned numeric ECANCELED"
+else
+	_fail "module init did not return ECANCELED"
+fi
+assert_absent /sys/module/rootkitlings
+
+summary

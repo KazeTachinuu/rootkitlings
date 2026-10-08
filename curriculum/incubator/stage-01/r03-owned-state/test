@@ -1,0 +1,17 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r03-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r03-work.XXXXXX")
+trap 'rm -rf -- "$baseline" "$work"' EXIT
+
+cp -a "$HERE/../r02-failed-init/solution/." "$baseline/"
+cp -a "$baseline/." "$work/"
+while IFS= read -r -d '' source; do
+	relative=${source#"$HERE/solution/"}
+	mkdir -p "$work/$(dirname "$relative")"
+	cp -p "$source" "$work/$relative"
+done < <(find "$HERE/solution" -type f -print0)
+
+"$HERE/check" "$work" "$baseline"

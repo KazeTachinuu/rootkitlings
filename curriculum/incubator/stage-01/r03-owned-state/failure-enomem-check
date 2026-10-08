@@ -1,0 +1,15 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "State allocation rejection"
+
+assert_absent /sys/module/rootkitlings
+if module_load_test /rootkitlings/rootkitlings.ko 12; then
+	_ok "state creation returned numeric ENOMEM"
+else
+	_fail "state creation did not return ENOMEM"
+fi
+assert_absent /sys/module/rootkitlings
+
+summary

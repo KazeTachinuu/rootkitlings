@@ -1,0 +1,120 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+ROOT=$HERE
+while [[ ! -f $ROOT/course.toml ]]; do
+	parent=$(dirname "$ROOT")
+	[[ $parent != "$ROOT" ]] || die "cannot find repository root from: $HERE"
+	ROOT=$parent
+done
+
+(( $# == 2 )) || die "usage: ${0##*/} WORKSPACE STARTING_SNAPSHOT"
+workspace=$(realpath -e -- "$1") || die "workspace not found: $1"
+baseline=$(realpath -e -- "$2") || die "starting snapshot not found: $2"
+[[ -d $workspace && ! -L $workspace ]] || die "workspace must be a real directory"
+[[ -d $baseline && ! -L $baseline ]] || die "starting snapshot must be a real directory"
+for path in Kbuild core/main.c; do
+	[[ -f $baseline/$path && ! -L $baseline/$path ]] ||
+		die "starting snapshot is missing regular file: $path"
+done
+for path in Kbuild core/main.c include/rootkit.h core/state.c; do
+	[[ -f $workspace/$path && ! -L $workspace/$path ]] ||
+		die "workspace is missing regular file: $path"
+done
+[[ -d $KDIR ]] || die "kernel build directory not found: $KDIR"
+
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r03-check.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+copy_tree()
+{
+	local destination=$1 path
+	mkdir -p "$destination/core" "$destination/include"
+	for path in Kbuild core/main.c include/rootkit.h core/state.c; do
+		cp -p "$workspace/$path" "$destination/$path"
+	done
+}
+
+build_variant()
+{
+	local name=$1 point=$2
+	local destination=$scratch/$name log=$scratch/$name.log
+	copy_tree "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
+		cat "$log" >&2
+		die "$name build failed"
+	fi
+	if grep -q 'warning:' "$log"; then cat "$log" >&2; die "$name builds with warnings"; fi
+	[[ -f $destination/rootkitlings.ko ]] || die "$name did not produce rootkitlings.ko"
+}
+
+build_variant success 0
+build_variant preflight 1
+build_variant allocation 2
+
+mapfile -t linked_objects < "$scratch/success/rootkitlings.mod"
+[[ ${linked_objects[*]} == './core/main.o ./core/state.o' ]] ||
+	die "rootkitlings.ko must link core/main.o and core/state.o only"
+for symbol in rk_state_create rk_state_destroy; do
+	nm "$scratch/success/core/state.o" | grep -Eq "[[:space:]]T[[:space:]]+$symbol$" ||
+		die "core/state.o must define $symbol"
+	nm -u "$scratch/success/core/main.o" | grep -Eq "[[:space:]]U[[:space:]]+$symbol$" ||
+		die "core/main.o must consume $symbol"
+done
+undefined=$(nm -u "$scratch/success/core/state.o")
+grep -Eq '[[:space:]](__kmalloc|kmalloc_caches|kmalloc_noprof)$' <<< "$undefined" ||
+	die "core/state.o has no kernel allocation dependency"
+grep -Eq '[[:space:]]kfree$' <<< "$undefined" ||
+	die "core/state.o has no kfree dependency"
+
+probe=$scratch/opaque-probe
+mkdir -p "$probe"
+cat > "$probe/Kbuild" <<EOF
+obj-m += probe.o
+ccflags-y += -I$workspace/include
+EOF
+cat > "$probe/probe.c" <<'EOF'
+#include <linux/module.h>
+#include "rootkit.h"
+static size_t exposed_layout = sizeof(struct rk_state);
+MODULE_LICENSE("GPL");
+EOF
+if make -s -C "$KDIR" M="$probe" W=1 modules >"$scratch/probe.log" 2>&1; then
+	die "struct rk_state layout is visible outside core/state.c"
+fi
+
+unknown=$scratch/unknown
+copy_tree "$unknown"
+if make -s -C "$KDIR" M="$unknown" W=1 ROOTKITLINGS_FAIL_POINT=99 \
+	modules >"$scratch/unknown.log" 2>&1; then
+	die "unknown failure-point value compiled successfully"
+fi
+grep -Fq 'unknown ROOTKITLINGS_FAIL_POINT' "$scratch/unknown.log" || {
+	cat "$scratch/unknown.log" >&2
+	die "unknown failure point failed for the wrong reason"
+}
+printf '[+] composite ownership boundary and failure builds verified\n'
+
+run_guest()
+{
+	local check_script=$1 module=$2 output
+	shift 2
+	if ! output=$("$ROOT/vm/boot" --check "$check_script" "$@" "$module" 2>&1); then
+		printf '%s\n' "$output" >&2
+		die "disposable guest did not complete"
+	fi
+	printf '%s\n' "$output"
+	grep -Fq '[+] PASSED' <<< "$output" || die "guest checks did not pass"
+}
+
+run_guest "$HERE/failure-ecanceled-check" "$scratch/preflight/rootkitlings.ko" \
+	--tool tools/module_load_test
+run_guest "$HERE/failure-enomem-check" "$scratch/allocation/rootkitlings.ko" \
+	--tool tools/module_load_test
+run_guest "$HERE/../support/module-lifecycle-check" "$scratch/success/rootkitlings.ko"
