@@ -36,8 +36,7 @@ An unknown value must stop compilation rather than silently exercise the normal 
 `-ECANCELED` is the negative Linux error for a canceled operation.
 Returning it preserves a precise reason for rejection.
 Because failed initialization never installs the module, the kernel does not call its registered exit callback.
-That is part of the kernel lifecycle contract; module inventory proves that the
-module remained absent, not whether a callback ran.
+That is part of the kernel lifecycle contract; module inventory proves that the module remained absent, not whether a callback ran.
 This module acquires no resource, so the rejected path has nothing to release.
 
 ## Your task
@@ -66,11 +65,9 @@ Run:
 ./rootkitlings check
 ```
 
-The checker builds value `1`, boots a disposable guest, and calls
-`finit_module()` through a small verifier. It requires the numeric error to be
-`ECANCELED`, then repeats the rejected load.
-Before and after both attempts, it verifies that `rootkitlings` is absent from
-both `/proc/modules` and `/sys/module/rootkitlings`.
+The checker builds value `1`, boots a disposable guest, and calls `finit_module()` through a small verifier.
+It requires the numeric error to be `ECANCELED`, then repeats the rejected load.
+Before and after both attempts, it verifies that `rootkitlings` is absent from both `/proc/modules` and `/sys/module/rootkitlings`.
 
 The checker then rebuilds value `0` in a clean directory and uses a fresh guest to load, unload, and immediately reload the module.
 It also proves that an unknown failure-point value cannot compile.
