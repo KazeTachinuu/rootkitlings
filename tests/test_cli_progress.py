@@ -12,10 +12,10 @@ import unittest
 ROOT = Path(__file__).resolve().parent.parent
 
 
-class ProgressResetCLITests(unittest.TestCase):
+class LearnerCLITests(unittest.TestCase):
     def setUp(self) -> None:
         namespace = runpy.run_path(ROOT / "rootkitlings", run_name="rootkitlings_test")
-        self.globals = namespace["cmd_progress_reset"].__globals__
+        self.globals = namespace["cmd_reset"].__globals__
         self.temporary = tempfile.TemporaryDirectory()
         runtime = Path(self.temporary.name) / ".rootkitlings"
         values = {
@@ -46,10 +46,10 @@ class ProgressResetCLITests(unittest.TestCase):
         (workspace / "learner.c").write_text(content, encoding="utf-8")
         return workspace
 
-    def _progress_reset(self, arguments: list[str]) -> str:
+    def _reset(self, arguments: list[str]) -> str:
         output = io.StringIO()
         with redirect_stdout(output):
-            self.globals["cmd_progress_reset"](arguments)
+            self.globals["cmd_reset"](arguments)
         return output.getvalue()
 
     def test_setup_accept_runs_doctor_then_module_free_probe_and_stamps(self) -> None:
@@ -99,10 +99,26 @@ class ProgressResetCLITests(unittest.TestCase):
         finally:
             self.globals["run"] = original_run
 
-    def test_setup_rejects_every_argument_shape_except_accept(self) -> None:
-        for arguments in ([], ["accept"], ["--accept", "extra"]):
+    def test_setup_without_accept_previews_policy_without_checks(self) -> None:
+        original_run = self.globals["run"]
+        try:
+            self.globals["run"] = lambda *_args, **_kwargs: self.fail(
+                "setup preview must not run checks"
+            )
+            output = io.StringIO()
+            errors = io.StringIO()
+            with redirect_stdout(output), redirect_stderr(errors):
+                self.globals["cmd_setup"]([])
+        finally:
+            self.globals["run"] = original_run
+        self.assertIn("Authorized disposable lab", output.getvalue())
+        self.assertIn("Status: not completed", output.getvalue())
+        self.assertIn("setup --accept", errors.getvalue())
+
+    def test_setup_rejects_invalid_argument_shapes(self) -> None:
+        for arguments in (["accept"], ["--accept", "extra"]):
             with self.subTest(arguments=arguments):
-                with self.assertRaisesRegex(self.globals["CLIError"], "setup --accept"):
+                with self.assertRaisesRegex(self.globals["CLIError"], r"setup \[--accept\]"):
                     self.globals["cmd_setup"](arguments)
 
     def test_setup_stale_reason_and_recovery_are_precise(self) -> None:
@@ -138,7 +154,7 @@ class ProgressResetCLITests(unittest.TestCase):
             for name in (
                 "setup", "read", "start", "build", "check", "hint",
                 "solution", "run", "gdb", "status", "list", "prereq",
-                "restore", "progress-reset", "clean",
+                "restore", "reset", "clean",
             )
         }
         try:
@@ -163,7 +179,18 @@ class ProgressResetCLITests(unittest.TestCase):
             self.globals["cmd_status"]([])
         lines = output.getvalue().splitlines()
         self.assertRegex(lines[0], r"^Setup   required \(not completed\)")
-        self.assertRegex(lines[1], r"^Course  0/\d+ required complete$")
+        self.assertRegex(lines[1], r"^Course  0/\d+ complete$")
+        self.assertIn("Workspace not started", lines)
+        self.assertIn("Next    ./rootkitlings start L00", lines)
+
+    def test_help_uses_short_reset_and_documents_current_default(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.globals["usage"]()
+        help_text = output.getvalue()
+        self.assertIn("reset --all --yes", help_text)
+        self.assertNotIn("progress-reset", help_text)
+        self.assertIn("current exercise is used", help_text)
 
     def _build_exercise(self, stable_id="artifact-test", host_check=""):
         return SimpleNamespace(
@@ -274,7 +301,8 @@ class ProgressResetCLITests(unittest.TestCase):
             output = self.globals["solution_output"](exercise, set())
         finally:
             self.globals["CAT"] = original_catalog
-        self.assertIn("Baseline: immutable template", output)
+        self.assertIn("Complete reference files", output)
+        self.assertIn("Viewing this reference is recorded", output)
         headings = (
             "--- Kbuild ---",
             "--- core/main.c ---",
@@ -322,9 +350,9 @@ class ProgressResetCLITests(unittest.TestCase):
             )
         finally:
             self.globals["CAT"] = original_catalog
-        self.assertIn("Baseline: L00 (provider): Provider lesson", output)
-        self.assertIn("not completed", output)
-        self.assertNotIn("not completed", completed)
+        self.assertIn("Compared with L00: Provider lesson", output)
+        self.assertIn("not complete", output)
+        self.assertNotIn("not complete", completed)
         self.assertNotIn("unchanged sentinel", output)
         self.assertIn("--- a/core/main.c", output)
         self.assertIn("+++ b/core/main.c", output)
@@ -349,7 +377,7 @@ class ProgressResetCLITests(unittest.TestCase):
             output = self.globals["solution_output"](exercise, set())
         finally:
             self.globals["CAT"] = original_catalog
-        self.assertIn("Baseline: L00 (provider): Provider", output)
+        self.assertIn("Complete reference files", output)
         self.assertIn("--- main.c ---", output)
         self.assertNotIn("--- a/main.c", output)
 
@@ -437,7 +465,7 @@ class ProgressResetCLITests(unittest.TestCase):
         marker = self.globals["PASSED"] / "untouched"
         marker.write_text("snapshot", encoding="utf-8")
 
-        output = self._progress_reset([selected])
+        output = self._reset([selected])
 
         with self.globals["STORE"].read_locked() as state:
             self.assertEqual(state.completed, {earlier})
@@ -448,7 +476,7 @@ class ProgressResetCLITests(unittest.TestCase):
         self.assertTrue(marker.exists())
         archives = list(self.globals["ARCHIVE"].iterdir())
         self.assertEqual(len(archives), 2)
-        self.assertIn("Reset L01 and its dependents", output)
+        self.assertIn("Reset progress from L01 onward", output)
 
     def test_all_reset_is_safe_when_workspaces_are_absent(self) -> None:
         first = self.globals["ROUTE"][0]
@@ -456,12 +484,15 @@ class ProgressResetCLITests(unittest.TestCase):
             state.completed.add(first)
             state.exercise(first).attempts = 1
 
-        output = self._progress_reset(["--all"])
+        with self.assertRaisesRegex(self.globals["CLIError"], "--all --yes"):
+            self._reset(["--all"])
+
+        output = self._reset(["--all", "--yes"])
 
         with self.globals["STORE"].read_locked() as state:
             self.assertEqual(state.completed, set())
             self.assertEqual(state.exercises, {})
-        self.assertIn("Reset all learner progress", output)
+        self.assertIn("Reset all course progress", output)
 
     def test_elective_reset_includes_only_elective_descendants(self) -> None:
         workspace = SimpleNamespace(parent="")

@@ -15,6 +15,7 @@ Run `./rootkitlings prereq L00` for the canonical course-entry list.
 
 ```sh
 make doctor
+./rootkitlings setup --accept
 ./rootkitlings read L00
 ./rootkitlings start L00
 $EDITOR .rootkitlings/work/module-lifecycle/hello.c
@@ -22,6 +23,7 @@ $EDITOR .rootkitlings/work/module-lifecycle/hello.c
 ```
 
 `make doctor` reports missing kernel artifacts, tools, and module dependencies.
+`setup --accept` records your authorization assertion and verifies the disposable guest boundary.
 KVM is optional.
 
 ## Work
@@ -38,7 +40,7 @@ read the contract -> edit the printed path -> check in a clean VM
 
 If you get stuck, `hint` gives a conceptual nudge and `solution` shows the reference implementation.
 `restore` archives edits and restores an exercise's starting files without changing progress.
-`progress-reset` is the separate, explicit command for resetting course progress.
+`reset` is the separate, explicit command for resetting course progress; resetting everything requires `reset --all --yes`.
 Run `./rootkitlings help` for the complete command list and `./rootkitlings list` for the metadata-backed route.
 
 ## Course

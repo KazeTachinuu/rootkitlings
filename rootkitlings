@@ -162,10 +162,16 @@ def setup_reason(reason):
 
 
 def cmd_setup(a):
-    if a != ['--accept']:
-        die('Usage: rootkitlings setup --accept')
     head('Authorized disposable lab')
     print(SETUP_POLICY_TEXT)
+    if not a:
+        status = current_setup_status()
+        print(f'\nStatus: {"ready" if status.ready else setup_reason(status.reason)}')
+        if not status.ready:
+            info('Accept and verify: ./rootkitlings setup --accept')
+        return
+    if a != ['--accept']:
+        die('Usage: rootkitlings setup [--accept]')
     info('Checking host tools and the default guest boundary')
     doctor = run(
         [str(ROOT / 'scripts/doctor')],
@@ -216,7 +222,7 @@ def resolve(q, state):
     if not q:
         x = current(state)
         if not x:
-            die('Required route complete; specify an exercise ID or serial')
+            die('Course complete; specify an exercise ID or serial')
         return x
     try:
         return CAT.resolve(q)
@@ -314,7 +320,8 @@ def cmd_start(a):
         available(x, s)
         p = wp(x)
         r = s.exercise(x.id)
-        if p.exists():
+        created = not p.exists()
+        if not created:
             if p.is_symlink() or not p.is_dir():
                 die(f'Unsafe workspace: {p.relative_to(ROOT)}')
             if not r.baseline_hash:
@@ -326,8 +333,10 @@ def cmd_start(a):
             r.baseline_provider = provider.id if provider else ''
             r.workspace_hash = canonical_tree_hash(p, x.workspace.files)
         head(f'{label(x)}: {x.title}')
-        for q in x.workspace.editable:
-            info(f'Edit {shown(p / q)}')
+        state = 'created' if created else 'already exists'
+        done(f'Workspace {state}: {shown(p)}')
+        print('Edit: ' + ', '.join(x.workspace.editable))
+        info(f'Next: ./rootkitlings check {label(x)}')
 
 
 def cmd_read(a):
@@ -351,6 +360,8 @@ def cmd_hint(a):
         x = resolve(one(a, 'hint'), s)
     head(f'Hint for {label(x)}: {x.title}')
     print((ROOT / x.resources.hint).read_text(), end='')
+    info(f'Try again: ./rootkitlings check {label(x)}')
+    info(f'Still stuck: ./rootkitlings solution {label(x)}')
 
 
 def cmd_solution(a):
@@ -362,6 +373,8 @@ def cmd_solution(a):
     print(output, end='')
     with STORE.locked() as s:
         s.exercise(x.id).solution_revealed = True
+    info(f'Try again: ./rootkitlings check {label(x)}')
+    info(f'Restore starting files: ./rootkitlings restore {label(x)}')
 
 
 def solution_text(data, relative):
@@ -377,15 +390,8 @@ def solution_output(x, completed):
     derived = provider is not None and x.workspace.baseline != 'completion'
     lines = []
     if not derived:
-        lines.append(f'{Y}Warning:{N} Reference solution for {label(x)}: {x.title}\n')
-        if provider is None:
-            lines.append('Baseline: immutable template\n')
-        else:
-            lines.append(
-                f'Baseline: {label(provider)} ({provider.id}): '
-                f'{provider.title}\n'
-            )
-        lines.append('Showing the complete reference workspace.\n')
+        lines.append(f'{Y}Warning:{N} Complete reference files for {label(x)}: {x.title}\n')
+        lines.append('Viewing this reference is recorded.\n')
         for relative, solution_file in sorted(tree.items()):
             text = solution_text(solution_file.data, relative)
             lines.append(f'\n--- {relative} ---\n')
@@ -396,14 +402,12 @@ def solution_output(x, completed):
 
     provider_tree = CAT.solution_tree(provider)
     lines.append(f'{Y}Warning:{N} Reference changes for {label(x)}: {x.title}\n')
-    lines.append(
-        f'Baseline: {label(provider)} ({provider.id}): {provider.title}\n'
-    )
-    lines.append(f'Showing only changes introduced by {label(x)}.\n')
+    lines.append('Viewing this reference is recorded.\n')
+    lines.append(f'Compared with {label(provider)}: {provider.title}\n')
     if provider.id not in completed:
         lines.append(
-            f'Note: {label(provider)} is not completed; this patch is relative '
-            'to its canonical reference, not your workspace.\n'
+            f'Note: {label(provider)} is not complete; these changes compare '
+            'with its reference files, not your workspace.\n'
         )
     changed = False
     for relative, solution_file in sorted(tree.items()):
@@ -425,7 +429,7 @@ def solution_output(x, completed):
         lines.append('\n')
         lines.extend(diff)
     if not changed:
-        die(f'Reference solution for {label(x)} introduces no changes')
+        die(f'Reference files for {label(x)} introduce no changes')
     return ''.join(lines)
 
 
@@ -542,7 +546,7 @@ def cmd_check(a):
         raise
     if x.resources.host_check and run_host_check(x, m).returncode:
         record_attempt(x, False)
-        die(f'Host check failed for {label(x)}')
+        die(f'Source and artifact checks failed for {label(x)}')
     r = run(
         [
             str(ROOT / 'vm/boot'),
@@ -565,9 +569,12 @@ def cmd_check(a):
     with STORE.read_locked() as s:
         next_item = current(s)
         if next_item:
-            info(f'Next: {label(next_item)}: {next_item.title}')
+            info(
+                f'Next: ./rootkitlings read {label(next_item)} - '
+                f'{next_item.title}'
+            )
         else:
-            info('Required route complete')
+            info('Course complete')
 
 
 def cmd_run(a, gdb=False):
@@ -614,22 +621,27 @@ def cmd_status(a):
     with STORE.read_locked() as s:
         x = current(s)
         completed = len(set(ROUTE) & s.completed)
-        print(f'Course  {completed}/{len(ROUTE)} required complete')
+        print(f'Course  {completed}/{len(ROUTE)} complete')
         if not x:
-            print('Status  Required route complete')
+            print('Status  Course complete')
             return
-        print(f'ID      {label(x)} ({x.id})')
+        print(f'Lesson  {label(x)}')
         print(f'Title   {x.title}')
         print(f'Stage   {CAT.section(x)}')
-        print(f'Level   {x.difficulty}')
+        print(f'Difficulty {x.difficulty}')
         concepts = ', '.join(CAT.concept_label(value) for value in x.teaches)
         print(f'Teaches {concepts}')
         tag_labels = {tag.id: tag.label for tag in CAT.tradecraft_tags}
         if x.tradecraft:
             print('Tradecraft ' + ', '.join(tag_labels[value] for value in x.tradecraft))
-        edit_paths = ', '.join(shown(wp(x) / p) for p in x.workspace.editable)
-        print(f'Edit    {edit_paths}')
-        print('Next    ./rootkitlings read')
+        workspace = wp(x)
+        if workspace.is_dir() and not workspace.is_symlink():
+            print(f'Workspace {shown(workspace)}')
+            print('Edit    ' + ', '.join(x.workspace.editable))
+            print(f'Next    ./rootkitlings check {label(x)}')
+        else:
+            print('Workspace not started')
+            print(f'Next    ./rootkitlings start {label(x)}')
 
 
 def cmd_list(a):
@@ -661,23 +673,25 @@ def cmd_list(a):
 def cmd_prereq(a):
     with STORE.read_locked() as s:
         x = resolve(one(a, 'prereq'), s)
+        completed = set(s.completed)
     head(f'Prerequisites for {label(x)}: {x.title}')
     if x.id == ROUTE[0]:
-        print('Course entry')
+        print('Before you begin')
         for assumption in CAT.assumptions:
             print(
                 f'  - {CAT.concept_label(assumption.concept)}: '
                 f'{assumption.competency}'
             )
         print()
-    print('Exercises')
+    print('Complete first')
     if not x.prerequisites:
         print('  - None')
     for p in x.prerequisites:
         y = CAT.by_id[p]
-        print(f'  - {label(y)}: {y.title}')
+        marker = 'done' if p in completed else 'missing'
+        print(f'  - [{marker}] {label(y)}: {y.title}')
     if x.requires:
-        print('\nConcepts')
+        print('\nKnowledge used')
         for c in x.requires:
             print(f'  - {CAT.concept_label(c)}')
 
@@ -697,8 +711,9 @@ def cmd_restore(a):
             x.workspace.files,
         )
         r.workspace_hash = canonical_tree_hash(restored, x.workspace.files)
-    done(f'Archived work at {shown(arch)}')
-    done(f'Restored {label(x)}')
+    done(f'Edits archived: {shown(arch)}')
+    done(f'Starting files restored for {label(x)}; progress unchanged')
+    info(f'Next: edit {", ".join(x.workspace.editable)}, then ./rootkitlings check {label(x)}')
 
 
 def progress_reset_ids(selected):
@@ -722,18 +737,22 @@ def progress_reset_ids(selected):
     return affected
 
 
-def cmd_progress_reset(a):
-    if len(a) != 1:
-        die('Usage: rootkitlings progress-reset EXERCISE | --all')
-    reset_all = a[0] == '--all'
+def cmd_reset(a):
+    reset_all = a == ['--all', '--yes']
+    if a == ['--all']:
+        die('Resetting all progress requires: ./rootkitlings reset --all --yes')
+    if not reset_all and len(a) != 1:
+        die('Usage: rootkitlings reset EXERCISE | reset --all --yes')
+    if not reset_all and a[0].startswith('-'):
+        die('Usage: rootkitlings reset EXERCISE | reset --all --yes')
     with STORE.locked() as s:
         selected = None if reset_all else resolve(a[0], s)
         affected = progress_reset_ids(selected)
         archives = archive_and_remove_workspaces(WORK, ARCHIVE, affected)
         s.clear_progress(affected)
-    for stable_id, archive in sorted(archives.items()):
-        done(f'Archived {stable_id} at {shown(archive)}')
-    scope = 'all learner progress' if reset_all else f'{label(selected)} and its dependents'
+    if archives:
+        done(f'Archived {len(archives)} workspace(s) under {shown(ARCHIVE)}')
+    scope = 'all course progress' if reset_all else f'progress from {label(selected)} onward'
     done(f'Reset {scope}')
 
 
@@ -751,17 +770,35 @@ def usage():
     print(
         '''rootkitlings <COMMAND> [EXERCISE]
 
-  setup --accept
-              Verify authorization and disposable guest containment
-  read start build check hint solution run gdb status list prereq
-  build     Compile the selected workspace without checking it
-  restore   Archive work and restore its starting baseline
-  progress-reset EXERCISE | --all
-              Archive affected work and reset learner progress
-  clean     Remove selected workspace build outputs
-  help      Show this help
+Setup
+  setup [--accept]  Review the lab boundary; accept to verify and save it
 
-Selectors accept stable IDs or serials. Commands accept unique prefixes.'''
+Learn
+  read [EXERCISE]   Read a lesson (default: current)
+  prereq [EXERCISE] Show what to complete and know first
+  hint [EXERCISE]   Get a focused nudge
+  solution [EXERCISE]
+                     Show recorded reference files or changes
+
+Work
+  start [EXERCISE]  Create or reopen a workspace
+  build [EXERCISE]  Compile without running checks
+  check [EXERCISE]  Build and verify in a disposable guest
+  run [EXERCISE]    Open an interactive disposable guest
+  gdb [EXERCISE]    Open a guest waiting for GDB
+
+Progress and recovery
+  status             Show setup, progress, and the next command
+  list               Show the course journey
+  restore [EXERCISE] Archive edits and restore starting files
+  reset EXERCISE     Reset progress from one exercise onward
+  reset --all --yes  Reset all course progress
+  clean [EXERCISE]   Remove build outputs only
+  help               Show this help
+
+Exercise selectors accept serials such as L00 or stable IDs.
+When EXERCISE is omitted, the current exercise is used.
+Commands also accept unambiguous prefixes.'''
     )
 
 
@@ -779,7 +816,7 @@ CMDS = {
     'list': cmd_list,
     'prereq': cmd_prereq,
     'restore': cmd_restore,
-    'progress-reset': cmd_progress_reset,
+    'reset': cmd_reset,
     'clean': cmd_clean,
     'help': lambda a: (none(a, 'help'), usage()),
 }
