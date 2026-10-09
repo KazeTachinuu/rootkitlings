@@ -6,7 +6,8 @@ The module still registers the two Kprobes from the previous exercise:
 - `filename_rmdir`
 
 This exercise changes only the list rendered by `/proc/rootkitlings`.
-The `filename_rmdir` probe must remain registered and active, but its `listed_probe` row must not appear.
+The `filename_rmdir` probe must remain registered and active, but its
+`listed_probe` row must not appear.
 
 A fresh load must return exactly:
 
@@ -18,7 +19,8 @@ filename_rmdir_seen=0
 listed_probe=vfs_mkdir
 ```
 
-After enabling actions and creating then removing the controlled directory, both observation flags must be one:
+After enabling actions and creating then removing the controlled directory, both
+observation flags must be one:
 
 ```text
 active=1
@@ -33,8 +35,10 @@ It means only that this procfs renderer omitted one item.
 
 ## One object, two views
 
-The supplied probe catalog is the source of identity for registration and display.
-Its IDs select the two actual `struct kprobe` descriptors, and `rk_probe_name()` reads each descriptor's registered name.
+The supplied probe catalog is the source of identity for registration and
+display.
+Its IDs select the two actual `struct kprobe` descriptors, and `rk_probe_name()`
+reads each descriptor's registered name.
 Do not add another symbol-name table or compare rendered strings.
 
 The two views have different owners:
@@ -44,35 +48,35 @@ The two views have different owners:
 
 The checker uses the second view as independent evidence.
 It also executes both target operations and checks both observation flags.
-The omitted `filename_rmdir` row therefore coexists with a registered probe and a live handler.
+The omitted `filename_rmdir` row therefore coexists with a registered probe and
+a live handler.
 
-The registered rows and observed target calls are positive controls: they prove that each evidence source can find an object known to exist.
-The deliberately nonexistent failure symbol is a negative control: it proves that the same checks do not report an object known to be absent.
-It must appear in neither view.
-Without both controls, an empty result could mean either "absent" or "the check did not work."
+Registered rows and observed calls are positive controls.
+The nonexistent failure symbol is a negative control and appears in neither
+view.
+Together they distinguish absence from a broken check.
 
-There is no supported userspace command here for directly looking up one registered Kprobe.
-The evidence comes from comparing inventories and behavior, not from claiming a direct object lookup.
-
-The kernel module list is not an external-module extension point.
-Linux v7.2 serializes its writers with an internal mutex and RCU, so this course does not unlink `THIS_MODULE->list`.
-The module remains visible in `/proc/modules` and `/sys/module`; later exercises alter bounded rendered results instead.
+Do not unlink `THIS_MODULE->list`; the module remains visible in `/proc/modules`
+and `/sys/module`.
 
 ## How `SEQ_SKIP` changes one item
 
 The supplied `seq_file` iterator visits exactly two catalog IDs.
 Its show function receives one ID at a time.
 
-On Linux v7.2, returning `SEQ_SKIP` tells the seq core to discard anything emitted for that item and continue with the next item.
+On Linux v7.2, returning `SEQ_SKIP` tells the seq core to discard anything
+emitted for that item and continue with the next item.
 Make the decision before writing anything so the suppression is local and clear.
 Every non-omitted ID reaches the single `listed_probe` formatter.
 
 This is a fixed view rule.
 Do not add a hide command, a second state switch, or a new failure point.
-Do not remove a probe, change the catalog, mutate module or kernel lists, or filter directories.
+Do not remove a probe, change the catalog, mutate module or kernel lists, or
+filter directories.
 
 The action switch remains separate.
-It controls whether handlers update observation flags; it does not register, unregister, show, or hide a probe.
+It controls whether handlers update observation flags; it does not register,
+unregister, show, or hide a probe.
 
 ## Your task
 
@@ -80,8 +84,10 @@ Edit one file:
 
 - `interface/proc.c`
 
-In `rk_proc_show()`, return `SEQ_SKIP` for `RK_PROBE_FILENAME_RMDIR` before any seq output.
-Leave the supplied iterator, catalog, lifecycle, control grammar, and formatter unchanged.
+In `rk_proc_show()`, return `SEQ_SKIP` for `RK_PROBE_FILENAME_RMDIR` before any
+seq output.
+Leave the supplied iterator, catalog, lifecycle, control grammar, and formatter
+unchanged.
 
 Run:
 
@@ -89,16 +95,27 @@ Run:
 ./rootkitlings check
 ```
 
-The checker covers exact output, small reads, EOF, seek and rewind, repeated opens, command rejection, live target behavior, both registry entries, the absent negative control, all inherited failure paths, concurrent teardown, reload, and stale-state cleanup.
+The checker covers exact seq-file behavior, live probes, independent registry
+evidence, rollback, teardown, reload, and stale-state cleanup.
 
 ## Official Linux v7.2 references
 
-- [The seq_file interface and `SEQ_SKIP`](https://docs.kernel.org/7.2/filesystems/seq_file.html)
-- [Linux v7.2 seq_file core](https://github.com/torvalds/linux/blob/v7.2/fs/seq_file.c)
-- [Linux v7.2 Kprobe registration and rollback](https://github.com/torvalds/linux/blob/v7.2/kernel/kprobes.c)
-- [Linux v7.2 Kprobe declarations](https://github.com/torvalds/linux/blob/v7.2/include/linux/kprobes.h)
-- [Linux v7.2 procfs file operations](https://github.com/torvalds/linux/blob/v7.2/fs/proc/inode.c)
-- [Linux v7.2 directory-operation targets](https://github.com/torvalds/linux/blob/v7.2/fs/namei.c)
-- [Linux v7.2 module-list locking and RCU updates](https://github.com/torvalds/linux/blob/v7.2/kernel/module/main.c#L68-L77)
-- [Linux v7.2 `/proc/modules` iterator locking](https://github.com/torvalds/linux/blob/v7.2/kernel/module/procfs.c#L48-L117)
-- [Kprobes API and debugfs registry](https://docs.kernel.org/7.2/trace/kprobes.html)
+- [The seq_file interface and `SEQ_SKIP`][1]
+- [Linux v7.2 seq_file core][2]
+- [Linux v7.2 Kprobe registration and rollback][3]
+- [Linux v7.2 Kprobe declarations][4]
+- [Linux v7.2 procfs file operations][5]
+- [Linux v7.2 directory-operation targets][6]
+- [Linux v7.2 module-list locking and RCU updates][7]
+- [Linux v7.2 `/proc/modules` iterator locking][8]
+- [Kprobes API and debugfs registry][9]
+
+[1]: https://docs.kernel.org/7.2/filesystems/seq_file.html
+[2]: https://github.com/torvalds/linux/blob/v7.2/fs/seq_file.c
+[3]: https://github.com/torvalds/linux/blob/v7.2/kernel/kprobes.c
+[4]: https://github.com/torvalds/linux/blob/v7.2/include/linux/kprobes.h
+[5]: https://github.com/torvalds/linux/blob/v7.2/fs/proc/inode.c
+[6]: https://github.com/torvalds/linux/blob/v7.2/fs/namei.c
+[7]: https://github.com/torvalds/linux/blob/v7.2/kernel/module/main.c#L68-L77
+[8]: https://github.com/torvalds/linux/blob/v7.2/kernel/module/procfs.c#L48-L117
+[9]: https://docs.kernel.org/7.2/trace/kprobes.html

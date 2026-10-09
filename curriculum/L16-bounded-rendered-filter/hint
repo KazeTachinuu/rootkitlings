@@ -1,3 +1,4 @@
-Reason in complete byte spans, not strings. Validate the width before any
-subtraction. A match consumes the whole pattern so replacement bytes are not
-scanned again; a mismatch advances by one byte.
+Reason in complete byte spans, not strings.
+Validate the width before any subtraction.
+A match consumes the whole pattern so replacement bytes are not scanned again; a
+mismatch advances by one byte.

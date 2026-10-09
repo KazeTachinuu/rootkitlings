@@ -1,6 +1,6 @@
-Keep build-time selection separate from runtime cleanup. The selected value
-must reach C unchanged, unknown values must fail during compilation, and each
-valid value must preserve its exact init result.
+Keep build-time selection separate from runtime cleanup.
+The selected value must reach C unchanged, unknown values must fail during
+compilation, and each valid value must preserve its exact init result.
 
-Remember that rejected initialization is not unload. This lesson has acquired
-no resource when it rejects the load.
+Remember that rejected initialization is not unload.
+This lesson has acquired no resource when it rejects the load.

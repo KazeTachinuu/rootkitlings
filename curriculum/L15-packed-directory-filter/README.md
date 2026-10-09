@@ -1,7 +1,9 @@
 # Filter packed directory records safely
 
-`getdents64()` returns a byte buffer containing adjacent variable-length records.
-This exercise removes one exact name from one controlled enumeration result without corrupting the remaining records.
+`getdents64()` returns a byte buffer containing adjacent variable-length
+records.
+Remove one exact name from one controlled enumeration result without corrupting
+the other records.
 
 The supplied module creates `/proc/rootkitlings_hidden`.
 A direct read still returns:
@@ -10,9 +12,9 @@ A direct read still returns:
 present=1
 ```
 
-When actions are enabled, native x86-64 `getdents64()` calls on the procfs root omit that name from mixed result chunks.
-The object still exists, and a normal directory containing the same name is unchanged.
-You are changing one view, not removing an object or making it invisible.
+When actions are enabled, native x86-64 `getdents64()` calls on the procfs root
+omit that name from mixed result chunks.
+The object still exists, and other directories are unchanged.
 
 ## The record sequence
 
@@ -28,8 +30,7 @@ struct linux_dirent64 {
 };
 ```
 
-`d_reclen` advances to the next record.
-It must equal the 8-byte-aligned size of the fixed fields, the filename, and its terminating NUL:
+`d_reclen` is the 8-byte-aligned size of the fixed fields, filename, and NUL:
 
 ```c
 ALIGN(offsetof(struct linux_dirent64, d_name) + name_length + 1,
@@ -45,27 +46,21 @@ For each record, require:
 - A name shorter than `PATH_MAX` with no `/`.
 - The exact canonical aligned record length above.
 
-The buffer itself may be unaligned.
-Read `d_reclen` and `d_off` with `memcpy()` instead of dereferencing an unaligned structure pointer.
+The buffer may be unaligned, so read `d_reclen` and `d_off` with `memcpy()`.
 Ignore padding after the first filename NUL.
 
 ## Compaction and directory cookies
 
-Compare both filename length and bytes.
-Prefixes, suffixes, substrings, and case variants are different names.
+Compare filename length and bytes exactly.
+After validation, compact retained records with `memmove()`.
 
-After validation, make a second pass and move retained records forward with `memmove()`.
-The source and destination can overlap.
-
-`d_off` is an opaque directory cookie used to resume enumeration.
-Linux writes the next position into the preceding record.
-When a record is removed after a retained record, copy the removed record's `d_off` bytes into that previous retained record.
-A run of removed records therefore leaves the previous retained record with the last removed cookie.
+`d_off` is an opaque resume cookie.
+For each removed record after a retained record, copy its `d_off` bytes into
+that retained record; a removed run leaves its last cookie there.
 Do not interpret or calculate cookies.
 
 If every record matches, return the chunk unchanged.
-Changing a positive syscall result to zero would look like end-of-directory even though the kernel already advanced the file position.
-Failing open avoids that false EOF.
+Returning zero would falsely signal EOF after the kernel advanced position.
 
 ## Your task
 
@@ -85,12 +80,16 @@ rk_filter_dirents64(void *buffer, size_t length,
 Set `*output_length` to the input length before validation.
 Return:
 
-- `RK_DIRENT_FILTER_INVALID` for a malformed sequence, without changing the buffer.
-- `RK_DIRENT_FILTER_UNCHANGED` when no record matches or every record matches, without changing the buffer.
-- `RK_DIRENT_FILTER_CHANGED` after compacting a mix of removed and retained records and setting the shorter output length.
+- `RK_DIRENT_FILTER_INVALID` for a malformed sequence, without changing the
+  buffer.
+- `RK_DIRENT_FILTER_UNCHANGED` when no record matches or every record matches,
+  without changing the buffer.
+- `RK_DIRENT_FILTER_CHANGED` after compacting a mix of removed and retained
+  records and setting the shorter output length.
 
 Bytes after the changed output length are unspecified.
-The pure helper must not allocate memory, access userspace, read module state, or know about probes.
+The pure helper must not allocate memory, access userspace, read module state,
+or know about probes.
 
 Run:
 
@@ -98,27 +97,26 @@ Run:
 ./rootkitlings check
 ```
 
-The checker compiles this exact helper with address and undefined-behavior sanitizers, tests malformed and randomized record streams, then verifies the supplied integration in the disposable guest.
+The checker sanitizes malformed and randomized streams, then tests the supplied
+integration in the guest.
 
 ## Supplied integration and limits
 
-The supplied return probe targets exported `iterate_dir()` on Linux v7.2.
-Its entry handler sees the actual `struct file` used for enumeration, so concurrent descriptor reuse cannot make it classify a different file.
-A managed identity Kprobe resolves the pinned kernel's local `filldir64()` address.
-On the pinned x86 kernel with indirect-branch tracking, Kprobes moves its probe past the four-byte `ENDBR64`; the supplied identity helper reverses that documented architecture adjustment before comparing the callback pointer.
-The return probe admits only the native `getdents64()` callback with that exact actor, an enabled procfs root file, and an initial buffer count no larger than 32 KiB.
+The supplied `iterate_dir()` return probe receives the actual `struct file`.
+A managed identity Kprobe resolves the pinned `filldir64()` and reverses x86's
+`ENDBR64` adjustment before comparing the callback.
+It admits only native `getdents64()` on an enabled procfs root with at most 32
+KiB requested.
 
-The integration depends on the private Linux v7.2 `getdents_callback64` layout.
-The supplied file checks every field offset and the total size at compile time, then admits the private cast only when the callback actor is the pinned native `filldir64()` function.
-This is not a stable module API.
-The title's safety claim applies to the pinned contract and complete record validation, not arbitrary kernel versions.
-
-The entry handler allocates the exact bounded size with `GFP_ATOMIC` and stores the initial userspace pointer, capacity, and callback in one Kretprobe instance.
-The return handler copies the produced prefix with nofault helpers and checks that the remaining count, produced length, final-record length, and final-record boundary agree before calling your pure filter.
-It copies back only a changed prefix.
-It then adjusts `current_dir`, `prev_reclen`, and the remaining count so `getdents64()` itself writes the final cookie and computes the shorter return value.
-If copy-back fails, it clears `prev_reclen` and forces `-EFAULT`, preventing the outer syscall from replacing that error with a positive count.
-This rewrite is not transactional: another userspace thread can change, unmap, or protect the buffer between the syscall and return handler.
+The private Linux v7.2 `getdents_callback64` layout is compile-time checked and
+used only with that exact actor; it is not a stable module API.
+Entry allocates bounded `GFP_ATOMIC` scratch and stores call data per instance.
+Return copies with nofault helpers and validates counts and final boundaries
+before filtering.
+After changed copy-back, it adjusts `current_dir`, `prev_reclen`, and remaining
+count so `getdents64()` produces the shorter result and final cookie.
+Copy-back failure clears `prev_reclen` and forces `-EFAULT`.
+The rewrite is not transactional against concurrent userspace buffer changes.
 
 The following cases deliberately fail open:
 
@@ -129,15 +127,24 @@ The following cases deliberately fail open:
 - A chunk in which every record has the target name.
 
 `directory_returns_missed` reports Kretprobe instance exhaustion.
-Instance allocation happens before the entry handler rejects an out-of-scope call, so a miss alone does not prove that a selected proc enumeration was lost.
+Allocation precedes admission, so a miss need not be a selected enumeration.
 
 ## Official Linux v7.2 references
 
-- [Directory record layout, `filldir64()`, cookie writes, and `getdents64()`](https://github.com/torvalds/linux/blob/v7.2/fs/readdir.c)
-- [`struct linux_dirent64`](https://github.com/torvalds/linux/blob/v7.2/include/linux/dirent.h)
-- [Kretprobe instance data, capacity, and unregister behavior](https://github.com/torvalds/linux/blob/v7.2/Documentation/trace/kprobes.rst)
-- [Linux v7.2 Kprobe implementation](https://github.com/torvalds/linux/blob/v7.2/kernel/kprobes.c)
-- [x86 Kprobe function-entry adjustment](https://github.com/torvalds/linux/blob/v7.2/arch/x86/kernel/kprobes/core.c)
-- [Nofault userspace-copy declarations](https://github.com/torvalds/linux/blob/v7.2/include/linux/uaccess.h)
-- [Procfs root construction](https://github.com/torvalds/linux/blob/v7.2/fs/proc/root.c)
-- [`getdents64(2)` and zero-at-EOF](https://man7.org/linux/man-pages/man2/getdents64.2.html)
+- [Directory record layout, `filldir64()`, cookie writes, and `getdents64()`][1]
+- [`struct linux_dirent64`][2]
+- [Kretprobe instance data, capacity, and unregister behavior][3]
+- [Linux v7.2 Kprobe implementation][4]
+- [x86 Kprobe function-entry adjustment][5]
+- [Nofault userspace-copy declarations][6]
+- [Procfs root construction][7]
+- [`getdents64(2)` and zero-at-EOF][8]
+
+[1]: https://github.com/torvalds/linux/blob/v7.2/fs/readdir.c
+[2]: https://github.com/torvalds/linux/blob/v7.2/include/linux/dirent.h
+[3]: https://github.com/torvalds/linux/blob/v7.2/Documentation/trace/kprobes.rst
+[4]: https://github.com/torvalds/linux/blob/v7.2/kernel/kprobes.c
+[5]: https://github.com/torvalds/linux/blob/v7.2/arch/x86/kernel/kprobes/core.c
+[6]: https://github.com/torvalds/linux/blob/v7.2/include/linux/uaccess.h
+[7]: https://github.com/torvalds/linux/blob/v7.2/fs/proc/root.c
+[8]: https://man7.org/linux/man-pages/man2/getdents64.2.html

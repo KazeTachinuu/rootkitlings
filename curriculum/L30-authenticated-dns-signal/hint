@@ -1,3 +1,7 @@
-Build the authenticated body in private storage, calculate its HMAC, and pass the complete message to the supplied DNS encoder. Copy the finished packet and length only after every step succeeds.
+Build the authenticated body in private storage, calculate its HMAC, and pass
+the complete message to the supplied DNS encoder.
+Copy the finished packet and length only after every step succeeds.
 
-For receive, decode into a private message and submit that message to the replay receiver. Clear private message and digest buffers on every exit.
+For receive, decode into a private message and submit that message to the replay
+receiver.
+Clear private message and digest buffers on every exit.

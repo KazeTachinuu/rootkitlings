@@ -1,10 +1,9 @@
 # Record authorized actions and rmdir results
 
-This milestone joins the resident worker, one-use credential action, and selected `rmdir()` return probe in one module.
-Those mechanisms are supplied.
-Your new mechanism is a bounded event ring shared by two producers.
-The fixed capacity bounds memory use and avoids allocation in a probe handler.
-The lock keeps simultaneous credential and probe events from reusing a slot or sequence number.
+Add a bounded event ring to the supplied resident worker, one-use credential
+action, and selected `rmdir()` return probe.
+Fixed capacity avoids probe-time allocation; one lock protects slots and
+sequence allocation across both producers.
 
 The control endpoint remains `/proc/rootkitlings` with mode `0622`.
 It accepts exactly:
@@ -14,7 +13,8 @@ It accepts exactly:
 - `run`
 - `root TOKEN`
 
-The separate `/proc/rootkitlings_events` endpoint is root-readable with mode `0400`.
+The separate `/proc/rootkitlings_events` endpoint is root-readable with mode
+`0400`.
 It begins with:
 
 ```text
@@ -35,20 +35,22 @@ sequence=N kind=rmdir tid=N result=failure
 
 ## Ring state
 
-`instrumentation/events.c` owns an array of 16 complete records and four state fields:
+`instrumentation/events.c` owns 16 complete records and four fields:
 
 - the index of the oldest retained record
 - the retained count
 - the next sequence number, initially 1
 - the overwrite count, initially 0
 
-Protect the array and all four fields with one ordinary `spinlock_t`.
-An append to a non-full ring writes after the newest record.
-An append to a full ring replaces the oldest record, advances the oldest index, and increments `overwritten`.
-Allocate the sequence number while holding the same lock.
+Protect everything with one ordinary `spinlock_t`.
+Append after the newest record, or replace and advance the oldest record while
+incrementing `overwritten` when full.
+Allocate sequence numbers under the same lock.
 
-Both producers run outside hard-IRQ and softirq context on the pinned non-RT kernel.
-Do not allocate, copy user memory, format output, unregister a probe, or call a sleeping function while holding the event lock.
+Both producers run outside hard-IRQ and softirq context on this pinned non-RT
+kernel.
+Under the lock, never allocate, copy user memory, format, unregister probes, or
+sleep.
 
 ## Typed producers
 
@@ -57,23 +59,19 @@ Expose two functions:
 - `rk_events_record_credential_change()`
 - `rk_events_record_rmdir(long result)`
 
-Neither accepts a task ID.
-The event component records `task_pid_nr(current)` at the append point.
-The authorization path calls its typed function only after credential replacement succeeds.
-Preparation failure, cancellation, rejected tokens, and replay append nothing.
-The Kretprobe calls its typed function only for the exact selected path after the syscall returns.
+Neither accepts a task ID; record `task_pid_nr(current)` at append.
+Record credentials only after successful replacement; failures, cancellation,
+rejected tokens, and replay append nothing.
+Record `rmdir()` only for the exact selected path after return.
 
 ## Reading a snapshot
 
-Copy retained records and counters into a bounded local snapshot while holding the lock.
-Release the lock before calling any `seq_*()` function.
-This keeps formatting and user-visible reads out of the short producer critical section.
+Copy records and counters into a bounded snapshot under the lock, then unlock
+before any `seq_*()` call.
 
-Opening the events endpoint does not take a snapshot.
-The first read at offset zero fills the seq-file buffer from one snapshot.
-Partial reads drain that buffer.
-EOF remains EOF when later events arrive.
-Seeking back to offset zero makes the next read take a new snapshot.
+Opening does not snapshot.
+The first offset-zero read snapshots; partial reads drain it, EOF persists, and
+seeking to zero requests a new snapshot.
 
 ## Lifetime
 
@@ -100,7 +98,8 @@ Unload in this order:
 
 ## Files
 
-The supplied state, worker, scheduler, and credential implementation remain unchanged.
+The supplied state, worker, scheduler, and credential implementation remain
+unchanged.
 Complete the integration and event ring in:
 
 - `Kbuild`
@@ -117,12 +116,18 @@ Run:
 ./rootkitlings check
 ```
 
-The checker covers every initialization rollback, both event producers, exact ring boundaries, concurrent appends, sequence allocation, overwrite accounting, seq-file snapshot behavior, unload, and reload reset.
-The controlled authorization-start failure returns `-EINTR`; normal builds still call `wait_for_random_bytes()` and propagate its real result.
+The checker covers rollback, both producers, ring boundaries, concurrency,
+sequence/overwrite accounting, snapshots, unload, and reset.
+The controlled authorization-start failure returns `-EINTR`; normal builds still
+call `wait_for_random_bytes()` and propagate its real result.
 
 ## Official Linux v7.2 references
 
-- [Spinlock API](https://github.com/torvalds/linux/blob/v7.2/include/linux/spinlock.h)
-- [Kernel locking guidance](https://github.com/torvalds/linux/blob/v7.2/Documentation/kernel-hacking/locking.rst)
-- [Kretprobe contracts](https://docs.kernel.org/7.2/trace/kprobes.html)
-- [`seq_file` implementation](https://github.com/torvalds/linux/blob/v7.2/fs/seq_file.c)
+- Spinlock API
+  <https://github.com/torvalds/linux/blob/v7.2/include/linux/spinlock.h>
+- Kernel locking guidance
+  <https://github.com/torvalds/linux/blob/v7.2/Documentation/kernel-hacking/locking.rst>
+- Kretprobe contracts
+  <https://docs.kernel.org/7.2/trace/kprobes.html>
+- `seq_file` implementation
+  <https://github.com/torvalds/linux/blob/v7.2/fs/seq_file.c>

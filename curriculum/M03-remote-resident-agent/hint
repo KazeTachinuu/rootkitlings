@@ -1,1 +1,3 @@
-Publish the socket and the stop gate under one lock. Keep shutdown in stop, release in the worker, and put every later acquisition behind a matching reverse-order label in main.c.
+Publish the socket and the stop gate under one lock.
+Keep shutdown in stop, release in the worker, and put every later acquisition
+behind a matching reverse-order label in main.c.

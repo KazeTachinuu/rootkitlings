@@ -1,7 +1,8 @@
 Draw the mechanism as two producers, one capacity-one slot, and one consumer.
 Admission must change an empty slot to full atomically, and notification must
-happen only after that publication. The consumer checks shutdown before taking
-the slot and checks the action gate again before recording work.
+happen only after that publication.
+The consumer checks shutdown before taking the slot and checks the action gate
+again before recording work.
 
-For teardown, make both producers unreachable before joining the consumer;
-keep shared state alive until every callback and thread is gone.
+For teardown, make both producers unreachable before joining the consumer; keep
+shared state alive until every callback and thread is gone.

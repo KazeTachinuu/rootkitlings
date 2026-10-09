@@ -1,23 +1,17 @@
 # Run and stop an event-driven kernel thread
 
 Add a `run` command to `/proc/rootkitlings`.
-The command submits one unit of work to one kernel thread.
-The thread sleeps when there is no work and records one completed run for each accepted command.
-A dedicated thread is a long-lived owner for work that may block; the proc callback only validates and submits bounded requests.
+Each accepted command submits one unit to a kernel thread, which sleeps when
+idle and records one completion per unit.
+The proc callback only validates and queues bounded requests.
 
-The complete write grammar is:
-
-- `enable`
-- `enable\n`
-- `disable`
-- `disable\n`
-- `run`
-- `run\n`
-
+The complete grammar is `enable`, `disable`, or `run`, each with one optional
+final newline.
 `run` returns `-EACCES` while actions are disabled.
-Once the action switch is enabled, every successful `run` adds exactly one pending unit and returns its full byte count.
+Once enabled, each successful `run` publishes one unit and returns the original
+byte count.
 
-The proc record becomes:
+The record becomes:
 
 ```text
 active=1
@@ -25,56 +19,44 @@ actions=enabled
 worker_runs=3
 ```
 
-## Keep the request count separate from the wait queue
+## Count requests; use the wait queue only to sleep
 
-A wait queue provides a place for the thread to sleep.
-It does not remember how many commands arrived.
-Store that count in an `atomic_t` and use the wait queue only to block until either:
-
-- the pending count is greater than zero
-- the thread has been asked to stop
-
-Use `wait_event_interruptible()` with the exact condition `pending > 0 || kthread_should_stop()`.
-Match it with `wake_up_interruptible()` after request publication.
-An idle worker then sleeps in the interruptible state instead of adding an uninterruptible task to the system load average.
+The wait queue does not remember arrivals, so store the pending count in an
+`atomic_t`.
+Sleep with `wait_event_interruptible()` using the exact condition
+`pending > 0 || kthread_should_stop()`.
+Call `wake_up_interruptible()` only after publishing a request.
 
 Use `atomic_add_unless(..., INT_MAX)` when a command is accepted.
-It returns true after adding one, and false without changing the counter when the value is already `INT_MAX`.
-On false, return `-EOVERFLOW` without waking the thread.
-Wake the thread only after the pending unit has been published.
+If it returns false, return `-EOVERFLOW` without changing the count or waking
+the thread.
 
 After waking, check `kthread_should_stop()` before consuming work.
-Consume one unit with `atomic_dec_if_positive()` and record one `worker_runs` increment.
-This operation returns the new nonnegative value when it decrements, or a negative value without changing a counter that was already zero.
-Then evaluate the wait condition again.
-Do not poll or add a delay.
+Consume one unit with `atomic_dec_if_positive()` and record one `worker_runs`
+increment.
+It leaves an already-zero counter unchanged and returns a negative value.
+Recheck the wait condition instead of polling or delaying.
 
-The only processing made observable in this lesson is one `worker_runs` increment for each consumed unit.
+The pending count needs atomic read-modify-write operations because proc writers
+add requests while the thread consumes them.
+The action switch is replaced as a whole, and one thread alone writes
+`worker_runs`, so those fields retain their supplied `READ_ONCE()` and
+`WRITE_ONCE()` operations.
 
-The pending count needs atomic read-modify-write operations because several proc write callbacks may add requests while the thread consumes them.
-The action switch does not: it is one value replaced as a whole, so its getter and setter use `READ_ONCE()` and `WRITE_ONCE()`.
-`worker_runs` also uses `READ_ONCE()` and `WRITE_ONCE()` because the one kernel thread is its only writer; procfs only reads it.
-Use atomic RMW operations for shared updates that can race, not merely because a value is visible to more than one execution context.
+Each `run` samples the action switch once.
+Seeing disabled rejects the write; seeing enabled admits a unit that remains
+valid even if another writer immediately disables future actions.
+Concurrent successful writes must not merge: 100 successes must eventually add
+exactly 100 runs.
 
-## Define concurrent writes precisely
-
-Each `run` reads the action switch once:
-
-- if that read sees disabled, the write returns `-EACCES` and submits nothing
-- if that read sees enabled, the accepted unit remains valid even if another
-  writer disables actions immediately afterward
-
-Concurrent successful `run` writes must not merge.
-If 100 writes succeed, the thread eventually records exactly 100 additional runs.
-
-## Start and stop the thread
+## Lifecycle
 
 Start the thread after state allocation and before procfs publication.
-If thread creation fails, destroy the state.
-If procfs publication fails, stop and join the thread before destroying the state.
-
 Failure point 4 supplies `ERR_PTR(-EINTR)` instead of creating the task.
-Handle that value through the same `IS_ERR()` and `PTR_ERR()` path as a real `kthread_run()` error.
+Handle that value through the same `IS_ERR()` and `PTR_ERR()` path as a real
+`kthread_run()` error.
+On creation failure, destroy state.
+On publication failure, stop and join the thread before destroying state.
 
 Unload in this order:
 
@@ -82,9 +64,8 @@ Unload in this order:
 2. call `kthread_stop()` to wake, stop, and join the thread
 3. destroy the state used by the thread
 
-Here, join means that `kthread_stop()` waits until the thread function has exited.
+`kthread_stop()` waits until the thread function exits.
 Pending units may be discarded once unload asks the thread to stop.
-Units that completed before that point remain counted.
 
 ## Your task
 
@@ -95,8 +76,8 @@ Edit these four files:
 - `interface/proc.c`: gate `run` and submit one request
 - `execution/worker.c`: implement the request, wait, and lifecycle operations
 
-The state counter and its narrow operations are already supplied so this exercise stays focused on the thread lifecycle and request path.
-`RK_WORKER_NAME` is also supplied; use it when creating the task so the task name is not a hidden checker requirement.
+The state counter and its operations are supplied.
+Use supplied `RK_WORKER_NAME` when creating the task.
 
 Run:
 
@@ -104,11 +85,24 @@ Run:
 ./rootkitlings check
 ```
 
-The checker covers creation failure, rollback, an idle sleeping thread, disabled commands, exact sequential and concurrent request counts, unload, and two complete load cycles.
+The checker proves creation failure and rollback, idle sleep, command gating,
+exact sequential and concurrent counts, clean unload, and repeated load cycles.
 
 ## Official Linux v7.2 references
 
-- [Kernel threads](https://docs.kernel.org/7.2/driver-api/basics.html#c.kthread_run)
-- [Stopping a kernel thread](https://docs.kernel.org/7.2/driver-api/basics.html#c.kthread_stop)
-- [Wait queues](https://docs.kernel.org/7.2/driver-api/basics.html#wait-queues-and-wake-events)
-- [Atomic operations](https://docs.kernel.org/7.2/core-api/wrappers/atomic_t.html)
+- [Kernel threads][ref-1]
+- [Stopping a kernel thread][ref-2]
+- [Wait queues][ref-3]
+- [Atomic operations][ref-4]
+
+[ref-1]:
+  https://docs.kernel.org/7.2/driver-api/basics.html#c.kthread_run
+
+[ref-2]:
+  https://docs.kernel.org/7.2/driver-api/basics.html#c.kthread_stop
+
+[ref-3]:
+  https://docs.kernel.org/7.2/driver-api/basics.html#wait-queues-and-wake-events
+
+[ref-4]:
+  https://docs.kernel.org/7.2/core-api/wrappers/atomic_t.html

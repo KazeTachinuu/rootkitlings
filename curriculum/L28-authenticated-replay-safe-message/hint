@@ -2,6 +2,7 @@ Authenticate the exact 20-byte body while holding the supplied lock.
 
 Compare the fixed 16-byte tag before parsing fields.
 
-Keep all parsed values local until the epoch, exact next sequence, command, level, and exhaustion checks pass; then update output and replay state together.
+Keep all parsed values local until the epoch, exact next sequence, command,
+level, and exhaustion checks pass; then update output and replay state together.
 
 Do not increment `UINT64_MAX`.

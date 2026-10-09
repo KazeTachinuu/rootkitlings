@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
-"""Put each prose sentence on its own Markdown source line."""
+"""Wrap Markdown prose to 80 columns without changing literal blocks."""
 
 from __future__ import annotations
 
 import argparse
 import re
+import textwrap
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-MARKUP = re.compile(r"^(?:\s|#|\||```|~~~|\[.+\]:|<)")
+WIDTH = 80
 LIST_ITEM = re.compile(r"^(\s*(?:[-*+]|\d+[.)]) )(.*)$")
 QUOTE = re.compile(r"^(>+ ?)(.*)$")
+PROTECTED_SPAN = re.compile(r"`[^`\n]+`|\[[^\]\n]+\]\([^\n]+?\)")
+REFERENCE = re.compile(r"^\s{0,3}\[[^]]+\]:")
+URL_LINE = re.compile(r"^(?:https?://\S+|<https?://\S+>)$")
+HEADING = re.compile(r"^\s{0,3}#{1,6}(?:\s|$)")
+THEMATIC_BREAK = re.compile(r"^\s{0,3}(?:([-*_])\s*){3,}$")
 BOUNDARY = re.compile(r'([.!?]["\'”’`*_)]*) +(?=\S)')
-PROTECTED = {
+ABBREVIATIONS = {
     "e.g.": "e§g§",
     "i.e.": "i§e§",
     "vs.": "vs§",
@@ -21,50 +27,105 @@ PROTECTED = {
 
 
 def split_sentences(paragraph: str) -> list[str]:
-	for text, token in PROTECTED.items():
+	"""Start each sentence on a new semantic source line."""
+	for text, token in ABBREVIATIONS.items():
 		paragraph = paragraph.replace(text, token)
 	paragraph = BOUNDARY.sub(r"\1\n", paragraph)
-	for text, token in PROTECTED.items():
+	for text, token in ABBREVIATIONS.items():
 		paragraph = paragraph.replace(token, text)
 	return paragraph.splitlines()
 
 
-def format_prefixed_line(line: str) -> list[str] | None:
-	for pattern in (LIST_ITEM, QUOTE):
-		match = pattern.match(line)
-		if not match:
-			continue
-		prefix, text = match.groups()
-		if not text:
-			return [line]
-		sentences = split_sentences(text)
-		continuation = "> " if prefix.startswith(">") else " " * len(prefix)
-		return [prefix + sentences[0], *(continuation + part for part in sentences[1:])]
-	return None
+def wrap_text(text: str, initial: str = "", subsequent: str = "") -> list[str]:
+	"""Wrap prose while keeping code spans and inline links indivisible."""
+	protected: list[tuple[str, str]] = []
+
+	def hide(match: re.Match[str]) -> str:
+		token = chr(0xE000 + len(protected)) * len(match.group(0))
+		protected.append((token, match.group(0)))
+		return token
+
+	hidden = PROTECTED_SPAN.sub(hide, text)
+	lines = textwrap.wrap(
+		hidden,
+		width=WIDTH,
+		initial_indent=initial,
+		subsequent_indent=subsequent,
+		break_long_words=False,
+		break_on_hyphens=False,
+	)
+	for token, value in protected:
+		lines = [line.replace(token, value) for line in lines]
+	return lines or [initial.rstrip()]
+
+
+def literal_line(line: str) -> bool:
+	stripped = line.lstrip()
+	return bool(
+		line.startswith(("    ", "\t"))
+		or stripped.startswith("|")
+		or HEADING.match(line)
+		or REFERENCE.match(line)
+		or THEMATIC_BREAK.match(line)
+		or stripped.startswith("<")
+		or line.endswith("  ")
+	)
 
 
 def format_markdown(source: str) -> str:
 	lines = source.splitlines()
 	result: list[str] = []
 	paragraph: list[str] = []
+	initial = ""
+	subsequent = ""
 	in_fence = False
+	expect_reference_destination = False
 
 	def flush() -> None:
+		nonlocal initial, subsequent
 		if paragraph:
-			result.extend(split_sentences(" ".join(part.strip() for part in paragraph)))
+			text = " ".join(part.strip() for part in paragraph)
+			for index, sentence in enumerate(split_sentences(text)):
+				result.extend(wrap_text(
+					sentence,
+					initial if index == 0 else subsequent,
+					subsequent,
+				))
 			paragraph.clear()
+			initial = ""
+			subsequent = ""
 
 	for line in lines:
 		stripped = line.lstrip()
-		prefixed = format_prefixed_line(line) if not in_fence else None
+		if expect_reference_destination and URL_LINE.fullmatch(stripped):
+			result.append("  " + stripped)
+			expect_reference_destination = False
+			continue
+		expect_reference_destination = False
 		if stripped.startswith(("```", "~~~")):
 			flush()
 			in_fence = not in_fence
 			result.append(line)
-		elif prefixed is not None:
+		elif in_fence:
+			result.append(line)
+		elif not line:
 			flush()
-			result.extend(prefixed)
-		elif in_fence or not line or MARKUP.match(line) or line.endswith("  "):
+			result.append(line)
+		elif match := LIST_ITEM.match(line):
+			flush()
+			initial, text = match.groups()
+			subsequent = " " * len(initial)
+			paragraph.append(text)
+		elif match := QUOTE.match(line):
+			flush()
+			initial, text = match.groups()
+			subsequent = initial
+			paragraph.append(text)
+		elif REFERENCE.match(line):
+			flush()
+			result.append(line)
+			expect_reference_destination = line.rstrip().endswith(":")
+		elif literal_line(line):
 			flush()
 			result.append(line)
 		else:
@@ -73,17 +134,41 @@ def format_markdown(source: str) -> str:
 	return "\n".join(result) + "\n"
 
 
+def overlong_prose(source: str) -> list[int]:
+	"""Return overlong prose lines, excluding literal blocks and exact URLs."""
+	result: list[int] = []
+	in_fence = False
+	for number, line in enumerate(source.splitlines(), 1):
+		stripped = line.lstrip()
+		if stripped.startswith(("```", "~~~")):
+			in_fence = not in_fence
+			continue
+		if len(line) <= WIDTH or in_fence:
+			continue
+		if line.startswith(("    ", "\t")) or URL_LINE.fullmatch(stripped):
+			continue
+		result.append(number)
+	return result
+
+
 def main() -> int:
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--check", action="store_true")
 	args = parser.parse_args()
 	changed: list[Path] = []
+	overlong: list[tuple[Path, int]] = []
 
-	for path in sorted(ROOT.rglob("*.md")):
+	documents = set(ROOT.rglob("*.md"))
+	documents.update((ROOT / "curriculum").glob("*/hint"))
+	for path in sorted(documents):
 		if ".git" in path.parts or ".rootkitlings" in path.parts:
 			continue
 		before = path.read_text(encoding="utf-8")
 		after = format_markdown(before)
+		overlong.extend(
+			(path.relative_to(ROOT), line)
+			for line in overlong_prose(after)
+		)
 		if before == after:
 			continue
 		changed.append(path.relative_to(ROOT))
@@ -92,10 +177,14 @@ def main() -> int:
 
 	if args.check and changed:
 		for path in changed:
-			print(f"needs sentence-per-line formatting: {path}")
+			print(f"needs {WIDTH}-column Markdown formatting: {path}")
+		return 1
+	if args.check and overlong:
+		for path, line in overlong:
+			print(f"overlong Markdown prose: {path}:{line}")
 		return 1
 	if not args.check:
-		print(f"formatted {len(changed)} Markdown files")
+		print(f"formatted {len(changed)} documents")
 	return 0
 
 

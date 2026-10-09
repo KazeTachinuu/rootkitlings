@@ -1,5 +1,7 @@
 Validate every record in a read-only first pass.
 
-In the second pass, keep `read_offset`, `write_offset`, and the destination offset of the last retained record.
+In the second pass, keep `read_offset`, `write_offset`, and the destination
+offset of the last retained record.
 Use `memmove()` for a retained record whose offsets differ.
-When removing a record after a retained one, copy only its opaque `d_off` bytes into that retained destination record.
+When removing a record after a retained one, copy only its opaque `d_off` bytes
+into that retained destination record.

@@ -1,6 +1,7 @@
 # Interpret the current task's credentials
 
-Extend `/proc/rootkitlings` with the credentials of the task that materializes the record:
+Extend `/proc/rootkitlings` with the credentials of the task that materializes
+the record:
 
 ```text
 active=1
@@ -13,68 +14,61 @@ cap_permitted=000001ffffffffff
 cap_effective=000001ffffffffff
 ```
 
-The four IDs are ordered as real, effective, saved, and filesystem.
+The IDs are ordered as real, effective, saved, and filesystem.
 Capability masks are fixed-width, lowercase hexadecimal without a `0x` prefix.
 Their exact value depends on the kernel's supported capabilities.
 
 ## Take one immutable snapshot
 
-Call `current_cred()` once and keep its `const struct cred *` result local to the show callback.
-These are the subjective credentials with which the current task acts.
-A published credential is immutable, and the current task cannot replace its credentials while that same thread is executing this callback.
-The callback therefore needs neither a lock nor a credential reference.
+Call `current_cred()` once and keep its `const struct cred *` result local to
+the show callback.
+These immutable subjective credentials govern how the current task acts.
+The same thread cannot replace them while executing this callback, so immediate
+access needs neither a lock nor a credential reference.
 
 This rule is specific to immediate access to `current` credentials.
-Holding a credential beyond the callback or reading another task's credentials has different lifetime rules.
+Holding a credential beyond the callback or reading another task's credentials
+has different lifetime rules.
 
-The ID roles are:
-
-- real: the task's underlying user or group identity
-- effective: the identity used by many permission checks
-- saved: an identity that a set-ID task can restore
-- filesystem: the identity used for filesystem access checks
-
-The primary GID is not the supplementary group list.
-This exercise does not render that separate, variable-length state.
+Real IDs express underlying identity, effective IDs drive many permission
+checks, saved IDs support set-ID restoration, and filesystem IDs drive
+filesystem checks.
+The primary GID is separate from the supplementary group list, which this record
+does not render.
 
 ## Separate the credential source from the numeric view
 
-`current_cred()` describes the task materializing the record.
-It does not describe the task that opened the file.
-
-`seq_user_ns(output)` deliberately supplies a different property: the user namespace stored in `output->file->f_cred`, which is the immutable credential captured when the proc file was opened.
-Translate every `kuid_t` and `kgid_t` through that opener namespace with `from_kuid_munged()` and `from_kgid_munged()`.
+`current_cred()` describes the materializing task, not the opener.
+`seq_user_ns(output)` supplies the user namespace stored in
+`output->file->f_cred`, the immutable credential captured at open time.
+Translate every `kuid_t` and `kgid_t` through that opener namespace with
+`from_kuid_munged()` and `from_kgid_munged()`.
 
 This matches `/proc/<pid>/status`.
-If an ID has no mapping in the opener's user namespace, the `*_munged()` helper emits the configured overflow ID.
+If an ID has no mapping in the opener's user namespace, the `*_munged()` helper
+emits the configured overflow ID.
 
-An inherited or passed descriptor can therefore combine:
-
-- identity fields from the task materializing the record
-- numeric UID/GID coordinates from the task that opened the file
-
-That split is the record contract, not an accident.
-The checker passes a proc descriptor from a nested namespace to a reader in the initial namespace and verifies both sides independently.
+An inherited or passed descriptor can therefore combine identity from the
+materializing task with numeric UID/GID coordinates from the opener.
+That split is the required record contract.
 
 ## Capabilities also have a namespace
 
-Print only the permitted and effective capability sets:
-
-- permitted is the set from which the task may enable capabilities
-- effective is the set consulted for current capability checks
-
+Print the permitted set, from which capabilities may be enabled, and the
+effective set used by current capability checks.
 Use the same credential snapshot for both.
-The in-tree proc implementation uses `seq_put_hex_ll()`, but Linux v7.2 does not export that symbol to external modules.
+The in-tree proc implementation uses `seq_put_hex_ll()`, but Linux v7.2 does not
+export that symbol to external modules.
 Render the identical fixed-width form with `seq_printf(..., "%016llx", ...)`
 and an explicit `unsigned long long` cast.
 
-`cap_userns` reports where those sets are anchored.
-Compare `credentials->user_ns` with `init_user_ns` and print `initial` or `nested`.
-A task can have UID 0 and a full effective mask in a nested namespace without having those capabilities over objects owned by the initial namespace.
-This record describes authorization context; it is not an authorization decision.
+For `cap_userns`, compare `credentials->user_ns` with `init_user_ns` and print
+`initial` or `nested`.
+Nested UID 0 with full capabilities does not imply authority over objects in the
+initial namespace; the record describes context, not a decision.
 
-The inheritable, bounding, and ambient sets affect capability transitions across `execve()`.
-No mechanism in this exercise performs such a transition, so they are not part of this record.
+Do not print inheritable, bounding, or ambient sets; this exercise performs no
+`execve()` transition.
 
 ## Your task
 
@@ -88,7 +82,8 @@ In `rk_status_show()`:
 4. identify the credential's capability namespace
 5. print the permitted and effective masks
 
-Keep the task attribution, command-name escaping, state access, proc publication, and teardown unchanged.
+Keep the task attribution, command-name escaping, state access, proc
+publication, and teardown unchanged.
 Do not prepare, mutate, retain, or replace credentials in this exercise.
 
 Run:
@@ -97,15 +92,38 @@ Run:
 ./rootkitlings check
 ```
 
-The checker compares the record with `/proc/thread-self/status` under initial root, an unprivileged identity, distinct ID roles, a credential change after open, and a nested user namespace.
-It also tests a descriptor passed across user namespaces, failure rollback, unload, and two complete load cycles.
+The checker compares the record with `/proc/thread-self/status` across root,
+unprivileged, distinct-ID, changed-after-open, and nested-namespace cases.
+It also proves cross-namespace descriptor semantics, rollback, clean unload, and
+repeated load cycles.
 
 ## Official Linux v7.2 references
 
-- [Credential model and lifetime](https://docs.kernel.org/7.2/security/credentials.html)
-- [`struct cred` and `current_cred()`](https://github.com/torvalds/linux/blob/v7.2/include/linux/cred.h)
-- [UID and GID translation](https://github.com/torvalds/linux/blob/v7.2/include/linux/uidgid.h)
-- [`seq_user_ns()`](https://github.com/torvalds/linux/blob/v7.2/include/linux/seq_file.h#L248-L255)
-- [`/proc/<pid>/status` identity rendering](https://github.com/torvalds/linux/blob/v7.2/fs/proc/array.c#L152-L202)
-- [`/proc/<pid>/status` capability rendering](https://github.com/torvalds/linux/blob/v7.2/fs/proc/array.c#L300-L329)
-- [Namespace-aware capability checks](https://github.com/torvalds/linux/blob/v7.2/security/commoncap.c#L56-L132)
+- [Credential model and lifetime][ref-1]
+- [`struct cred` and `current_cred()`][ref-2]
+- [UID and GID translation][ref-3]
+- [`seq_user_ns()`][ref-4]
+- [`/proc/<pid>/status` identity rendering][ref-5]
+- [`/proc/<pid>/status` capability rendering][ref-6]
+- [Namespace-aware capability checks][ref-7]
+
+[ref-1]:
+  https://docs.kernel.org/7.2/security/credentials.html
+
+[ref-2]:
+  https://github.com/torvalds/linux/blob/v7.2/include/linux/cred.h
+
+[ref-3]:
+  https://github.com/torvalds/linux/blob/v7.2/include/linux/uidgid.h
+
+[ref-4]:
+  https://github.com/torvalds/linux/blob/v7.2/include/linux/seq_file.h#L248-L255
+
+[ref-5]:
+  https://github.com/torvalds/linux/blob/v7.2/fs/proc/array.c#L152-L202
+
+[ref-6]:
+  https://github.com/torvalds/linux/blob/v7.2/fs/proc/array.c#L300-L329
+
+[ref-7]:
+  https://github.com/torvalds/linux/blob/v7.2/security/commoncap.c#L56-L132

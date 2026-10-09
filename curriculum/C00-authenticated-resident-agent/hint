@@ -1,1 +1,5 @@
-Build the header and nonce in local buffers; publish bytes and advance state only after AES-GCM succeeds. Open before parsing, seal before framing, start the channel after the file transaction, send the status only after every endpoint exists, and unwind every acquired resource in reverse order.
+Build the header and nonce in local buffers; publish bytes and advance state
+only after AES-GCM succeeds.
+Open before parsing, seal before framing, start the channel after the file
+transaction, send the status only after every endpoint exists, and unwind every
+acquired resource in reverse order.

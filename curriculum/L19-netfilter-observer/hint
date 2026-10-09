@@ -1,1 +1,3 @@
-Treat `struct rk_netfilter_observer` as one owned component: initialize everything before registration, publish `registered` after success, and keep it published until unregister plus `synchronize_rcu()` complete.
+Treat `struct rk_netfilter_observer` as one owned component: initialize
+everything before registration, publish `registered` after success, and keep it
+published until unregister plus `synchronize_rcu()` complete.

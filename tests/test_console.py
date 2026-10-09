@@ -69,6 +69,14 @@ class ConsoleTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"COLUMNS": "not-a-number"}, clear=False):
             self.assertGreater(self.console.terminal_width(), 0)
 
+    def test_color_capability_tracks_the_active_output_stream(self) -> None:
+        with mock.patch.dict(os.environ, {"TERM": "xterm"}, clear=False):
+            os.environ.pop("NO_COLOR", None)
+            with mock.patch.object(sys, "stdout", Stream(True)):
+                self.assertTrue(self.console.color_enabled())
+            with mock.patch.object(sys, "stdout", Stream(False)):
+                self.assertFalse(self.console.color_enabled())
+
     def test_raw_block_terminates_unterminated_command_output(self) -> None:
         stdout = Stream(False)
         with mock.patch.object(sys, "stdout", stdout):

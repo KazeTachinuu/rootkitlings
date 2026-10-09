@@ -1,7 +1,8 @@
 The pending counter is the work state; the wait queue is only its notification
-mechanism. Publish one accepted unit before waking the thread, and consume one
-unit only after shutdown has been ruled out.
+mechanism.
+Publish one accepted unit before waking the thread, and consume one unit only
+after shutdown has been ruled out.
 
-Make the worker reachable before procfs can submit requests. On rollback or
-unload, remove that request source, stop and join the worker, and only then
-destroy its borrowed state.
+Make the worker reachable before procfs can submit requests.
+On rollback or unload, remove that request source, stop and join the worker, and
+only then destroy its borrowed state.

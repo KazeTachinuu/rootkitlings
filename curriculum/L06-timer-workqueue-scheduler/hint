@@ -2,5 +2,6 @@ Keep the timer callback bounded: record the firing, publish work, and rearm.
 Only the workqueue callback should decide whether an enabled action completes.
 
 The scheduler borrows state, so initialize both callback objects before making
-the timer reachable. During shutdown, stop the rearming producer before
-draining its work and releasing the borrowed pointer.
+the timer reachable.
+During shutdown, stop the rearming producer before draining its work and
+releasing the borrowed pointer.

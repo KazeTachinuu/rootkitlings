@@ -1,1 +1,4 @@
-Treat the eight-byte input as a bounded copy of one UDP header. Validate UDP Length against `ipv4->payload_length`, keep all decoded values in a local view, and publish that view only after the protocol, length, and destination port all match.
+Treat the eight-byte input as a bounded copy of one UDP header.
+Validate UDP Length against `ipv4->payload_length`, keep all decoded values in a
+local view, and publish that view only after the protocol, length, and
+destination port all match.

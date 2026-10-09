@@ -50,7 +50,12 @@ class _LevelFilter(logging.Filter):
 class _ConsoleHandler(logging.Handler):
     """A logging handler that follows redirected stdout and stderr."""
 
-    def __init__(self, target: str, minimum: int, maximum: int | None = None) -> None:
+    def __init__(
+        self,
+        target: str,
+        minimum: int,
+        maximum: int | None = None,
+    ) -> None:
         super().__init__()
         self.target = target
         self.addFilter(_LevelFilter(minimum, maximum))
@@ -136,7 +141,11 @@ class Console:
     ) -> None:
         stream = self._stream()
         shown_label = _styled(f"{label:<{width}}", "dim", stream)
-        shown_value = _styled(value, value_style, stream) if value_style else value
+        shown_value = (
+            _styled(value, value_style, stream)
+            if value_style
+            else value
+        )
         print(f"{shown_label}{shown_value}", file=stream, flush=True)
 
     def row(
@@ -160,7 +169,8 @@ class Console:
         self.line(f"  {value}", style="command", error=error)
 
     def transcript(self, command: list[object] | tuple[object, ...]) -> None:
-        self.line(f"$ {shlex.join(str(value) for value in command)}", style="dim")
+        shown = shlex.join(str(value) for value in command)
+        self.line(f"$ {shown}", style="dim")
 
     def process_output(self, text: str, *, error: bool = False) -> None:
         if text:
@@ -203,11 +213,15 @@ class Console:
         self.log.error(message, extra={"console_kind": "error"})
 
     @staticmethod
-    def terminal_width(default: int = 80, maximum: int = 100) -> int:
+    def terminal_width(default: int = 80, maximum: int = 80) -> int:
         requested = os.environ.get("COLUMNS")
         if requested and requested.isdigit() and int(requested) > 0:
             return min(int(requested), maximum)
         return min(shutil.get_terminal_size((default, 24)).columns, maximum)
+
+    @staticmethod
+    def color_enabled(*, error: bool = False) -> bool:
+        return _color_enabled(sys.stderr if error else sys.stdout)
 
     @staticmethod
     def style(text: str, style: str, *, error: bool = False) -> str:

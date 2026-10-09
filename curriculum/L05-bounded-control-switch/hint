@@ -1,7 +1,7 @@
-Keep the switch private and expose only whole-value reads and writes. A rejected
-command must leave it unchanged.
+Keep the switch private and expose only whole-value reads and writes.
+A rejected command must leave it unchanged.
 
 Treat a write as validate-then-commit: bound the raw request before touching
 user memory, copy it into local storage, recognize one complete command, and
-perform one state change only after every check passes. Retain the existing
-`seq_file` read path when adding the write operation.
+perform one state change only after every check passes.
+Retain the existing `seq_file` read path when adding the write operation.

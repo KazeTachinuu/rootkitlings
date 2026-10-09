@@ -1,1 +1,3 @@
-Copy the bounded input and key before writing output; then choose AEAD first for confidentiality, replay-safe authentication for freshness, HMAC for origin, and a trusted digest for integrity alone.
+Copy the bounded input and key before writing output; then choose AEAD first for
+confidentiality, replay-safe authentication for freshness, HMAC for origin, and
+a trusted digest for integrity alone.

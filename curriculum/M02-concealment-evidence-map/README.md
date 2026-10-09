@@ -1,66 +1,49 @@
 # Omit the resident worker and map the affected view
 
-This milestone adds one result to the existing module: while actions are enabled, the resident worker's numeric name is omitted from ordinary bounded `getdents64()` results for the root of a procfs mount.
+While actions are enabled, omit the resident worker's numeric name from bounded
+`getdents64()` results for a procfs root.
+The worker still runs, and direct `/proc/PID`, `comm`, `/proc/modules`, and
+`/sys/module` views remain unchanged.
+The evidence endpoint declares this narrow scope without claiming invisibility
+or independent verification.
 
-The worker is not removed.
-Direct `/proc/PID` lookup, its `comm` file, task execution, `/proc/modules`, and `/sys/module` remain unchanged.
-The evidence endpoint states that scope directly; it does not claim that the worker is hidden or that a property has been independently verified.
+## Identity and directory result
 
-The control endpoint remains `/proc/rootkitlings` with mode `0622`.
-The event endpoint remains `/proc/rootkitlings_events` with mode `0400`.
+After creating the worker, acquire its `PIDTYPE_TGID` identity with
+`get_task_pid()`.
+Own that `struct pid` reference rather than a borrowed task pointer or decimal
+PID.
+For each selected proc root, use `proc_pid_ns()` and `pid_nr_ns()` to translate
+the identity into that mount's namespace.
+Leave the result unchanged when translation returns zero.
 
-## Process identity
+Reuse the supplied `rk_filter_dirents64()` helper.
+The integration resolves private `filldir64()` state with a managed Kprobe and
+observes `iterate_dir()` with a Kretprobe.
+Use the actual entry-time directory file so close or descriptor reuse cannot
+redirect the scope check.
+Pinned Linux 7.2 x86-64 layout checks bound the private cast.
 
-After creating the worker, acquire its `PIDTYPE_TGID` identity with `get_task_pid()`.
-The process-view component owns that `struct pid` reference.
-It must not retain a borrowed `task_struct` pointer or a decimal PID string.
+The hook must:
 
-A numeric PID is meaningful only in a PID namespace.
-For each selected proc root, obtain that mount's namespace with `proc_pid_ns()` and translate the owned identity with `pid_nr_ns()`.
-If the result is zero, that worker is not visible from the mount and the result must remain unchanged.
+- sample the action gate once at entry;
+- select only a procfs root and native `getdents64()` callback state;
+- accept at most 32 KiB of returned records;
+- validate remaining count, produced length, and final-record boundaries;
+- translate and remove only the exact worker PID name;
+- preserve retained directory cookies;
+- leave invalid, oversized, all-match, or invisible-namespace results intact;
+- return `-EFAULT` when changed bytes cannot be copied back;
+- free temporary storage on every path.
 
-Format the positive translated number into the return-probe instance.
-Do not store a process-wide formatted target.
+Copy-back is not transactional because userspace may alter its buffer between
+iteration and the return handler.
+A fault cannot roll back bytes already written by either path.
+A missed Kretprobe instance is diagnostic, not a missed-omission count.
 
-## Directory result
+## Evidence endpoint
 
-Reuse the supplied `rk_filter_dirents64()` helper from the packed-directory filter exercise.
-Do not add another parser.
-
-The supplied integration resolves the private `filldir64()` callback with a managed Kprobe and observes `iterate_dir()` with a Kretprobe.
-The `iterate_dir()` entry receives the actual directory file, so a concurrent close or descriptor reuse cannot redirect the scope check to another file.
-The callback identity limits the private cast to native `getdents64()` state.
-
-That state layout belongs to Linux v7.2, not the stable module API.
-Compile-time checks fix every field offset and the total size for the pinned x86-64 kernel.
-Before filtering, the return handler also checks the remaining count, produced length, final-record length, and final-record boundary.
-A disagreement leaves the result unchanged.
-
-The process-view hook must:
-
-- sample the action gate at entry
-- select only a procfs root using the actual directory file
-- accept only native `getdents64()` callback state
-- accept at most 32 KiB of returned records
-- translate the worker TGID through the selected proc mount
-- copy user bytes without faulting
-- remove only the exact translated PID name
-- preserve retained directory cookies
-- leave invalid, oversized, invisible-namespace, and all-match results unchanged
-- return `-EFAULT` if writing a changed result back fails
-- free temporary storage on every path
-
-The gate is sampled once.
-A concurrent enable or disable may therefore affect the current call or the next call.
-A missed Kretprobe instance is a diagnostic count; it is not a count of missed omissions.
-
-Copy-back is not transactional.
-Another userspace thread can change, unmap, or protect its buffer between directory iteration and the return handler.
-A copy-back fault becomes `-EFAULT`; bytes already written by either path cannot be rolled back.
-
-## Evidence map
-
-Publish `/proc/rootkitlings_evidence` as root-owned mode `0400` with exactly this record:
+Publish `/proc/rootkitlings_evidence` as root-owned mode `0400` with exactly:
 
 ```text
 evidence_map_version=1
@@ -85,65 +68,37 @@ filter_return_capacity=16
 filter_returns_missed=N
 ```
 
-Translate `target_pid` through the PID namespace of the procfs instance used to read this endpoint.
-The endpoint uses normal seq-file behavior: the first read at offset zero renders one record, partial reads drain that record, EOF stays EOF, and seeking to zero renders a new record.
+Translate `target_pid` through the namespace of the procfs instance serving the
+read.
+The first offset-zero read snapshots one record; partial reads drain it, EOF
+persists, and seeking to zero requests a new snapshot.
 
-## Lifetime
+## Integration and lifetime
 
-Acquire resources in this order:
+Complete `Kbuild`, `include/rootkit.h`, `execution/worker.c`,
+`instrumentation/getdents_probe.c`, `interface/evidence.c`, and `core/main.c`.
+The proc operations, record filter, and inherited mechanisms are supplied.
 
-1. create state
-2. reset the event ring
-3. start the worker
-4. start authorization
-5. register the `rmdir()` return probe
-6. acquire the worker TGID and register the process-view hooks
-7. publish the events endpoint
-8. publish the evidence endpoint
-9. publish the control endpoint
-10. start the timer
+Acquire state, events, worker, authorization, `rmdir()` probe, process view,
+events endpoint, evidence endpoint, control endpoint, then timer.
+Release control, evidence, events, timer, process view and its TGID, `rmdir()`
+probe, authorization, worker, then state.
+Drain process-view hooks before releasing their PID reference, and keep the
+worker alive until that component stops.
 
-Release them in this order:
-
-1. remove the control endpoint
-2. remove the evidence endpoint
-3. remove the events endpoint
-4. stop the timer
-5. unregister the process-view hooks and release the TGID
-6. unregister the `rmdir()` return probe
-7. erase authorization state
-8. stop and join the worker
-9. destroy state
-
-The process-view hook must be drained before releasing its PID reference.
-The worker must remain alive until the process-view component has stopped.
-
-## Files
-
-Complete the milestone in:
-
-- `Kbuild`
-- `include/rootkit.h`
-- `execution/worker.c`
-- `instrumentation/getdents_probe.c`
-- `interface/evidence.c`
-- `core/main.c`
-
-Add the three new objects and their declarations to the cumulative build and shared header.
-The proc operations, packed-record helper, and all other cumulative mechanisms are supplied.
-
-Run:
-
-```bash
-./rootkitlings check
-```
-
-The checker covers both gate states, namespace translation, direct-view controls, packed-record boundaries and cookies, concurrency, every initialization rollback, unload, reload, and the complete inherited authorization and telemetry behavior.
+Run `./rootkitlings check`.
+The checker exercises gate and namespace behavior, direct-view controls,
+record/cookie boundaries, concurrency, rollback, unload, and inherited features.
 
 ## Official Linux v7.2 references
 
-- [`struct pid` ownership and namespace translation](https://github.com/torvalds/linux/blob/v7.2/include/linux/pid.h)
-- [procfs PID lookup and enumeration](https://github.com/torvalds/linux/blob/v7.2/fs/proc/base.c)
-- [native `getdents64()` record construction](https://github.com/torvalds/linux/blob/v7.2/fs/readdir.c)
-- [procfs entry teardown](https://github.com/torvalds/linux/blob/v7.2/fs/proc/inode.c)
-- [Kprobe unregister synchronization](https://github.com/torvalds/linux/blob/v7.2/kernel/kprobes.c)
+- `struct pid` ownership and namespace translation
+  <https://github.com/torvalds/linux/blob/v7.2/include/linux/pid.h>
+- procfs PID lookup and enumeration
+  <https://github.com/torvalds/linux/blob/v7.2/fs/proc/base.c>
+- native `getdents64()` record construction
+  <https://github.com/torvalds/linux/blob/v7.2/fs/readdir.c>
+- procfs entry teardown
+  <https://github.com/torvalds/linux/blob/v7.2/fs/proc/inode.c>
+- Kprobe unregister synchronization
+  <https://github.com/torvalds/linux/blob/v7.2/kernel/kprobes.c>

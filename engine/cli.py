@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import difflib
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -80,7 +81,8 @@ def initialize_runtime():
     for path in (RT, WORK, PASSED, ARCHIVE):
         path.mkdir(parents=True, exist_ok=True)
         if path.is_symlink():
-            die(f'Runtime directory must not be a symlink: {path.relative_to(ROOT)}')
+            relative = path.relative_to(ROOT)
+            die(f'Runtime directory must not be a symlink: {relative}')
 
 
 def course_kernel_ready():
@@ -110,7 +112,10 @@ def cmd_setup(a):
     if doctor.returncode:
         die('Setup failed: scripts/doctor did not pass')
     UI.success('Host tools ready')
-    UI.progress('Preparing the pinned course kernel; the first build may be quiet for several minutes')
+    UI.progress(
+        'Preparing the pinned course kernel; the first build may be quiet '
+        'for several minutes'
+    )
     kernel = run(
         [str(ROOT / 'scripts/kernel'), 'ensure'],
         timeout=KERNEL_PREP_TIMEOUT,
@@ -199,11 +204,18 @@ def available(x, state):
             return
         if ROUTE.index(x.id) > ROUTE.index(state.current):
             now = CAT.by_id[state.current]
-            die(f'{label(x)} is locked. Complete {label(now)}: {now.title} first.')
+            die(
+                f'{label(x)} is locked. Complete {label(now)}: '
+                f'{now.title} first.'
+            )
     else:
         missing = [p for p in x.prerequisites if p not in state.completed]
         if missing:
-            die(f'{label(x)} is locked; incomplete prerequisites: {", ".join(missing)}')
+            prerequisites = ', '.join(missing)
+            die(
+                f'{label(x)} is locked; incomplete prerequisites: '
+                f'{prerequisites}'
+            )
 
 
 def wp(x):
@@ -217,7 +229,10 @@ def bd(x):
 def need(x):
     p = wp(x)
     if not p.is_dir() or p.is_symlink():
-        die(f'{label(x)} has no workspace. Run: ./rootkitlings start {label(x)}')
+        die(
+            f'{label(x)} has no workspace. '
+            f'Run: ./rootkitlings start {label(x)}'
+        )
     return p
 
 
@@ -276,7 +291,10 @@ def run(cmd, timeout=None, capture=False, env=None, visible=False):
             env=env,
         )
         if visible and capture:
-            UI.process_output(result.stdout or '', error=bool(result.returncode))
+            UI.process_output(
+                result.stdout or '',
+                error=bool(result.returncode),
+            )
         if visible:
             UI.process_result(result.returncode)
         return result
@@ -285,7 +303,8 @@ def run(cmd, timeout=None, capture=False, env=None, visible=False):
             UI.process_output(error.output, error=True)
         if visible:
             UI.process_result(None)
-            raise CLIError(f'Command timed out after {error.timeout} seconds') from error
+            message = f'Command timed out after {error.timeout} seconds'
+            raise CLIError(message) from error
         raise CLIError(str(error)) from error
     except ProcessError as error:
         if visible and capture:
@@ -306,7 +325,8 @@ def cmd_start(a):
             if p.is_symlink() or not p.is_dir():
                 die(f'Unsafe workspace: {p.relative_to(ROOT)}')
             if not r.baseline_hash:
-                die(f'Workspace exists without recorded baseline: {p.relative_to(ROOT)}')
+                relative = p.relative_to(ROOT)
+                die(f'Workspace exists without recorded baseline: {relative}')
         else:
             materialize_workspace(x, s)
             r.baseline_hash, _ = create_snapshot(p, PASSED, x.workspace.files)
@@ -327,7 +347,28 @@ def cmd_read(a):
     with STORE.read_locked() as s:
         x = resolve(one(a, 'read'), s)
     p = ROOT / x.resources.readme
-    UI.raw(p.read_text())
+    viewer = shutil.which('batcat') or shutil.which('bat')
+    if viewer:
+        command = [
+            viewer,
+            '--style=plain',
+            '--paging=never',
+            '--color=always' if UI.color_enabled() else '--color=never',
+            f'--terminal-width={UI.terminal_width()}',
+            '--language=markdown',
+            str(p),
+        ]
+        rendered = run(command, capture=True)
+        if rendered.returncode == 0:
+            UI.raw(rendered.stdout or '')
+        else:
+            UI.warning('Syntax highlighting failed; showing plain Markdown')
+            UI.transcript(command)
+            UI.process_output(rendered.stdout or '', error=True)
+            UI.process_result(rendered.returncode)
+            UI.raw(p.read_text())
+    else:
+        UI.raw(p.read_text())
     workspace = wp(x)
     if workspace.is_dir() and not workspace.is_symlink():
         UI.section('Next')
@@ -407,7 +448,9 @@ def solution_output(x, completed):
         if before is not None and before.data == solution_file.data:
             continue
         changed = True
-        before_text = '' if before is None else solution_text(before.data, relative)
+        before_text = (
+            '' if before is None else solution_text(before.data, relative)
+        )
         after_text = solution_text(solution_file.data, relative)
         diff = list(difflib.unified_diff(
             before_text.splitlines(keepends=True),
@@ -435,7 +478,10 @@ def build_workspace(x):
         die(f'Expected artifact must not be a symlink: {shown(artifact)}')
     if artifact.exists():
         if not artifact.is_file():
-            die(f'Expected artifact path is not a regular file: {shown(artifact)}')
+            die(
+                'Expected artifact path is not a regular file: '
+                f'{shown(artifact)}'
+            )
         artifact.unlink()
     kdir = course_kernel_build_dir()
     r = run([
@@ -581,7 +627,9 @@ def record_attempt(x, passed, verified_source=None, verified_hash=None):
         r.workspace_hash = live_hash
         if passed:
             if verified_source is None or verified_hash is None:
-                raise CLIError('successful attempt requires a verified frozen source')
+                raise CLIError(
+                    'successful attempt requires a verified frozen source'
+                )
             if live_hash != verified_hash:
                 changed = True
             else:
@@ -591,7 +639,9 @@ def record_attempt(x, passed, verified_source=None, verified_hash=None):
                     x.workspace.files,
                 )
                 if content_hash != verified_hash:
-                    raise CLIError('verified snapshot hash changed unexpectedly')
+                    raise CLIError(
+                        'verified snapshot hash changed unexpectedly'
+                    )
                 r.passed_snapshot = content_hash
                 r.workspace_hash = content_hash
                 s.completed.add(x.id)
@@ -626,7 +676,10 @@ def cmd_check(a):
         UI.transcript(command)
 
     def after_build(case, output, returncode):
-        unexpected_failure = returncode not in (0, None) and case.expect_build == 'pass'
+        unexpected_failure = (
+            returncode not in (0, None)
+            and case.expect_build == 'pass'
+        )
         UI.process_output(output, error=unexpected_failure)
         UI.process_result(
             returncode,
@@ -694,7 +747,10 @@ def cmd_check(a):
                 if result.returncode:
                     die(f'Guest check failed: {outcome.case.label}')
             if host_check_pending:
-                die(f'No successful artifact was available for {label(x)} host checks')
+                die(
+                    f'No successful artifact was available for {label(x)} '
+                    'host checks'
+                )
             verified_source = verification.frozen_source
             verified_hash = verification.source_hash
             workspace_changed = record_attempt(
@@ -711,7 +767,8 @@ def cmd_check(a):
         ) from error
     if workspace_changed:
         die(
-            'Workspace changed while checks were running; no pass was recorded. '
+            'Workspace changed while checks were running; '
+            'no pass was recorded. '
             f'Rerun: ./rootkitlings check {label(x)}'
         )
     UI.success(f'Passed {label(x)}')
@@ -918,8 +975,14 @@ def cmd_reset(a):
         archives = archive_and_remove_workspaces(WORK, ARCHIVE, affected)
         s.clear_progress(affected)
     if archives:
-        UI.success(f'Archived {len(archives)} workspace(s) under {shown(ARCHIVE)}')
-    scope = 'all course progress' if reset_all else f'progress from {label(selected)} onward'
+        UI.success(
+            f'Archived {len(archives)} workspace(s) under {shown(ARCHIVE)}'
+        )
+    scope = (
+        'all course progress'
+        if reset_all
+        else f'progress from {label(selected)} onward'
+    )
     UI.success(f'Reset {scope}')
 
 
@@ -965,7 +1028,9 @@ def usage():
         )),
     )
     UI.heading('Rootkitlings')
-    UI.line('Learn kernel development by building one rootkit mechanism at a time.')
+    UI.line(
+        'Learn kernel development by building one rootkit mechanism at a time.'
+    )
     UI.section('Usage')
     UI.command('./rootkitlings <COMMAND> [EXERCISE]')
     for title, commands in sections:

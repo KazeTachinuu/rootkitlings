@@ -1,7 +1,12 @@
 Validate into local state and commit only once.
 
-For encoding, keep a local 255-byte candidate and a current length. Before appending a label, prove that its length byte, its data, and the final root byte still fit.
+For encoding, keep a local 255-byte candidate and a current length.
+Before appending a label, prove that its length byte, its data, and the final
+root byte still fit.
 
-For parsing, keep a local view and a wire offset. A valid non-root label consumes `1 + length` bytes, but the 255-byte check must also reserve one later byte for the root.
+For parsing, keep a local view and a wire offset.
+A valid non-root label consumes `1 + length` bytes, but the 255-byte check must
+also reserve one later byte for the root.
 
-Check a length byte's top two bits before treating the lower six bits as an ordinary length.
+Check a length byte's top two bits before treating the lower six bits as an
+ordinary length.

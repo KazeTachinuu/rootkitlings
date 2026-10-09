@@ -2,38 +2,32 @@
 
 An IPv4 packet carries two different bounds:
 
-- `available` is the number of bytes the packet's backing storage can provide through its safe-copy interface.
+- `available` is the number of bytes the packet's backing storage can provide
+  through its safe-copy interface.
 - The header's Total Length is the number of bytes the packet declares.
 
-Neither bound proves the other.
-A parser must validate both before it reports where the IPv4 payload begins.
+Validate both bounds before reporting the payload.
 
 ## The fields used here
 
-The first byte contains the four-bit version followed by the four-bit Internet Header Length, or IHL.
-IHL counts 32-bit words, so a value of 5 means 20 bytes and a value of 15 means 60 bytes.
+The first byte holds version and IHL; IHL counts 32-bit words from 5 to 15.
 Values below 5 are malformed IPv4 headers.
 
-Total Length is a two-byte, big-endian value at bytes 2 and 3.
-It includes the IPv4 header.
-A declared length smaller than the header is malformed.
-A declared length larger than `available` is truncated.
-Extra available bytes after Total Length are outside this packet and must not enlarge the payload view.
+Big-endian Total Length at bytes 2 and 3 includes the header.
+Less than IHL is malformed; more than `available` is truncated.
+Bytes beyond Total Length do not enlarge the view.
 
 The two-byte fragment field is also big-endian:
 
-- RFC 791 reserves the top bit and says senders must set it to zero.
-- RFC 1812 says a router must not reject a packet solely because that bit is nonzero.
-- Linux v7.2 names the bit `IP_CE` and excludes it from the fragment test.
-- This receive-side parser follows the Linux policy and ignores it.
+- Ignore the reserved top bit, following Linux v7.2 and RFC 1812 policy.
 - `0x4000` is Don't Fragment.
   It does not mean that the packet is a fragment.
 - `0x2000` is More Fragments.
 - The low 13 bits are the fragment offset.
 
 This parser rejects More Fragments and every nonzero fragment offset.
-Later code can therefore treat the reported offset as the start of a complete datagram payload instead of mistaking a later fragment for its beginning.
-Reassembly is a different mechanism and is outside this exercise.
+This lets later code treat the payload as a complete datagram; no reassembly is
+performed.
 
 ## Your task
 
@@ -52,10 +46,13 @@ On success, fill the output view with:
 
 Return the exact failure class:
 
-- `RK_IPV4_PARSE_TRUNCATED` when the supplied bytes end before a required declared boundary;
+- `RK_IPV4_PARSE_TRUNCATED` when the supplied bytes end before a required
+  declared boundary;
 - `RK_IPV4_PARSE_MALFORMED` when present fields contradict the IPv4 format;
-- `RK_IPV4_PARSE_FRAGMENTED` for a well-bounded fragment that this parser deliberately declines;
-- `RK_IPV4_PARSE_OK` for one length-complete, unfragmented packet within this parser's scope.
+- `RK_IPV4_PARSE_FRAGMENTED` for a well-bounded fragment that this parser
+  deliberately declines;
+- `RK_IPV4_PARSE_OK` for one length-complete, unfragmented packet within this
+  parser's scope.
 
 Apply those checks in this order:
 
@@ -66,17 +63,16 @@ Apply those checks in this order:
 - validate Total Length against IHL, then against `available`;
 - reject More Fragments or a nonzero fragment offset.
 
-The first failing check determines the result.
-This makes a truncated declared boundary take precedence over a fragment flag that is already present.
+The first failure wins, so truncated declared bounds precede fragmentation.
 
 Do not change the output view on failure.
-Parse the two-byte fields from individual bytes; the input pointer need not be aligned.
+Parse the two-byte fields from individual bytes; the input pointer need not be
+aligned.
 Validate a larger value before subtracting a smaller one.
 
-When `available` is at least 20, `packet` must address at least the fixed 20-byte IPv4 prefix.
-It need not point to `available` contiguous bytes.
-The parser does not read options or payload bytes.
-It validates their declared boundaries so a later adapter can fetch those ranges through the storage-specific safe-copy interface.
+When `available >= 20`, `packet` addresses only the fixed 20-byte prefix.
+It need not expose `available` contiguous bytes.
+Do not read options or payload; only validate their declared bounds.
 
 Run:
 
@@ -84,17 +80,25 @@ Run:
 ./rootkitlings check
 ```
 
-The checker compiles the exact parser for the pinned kernel and separately runs it with address and undefined-behavior sanitizers.
-Its corpus covers every IHL byte, every 16-bit Total Length, every 16-bit fragment field, result precedence, an unaligned prefix, truncation, options, capture padding, and all protocol values.
-It also gives the parser only 20 allocated bytes while declaring the maximum IHL and Total Length, so reading options or payload is detected.
+Sanitized checks cover every IHL, Total Length, fragment field, precedence,
+unaligned input, options, padding, and protocol value.
+A guarded 20-byte allocation detects reads into declared options or payload.
 
-This exercise does not validate the IPv4 checksum or interpret options, addresses, TTL, protocol-specific headers, or payload bytes.
-It establishes only the boundaries that later packet code may safely use.
+Checksums, options, addresses, TTL, transport headers, and payload are out of
+scope.
 
 ## References
 
-- [RFC 791: IPv4 header format, IHL, Total Length, flags, and fragment offset](https://www.rfc-editor.org/rfc/rfc791.html#section-3.1)
-- [RFC 1812: routers must not reject a packet solely for a nonzero reserved flag](https://www.rfc-editor.org/rfc/rfc1812.html#section-4.2.2.3)
-- [Linux v7.2 `struct iphdr`](https://github.com/torvalds/linux/blob/v7.2/include/uapi/linux/ip.h)
-- [Linux v7.2 `IP_CE` and fragment masks](https://github.com/torvalds/linux/blob/v7.2/include/net/ip.h#L142-L145)
-- [Linux v7.2 fragment test](https://github.com/torvalds/linux/blob/v7.2/include/net/ip.h#L375-L378)
+- [RFC 791: IPv4 header format, IHL, Total Length, flags, and fragment
+  offset][1]
+- [RFC 1812: routers must not reject a packet solely for a nonzero reserved
+  flag][2]
+- [Linux v7.2 `struct iphdr`][3]
+- [Linux v7.2 `IP_CE` and fragment masks][4]
+- [Linux v7.2 fragment test][5]
+
+[1]: https://www.rfc-editor.org/rfc/rfc791.html#section-3.1
+[2]: https://www.rfc-editor.org/rfc/rfc1812.html#section-4.2.2.3
+[3]: https://github.com/torvalds/linux/blob/v7.2/include/uapi/linux/ip.h
+[4]: https://github.com/torvalds/linux/blob/v7.2/include/net/ip.h#L142-L145
+[5]: https://github.com/torvalds/linux/blob/v7.2/include/net/ip.h#L375-L378

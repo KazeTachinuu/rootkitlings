@@ -1,7 +1,7 @@
 Keep three coordinate systems distinct: the signed network-header offset, the
-logical network-relative length, and the helper's signed `int` offset. Validate
-each conversion before narrowing or subtracting; a negative network offset may
-legitimately point into headroom.
+logical network-relative length, and the helper's signed `int` offset.
+Validate each conversion before narrowing or subtracting; a negative network
+offset may legitimately point into headroom.
 
 Retrieve bytes into local storage and publish both outputs only after geometry,
 fragment readability, range, and safe-copy checks all succeed.

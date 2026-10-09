@@ -1,7 +1,7 @@
-Treat the two registered probes and their borrowed state as one lifetime. Make
-the state reachable before registration and keep it valid until batch
+Treat the two registered probes and their borrowed state as one lifetime.
+Make the state reachable before registration and keep it valid until batch
 unregistration has drained both handlers.
 
-Each handler should do only the bounded observation described in the task. On
-registration failure, remember that the batch helper already rolled back any
+Each handler should do only the bounded observation described in the task.
+On registration failure, remember that the batch helper already rolled back any
 earlier probe.

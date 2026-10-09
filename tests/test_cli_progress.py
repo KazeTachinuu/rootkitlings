@@ -929,6 +929,62 @@ class LearnerCLITests(unittest.TestCase):
         self.assertIn("./rootkitlings check L00", output.getvalue())
         self.assertNotIn("./rootkitlings start L00", output.getvalue())
 
+    def test_read_uses_bat_without_paging_and_respects_redirected_output(self) -> None:
+        calls = []
+        original_which = self.globals["shutil"].which
+        original_run = self.globals["run"]
+        try:
+            self.globals["shutil"].which = (
+                lambda name: "/usr/bin/batcat" if name == "batcat" else None
+            )
+            self.globals["run"] = (
+                lambda command, **kwargs: calls.append((command, kwargs))
+                or SimpleNamespace(returncode=0, stdout="# highlighted\n")
+            )
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.globals["cmd_read"](["L00"])
+        finally:
+            self.globals["shutil"].which = original_which
+            self.globals["run"] = original_run
+        command, kwargs = calls[0]
+        self.assertEqual(command[0], "/usr/bin/batcat")
+        self.assertIn("--style=plain", command)
+        self.assertIn("--paging=never", command)
+        self.assertIn("--color=never", command)
+        self.assertIn("--terminal-width=80", command)
+        self.assertIn("--language=markdown", command)
+        self.assertEqual(kwargs, {"capture": True})
+        self.assertIn("# highlighted", output.getvalue())
+
+    def test_read_shows_renderer_failure_then_plain_markdown(self) -> None:
+        original_which = self.globals["shutil"].which
+        original_run = self.globals["run"]
+        try:
+            self.globals["shutil"].which = lambda _name: "/usr/bin/bat"
+            self.globals["run"] = lambda *_args, **_kwargs: SimpleNamespace(
+                returncode=2,
+                stdout="renderer error\n",
+            )
+            output = io.StringIO()
+            error = io.StringIO()
+            with redirect_stdout(output), redirect_stderr(error):
+                self.globals["cmd_read"](["L00"])
+        finally:
+            self.globals["shutil"].which = original_which
+            self.globals["run"] = original_run
+
+        rendered = output.getvalue()
+        failure = error.getvalue()
+        self.assertIn("Syntax highlighting failed", failure)
+        self.assertIn("renderer error", failure)
+        self.assertIn("$ /usr/bin/bat", rendered)
+        self.assertRegex(rendered, r"Exit\s+2")
+        self.assertIn(
+            "# Build, load, inspect, and unload a kernel module",
+            rendered,
+        )
+
     def test_list_and_status_cover_started_advanced_and_complete_states(self) -> None:
         original_ready = self.globals["course_kernel_ready"]
         try:

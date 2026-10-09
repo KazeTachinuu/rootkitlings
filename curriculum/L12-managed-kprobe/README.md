@@ -1,12 +1,14 @@
 # Manage two named Kprobes
 
-Observe two kernel functions without changing what they do:
+Observe without altering two filesystem functions:
 
 - `vfs_mkdir` when a directory is created
 - `filename_rmdir` when a directory is removed
 
-The module keeps one flag for each function.
-The flags start at zero on every load and change only while actions are enabled:
+Each probe owns a seen flag that starts false on every load.
+While actions are enabled, creation sets only `vfs_mkdir_seen` and removal sets
+`filename_rmdir_seen`.
+Both operations must still complete normally.
 
 ```text
 active=1
@@ -15,86 +17,61 @@ vfs_mkdir_seen=1
 filename_rmdir_seen=0
 ```
 
-Creating a directory sets only `vfs_mkdir_seen`.
-Removing it then sets `filename_rmdir_seen`.
-Both filesystem operations must still succeed normally.
+## Work against the pinned kernel
 
-## Names belong to a pinned kernel
+The course uses Linux v7.2 on x86-64 with Kprobes, kallsyms, and debugfs.
+In this build, `vfs_mkdir` is present and exported to modules; `filename_rmdir`
+is present but not exported.
+A module cannot link to the internal symbol, but the Kprobe core can resolve a
+`.symbol_name` in the running kernel and install a probe when the target exists
+and is probeable.
+This is a pinned-build mechanism, not a stable API.
 
-This course runs Linux v7.2 on x86-64 with Kprobes, kallsyms, and debugfs enabled.
-In that build:
-
-- `vfs_mkdir` is present and exported to modules
-- `filename_rmdir` is present but not exported to modules
-
-An exported symbol is part of the interface that an external module may link against.
-An internal symbol is not.
-A named Kprobe is different: the Kprobe core resolves `.symbol_name` inside the running kernel and installs an observation point if that target is present and probeable.
-
-Do not treat `filename_rmdir` as a stable module API.
-Its name and behavior may change in another kernel build.
-The checker verifies the release, architecture, configuration, symbol presence, and export surface used here.
-
-Successful registration fills the `addr` field inside each managed `struct kprobe`.
-Do not copy that address, call through it, log it, or publish it.
-This exercise needs only the registered probe objects.
+Registration fills each managed `struct kprobe.addr`.
+Do not copy, call through, log, or publish that address.
 
 ## Keep handlers bounded
 
-A Kprobe pre-handler may run concurrently on several CPUs with preemption or interrupts disabled.
-It must not sleep or perform work that may block.
+A pre-handler may run concurrently on several CPUs with preemption or interrupts
+disabled.
+Each handler must only read the action switch once, set its own flag to `true`
+when enabled, and return zero so the target continues normally.
+Do not allocate, access userspace, log, wait, take a sleeping lock, perform I/O,
+or inspect or modify registers.
 
-Each handler in this exercise does only this:
+The supplied flags use `READ_ONCE()` and `WRITE_ONCE()`.
+Concurrent stores are safe because every writer stores the same final value and
+no update depends on old state.
+A counter would require an atomic read-modify-write operation or protected
+update.
 
-1. read the action switch once
-2. if enabled, set its own seen flag to `true`
-3. return zero so the probed function continues normally
+Disabling actions does not unregister probes.
+A handler admitted by an enabled read may finish after a concurrent `disable`.
 
-Do not allocate memory, access user memory, log, wait, take a sleeping lock, perform I/O, inspect registers, or change registers in these handlers.
+## Own the complete probe set
 
-Several CPUs may store `true` to the same flag.
-The supplied state operations use `READ_ONCE()` and `WRITE_ONCE()`.
-This is sufficient because every writer stores the same final value and no update depends on the previous value.
-A counter would need an atomic read-modify-write operation or another design that protects the update.
+Pass an array of probe pointers to `register_kprobes()`.
+It registers in order and, if one fails, unregisters every earlier element
+before returning the exact error.
+Do not unregister an earlier probe again on that path.
 
-The action switch is an admission rule, not probe removal.
-Both probes remain registered while actions are disabled.
-A handler that reads enabled may finish after a concurrent `disable` write.
+Failure point 4 assigns the second probe a nonexistent name.
+Lookup returns `-ENOENT`, and batch registration rolls back the first probe.
 
-## Acquire and release the complete set
+Normal initialization allocates state, registers both probes, then publishes
+procfs.
+If publication fails, unpublish nothing, unregister both probes, and free state.
+Unload removes procfs, calls `unregister_kprobes()`, then frees state.
+Unregistration waits until handlers can no longer use the borrowed state.
 
-`register_kprobes()` takes an array of probe pointers.
-It registers them in order.
-If one registration fails, Linux unregisters every earlier probe in the array before returning the failing error.
-Do not unregister the first probe a second time on this error path.
-
-Failure point 4 gives the second probe a name that does not exist.
-Named lookup returns `-ENOENT`, and the batch operation removes the already registered first probe before returning.
-
-The supplied module lifecycle is:
-
-```text
-allocate state
-register both probes
-publish procfs
-```
-
-If procfs publication fails, the module unregisters both probes before freeing state.
-Unload removes procfs, unregisters both probes, then frees state.
-`unregister_kprobes()` waits until the handlers can no longer use the borrowed state.
-
-`/sys/kernel/debug/kprobes/list` independently shows registered probes.
-Its lines include a kernel address and may include `[FTRACE]` or `[OPTIMIZED]`.
-Those details are chosen by the kernel.
-The checker uses only the probe type and exact symbol name, and verifies that this module adds one entry per target only while it is loaded.
+`/sys/kernel/debug/kprobes/list` provides independent evidence.
+Addresses and tags such as `[FTRACE]` or `[OPTIMIZED]` are kernel-selected; only
+probe type and exact symbol name are contractual.
 
 ## Your task
 
-Edit one file:
-
-- `instrumentation/probes.c`
-
-Complete the two handlers, batch registration, and batch unregistration.
+Edit only `instrumentation/probes.c`.
+Complete both pre-handlers, batch registration, and batch unregistration.
 
 Run:
 
@@ -102,11 +79,26 @@ Run:
 ./rootkitlings check
 ```
 
-The checker covers the pinned ABI contract, disabled and enabled observations, normal filesystem results, missing-symbol rollback, procfs rollback, unload, reload, two complete load cycles, and stale probe cleanup.
+The checker pins the ABI assumptions and proves gated observations without
+changing filesystem results.
+It also verifies missing-symbol and procfs rollback, registry cleanup, unload,
+and repeated load cycles.
 
 ## Official Linux v7.2 references
 
-- [Kprobes API, handler constraints, and debugfs registry](https://docs.kernel.org/7.2/trace/kprobes.html)
-- [`register_kprobes()` rollback and named lookup](https://github.com/torvalds/linux/blob/v7.2/kernel/kprobes.c)
-- [`vfs_mkdir`, `filename_rmdir`, and the export boundary](https://github.com/torvalds/linux/blob/v7.2/fs/namei.c)
-- [Kprobe declarations](https://github.com/torvalds/linux/blob/v7.2/include/linux/kprobes.h)
+- [Kprobes API, handler constraints, and debugfs registry][ref-1]
+- [`register_kprobes()` rollback and named lookup][ref-2]
+- [`vfs_mkdir`, `filename_rmdir`, and the export boundary][ref-3]
+- [Kprobe declarations][ref-4]
+
+[ref-1]:
+  https://docs.kernel.org/7.2/trace/kprobes.html
+
+[ref-2]:
+  https://github.com/torvalds/linux/blob/v7.2/kernel/kprobes.c
+
+[ref-3]:
+  https://github.com/torvalds/linux/blob/v7.2/fs/namei.c
+
+[ref-4]:
+  https://github.com/torvalds/linux/blob/v7.2/include/linux/kprobes.h

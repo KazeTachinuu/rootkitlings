@@ -1,7 +1,9 @@
 # Course design
 
-Rootkitlings teaches Linux kernel development by building a rootkit one observable mechanism at a time.
-The required route contains 31 lessons, four integration milestones, and one capstone.
+Rootkitlings teaches Linux kernel development by building a rootkit one
+observable mechanism at a time.
+The required route contains 31 lessons, four integration milestones, and one
+capstone.
 
 ## Dependency spine
 
@@ -20,33 +22,26 @@ module lifecycle
                 `-- C00 authenticated resident agent
 ```
 
-The graph is not a list of every API used by a rootkit.
-Each lesson introduces one reusable mechanism with an observable success path, a rejection or failure path, and cleanup evidence.
-Milestones integrate mechanisms already practiced.
+Each lesson teaches one reusable mechanism through success, rejection, and
+cleanup evidence.
+Milestones integrate only mechanisms already practiced.
 
 The exact graph is metadata, not prose:
 
-- `course.toml` defines the route, controlled vocabularies, entry knowledge,
-  tools, stages, and tradecraft tags.
-- Each `curriculum/<serial>-<stable-id>/exercise.toml` defines direct exercise
-  prerequisites, concepts taught, knowledge used, workspace composition, and
-  verification cases.
-- A resource-level host check validates the frozen source and artifact from the
-  first successful case once; every successful case still runs its own guest
-  check.
-- L, M, and C serials are derived from the route and prefix bundle directory
-  names.
-  Stable IDs remain the durable keys for metadata and learner state.
+- `course.toml` owns the route and controlled vocabularies.
+- Each `exercise.toml` owns direct prerequisites, concepts, workspace
+  composition, and verification cases.
+- L, M, and C serials are display names; stable IDs are durable state keys.
 
 ## Prerequisites
 
-Entry knowledge is attached only where first used.
-It is not copied into every lesson.
-`./rootkitlings prereq ID` prints direct exercise dependencies and the specific outside knowledge used by that exercise.
+Entry knowledge is attached where first used, not copied into every lesson.
+`./rootkitlings prereq ID` prints direct exercise dependencies and the specific
+outside knowledge used by that exercise.
 
-Exercise prerequisites contain only direct edges.
-Transitive duplicates are rejected by catalog validation.
-A required concept must be either declared entry knowledge or taught by a prerequisite.
+Prerequisites contain only direct edges; validation rejects transitive
+duplicates.
+Every required concept must be entry knowledge or taught by a prerequisite.
 
 ## Workspace composition
 
@@ -63,9 +58,9 @@ checks/       host, guest, failure, and maintainer checks
 fixtures/     optional independent test inputs
 ```
 
-The engine recursively composes inherited solutions, starter files, and sparse solution changes.
-It rejects undeclared files, empty directories, missing new files, and byte-identical inherited copies.
-This keeps every mechanism's delta small without weakening the complete build.
+The engine composes inherited solutions, starter files, and sparse changes.
+It rejects undeclared, missing, empty, or redundant content so each exercise
+keeps a small, complete delta.
 
 ## Verification
 
@@ -79,13 +74,15 @@ Depending on the mechanism, evidence includes:
 - independent views instead of trusting module-owned status alone;
 - repeated load/unload and cancellation paths for resource ownership.
 
-Text inspection is used only for static contracts that have no useful runtime observation, such as exported metadata or a required build-time diagnostic.
+Text inspection is reserved for static contracts with no runtime observation.
 
 ## Runtime boundary
 
-The course pins Linux 7.2.9 and boots it in a disposable x86-64 QEMU guest.
-The host kernel and host headers are not part of the build contract.
-KVM is an optional accelerator.
-The default guest has no persistent disk, host mount, or network device; a verification case requests only the capability it needs.
+The course pins Linux 7.2.9 in a disposable x86-64 QEMU guest.
+The host kernel and headers are outside the build contract.
+KVM is optional.
+The guest has no persistent disk, host mount, or network unless a check requests
+that capability.
 
-Kernel-version-sensitive API choices and primary references are documented in the README for the lesson that uses them.
+Kernel-version-sensitive API choices and primary references are documented in
+the README for the lesson that uses them.

@@ -1,1 +1,5 @@
-Parse the 32 lowercase hex digits into 16 bytes before locking. Under one mutex, check the gate and token, erase the active value before calling the credential helper, rotate after every matched attempt, and count only success. Clear local copies before returning.
+Parse the 32 lowercase hex digits into 16 bytes before locking.
+Under one mutex, check the gate and token, erase the active value before calling
+the credential helper, rotate after every matched attempt, and count only
+success.
+Clear local copies before returning.

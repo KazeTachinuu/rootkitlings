@@ -1,1 +1,4 @@
-Keep the socket local until connect and both name queries succeed. Under the owner mutex, copy the evidence first and publish the socket pointer last; close in the reverse direction by clearing that pointer before shutdown and unconditional release.
+Keep the socket local until connect and both name queries succeed.
+Under the owner mutex, copy the evidence first and publish the socket pointer
+last; close in the reverse direction by clearing that pointer before shutdown
+and unconditional release.
