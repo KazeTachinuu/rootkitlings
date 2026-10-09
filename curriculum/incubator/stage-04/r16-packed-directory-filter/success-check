@@ -1,0 +1,243 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+# shellcheck disable=SC2015
+. /lib/check.sh
+
+begin "Packed directory filtering"
+
+endpoint=/proc/rootkitlings
+hidden=/proc/rootkitlings_hidden
+registry=/sys/kernel/debug/kprobes/list
+fixtures=/tmp/rootkitlings-dirents
+ordinary=$fixtures/ordinary
+mkdir -p "$fixtures" "$ordinary/rootkitlings_hidden"
+: > "$ordinary/ordinary_marker"
+printf 'enable' > "$fixtures/enable"
+printf 'disable' > "$fixtures/disable"
+printf 'present=1\n' > "$fixtures/present"
+printf 'active=1\nactions=disabled\nvfs_mkdir_seen=0\nfilename_rmdir_seen=0\n' > "$fixtures/status-disabled"
+printf 'directory_filter=active\ndirectory_target=rootkitlings_hidden\n' >> "$fixtures/status-disabled"
+printf 'directory_chunk_capacity=32768\ndirectory_returns_missed=0\nlisted_probe=vfs_mkdir\n' >> "$fixtures/status-disabled"
+printf 'active=1\nactions=enabled\nvfs_mkdir_seen=0\nfilename_rmdir_seen=0\n' > "$fixtures/status-enabled"
+printf 'directory_filter=active\ndirectory_target=rootkitlings_hidden\n' >> "$fixtures/status-enabled"
+printf 'directory_chunk_capacity=32768\ndirectory_returns_missed=0\nlisted_probe=vfs_mkdir\n' >> "$fixtures/status-enabled"
+chmod 0644 "$fixtures"/* 2>/dev/null || true
+
+probe_count()
+{
+	kind=$1
+	target=$2
+	awk -v kind="$kind" -v target="$target" '
+		$2 == kind { split($3, name, "+"); if (name[1] == target) count++ }
+		END { print count + 0 }
+	' "$registry"
+}
+
+assert_registry_delta()
+{
+	delta=$1
+	label=$2
+	if [ "$(probe_count k vfs_mkdir)" -eq $((mkdir_before + delta)) ] &&
+	   [ "$(probe_count k filename_rmdir)" -eq $((rmdir_before + delta)) ] &&
+	   [ "$(probe_count r iterate_dir)" -eq $((iterate_before + delta)) ] &&
+	   [ "$(probe_count k filldir64)" -eq $((filldir_before + delta)) ]; then
+		_ok "$label has exactly the managed probe set"
+	else
+		_fail "$label has an unexpected probe set"
+	fi
+}
+
+assert_status()
+{
+	expected=$1
+	label=$2
+	if cat "$endpoint" > "$fixtures/actual" &&
+	   cmp -s "$fixtures/status-$expected" "$fixtures/actual"; then
+		_ok "$label returns the exact status"
+	else
+		_fail "$label returned unexpected status"
+	fi
+}
+
+assert_unloaded()
+{
+	assert_absent /sys/module/rootkitlings
+	assert_absent "$endpoint"
+	assert_absent "$hidden"
+	assert_registry_delta 0 "unloaded state"
+}
+
+check_loaded()
+{
+	assert_loaded rootkitlings
+	assert_exists "$endpoint"
+	assert_exists "$hidden"
+	[ "$(stat -c '%a:%u:%g' "$endpoint")" = 644:0:0 ] &&
+		_ok "control/status entry is root-owned mode 0644" ||
+		_fail "control/status entry metadata is wrong"
+	[ "$(stat -c '%a:%u:%g' "$hidden")" = 400:0:0 ] &&
+		_ok "controlled entry is root-owned mode 0400" ||
+		_fail "controlled entry metadata is wrong"
+	cmp -s "$fixtures/present" "$hidden" &&
+		_ok "direct read proves the controlled object remains present" ||
+		_fail "direct controlled-object read failed"
+	assert_registry_delta 1 "loaded module"
+	assert_status disabled "fresh load"
+	proc_read_test "$endpoint" "$fixtures/status-disabled" &&
+		_ok "small reads, EOF, seek, and rewind are exact" ||
+		_fail "status read contract changed"
+}
+
+check_filtering()
+{
+	getdents64_test visible /proc 32768 rootkitlings_hidden > "$fixtures/raw" &&
+		_ok "disabled raw getdents64 sees the controlled proc entry" ||
+		_fail "disabled raw getdents64 omitted the controlled entry"
+	getdents64_test visible "$ordinary" 32768 rootkitlings_hidden > "$fixtures/raw" &&
+		_ok "ordinary-directory negative control sees the same name" ||
+		_fail "ordinary-directory negative control failed"
+	proc_write_test write "$endpoint" "$fixtures/enable" > /dev/null ||
+		_fail "could not enable actions"
+	assert_status enabled "enable"
+	getdents64_test hidden /proc 32768 rootkitlings_hidden > "$fixtures/raw" &&
+		_ok "enabled raw getdents64 omits the name from a mixed proc chunk" ||
+		_fail "enabled raw getdents64 exposed the name"
+	cmp -s "$fixtures/present" "$hidden" &&
+		_ok "direct lookup still reads the object while enumeration omits it" ||
+		_fail "enumeration changed direct lookup"
+	getdents64_test visible "$ordinary" 32768 rootkitlings_hidden > "$fixtures/raw" &&
+		_ok "enabled filtering remains scoped away from an ordinary directory" ||
+		_fail "filter escaped the proc-root scope"
+	getdents64_test hidden /proc 65536 rootkitlings_hidden > "$fixtures/raw" &&
+		_fail "oversized getdents64 did not fail open" || true
+	getdents64_test visible /proc 65536 rootkitlings_hidden > "$fixtures/raw" &&
+		_ok "calls above 32 KiB fail open" ||
+		_fail "oversized calls were changed"
+	getdents64_test cookies /proc 32768 rootkitlings_hidden > "$fixtures/raw" &&
+		_ok "retained directory cookies remain seekable" ||
+		_fail "a retained directory cookie is invalid"
+
+	proc_write_test write "$endpoint" "$fixtures/disable" > /dev/null ||
+		_fail "could not disable before all-match test"
+	getdents64_test isolate /proc "$endpoint" rootkitlings_hidden > "$fixtures/raw" &&
+		_ok "an isolated all-target chunk stays positive and makes progress" ||
+		_fail "all-target handling produced false EOF or repeated the record"
+	if getdents64_test fdreuse /proc "$ordinary" 2000 rootkitlings_hidden \
+		> "$fixtures/raw"; then
+		_ok "descriptor-reuse stress kept every returned chunk structurally valid"
+	else
+		reuse_result=$?
+		if [ "$reuse_result" -eq 4 ]; then
+			_ok "descriptor-reuse stress reached the documented unsupported ABA scope"
+		else
+			_fail "descriptor-reuse stress returned malformed data or a tool error"
+		fi
+	fi
+}
+
+enumerate_many()
+{
+	i=0
+	while [ "$i" -lt 40 ]; do
+		getdents64_test either /proc 32768 rootkitlings_hidden > /dev/null || return 1
+		i=$((i + 1))
+	done
+}
+
+toggle_many()
+{
+	i=0
+	while [ "$i" -lt 32 ]; do
+		proc_write_test write "$endpoint" "$fixtures/disable" > /dev/null || return 1
+		proc_write_test write "$endpoint" "$fixtures/enable" > /dev/null || return 1
+		i=$((i + 1))
+	done
+}
+
+check_concurrency()
+{
+	pids=""
+	i=0
+	while [ "$i" -lt 8 ]; do
+		enumerate_many &
+		pids="$pids $!"
+		i=$((i + 1))
+	done
+	toggle_many &
+	pids="$pids $!"
+	ok=1
+	for pid in $pids; do wait "$pid" || ok=0; done
+	[ "$ok" -eq 1 ] && _ok "eight enumerators survive repeated enable/disable" ||
+		_fail "concurrent enumeration or control failed"
+	proc_write_test write "$endpoint" "$fixtures/enable" > /dev/null ||
+		_fail "could not restore enabled actions"
+	if grep -Fqx 'directory_returns_missed=0' "$endpoint"; then
+		_ok "bounded concurrency records no missed Kretprobe instance"
+	else
+		_fail "directory return-probe capacity was exceeded"
+	fi
+}
+
+stress_enumeration()
+{
+	while [ -e "$endpoint" ]; do
+		getdents64_test hidden /proc 32768 rootkitlings_hidden > /dev/null 2>&1 || {
+			[ ! -e "$endpoint" ] || : > "$fixtures/stress-failed"
+			return
+		}
+		: > "$fixtures/stress-ready"
+	done
+}
+
+unload_active()
+{
+	stress_enumeration &
+	stress_pid=$!
+	while [ ! -e "$fixtures/stress-ready" ]; do :; done
+	exec 9</proc
+	if proc_write_test unload "$endpoint" "$fixtures/disable" rootkitlings > /dev/null; then
+		_ok "unload completes with a held control descriptor and active enumeration"
+	else
+		_fail "unload under enumeration failed"
+	fi
+	wait "$stress_pid" || true
+	[ ! -e "$fixtures/stress-failed" ] &&
+		_ok "concurrent enumerator saw only complete results" ||
+		_fail "concurrent enumerator saw a malformed result"
+	[ -r /proc/self/fd/9 ] && _ok "proc-root descriptor opened before unload remains valid" ||
+		_fail "held proc-root descriptor became invalid"
+	exec 9<&-
+}
+
+case $(uname -r) in 7.2.*|7.2-*) _ok "guest runs Linux 7.2.x" ;; *) _fail "wrong kernel" ;; esac
+[ "$(uname -m)" = x86_64 ] && _ok "guest uses native x86-64" || _fail "wrong architecture"
+[ -r "$registry" ] || { _fail "Kprobe registry is unavailable"; summary; }
+mkdir_before=$(probe_count k vfs_mkdir)
+rmdir_before=$(probe_count k filename_rmdir)
+iterate_before=$(probe_count r iterate_dir)
+filldir_before=$(probe_count k filldir64)
+assert_unloaded
+
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	load rootkitlings.ko
+	check_loaded
+	check_filtering
+	check_concurrency
+	unload_active
+	assert_unloaded
+	if getdents64_test visible /proc 32768 rootkitlings_hidden > "$fixtures/raw"; then
+		_fail "post-unload enumeration retained a stale controlled object"
+	else
+		_ok "post-unload enumeration contains no stale controlled object"
+	fi
+	attempt=$((attempt + 1))
+done
+
+if dmesg | grep -Eqi '(BUG:|WARNING:|Oops:|KASAN:|use-after-free|general protection fault)'; then
+	_fail "kernel log contains a fault signature"
+else
+	_ok "kernel log contains no fault signature"
+fi
+
+summary

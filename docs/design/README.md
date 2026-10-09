@@ -13,5 +13,6 @@ The target has an unscored authorization and containment setup gate followed by 
 - `stage-01-implementation.md` defines the setup-gate acceptance contract and tracks the Stage 1 implementation slice.
 - `stage-02-implementation.md` records the validated control, scheduling, resident-thread, and M00 integration slice.
 - `stage-03-architecture.md` fixes the M01 integration, event-ring, publication, and lifecycle contracts.
+- `stage-04-architecture.md` records the rejected module-list lesson and fixes the packed-directory-filter contract.
 
 Until the migration is complete, the repository root README and the generated catalog describe the implemented course.

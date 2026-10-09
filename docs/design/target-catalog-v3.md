@@ -64,7 +64,7 @@ An unused general competency is omitted rather than attached to L00 as a course-
 | L12 | `managed-kprobe` — Manage two named Kprobes | S3 | `bounded-control-switch` | `named-kprobe-resolution`, `kernel-abi-contract`, `kprobes`, `hook-rollback`, `managed-hook-lifecycle` | `resource-ownership`, `proc-publication-lifetime`, `read-once-write-once` | instrumentation, detection, lifecycle | L27, L29, L33 | adapt |
 | L13 | `return-aware-syscall-telemetry` — Correlate an rmdir path with its result | S3 | `managed-kprobe` | `kretprobes`, `syscall-argument-decoding`, `nofault-user-copy`, `return-correlation` | `bounded-user-copy`, `action-control-switch`, `kernel-abi-contract`, `managed-hook-lifecycle` | instrumentation, detection | L30, L32 | adapt |
 | L14 | `cross-view-evidence` — Omit one live probe from a proc view | S4 | `managed-kprobe` | `cross-view-evidence`, `positive-negative-controls` | `proc-read`, `kprobes` | detection, concealment | implicit in L34–L39 | new |
-| L15 | `packed-directory-filter` — Filter packed directory records safely | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `directory-filtering`, `packed-record-validation` | `kernel-allocation`, `syscall-argument-decoding`, `cross-view-evidence` | concealment, detection | L36 | adapt |
+| L15 | `packed-directory-filter` — Filter packed directory records safely | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `packed-record-validation`, `overlap-safe-record-compaction`, `directory-cookie-preservation`, `false-eof-avoidance` | `kretprobes`, `nofault-user-copy`, `kernel-allocation`, `kernel-abi-contract`, `managed-hook-lifecycle`, `cross-view-evidence` | concealment, detection | L36 | adapt |
 | L16 | `bounded-rendered-filter` — Filter a bounded rendered result | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `read-view-filtering`, `bounded-rendered-filter` | `kretprobes`, `cross-view-evidence` | concealment, detection | L37 | adapt |
 | L17 | `hostile-packet-lengths` — Parse hostile packet lengths before touching payload | S5 | — | `packet-length-validation`, `network-byte-order-policy` | `ipv4-packet-basics` | networking, detection | fragments in L41/L42/L44/L46 | new |
 | L18 | `safe-skb-access` — Read an sk_buff without assuming linear storage | S5 | `hostile-packet-lengths` | `skb-safe-access`, `nonlinear-packet-access` | `packet-length-validation` | networking | hidden in current scaffolds | new |
@@ -166,6 +166,9 @@ Add these genuinely new concepts:
 - `cross-view-evidence`
 - `positive-negative-controls`
 - `packed-record-validation`
+- `overlap-safe-record-compaction`
+- `directory-cookie-preservation`
+- `false-eof-avoidance`
 - `bounded-rendered-filter`
 - `packet-length-validation`
 - `network-byte-order-policy`
@@ -236,14 +239,13 @@ The removed `module-view-suppression` checkpoint receives no replacement alias.
 
 No complete target asset set currently exists for the redesigned route.
 
-- Validated incubation assets exist for L00 through L05, but they are not yet the public route or final metadata.
+- Independently validated incubation assets exist for L00 through L14 and for M00 and M01.
+- L15 has an implemented incubation asset awaiting independent audit.
+- These assets are not yet the public route or final metadata.
 
-- L14, L17, and L18 have no adequate standalone current exercise
-  satisfying their contracts.
-- Every milestone and the final capstone require new cumulative checks, hints,
-  and sparse solution overlays on the declared project lineage.
-- M01 needs an explicitly taught or tightly guided spinlocked ring; the existing
-  C04 scaffold cannot silently supply that knowledge.
+- L16 through L30 still require target assets satisfying their contracts.
+- M02, M03, and the final capstone still require cumulative checks, hints, and
+  sparse solution overlays on the declared project lineage.
 - The authenticated DNS signal source lacks the required replay-safe state machine.
 - E02, E04, E05, and E08 substantially exceed their current source exercises.
 - Existing source bundles are inputs for adaptation.

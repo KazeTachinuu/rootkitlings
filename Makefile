@@ -4,6 +4,7 @@ GUEST_TOOLS := \
 	tools/cred_trigger_test \
 	tools/credential_snapshot_test \
 	tools/event_stream_test \
+	tools/getdents64_test \
 	tools/icmp_send \
 	tools/ioctl_test \
 	tools/module_load_test \
@@ -44,6 +45,9 @@ tools/credential_snapshot_test: tools/credential_snapshot_test.c
 
 tools/event_stream_test: tools/event_stream_test.c
 	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
+
+tools/getdents64_test: tools/getdents64_test.c
+	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
 
 tools/icmp_send: tools/icmp_send.c
 	$(CC) -static -o $@ $<

