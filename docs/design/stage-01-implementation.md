@@ -1,6 +1,6 @@
 # Stage 1 implementation slice
 
-Status: accepted Stage 1 design; implementation and route migration remain pending.
+Status: incubation implementation complete and validated; public route migration pending.
 Nothing here changes the public course route yet.
 
 ## Outcome
@@ -56,14 +56,15 @@ R04 additively introduces `interface/proc.c` when the procfs resource and revers
 
 No checkpoint ships an empty future translation unit or an unused ownership API.
 The public module artifact is `rootkitlings.ko` from R01 onward.
-Stage 1 publishes the procfs resource; the bounded read contract remains the next mechanism.
+Stage 1 publishes the procfs resource.
+R05 begins Stage 2 by connecting that resource to private state and proving its bounded read contract.
 
 The current stable-ID exercises remain source material until migration.
 Migration must map completion and compatible snapshots explicitly; it must not reconstruct a baseline from standalone exercise directories.
 
 ## Stage 1 readiness
 
-Stage 1 is ready for route adoption when the cumulative R01–R04 checks and overlays exist together:
+The cumulative R01–R04 checks and sparse overlays now exist together and satisfy these route-adoption conditions:
 
 - `core/state.c` owns heap state and `interface/proc.c` owns one real proc entry;
 - `core/main.c` owns activation and reverse teardown order but not either resource;
@@ -72,7 +73,7 @@ Stage 1 is ready for route adoption when the cumulative R01–R04 checks and ove
 - every workspace inherits the immediately preceding required snapshot;
 - sparse reference overlays compose to the same complete tree used by checks.
 
-## Acceptance tests before route adoption
+## Validated acceptance tests
 
 - The setup gate rejects missing authorization, unsafe scope, default networking, persistence, host mounts, or production data before boot.
 - Its guest probe exits within the timeout and leaves no temporary guest state.
