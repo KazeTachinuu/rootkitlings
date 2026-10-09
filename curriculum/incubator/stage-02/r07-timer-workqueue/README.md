@@ -1,17 +1,19 @@
 # Defer timer work to a worker
 
-The action switch now controls a periodic module action.
-A kernel timer provides the timing, but its callback cannot sleep.
-The timer therefore does only three bounded operations:
+A timer callback cannot sleep.
+A normal workqueue callback runs in worker-thread context, where later actions may use sleep-capable APIs.
+Build this path:
 
-- record one timer firing
-- queue preallocated work
-- rearm the timer
+```text
+timer expiry
+  -> record timer_fires
+  -> schedule_work(&action_work)
+       -> read actions_enabled once
+       -> if enabled, increment worker_runs
+```
 
-The work callback runs on the normal system workqueue.
-It reads the action switch and records one completed action only while the switch is enabled.
-No memory is allocated in either callback.
-For this lesson, the action is the counter increment: it makes worker execution observable without adding another mechanism.
+The counter increment is the complete observable work in this exercise; it does not need to sleep.
+The mechanism being added is the boundary between the timer callback and work that may later need worker-thread context.
 
 The proc record becomes:
 
@@ -19,47 +21,45 @@ The proc record becomes:
 active=1
 actions=disabled
 timer_fires=12
-actions_completed=0
+worker_runs=0
 ```
 
-`timer_fires` keeps increasing while the module is loaded.
-`actions_completed` increases only after `enable` has been written.
-The existing write grammar and error behavior do not change.
-The counters are not required to match: scheduling the same pending work item again may coalesce timer firings instead of building a backlog.
+## Timer and work behavior
 
-## Keep scheduling separate from state
+A kernel timer is one-shot.
+The timer callback makes it periodic by calling `mod_timer()` with the current `jiffies` plus an interval converted by `msecs_to_jiffies()`.
+It performs only three bounded operations: record the firing, call `schedule_work()`, and rearm the timer.
 
-Add `execution/scheduler.c` for the timer and workqueue objects.
-Keep the counters private in `struct rk_state` as `atomic_long_t` values, with narrow read and increment operations in `rootkit.h`.
+The work item is preallocated.
+If that same item is already pending, another `schedule_work()` may be coalesced rather than creating a backlog.
+`timer_fires` and `worker_runs` therefore do not have to match.
 
-The timer and worker can update counters while procfs reads them.
-Atomic operations make each individual counter access complete without introducing a lock or a multi-field invariant.
+The worker reads the action switch once.
+An enabled read admits that run; a disabled read rejects it.
+Writing `disable` prevents later admissions, but it is not a quiescence barrier: a run admitted before the write may finish after the write returns.
+
+## Ownership and shutdown
+
+`execution/scheduler.c` owns one timer and one work item.
+Its state pointer is borrowed from `core/main.c`; the scheduler neither allocates nor frees state.
+Both callback objects are initialized before the timer is armed, so scheduler start has no failure path.
 
 Start the scheduler only after procfs publication succeeds.
-If an earlier initialization step fails, there is no timer or work item to undo.
-
-## Stop every callback before freeing state
-
 Unload in this order:
 
-1. remove the proc entry so no new reads or writes begin
-2. call `timer_shutdown_sync()` so the timer callback has finished and cannot rearm the timer
-3. call `cancel_work_sync()` so queued or running work has finished
+1. remove procfs so no new control operations begin
+2. call `timer_shutdown_sync()` to stop the producer and prevent rearming
+3. call `cancel_work_sync()` to drain the consumer
 4. destroy the state used by both callbacks
 
-`timer_delete_sync()` alone is not enough for a timer that rearms itself.
-`timer_shutdown_sync()` also rejects later attempts to rearm it.
+The borrowed pointer remains valid until both callback sources have stopped.
+`timer_delete_sync()` is insufficient here because this timer rearms itself.
 
 ## Your task
 
-Edit these six files:
-
-- `Kbuild`
-- `include/rootkit.h`
-- `core/main.c`
-- `core/state.c`
-- `interface/proc.c`
-- `execution/scheduler.c`
+- `Kbuild` — link `execution/scheduler.o`
+- `core/main.c` — start after publication and stop before state destruction
+- `execution/scheduler.c` — implement both callbacks and their lifecycle
 
 Run:
 
@@ -67,7 +67,7 @@ Run:
 ./rootkitlings check
 ```
 
-The checker verifies the timer-to-worker path, disabled and enabled behavior, inherited procfs writes, failure rollback, teardown, and two complete load cycles.
+The checker verifies the callback call boundaries, observable timer and worker behavior, inherited failure rollback and procfs writes, two load cycles, and a bounded post-unload clean period.
 
 ## Official Linux v7.2 references
 

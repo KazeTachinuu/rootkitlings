@@ -17,10 +17,14 @@ static int rk_proc_show(struct seq_file *output, void *unused)
 	const struct rk_state *state = output->private;
 	const bool active = rk_state_is_active(state);
 	const bool actions_enabled = rk_state_actions_enabled(state);
+	const long timer_fires = rk_state_timer_fires(state);
+	const long worker_runs = rk_state_worker_runs(state);
 
-	/* TODO: read both counters once and append their exact lines. */
-	seq_printf(output, "active=%u\nactions=%s\n", active ? 1U : 0U,
-		   actions_enabled ? "enabled" : "disabled");
+	seq_printf(output,
+		   "active=%u\nactions=%s\ntimer_fires=%ld\nworker_runs=%ld\n",
+		   active ? 1U : 0U,
+		   actions_enabled ? "enabled" : "disabled", timer_fires,
+		   worker_runs);
 	return 0;
 }
 

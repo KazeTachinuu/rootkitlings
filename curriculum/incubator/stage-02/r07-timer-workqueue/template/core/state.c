@@ -10,7 +10,8 @@
 struct rk_state {
 	bool active;
 	atomic_t actions_enabled;
-	/* TODO: add atomic_long_t counters for timer fires and completed actions. */
+	atomic_long_t timer_fires;
+	atomic_long_t worker_runs;
 };
 
 __must_check struct rk_state *rk_state_create(void)
@@ -26,7 +27,8 @@ __must_check struct rk_state *rk_state_create(void)
 
 	state->active = true;
 	atomic_set(&state->actions_enabled, 0);
-	/* TODO: initialize both counters. */
+	atomic_long_set(&state->timer_fires, 0);
+	atomic_long_set(&state->worker_runs, 0);
 	return state;
 }
 
@@ -45,7 +47,25 @@ void rk_state_set_actions_enabled(struct rk_state *state, bool enabled)
 	atomic_set(&state->actions_enabled, enabled ? 1 : 0);
 }
 
-/* TODO: implement one read and one increment operation for each counter. */
+long rk_state_timer_fires(const struct rk_state *state)
+{
+	return atomic_long_read(&state->timer_fires);
+}
+
+void rk_state_record_timer_fire(struct rk_state *state)
+{
+	atomic_long_inc(&state->timer_fires);
+}
+
+long rk_state_worker_runs(const struct rk_state *state)
+{
+	return atomic_long_read(&state->worker_runs);
+}
+
+void rk_state_record_worker_run(struct rk_state *state)
+{
+	atomic_long_inc(&state->worker_runs);
+}
 
 void rk_state_destroy(struct rk_state *state)
 {

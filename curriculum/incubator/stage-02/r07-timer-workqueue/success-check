@@ -45,16 +45,16 @@ read_status()
 		NR == 1 { if ($0 != "active=1") valid = 0 }
 		NR == 2 { if ($0 != "actions=" expected) valid = 0 }
 		NR == 3 { if ($0 !~ /^timer_fires=[0-9]+$/) valid = 0 }
-		NR == 4 { if ($0 !~ /^actions_completed=[0-9]+$/) valid = 0 }
+		NR == 4 { if ($0 !~ /^worker_runs=[0-9]+$/) valid = 0 }
 		END { exit !(valid && NR == 4) }
 	   ' "$actual"; then
 		status_timer=$(sed -n 's/^timer_fires=//p' "$actual")
-		status_completed=$(sed -n 's/^actions_completed=//p' "$actual")
+		status_worker_runs=$(sed -n 's/^worker_runs=//p' "$actual")
 		_ok "$label returns one complete $expected record"
 		return 0
 	fi
 	status_timer=0
-	status_completed=0
+	status_worker_runs=0
 	_fail "$label: malformed or unexpected proc record"
 	return 1
 }
@@ -70,10 +70,10 @@ expect_errno()
 		_fail "$label did not return errno $errno"
 	fi
 	read_status disabled "$label" > /dev/null || true
-	if [ "$status_completed" -eq 0 ]; then
+	if [ "$status_worker_runs" -eq 0 ]; then
 		_ok "$label preserves disabled action state"
 	else
-		_fail "$label completed an action while disabled"
+		_fail "$label admitted a worker run while disabled"
 	fi
 }
 
@@ -93,10 +93,10 @@ check_loaded()
 		_fail "rootkitlings is absent from /proc/modules"
 	fi
 	read_status disabled "module load" || true
-	if [ "$status_completed" -eq 0 ]; then
-		_ok "actions begin with no completed work"
+	if [ "$status_worker_runs" -eq 0 ]; then
+		_ok "worker starts with no admitted runs"
 	else
-		_fail "actions_completed starts at $status_completed"
+		_fail "worker_runs starts at $status_worker_runs"
 	fi
 }
 
@@ -146,18 +146,18 @@ check_scheduler()
 {
 	read_status disabled "disabled scheduler" || true
 	before_timer=$status_timer
-	before_completed=$status_completed
+	before_worker_runs=$status_worker_runs
 	if status_timer=$(status_field_test advance "$endpoint" timer_fires \
 		"$before_timer" 1000); then
 		_ok "timer fires while actions are disabled"
 	else
 		_fail "timer did not advance while actions were disabled"
 	fi
-	if status_field_test unchanged "$endpoint" actions_completed \
-		"$before_completed" 300 > /dev/null; then
-		_ok "disabled worker does not complete actions"
+	if status_field_test unchanged "$endpoint" worker_runs \
+		"$before_worker_runs" 300 > /dev/null; then
+		_ok "disabled switch rejects worker runs"
 	else
-		_fail "disabled worker changed actions_completed"
+		_fail "disabled switch admitted a worker run"
 	fi
 
 	if proc_write_test write "$endpoint" "$fixtures/enable" > /dev/null; then
@@ -166,12 +166,12 @@ check_scheduler()
 		_fail "enable failed"
 	fi
 	read_status enabled "enable" > /dev/null || true
-	enabled_before=$status_completed
-	if status_completed=$(status_field_test advance "$endpoint" \
-		actions_completed "$enabled_before" 1000); then
-		_ok "normal worker completes enabled actions"
+	enabled_before=$status_worker_runs
+	if status_worker_runs=$(status_field_test advance "$endpoint" \
+		worker_runs "$enabled_before" 1000); then
+		_ok "enabled switch admits a worker run"
 	else
-		_fail "enabled worker did not complete an action"
+		_fail "enabled switch did not admit a worker run"
 	fi
 
 	if proc_write_test write "$endpoint" "$fixtures/disable-lf" > /dev/null; then
@@ -182,18 +182,18 @@ check_scheduler()
 	settled=0
 	settle_attempt=1
 	while [ "$settle_attempt" -le 3 ]; do
-		disabled_completed=$(status_field_test read "$endpoint" actions_completed)
-		if status_field_test unchanged "$endpoint" actions_completed \
-			"$disabled_completed" 300 > /dev/null 2>&1; then
+		disabled_worker_runs=$(status_field_test read "$endpoint" worker_runs)
+		if status_field_test unchanged "$endpoint" worker_runs \
+			"$disabled_worker_runs" 300 > /dev/null 2>&1; then
 			settled=1
 			break
 		fi
 		settle_attempt=$((settle_attempt + 1))
 	done
 	if [ "$settled" -eq 1 ]; then
-		_ok "completed-action count stabilizes while disabled"
+		_ok "worker-run count stabilizes after disable"
 	else
-		_fail "worker keeps completing actions while disabled"
+		_fail "worker keeps admitting runs after disable"
 	fi
 	read_status disabled "disabled scheduler remains active" > /dev/null || true
 	disabled_timer=$status_timer
@@ -247,7 +247,7 @@ check_concurrency()
 			NR == 1 { if ($0 != "active=1") exit 1 }
 			NR == 2 { if ($0 != "actions=disabled" && $0 != "actions=enabled") exit 1 }
 			NR == 3 { if ($0 !~ /^timer_fires=[0-9]+$/) exit 1 }
-			NR == 4 { if ($0 !~ /^actions_completed=[0-9]+$/) exit 1 }
+			NR == 4 { if ($0 !~ /^worker_runs=[0-9]+$/) exit 1 }
 			END { if (NR != 4) exit 1 }
 		' "$actual"; then
 			read_ok=0
@@ -281,6 +281,8 @@ while [ "$attempt" -le 2 ]; do
 	else
 		_fail "attempt $attempt failed the held-descriptor unload check"
 	fi
+	assert_not_loaded
+	sleep 0.3
 	assert_not_loaded
 	attempt=$((attempt + 1))
 done

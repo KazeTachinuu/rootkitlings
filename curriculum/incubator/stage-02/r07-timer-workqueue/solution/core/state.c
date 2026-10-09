@@ -11,7 +11,7 @@ struct rk_state {
 	bool active;
 	atomic_t actions_enabled;
 	atomic_long_t timer_fires;
-	atomic_long_t actions_completed;
+	atomic_long_t worker_runs;
 };
 
 __must_check struct rk_state *rk_state_create(void)
@@ -28,7 +28,7 @@ __must_check struct rk_state *rk_state_create(void)
 	state->active = true;
 	atomic_set(&state->actions_enabled, 0);
 	atomic_long_set(&state->timer_fires, 0);
-	atomic_long_set(&state->actions_completed, 0);
+	atomic_long_set(&state->worker_runs, 0);
 	return state;
 }
 
@@ -57,14 +57,14 @@ void rk_state_record_timer_fire(struct rk_state *state)
 	atomic_long_inc(&state->timer_fires);
 }
 
-long rk_state_actions_completed(const struct rk_state *state)
+long rk_state_worker_runs(const struct rk_state *state)
 {
-	return atomic_long_read(&state->actions_completed);
+	return atomic_long_read(&state->worker_runs);
 }
 
-void rk_state_record_action(struct rk_state *state)
+void rk_state_record_worker_run(struct rk_state *state)
 {
-	atomic_long_inc(&state->actions_completed);
+	atomic_long_inc(&state->worker_runs);
 }
 
 void rk_state_destroy(struct rk_state *state)

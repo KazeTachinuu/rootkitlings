@@ -16,9 +16,16 @@ for path in execution/scheduler.c execution/scheduler.o; do
 done
 
 command -v objdump >/dev/null || die "objdump is required"
+command -v sha256sum >/dev/null || die "sha256sum is required"
+
+for path in include/rootkit.h core/state.c interface/proc.c; do
+	[[ $(sha256sum "$build_dir/$path" | cut -d' ' -f1) == \
+		$(sha256sum "$here/solution/$path" | cut -d' ' -f1) ]] ||
+		die "$path is supplied for this exercise and must not be changed"
+done
 
 for symbol in rk_state_timer_fires rk_state_record_timer_fire \
-	rk_state_actions_completed rk_state_record_action; do
+	rk_state_worker_runs rk_state_record_worker_run; do
 	nm "$build_dir/core/state.o" | grep -Eq "[[:space:]]T[[:space:]]+$symbol$" ||
 		die "core/state.o must define $symbol"
 done
@@ -26,8 +33,8 @@ done
 state_source=$build_dir/core/state.c
 grep -Eq 'atomic_long_t[[:space:]]+timer_fires' "$state_source" ||
 	die "timer_fires must be a private atomic_long_t"
-grep -Eq 'atomic_long_t[[:space:]]+actions_completed' "$state_source" ||
-	die "actions_completed must be a private atomic_long_t"
+grep -Eq 'atomic_long_t[[:space:]]+worker_runs' "$state_source" ||
+	die "worker_runs must be a private atomic_long_t"
 [[ $(grep -Ec 'atomic_long_set[[:space:]]*\(' "$state_source") -ge 2 ]] ||
 	die "initialize both counters with atomic_long_set"
 [[ $(grep -Ec 'atomic_long_read[[:space:]]*\(' "$state_source") -ge 2 ]] ||
@@ -36,7 +43,7 @@ grep -Eq 'atomic_long_t[[:space:]]+actions_completed' "$state_source" ||
 	die "increment each counter through its state operation"
 
 proc_undefined=$(nm -u "$build_dir/interface/proc.o")
-for symbol in rk_state_timer_fires rk_state_actions_completed; do
+for symbol in rk_state_timer_fires rk_state_worker_runs; do
 	grep -Eq "[[:space:]]$symbol$" <<< "$proc_undefined" ||
 		die "interface/proc.o has no $symbol dependency"
 done
@@ -44,7 +51,7 @@ done
 scheduler=$build_dir/execution/scheduler.o
 scheduler_undefined=$(nm -u "$scheduler")
 for symbol in mod_timer timer_shutdown_sync cancel_work_sync queue_work_on system_percpu_wq \
-	rk_state_actions_enabled rk_state_record_action rk_state_record_timer_fire; do
+	rk_state_actions_enabled rk_state_record_worker_run rk_state_record_timer_fire; do
 	grep -Eq "[[:space:]]$symbol$" <<< "$scheduler_undefined" ||
 		die "execution/scheduler.o has no $symbol dependency"
 done
@@ -71,7 +78,7 @@ work_init_line=$(grep -n 'INIT_WORK[[:space:]]*(' "$scheduler_source" | head -n1
 timer_init_line=$(grep -n 'timer_setup[[:space:]]*(' "$scheduler_source" | head -n1 | cut -d: -f1)
 arm_line=$(grep -n 'mod_timer[[:space:]]*(' "$scheduler_source" | tail -n1 | cut -d: -f1)
 [[ -n $state_line && -n $work_init_line && -n $timer_init_line && -n $arm_line && \
-	$state_line -lt $work_init_line && $work_init_line -lt $timer_init_line && \
+	$state_line -lt $arm_line && $work_init_line -lt $arm_line && \
 	$timer_init_line -lt $arm_line ]] ||
 	die "initialize state, work, and timer before arming the timer"
 
@@ -91,18 +98,66 @@ work_disassembly=$(sed -n '/<rk_action_run>:/,/^$/p' <<< "$scheduler_disassembly
 [[ -n $timer_disassembly ]] || die "execution/scheduler.c must define rk_action_timer"
 [[ -n $work_disassembly ]] || die "execution/scheduler.c must define rk_action_run"
 
-for symbol in rk_state_record_timer_fire queue_work_on mod_timer; do
-	grep -Eq "[[:space:]]$symbol([+-]|$)" <<< "$timer_disassembly" ||
-		die "rk_action_timer must call $symbol"
+expected_functions=$'rk_action_run\nrk_action_timer\nrk_scheduler_start\nrk_scheduler_stop'
+actual_functions=$(nm --defined-only "$scheduler" |
+	awk '$2 ~ /^[tT]$/ { print $3 }' | LC_ALL=C sort)
+[[ $actual_functions == "$expected_functions" ]] ||
+	die "execution/scheduler.c must define only the four scaffolded functions"
+
+call_relocations()
+{
+	awk '$2 ~ /^R_[^[:space:]]*(PLT|CALL)/ {
+		symbol = $3
+		sub(/[+-].*$/, "", symbol)
+		print symbol
+	}' <<< "$1"
+}
+
+assert_direct_calls()
+{
+	local function=$1 disassembly=$2 symbol calls count
+	shift 2
+	calls=$(call_relocations "$disassembly")
+	while IFS= read -r symbol; do
+		[[ -n $symbol ]] || continue
+		case " $* " in
+			*" $symbol "*) ;;
+			*)
+				case "$symbol" in
+					__fentry__|__x86_return_thunk) ;;
+					*) die "$function directly calls unexpected symbol: $symbol" ;;
+				esac
+			;;
+		esac
+	done <<< "$calls"
+	for symbol in "$@"; do
+		count=$(awk -v expected="$symbol" '$0 == expected { count++ }
+			END { print count + 0 }' <<< "$calls")
+		[[ $count -eq 1 ]] ||
+			die "$function must directly call $symbol exactly once"
+	done
+	if grep -Eq '[[:space:]](call|jmp)[[:space:]]+\*' <<< "$disassembly"; then
+		die "$function must not call through a function pointer"
+	fi
+}
+
+assert_direct_calls rk_action_timer "$timer_disassembly" \
+	rk_state_record_timer_fire queue_work_on mod_timer
+assert_direct_calls rk_action_run "$work_disassembly" \
+	rk_state_actions_enabled rk_state_record_worker_run
+
+state_disassembly=$(objdump -dr "$build_dir/core/state.o")
+for function in rk_state_record_timer_fire rk_state_actions_enabled \
+	rk_state_record_worker_run; do
+	helper_disassembly=$(sed -n "/<$function>:/,/^$/p" <<< "$state_disassembly")
+	[[ -n $helper_disassembly ]] || die "core/state.c must define $function"
+	assert_direct_calls "$function" "$helper_disassembly"
 done
-for symbol in rk_state_actions_enabled rk_state_record_action; do
-	grep -Eq "[[:space:]]$symbol([+-]|$)" <<< "$work_disassembly" ||
-		die "rk_action_run must call $symbol"
+for function in rk_state_record_timer_fire rk_state_record_worker_run; do
+	helper_disassembly=$(sed -n "/<$function>:/,/^$/p" <<< "$state_disassembly")
+	grep -Eq '[[:space:]]lock[[:space:]]' <<< "$helper_disassembly" ||
+		die "$function must remain one inline atomic increment"
 done
-if grep -Eq '[[:space:]](msleep|usleep_range|schedule_timeout|mutex_lock|down|wait_for_completion|_copy_from_user|copy_from_user)([+-]|$)' \
-	<<< "$timer_disassembly"; then
-	die "rk_action_timer contains an operation that may sleep"
-fi
 
 main_undefined=$(nm -u "$build_dir/core/main.o")
 for symbol in rk_scheduler_start rk_scheduler_stop; do
@@ -124,7 +179,7 @@ destroy_line=$(grep -n 'rk_state_destroy[[:space:]]*(' "$main_source" | tail -n1
 
 header_text=$(tr '\n' ' ' < "$build_dir/include/rootkit.h")
 for declaration in rk_state_timer_fires rk_state_record_timer_fire \
-	rk_state_actions_completed rk_state_record_action rk_scheduler_start rk_scheduler_stop; do
+	rk_state_worker_runs rk_state_record_worker_run rk_scheduler_start rk_scheduler_stop; do
 	grep -Eq "${declaration}[[:space:]]*\(" <<< "$header_text" ||
 		die "rootkit.h must declare $declaration"
 done

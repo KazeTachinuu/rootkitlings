@@ -1,10 +1,9 @@
-Put one timer_list, one work_struct, and one borrowed rk_state pointer in
-execution/scheduler.c. Initialize both callback objects before the first
-mod_timer().
+In rk_action_timer(), call rk_state_record_timer_fire(), schedule_work(), then
+mod_timer() with jiffies + msecs_to_jiffies(RK_ACTION_INTERVAL_MS).
 
-The timer callback should only increment timer_fires, call schedule_work(), and
-rearm itself. The work callback reads actions_enabled once and increments
-actions_completed when it is true.
+In rk_action_run(), read rk_state_actions_enabled() once. If it is true, call
+rk_state_record_worker_run().
 
-On unload, remove procfs first. Then use timer_shutdown_sync() before
-cancel_work_sync(), and destroy state only after both calls return.
+In rk_scheduler_start(), store the borrowed state, initialize action_work and
+action_timer, then arm the timer. In rk_scheduler_stop(), call
+timer_shutdown_sync() before cancel_work_sync(), then clear the borrowed pointer.

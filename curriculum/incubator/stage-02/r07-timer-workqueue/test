@@ -7,6 +7,14 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r07-work.XXXXXX")
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r07-test.XXXXXX")
 trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
 
+for supplied in include/rootkit.h core/state.c interface/proc.c; do
+	[[ $(sha256sum "$HERE/template/$supplied" | cut -d' ' -f1) == \
+		$(sha256sum "$HERE/solution/$supplied" | cut -d' ' -f1) ]] || {
+		printf '[x] supplied template differs from solution: %s\n' "$supplied" >&2
+		exit 1
+	}
+done
+
 cp -a "$HERE/../../stage-01/r03-owned-state/solution/." "$baseline/"
 cp -a "$HERE/../../stage-01/r04-proc-publication/solution/." "$baseline/"
 cp -a "$HERE/../r05-proc-read/solution/." "$baseline/"

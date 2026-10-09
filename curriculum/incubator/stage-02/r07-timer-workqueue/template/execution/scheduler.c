@@ -11,9 +11,15 @@ static struct rk_state *scheduler_state;
 static struct timer_list action_timer;
 static struct work_struct action_work;
 
-/* TODO: implement the work callback. */
+static void rk_action_run(struct work_struct *work)
+{
+	/* TODO: admit a run through the action switch and record it. */
+}
 
-/* TODO: implement the timer callback without any sleeping operation. */
+static void rk_action_timer(struct timer_list *timer)
+{
+	/* TODO: record the firing, queue work, and rearm the timer. */
+}
 
 void rk_scheduler_start(struct rk_state *state)
 {

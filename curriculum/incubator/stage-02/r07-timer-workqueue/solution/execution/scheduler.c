@@ -14,7 +14,7 @@ static struct work_struct action_work;
 static void rk_action_run(struct work_struct *work)
 {
 	if (rk_state_actions_enabled(scheduler_state))
-		rk_state_record_action(scheduler_state);
+		rk_state_record_worker_run(scheduler_state);
 }
 
 static void rk_action_timer(struct timer_list *timer)
