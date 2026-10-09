@@ -1,0 +1,1 @@
+Keep the exact I/O loops separate from lifecycle state. Publish the created socket under the same mutex that protects `stopping`, then let stop set the gate, shut down the published socket, wake other waits, and join. Only the worker releases.

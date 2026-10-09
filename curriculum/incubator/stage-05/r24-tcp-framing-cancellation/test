@@ -1,0 +1,226 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+scratch=$(mktemp -d "$HERE/.r24-test.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
+[[ -d $KDIR ]] || {
+	printf '[x] kernel build directory not found: %s\n' "$KDIR" >&2
+	exit 1
+}
+case $(uname -r) in
+	7.2.*|7.2-*) ;;
+	*) printf '[x] this lesson requires Linux 7.2.x\n' >&2; exit 1 ;;
+esac
+[[ $(uname -m) == x86_64 ]] || {
+	printf '[x] this lesson requires x86_64\n' >&2
+	exit 1
+}
+for option in NET NET_NS INET PROC_FS; do
+	grep -qx "CONFIG_$option=y" "$KDIR/.config" || {
+		printf '[x] this lesson requires CONFIG_%s=y\n' "$option" >&2
+		exit 1
+	}
+done
+grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
+	printf '[x] pinned kernel build is not configured for GCC\n' >&2
+	exit 1
+}
+for command in base64 gcc gzip make nm; do
+	command -v "$command" >/dev/null || {
+		printf '[x] %s is required\n' "$command" >&2
+		exit 1
+	}
+done
+
+for symbol in sock_create_kern kernel_connect kernel_sendmsg kernel_recvmsg \
+		kernel_sock_shutdown sock_release kthread_create_on_node \
+		wake_up_process kthread_stop; do
+	awk -v symbol="$symbol" '$2 == symbol && $4 == "EXPORT_SYMBOL" { found = 1 }
+		 END { exit !found }' "$KDIR/Module.symvers" || {
+		printf '[x] pinned kernel does not export %s\n' "$symbol" >&2
+		exit 1
+	}
+done
+
+for script in test host-check success-check failure-check.in \
+		validation-check.in; do
+	bash -n "$HERE/$script"
+done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
+	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check.in" \
+		"$HERE/validation-check.in"
+fi
+
+mapfile -t changed_files < <(
+	diff -qr "$HERE/template" "$HERE/solution" |
+		sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p'
+)
+(( ${#changed_files[@]} == 1 )) || {
+	printf '[x] expected one learner-edited file, found %d\n' \
+		"${#changed_files[@]}" >&2
+	exit 1
+}
+[[ ${changed_files[0]} == session/tcp_session.c ]] || {
+	printf '[x] learner edit surface is %s\n' "${changed_files[0]}" >&2
+	exit 1
+}
+
+build_tree()
+{
+	local source=$1 destination=$2 point=${3:-0}
+	local log=$destination.log
+	cp -a "$source" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+			ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] %s build failed\n' "${source##*/}" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] %s build has warnings\n' "${source##*/}" >&2
+		exit 1
+	fi
+}
+
+build_tree "$HERE/template" "$scratch/template"
+build_tree "$HERE/solution" "$scratch/solution"
+build_tree "$HERE/solution" "$scratch/worker-failure" 1
+build_tree "$HERE/solution" "$scratch/proc-failure" 2
+"$HERE/host-check" "$scratch/solution" "$scratch/solution/rootkitlings.ko"
+if "$HERE/host-check" "$scratch/template" \
+		"$scratch/template/rootkitlings.ko" > "$scratch/template-host.log" 2>&1; then
+	printf '[x] host checker accepted the unfinished session\n' >&2
+	exit 1
+fi
+
+equivalent=$scratch/equivalent
+cp -a "$HERE/solution" "$equivalent"
+sed -i -e 's/\<offset\>/position/g' -e 's/\<remaining\>/left/g' \
+	-e 's/\<context\>/cookie/g' -e 's/\<received\>/decoded/g' \
+	-e 's/\<error\>/result/g' "$equivalent/session/tcp_session.c"
+make -s -C "$KDIR" M="$equivalent" W=1 modules > "$equivalent.log" 2>&1 || {
+	cat "$equivalent.log" >&2
+	printf '[x] equivalent implementation build failed\n' >&2
+	exit 1
+}
+if grep -q 'warning:' "$equivalent.log"; then
+	cat "$equivalent.log" >&2
+	printf '[x] equivalent implementation warned\n' >&2
+	exit 1
+fi
+"$HERE/host-check" "$equivalent" "$equivalent/rootkitlings.ko"
+
+build_mutant()
+{
+	local name=$1 expression=$2
+	local directory=$scratch/$name
+	cp -a "$HERE/solution" "$directory"
+	sed -i "$expression" "$directory/session/tcp_session.c"
+	make -s -C "$KDIR" M="$directory" W=1 modules > "$directory.log" 2>&1 || {
+		cat "$directory.log" >&2
+		printf '[x] mutant did not build: %s\n' "$name" >&2
+		exit 1
+	}
+	if grep -q 'warning:' "$directory.log"; then
+		cat "$directory.log" >&2
+		printf '[x] mutant warned: %s\n' "$name" >&2
+		exit 1
+	fi
+	cp "$directory/rootkitlings.ko" "$scratch/$name.ko"
+}
+
+build_mutant short-send '0,/offset += result;/s//return 0;/'
+build_mutant short-drain 's/remaining -= chunk;/remaining = 0;/'
+build_mutant late-publish '0,/if (session->stopping)/s//if (false)/'
+build_mutant double-release \
+	'0,/ops->release(socket, context);/s//ops->release(socket, context); ops->release(socket, context);/'
+
+cp "$scratch/template/rootkitlings.ko" "$scratch/template.ko"
+if make -s -C "$KDIR" M="$scratch/solution" W=1 \
+		ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
+	printf '[x] unknown failure point compiled successfully\n' >&2
+	exit 1
+fi
+
+gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
+	-o "$scratch/tcp_session_fixture" \
+	"$HERE/fixtures/host/tcp_session_fixture.c"
+gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
+	-o "$scratch/module_load_params" \
+	"$HERE/fixtures/host/module_load_params.c"
+
+append_loader()
+{
+	local script=$1
+	printf '\n__ROOTKITLINGS_MODULE_LOADER__\n' >> "$script"
+	gzip -c "$scratch/module_load_params" | base64 -w 76 >> "$script"
+}
+
+append_helpers()
+{
+	local script=$1
+	printf '\n__ROOTKITLINGS_TCP_HELPER__\n' >> "$script"
+	gzip -c "$scratch/tcp_session_fixture" | base64 -w 76 >> "$script"
+	append_loader "$script"
+	chmod 0755 "$script"
+}
+
+modules='template.ko short-send.ko short-drain.ko late-publish.ko double-release.ko'
+sed "s#@MODULES@#$modules#" "$HERE/validation-check.in" \
+	> "$scratch/validation-check"
+append_loader "$scratch/validation-check"
+for name in $modules; do
+	marker=${name//[-.]/_}
+	{
+		printf '\n__ROOTKITLINGS_MODULE_%s__\n' "$marker"
+		gzip -c "$scratch/$name" | base64 -w 76
+		printf '\n__ROOTKITLINGS_END_%s__\n' "$marker"
+	} >> "$scratch/validation-check"
+done
+chmod 0755 "$scratch/validation-check"
+
+sed -e 's/@LABEL@/Worker creation failure/g' \
+	-e 's/@EXPECTED_ERRNO@/4/g' -e 's/@NEEDS_LISTENER@/0/g' \
+	"$HERE/failure-check.in" > "$scratch/worker-failure-check"
+append_helpers "$scratch/worker-failure-check"
+sed -e 's/@LABEL@/Proc publication rollback/g' \
+	-e 's/@EXPECTED_ERRNO@/12/g' -e 's/@NEEDS_LISTENER@/1/g' \
+	"$HERE/failure-check.in" > "$scratch/proc-failure-check"
+append_helpers "$scratch/proc-failure-check"
+cp "$HERE/success-check" "$scratch/success-check"
+printf '\n__ROOTKITLINGS_TCP_HELPER__\n' >> "$scratch/success-check"
+gzip -c "$scratch/tcp_session_fixture" | base64 -w 76 >> "$scratch/success-check"
+chmod 0755 "$scratch/success-check"
+
+run_guest()
+{
+	local check=$1 module=$2 label=$3 output
+	shift 3
+	if ! output=$("$HERE/../../../../vm/boot" --check "$check" "$@" \
+			"$module" 2>&1); then
+		printf '%s\n' "$output" >&2
+		printf '[x] disposable guest rejected %s\n' "$label" >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+	grep -Fq '[+] PASSED' <<< "$output" || {
+		printf '[x] guest did not pass %s\n' "$label" >&2
+		exit 1
+	}
+}
+
+run_guest "$scratch/validation-check" "$scratch/solution/rootkitlings.ko" \
+	validation
+run_guest "$scratch/worker-failure-check" \
+	"$scratch/worker-failure/rootkitlings.ko" worker-failure
+run_guest "$scratch/proc-failure-check" \
+	"$scratch/proc-failure/rootkitlings.ko" proc-failure
+run_guest "$scratch/success-check" "$scratch/solution/rootkitlings.ko" \
+	solution --tool tools/proc_read_test
+
+printf '[+] R24 cancellable framed TCP session passed\n'
