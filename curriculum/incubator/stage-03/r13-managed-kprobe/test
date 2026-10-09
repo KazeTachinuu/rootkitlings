@@ -139,15 +139,117 @@ build_variant missing 4
 "$HERE/host-check" "$scratch/success" \
 	"$scratch/success/rootkitlings.ko" "$scratch/missing"
 
+rebuild_host_fixture()
+{
+	local directory=$1 label=$2 log=$scratch/host-$2-build.log
+
+	if ! make -s -C "$KDIR" M="$directory" W=1 \
+		ROOTKITLINGS_FAIL_POINT=0 modules > "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] %s fixture did not build\n' "$label" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] %s fixture builds with warnings\n' "$label" >&2
+		exit 1
+	fi
+}
+
+expect_host_rejection()
+{
+	local directory=$1 label=$2
+
+	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+		"$scratch/missing" > "$scratch/host-$label.log" 2>&1; then
+		printf '[x] host checker accepted %s\n' "$label" >&2
+		exit 1
+	fi
+}
+
 formatted=$scratch/host-formatting
 cp -a "$scratch/success" "$formatted"
 sed -i \
 	-e 's/if (rk_state_actions_enabled(probe_state))/if ( rk_state_actions_enabled ( probe_state ) )/' \
-	-e 's/register_kprobes(probes, ARRAY_SIZE(probes))/register_kprobes ( probes, ARRAY_SIZE ( probes ) )/' \
-	-e 's/unregister_kprobes(probes, ARRAY_SIZE(probes))/unregister_kprobes ( probes, ARRAY_SIZE ( probes ) )/' \
+	"$formatted/instrumentation/probes.c"
+sed -i '/if ( rk_state_actions_enabled ( probe_state ) )/i\	/* Handler arguments are intentionally unused. */\
+\t(void)probe;\
+\t(void)registers;' "$formatted/instrumentation/probes.c"
+awk '
+	/probe_state = state;/ {
+		print "\tprobe_state"
+		print "\t\t= state;"
+		next
+	}
+	/error = register_kprobes\(probes, ARRAY_SIZE\(probes\)\);/ {
+		print "\terror = register_kprobes("
+		print "\t\tprobes,"
+		print "\t\tARRAY_SIZE(probes)"
+		print "\t);"
+		next
+	}
+	/unregister_kprobes\(probes, ARRAY_SIZE\(probes\)\);/ {
+		print "\tunregister_kprobes("
+		print "\t\tprobes,"
+		print "\t\tARRAY_SIZE(probes)"
+		print "\t);"
+		next
+	}
+	{ print }
+' "$formatted/instrumentation/probes.c" \
+	> "$formatted/instrumentation/probes.c.new"
+mv "$formatted/instrumentation/probes.c.new" \
 	"$formatted/instrumentation/probes.c"
 "$HERE/host-check" "$formatted" "$formatted/rootkitlings.ko" \
 	"$scratch/missing" > "$scratch/host-formatting.log"
+
+sleeping_handler=$scratch/host-sleeping-handler
+cp -a "$scratch/success" "$sleeping_handler"
+sed -i '/#include <linux\/errno.h>/a #include <linux/delay.h>' \
+	"$sleeping_handler/instrumentation/probes.c"
+sed -i '/if (rk_state_actions_enabled(probe_state))/i\	usleep_range(10, 20);' \
+	"$sleeping_handler/instrumentation/probes.c"
+rebuild_host_fixture "$sleeping_handler" sleeping-handler
+expect_host_rejection "$sleeping_handler" a-sleeping-probe-handler
+
+nonzero_handler=$scratch/host-nonzero-handler
+cp -a "$scratch/success" "$nonzero_handler"
+sed -i '/if (rk_state_actions_enabled(probe_state))/i\	if (probe != NULL)\
+\t\treturn 1;' "$nonzero_handler/instrumentation/probes.c"
+expect_host_rejection "$nonzero_handler" a-nonzero-handler-return
+
+swapped_handlers=$scratch/host-swapped-handlers
+cp -a "$scratch/success" "$swapped_handlers"
+sed -i \
+	-e 's/\.pre_handler = rk_vfs_mkdir_pre/.pre_handler = rk_swap_placeholder/' \
+	-e 's/\.pre_handler = rk_filename_rmdir_pre/.pre_handler = rk_vfs_mkdir_pre/' \
+	-e 's/\.pre_handler = rk_swap_placeholder/.pre_handler = rk_filename_rmdir_pre/' \
+	"$swapped_handlers/instrumentation/probes.c"
+expect_host_rejection "$swapped_handlers" swapped-probe-handlers
+
+manual_rollback=$scratch/host-manual-rollback
+cp -a "$scratch/success" "$manual_rollback"
+sed -i '/#define RK_MISSING_TARGET/a #define RK_UNREGISTER unregister_kprobes' \
+	"$manual_rollback/instrumentation/probes.c"
+sed -i '/if (error)/c\	if (error) {\
+\t\tRK_UNREGISTER(probes, 1);' \
+	"$manual_rollback/instrumentation/probes.c"
+sed -i '0,/probe_state = NULL;/s//probe_state = NULL;\
+\t}/' "$manual_rollback/instrumentation/probes.c"
+rebuild_host_fixture "$manual_rollback" manual-rollback
+expect_host_rejection "$manual_rollback" manual-batch-rollback
+
+address_alias=$scratch/host-address-alias
+cp -a "$scratch/success" "$address_alias"
+sed -i '/#define RK_MISSING_TARGET/a #define RK_ADDR addr' \
+	"$address_alias/instrumentation/probes.c"
+sed -i '/static struct rk_state \*probe_state;/a static kprobe_opcode_t *saved_address;' \
+	"$address_alias/instrumentation/probes.c"
+sed -i '/error = register_kprobes/a\	if (!error)\
+\t\tWRITE_ONCE(saved_address, mkdir_probe.RK_ADDR);' \
+	"$address_alias/instrumentation/probes.c"
+rebuild_host_fixture "$address_alias" address-alias
+expect_host_rejection "$address_alias" a-copied-probe-address
 
 wrong_target=$scratch/host-wrong-target
 cp -a "$scratch/success" "$wrong_target"

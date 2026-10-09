@@ -239,6 +239,12 @@ exercise_targets()
 		_fail "disable failed"
 	fi
 	assert_status disabled-11 "disable"
+	if proc_write_test write "$endpoint" "$fixtures/disable-lf" > /dev/null; then
+		_ok "disable with newline returns its full byte count"
+	else
+		_fail "disable with newline failed"
+	fi
+	assert_status disabled-11 "disable with newline"
 }
 
 toggle_actions()

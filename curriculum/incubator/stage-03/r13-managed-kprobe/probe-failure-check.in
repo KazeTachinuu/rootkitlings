@@ -35,49 +35,6 @@ assert_registry_baseline()
 	fi
 }
 
-assert_state_allocation_freed()
-{
-	label=$1
-	allocs=$fixtures/state-allocs
-	frees=$fixtures/frees
-	: > "$allocs"
-	: > "$frees"
-	# shellcheck disable=SC2154 # Set by kmem_trace_stop in /lib/check.sh.
-	while IFS= read -r line; do
-		case "$line" in
-			*module_load_tes-*' kmalloc: '*) kind=alloc ;;
-			*module_load_tes-*' kfree: '*) kind=free ;;
-			*) continue ;;
-		esac
-		ptr=
-		bytes_req=
-		for field in $line; do
-			case "$field" in
-				ptr=*)
-					ptr=${field#ptr=}
-					ptr=${ptr#0x}
-					;;
-				bytes_req=*) bytes_req=${field#bytes_req=} ;;
-			esac
-		done
-		[ -n "$ptr" ] || continue
-		case "$kind" in
-			alloc)
-				[ "$bytes_req" = 4 ] && printf '%s\n' "$ptr" >> "$allocs"
-				;;
-			free) printf '%s\n' "$ptr" >> "$frees" ;;
-		esac
-	done < "$_kmem_trace_copy"
-	state_ptr=$(sed -n '1p' "$allocs")
-	if [ "$(wc -l < "$allocs")" -eq 1 ] &&
-	   [ -n "$state_ptr" ] && [ "$state_ptr" != 0000000000000000 ] &&
-	   grep -Fqx "$state_ptr" "$frees"; then
-		_ok "$label"
-	else
-		_fail "$label: the four-byte state allocation was not matched by a free"
-	fi
-}
-
 cleanup()
 {
 	if test -d /sys/module/rootkitlings; then
@@ -104,7 +61,7 @@ while [ "$attempt" -le 2 ]; do
 		_fail "attempt $attempt returned the wrong error"
 	fi
 	kmem_trace_stop
-	assert_state_allocation_freed \
+	assert_one_loader_allocation_freed \
 		"attempt $attempt freed module state after rollback"
 	assert_absent /sys/module/rootkitlings
 	assert_absent "$endpoint"
