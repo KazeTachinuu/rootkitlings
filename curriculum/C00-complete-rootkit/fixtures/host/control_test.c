@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "secure_control.h"
+#include "protocol.h"
 
 void rk_test_crypto_fail(int error);
 void rk_test_clear_reset(void);
@@ -46,6 +47,51 @@ static int all_bytes_are(const u8 *bytes, size_t length, u8 value)
 		if (bytes[index] != value)
 			return 0;
 	return 1;
+}
+
+static void expect_command(const char *text, enum rk_command_kind kind)
+{
+	struct rk_command command;
+
+	memset(&command, 0xa5, sizeof(command));
+	CHECK(rk_command_parse((const unsigned char *)text, strlen(text),
+			       &command) == 0);
+	CHECK(command.kind == kind);
+}
+
+static void test_commands(void)
+{
+	struct rk_command command;
+	struct rk_command before;
+	static const struct {
+		const char *text;
+		enum rk_command_kind kind;
+	} cases[] = {
+		{ "PING", RK_COMMAND_PING },
+		{ "INFO", RK_COMMAND_INFO },
+		{ "STATUS", RK_COMMAND_STATUS },
+		{ "ENABLE", RK_COMMAND_ENABLE },
+		{ "DISABLE", RK_COMMAND_DISABLE },
+		{ "RUN", RK_COMMAND_RUN },
+		{ "QUIT", RK_COMMAND_QUIT },
+	};
+
+	for (size_t index = 0; index < sizeof(cases) / sizeof(cases[0]);
+	     index++)
+		expect_command(cases[index].text, cases[index].kind);
+	expect_command("MARK alpha_7", RK_COMMAND_MARK);
+
+	memset(&command, 0xa5, sizeof(command));
+	before = command;
+	CHECK(rk_command_parse((const unsigned char *)"STATUS ", 7,
+			       &command) == -EINVAL);
+	CHECK(!memcmp(&command, &before, sizeof(command)));
+	CHECK(rk_command_parse((const unsigned char *)"enable", 6,
+			       &command) == -EINVAL);
+	CHECK(!memcmp(&command, &before, sizeof(command)));
+	CHECK(rk_command_parse((const unsigned char *)"RUN now", 7,
+			       &command) == -EINVAL);
+	CHECK(!memcmp(&command, &before, sizeof(command)));
 }
 
 static void expect_open_unchanged(struct rk_secure_channel *channel,
@@ -298,6 +344,7 @@ static void test_validation(void)
 
 int main(void)
 {
+	test_commands();
 	test_channel();
 	test_validation();
 	printf("[+] authenticated control envelope: %lu assertions\n",

@@ -16,7 +16,9 @@ trap 'rm -rf -- "$scratch"' EXIT
 while IFS= read -r source; do
 	relative=${source#"$remote_agent/starter/"}
 	case $relative in
-		include/agent.h|include/framing.h|include/platform.h|network/agent.c)
+		include/agent.h|include/framing.h|include/platform.h|include/protocol.h)
+			continue ;;
+		network/agent.c|network/protocol.c)
 			continue ;;
 	esac
 	cmp -s "$source" "$build/$relative" ||
@@ -38,6 +40,7 @@ gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
 	-fsanitize=address,undefined -fno-omit-frame-pointer \
 	-I"$build/include" "$here/../fixtures/host/control_test.c" \
 	"$here/../fixtures/host/crypto_oracle.c" "$build/security/control.c" \
+	"$build/network/protocol.c" \
 	-lcrypto -o "$scratch/control-test"
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -56,6 +59,18 @@ for symbol in rk_secure_open_request rk_secure_seal_reply; do
 	nm -u "$build/network/agent.o" |
 		awk -v symbol="$symbol" '$2 == symbol { found = 1 } END { exit !found }' ||
 		die "agent does not use $symbol"
+done
+for symbol in rk_state_actions_enabled rk_state_set_actions_enabled \
+		rk_state_worker_runs rk_worker_request; do
+	nm -u "$build/network/agent.o" |
+		awk -v symbol="$symbol" '$2 == symbol { found = 1 }
+			END { exit !found }' ||
+		die "agent does not operate the resident core through $symbol"
+done
+for symbol in rk_agent_enable_commands rk_agent_start; do
+	nm -u "$build/core/main.o" |
+		awk -v symbol="$symbol" '$2 == symbol { found = 1 } END { exit !found }' ||
+		die "module initialization does not call $symbol"
 done
 for object in crypto/aead.o crypto/aead_platform.o crypto/auth_platform.o \
 		message/authenticated.o signal/authenticated_dns.o signal/status.o \

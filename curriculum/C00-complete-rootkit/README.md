@@ -1,7 +1,8 @@
 # Build the complete rootkit
 
-This final project builds one working rootkit from the course's completed
-subsystems:
+The individual mechanisms now work alone.
+This project joins them into one loadable module with one startup, one rollback
+path, and one authenticated control channel:
 
 ```text
 local control ----> authorization ----> credential action
@@ -18,9 +19,19 @@ process-view filtering, a guarded boot request, authenticated remote control,
 and an authenticated status signal.
 Every startup step needs rollback, and unload must release everything.
 
-The remote agent accepts only `PING`, `INFO`, `MARK label`, and `QUIT`.
+The remote agent retains `PING`, `INFO`, `MARK label`, and `QUIT`.
+It also exposes four exact, bounded resident-core commands:
+
+- `STATUS` returns `STATUS enabled worker_runs`;
+- `ENABLE` allows scheduled and requested work;
+- `DISABLE` prevents new work;
+- `RUN` queues one worker request or reports why it could not.
+
 It does not run shell text or arbitrary commands.
 The supplied keys are test fixtures, not a key-provisioning design.
+Credential replacement stays on the local authorized path.
+That path authenticates the requesting task and replaces that task's
+credentials; invoking it from the agent would target the kernel thread instead.
 
 Edit:
 
@@ -29,7 +40,9 @@ Edit:
 - `include/agent.h`
 - `include/framing.h`
 - `include/platform.h`
+- `include/protocol.h`
 - `network/agent.c`
+- `network/protocol.c`
 - `security/control.c`
 
 Implement the four `security/control.c` channel operations and store their state
@@ -37,6 +50,7 @@ in the agent.
 Authenticate requests before parsing and replies before framing.
 Send ready only after all resources exist, and reverse every acquisition on
 failure or unload.
+Keep remote command processing blocked until initialization is complete.
 Compile, but do not reimplement, the supplied AES-GCM and signal components.
 
 Run:
@@ -99,7 +113,8 @@ The checker:
 - uses OpenSSL as an independent AES-GCM oracle;
 - verifies tamper, key, length, replay, exhaustion, failure, and cleanup rules;
 - exercises the loopback agent, reconnect, cancellation, boot rollback, ready
-  signal, and inherited local features on Linux 7.2.9;
+  signal, remote core control, and inherited local features on Linux 7.2.9;
+- verifies failed initialization produces no remote command reply;
 - forces startup failures 1 through 14 and verifies rollback;
 - rejects an unknown failure point at build time.
 

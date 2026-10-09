@@ -37,9 +37,10 @@ fi
 
 mapfile -t solution_files < <(cd "$HERE/../solution" && find . -type f | sort)
 expected=(./Kbuild ./core/main.c ./include/agent.h ./include/framing.h
-	./include/platform.h ./network/agent.c ./security/control.c)
+	./include/platform.h ./include/protocol.h ./network/agent.c
+	./network/protocol.c ./security/control.c)
 [[ ${solution_files[*]} == "${expected[*]}" ]] || {
-	printf '[x] solution is not the seven-file sparse overlay\n' >&2; exit 1;
+	printf '[x] solution is not the nine-file sparse overlay\n' >&2; exit 1;
 }
 while IFS= read -r file; do
 	relative=${file#"$HERE/../starter/"}

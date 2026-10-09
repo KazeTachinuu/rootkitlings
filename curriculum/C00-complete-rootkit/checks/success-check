@@ -8,6 +8,7 @@ root=/etc/modules-load.d
 target=$root/rootkitlings.conf
 sibling=$root/.rootkitlings.conf.rootkitlings
 status=/proc/rootkitlings_agent
+core=/proc/rootkitlings
 work=/tmp/rootkitlings-complete-rootkit
 helper=secure_agent_fixture
 capture=$work/dns-query
@@ -90,6 +91,25 @@ if wait_file "$work/server/tamper_rejected"; then
 else
 	_fail "mutated request was not rejected"
 fi
+wait_file "$work/server/control_complete" ||
+	_fail "authenticated resident-core commands did not complete"
+index=0
+while test "$index" -lt 1000; do
+	actions=$(sed -n 's/^actions=//p' "$core" 2>/dev/null)
+	worker_runs=$(sed -n 's/^worker_runs=//p' "$core" 2>/dev/null)
+	if test "$actions" = disabled && test "${worker_runs:-0}" -ge 1 2>/dev/null
+	then
+		break
+	fi
+	sleep 0.01
+	index=$((index + 1))
+done
+if test "$actions" = disabled && test "${worker_runs:-0}" -ge 1 2>/dev/null
+then
+	_ok "authenticated ENABLE, RUN, and DISABLE operated the resident core"
+else
+	_fail "remote resident-core state is wrong"
+fi
 if wait_file "$work/server/quit_complete"; then
 	_ok "authenticated QUIT closed one session"
 else
@@ -97,7 +117,7 @@ else
 fi
 wait_file "$work/server/blocked_receive" || _fail "final session did not reach blocked receive"
 
-if wait_field connections 4 && wait_field commands 7 &&
+if wait_field connections 4 && wait_field commands 11 &&
 		wait_field protocol_errors 3; then
 	_ok "fixed commands and rejected envelopes updated independent counters"
 else

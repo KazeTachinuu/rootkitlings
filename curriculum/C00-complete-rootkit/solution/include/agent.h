@@ -13,6 +13,7 @@
 #include "secure_control.h"
 
 struct socket;
+struct rk_state;
 struct task_struct;
 
 struct rk_agent {
@@ -25,6 +26,8 @@ struct rk_agent {
 	bool stopping;
 	bool connected;
 	bool shutdown_started;
+	bool commands_ready;
+	struct rk_state *state;
 	unsigned int retry_base_ms;
 	unsigned int retry_max_ms;
 	unsigned int retry_delay_ms;
@@ -58,7 +61,9 @@ struct rk_agent_status {
 __must_check int rk_agent_start(struct rk_agent *agent, u16 peer_port,
 				unsigned int retry_base_ms,
 				unsigned int retry_max_ms, const u8 *key,
-				size_t key_length, u64 session);
+				size_t key_length, u64 session,
+				struct rk_state *state);
+void rk_agent_enable_commands(struct rk_agent *agent);
 void rk_agent_stop(struct rk_agent *agent);
 void rk_agent_snapshot(struct rk_agent *agent, struct rk_agent_status *status);
 

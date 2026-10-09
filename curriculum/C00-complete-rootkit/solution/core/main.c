@@ -95,7 +95,7 @@ static int __init rk_init(void)
 	else
 		error = rk_agent_start(&agent, peer_port, retry_base_ms,
 				       retry_max_ms, control_key,
-				       sizeof(control_key), session_id);
+				       sizeof(control_key), session_id, state);
 	if (error)
 		goto restore_transaction;
 	error = rk_events_publish();
@@ -110,18 +110,21 @@ static int __init rk_init(void)
 	error = rk_proc_publish(state);
 	if (error)
 		goto unpublish_agent_status;
+
+	rk_scheduler_start(state);
 	if (ROOTKITLINGS_FAIL_POINT == 14)
 		error = -EIO;
 	else
 		error = rk_status_signal_send(signal_key, sizeof(signal_key),
 					      session_id, 1, 2, signal_id);
 	if (error)
-		goto unpublish_proc;
+		goto stop_scheduler;
 
-	rk_scheduler_start(state);
+	rk_agent_enable_commands(&agent);
 	return 0;
 
-unpublish_proc:
+stop_scheduler:
+	rk_scheduler_stop();
 	rk_proc_unpublish();
 unpublish_agent_status:
 	rk_agent_status_unpublish();
@@ -152,12 +155,12 @@ destroy_state:
 
 static void __exit rk_exit(void)
 {
+	rk_scheduler_stop();
+	rk_agent_stop(&agent);
 	rk_proc_unpublish();
 	rk_agent_status_unpublish();
 	rk_evidence_unpublish();
 	rk_events_unpublish();
-	rk_scheduler_stop();
-	rk_agent_stop(&agent);
 	(void)rk_transaction_restore(&transaction);
 	rk_transaction_dispose(&transaction);
 	rk_platform_finish();

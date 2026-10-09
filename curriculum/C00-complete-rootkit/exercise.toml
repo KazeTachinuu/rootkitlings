@@ -90,7 +90,9 @@ editable = [
   "include/agent.h",
   "include/framing.h",
   "include/platform.h",
+  "include/protocol.h",
   "network/agent.c",
+  "network/protocol.c",
   "security/control.c",
 ]
 build = "."
