@@ -27,8 +27,8 @@ static struct rk_ipv4_view sentinel(void)
 	return (struct rk_ipv4_view) {
 		.header_length = 101,
 		.packet_length = 202,
-		.transport_offset = 303,
-		.transport_length = 404,
+		.payload_offset = 303,
+		.payload_length = 404,
 		.protocol = 0xa5,
 	};
 }
@@ -36,8 +36,8 @@ static struct rk_ipv4_view sentinel(void)
 static int is_sentinel(const struct rk_ipv4_view *view)
 {
 	return view->header_length == 101 && view->packet_length == 202 &&
-	       view->transport_offset == 303 &&
-	       view->transport_length == 404 && view->protocol == 0xa5;
+	       view->payload_offset == 303 &&
+	       view->payload_length == 404 && view->protocol == 0xa5;
 }
 
 static void write_be16(unsigned char *bytes, unsigned int value)
@@ -83,10 +83,10 @@ static void expect_success(const char *label, const unsigned char *packet,
 	      "wrong header length");
 	check(view.packet_length == packet_length, label,
 	      "wrong packet length");
-	check(view.transport_offset == header_length, label,
-	      "wrong transport offset");
-	check(view.transport_length == packet_length - header_length, label,
-	      "wrong transport length");
+	check(view.payload_offset == header_length, label,
+	      "wrong payload offset");
+	check(view.payload_length == packet_length - header_length, label,
+	      "wrong payload length");
 	check(view.protocol == protocol, label, "wrong protocol");
 }
 
@@ -109,13 +109,16 @@ static void test_examples(unsigned char *packet)
 	fixed_prefix = malloc(20);
 	check(fixed_prefix != NULL, "fixed prefix", "allocation failed");
 	memcpy(fixed_prefix, packet, 20);
+	fixed_prefix[0] = 0x4f;
 	write_be16(fixed_prefix + 2, 0xffff);
-	expect_success("fixed prefix only", fixed_prefix, 0xffff, 20,
+	expect_success("fixed prefix only", fixed_prefix, 0xffff, 60,
 		       0xffff, 6);
 	free(fixed_prefix);
 
 	make_packet(packet, 4, 5, 20, 0x4000, 6);
 	expect_success("do-not-fragment", packet, 20, 20, 20, 6);
+	make_packet(packet, 4, 5, 20, 0x8000, 6);
+	expect_success("Linux IP_CE flag name", packet, 20, 20, 20, 6);
 
 	unaligned = malloc(PACKET_CAPACITY + 1);
 	check(unaligned != NULL, "unaligned", "allocation failed");
@@ -152,12 +155,35 @@ static void test_failures(unsigned char *packet)
 	make_packet(packet, 4, 5, 21, 0, 6);
 	expect_failure("declared packet truncation", packet, 20,
 		       RK_IPV4_PARSE_TRUNCATED);
-	make_packet(packet, 4, 5, 20, 0x8000, 6);
-	expect_failure("reserved flag", packet, 20, RK_IPV4_PARSE_MALFORMED);
 	make_packet(packet, 4, 5, 20, 0x2000, 6);
 	expect_failure("first fragment", packet, 20, RK_IPV4_PARSE_FRAGMENTED);
 	make_packet(packet, 4, 5, 20, 0x0001, 6);
 	expect_failure("later fragment", packet, 20, RK_IPV4_PARSE_FRAGMENTED);
+}
+
+static void test_result_precedence(unsigned char *packet)
+{
+	make_packet(packet, 6, 4, 0, 0x2000, 6);
+	expect_failure("unavailable fixed prefix wins", packet, 19,
+		       RK_IPV4_PARSE_TRUNCATED);
+	expect_failure("version wins after fixed prefix", packet, 20,
+		       RK_IPV4_PARSE_MALFORMED);
+
+	make_packet(packet, 4, 4, 0, 0x2000, 6);
+	expect_failure("IHL format wins", packet, 20,
+		       RK_IPV4_PARSE_MALFORMED);
+
+	make_packet(packet, 4, 15, 20, 0x2000, 6);
+	expect_failure("IHL boundary wins", packet, 20,
+		       RK_IPV4_PARSE_TRUNCATED);
+
+	make_packet(packet, 4, 15, 59, 0x2000, 6);
+	expect_failure("total format before fragment", packet, 60,
+		       RK_IPV4_PARSE_MALFORMED);
+
+	make_packet(packet, 4, 5, 21, 0x2000, 6);
+	expect_failure("total boundary before fragment", packet, 20,
+		       RK_IPV4_PARSE_TRUNCATED);
 }
 
 static void test_first_octet(unsigned char *packet)
@@ -178,7 +204,7 @@ static void test_first_octet(unsigned char *packet)
 		if (expected == RK_IPV4_PARSE_OK) {
 			check(view.header_length == words * 4,
 			      "first octet sweep", "wrong IHL conversion");
-			check(view.transport_length == 60 - words * 4,
+			check(view.payload_length == 60 - words * 4,
 			      "first octet sweep", "wrong payload boundary");
 		} else {
 			check(is_sentinel(&view), "first octet sweep",
@@ -203,8 +229,8 @@ static void test_total_lengths(unsigned char *packet)
 		if (expected == RK_IPV4_PARSE_OK) {
 			check(view.packet_length == total, "total length sweep",
 			      "wrong byte order");
-			check(view.transport_length == total - 20,
-			      "total length sweep", "wrong transport length");
+			check(view.payload_length == total - 20,
+			      "total length sweep", "wrong payload length");
 		} else {
 			check(is_sentinel(&view), "total length sweep",
 			      "failure changed the output view");
@@ -222,9 +248,7 @@ static void test_fragment_field(unsigned char *packet)
 		enum rk_ipv4_parse_result expected;
 
 		write_be16(packet + 6, fragment);
-		if (fragment & 0x8000)
-			expected = RK_IPV4_PARSE_MALFORMED;
-		else if (fragment & 0x3fff)
+		if (fragment & 0x3fff)
 			expected = RK_IPV4_PARSE_FRAGMENTED;
 		else
 			expected = RK_IPV4_PARSE_OK;
@@ -266,6 +290,7 @@ int main(void)
 	check(packet != NULL, "fixture", "allocation failed");
 	test_examples(packet);
 	test_failures(packet);
+	test_result_precedence(packet);
 	test_first_octet(packet);
 	test_total_lengths(packet);
 	test_fragment_field(packet);

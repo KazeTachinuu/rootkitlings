@@ -19,8 +19,8 @@ enum rk_ipv4_parse_result {
 struct rk_ipv4_view {
 	size_t header_length;
 	size_t packet_length;
-	size_t transport_offset;
-	size_t transport_length;
+	size_t payload_offset;
+	size_t payload_length;
 	unsigned char protocol;
 };
 

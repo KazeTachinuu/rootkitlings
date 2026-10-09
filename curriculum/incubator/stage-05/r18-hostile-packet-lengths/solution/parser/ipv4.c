@@ -3,7 +3,6 @@
 
 enum {
 	RK_IPV4_MIN_HEADER = 20,
-	RK_IPV4_RESERVED_FLAG = 0x8000,
 	RK_IPV4_MORE_FRAGMENTS = 0x2000,
 	RK_IPV4_FRAGMENT_OFFSET = 0x1fff,
 };
@@ -43,15 +42,13 @@ rk_parse_ipv4(const unsigned char *packet, size_t available,
 		return RK_IPV4_PARSE_TRUNCATED;
 
 	fragment = rk_read_be16(packet + 6);
-	if (fragment & RK_IPV4_RESERVED_FLAG)
-		return RK_IPV4_PARSE_MALFORMED;
 	if (fragment & (RK_IPV4_MORE_FRAGMENTS | RK_IPV4_FRAGMENT_OFFSET))
 		return RK_IPV4_PARSE_FRAGMENTED;
 
 	parsed.header_length = header_length;
 	parsed.packet_length = packet_length;
-	parsed.transport_offset = header_length;
-	parsed.transport_length = packet_length - header_length;
+	parsed.payload_offset = header_length;
+	parsed.payload_length = packet_length - header_length;
 	parsed.protocol = packet[9];
 	*view = parsed;
 	return RK_IPV4_PARSE_OK;

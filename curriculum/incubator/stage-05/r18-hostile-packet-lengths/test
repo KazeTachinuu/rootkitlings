@@ -113,6 +113,22 @@ sed -i 's/return RK_IPV4_PARSE_FRAGMENTED;/return RK_IPV4_PARSE_OK;/' \
 	"$accepted_fragment/parser/ipv4.c"
 expect_rejection "$accepted_fragment" accepted-fragment
 
+rejected_ip_ce=$scratch/rejected-ip-ce
+cp -a "$scratch/solution" "$rejected_ip_ce"
+sed -i '/fragment = rk_read_be16(packet + 6);/a\
+\tif (fragment \& 0x8000)\
+\t\treturn RK_IPV4_PARSE_MALFORMED;' \
+	"$rejected_ip_ce/parser/ipv4.c"
+expect_rejection "$rejected_ip_ce" rejected-ip-ce
+
+read_past_prefix=$scratch/read-past-prefix
+cp -a "$scratch/solution" "$read_past_prefix"
+sed -i '/fragment = rk_read_be16(packet + 6);/i\
+\tif (packet[header_length - 1] == 0xff)\
+\t\treturn RK_IPV4_PARSE_MALFORMED;' \
+	"$read_past_prefix/parser/ipv4.c"
+expect_rejection "$read_past_prefix" read-past-prefix
+
 early_output=$scratch/early-output
 cp -a "$scratch/solution" "$early_output"
 sed -i '/if (!packet || !view)/a\
