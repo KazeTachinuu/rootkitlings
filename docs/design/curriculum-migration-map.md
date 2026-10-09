@@ -564,16 +564,65 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
   supplied learner-visible decoder, and narrow shell-only boundary checks are
   replaced.
 
-#### R26 - Apply and conditionally roll back a file transaction
+#### R26 - Replace one owned file and restore it conditionally
 
-- Teaches: exact original image, bounded kernel file I/O, foreign-file ownership,
-  compare-before-restore, and the local rule that file I/O runs only from an
-  owned sleep-capable path with no conflicting lock held.
-- Produces: a guarded durable boot-request edit.
+- Stable ID: `guarded-file-transaction`.
+- Teaches: bounded binary file I/O, exclusive sibling staging, file and directory
+  synchronization, atomic name exchange, retained inode identity, and
+  compare-before-rollback.
+- Produces: one narrow replacement transaction for `request.conf` inside a
+  checker-created private tmpfs mounted at `/run/rootkitlings-r26` with
+  `nosuid,nodev,noexec`.
+  It never accepts an arbitrary path and never touches `/etc`, a host share, or a
+  persistent guest filesystem.
 - Requires: R04.
-- Defensive evidence: byte-for-byte restoration, sentinel protection, preservation
-  of newer foreign content, and file-integrity monitoring.
-- Current source: L48.
+- Learner work: one `persistence/transaction.c` owns the bounded read loop,
+  complete write loop, identity/metadata/content match, apply ordering, and
+  conditional restore ordering.
+  Supplied frozen Linux v7.2 integration owns only the low-level path lookup,
+  mount-write, parent-lock, LSM, `vfs_rename(RENAME_EXCHANGE)`, and guarded-unlink
+  calls whose signatures would otherwise obscure the transaction being taught.
+- Admission: the held directory must be the exact private tmpfs root.
+  The existing target must be a root-owned regular file with mode `0600`, one
+  link, length at most 256 bytes, and content different from the intended image.
+  A pre-existing sibling stage, symlink, special file, unexpected owner, mode,
+  link count, size, mount, or path is foreign and remains untouched.
+- Capture and stage: retain the original file/inode, read until real EOF while
+  distinguishing a positive short read from EOF, create the sibling with
+  `O_CREAT|O_EXCL|O_NOFOLLOW`, loop over positive short writes, and fsync the
+  complete candidate.
+  The intended image is the exact 12-byte binary string `rkling_demo\n`.
+- Commit: freshly reopen and revalidate both names against retained inode,
+  metadata, length, and bytes; atomically exchange the two names in the same
+  directory; record that the exchange occurred immediately; fsync the directory;
+  and publish `applied` only after that sync succeeds.
+  No fallible operation may make the original image unreachable.
+- Rollback: restore only while the target still names the retained candidate with
+  exact intended metadata and bytes and the sibling still names the retained
+  original with exact saved metadata and bytes.
+  Exchange them back, fsync the directory, remove only the still-matching retained
+  candidate, then fsync the directory again.
+  If either side was removed, replaced, relinked, chmoded, chowned, or modified,
+  preserve both current names and emit one concise warning rather than overwrite
+  or delete foreign state.
+- Context: apply and restore run only in module init and exit process context.
+  Proc output is a cached transaction record and performs no file I/O.
+  The lesson assumes exclusive ownership while each apply or restore operation is
+  executing; compare-before-exchange is not a multi-writer content CAS.
+- Durability claim: fsync order is part of the real protocol, but the isolated
+  tmpfs guest proves call ordering and errors, not survival across reboot, because
+  Linux v7.2 tmpfs uses `noop_fsync`.
+- Defensive evidence: original lengths 0, 1, and 256 including embedded zero
+  bytes; 257-byte rejection; positive short reads and writes; every acquisition,
+  write, sync, revalidation, exchange, and publication failure; exact inode and
+  byte restoration; reload; and clean logs.
+  Foreign target and sibling byte changes, replacements, metadata changes, and
+  hard links must all suppress rollback without deleting sentinel content.
+- Current sources: L48 and C08.
+  L48's followed pathname, in-place `O_TRUNC`, one-shot reads, proc-time I/O, and
+  reopen-before-restore race are retired.
+  C08's broad `/etc` scope, userspace `mkdir`/`rm`, missing fsyncs, and blind
+  pathname cleanup are retired.
 
 #### M03 - Remote resident agent
 
