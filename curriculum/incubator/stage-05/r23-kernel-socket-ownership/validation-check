@@ -1,0 +1,39 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Kernel socket configuration and connect errors"
+
+fixtures=/tmp/rootkitlings-socket-validation
+tcp_fixture=$fixtures/tcp_fixture
+module_loader=$fixtures/module_load_params
+mkdir -p "$fixtures"
+
+sed -n '/^__ROOTKITLINGS_TCP_FIXTURE__$/,/^__ROOTKITLINGS_MODULE_LOADER__$/p' /check |
+	sed '1d;$d' | busybox base64 -d | busybox gzip -d > "$tcp_fixture"
+sed -n '/^__ROOTKITLINGS_MODULE_LOADER__$/,$p' /check |
+	sed '1d' | busybox base64 -d | busybox gzip -d > "$module_loader"
+chmod 0755 "$tcp_fixture" "$module_loader"
+ifconfig lo 127.0.0.1 up
+
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	if module_load_test /rootkitlings/rootkitlings.ko 22; then
+		_ok "zero-port attempt $attempt returned EINVAL"
+	else
+		_fail "zero-port attempt $attempt returned the wrong error"
+	fi
+	"$tcp_fixture" unused "$fixtures/unused-$attempt"
+	port=$(cat "$fixtures/unused-$attempt")
+	if "$module_loader" /rootkitlings/rootkitlings.ko 111 \
+			"peer_port=$port"; then
+		_ok "refused-connect attempt $attempt returned ECONNREFUSED"
+	else
+		_fail "refused-connect attempt $attempt returned the wrong error"
+	fi
+	assert_absent /sys/module/rootkitlings
+	assert_absent /proc/rootkitlings
+	attempt=$((attempt + 1))
+done
+
+summary

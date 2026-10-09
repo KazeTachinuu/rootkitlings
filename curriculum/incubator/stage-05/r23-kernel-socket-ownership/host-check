@@ -1,0 +1,211 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR MODULE"
+build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
+module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found: $2"
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+for relative in Kbuild core/main.c include/rootkit.h interface/proc.c \
+		network/socket_owner.c network/socket_owner.o; do
+	[[ -f $build_dir/$relative && ! -L $build_dir/$relative ]] ||
+		die "build is missing regular file: $relative"
+done
+[[ -f $module && ! -L $module ]] || die "module must be a regular file"
+
+for relative in Kbuild core/main.c include/rootkit.h interface/proc.c; do
+	cmp -s "$here/solution/$relative" "$build_dir/$relative" ||
+		die "supplied file was changed: $relative"
+done
+
+python3 - "$build_dir/network/socket_owner.c" <<'PY'
+import re
+import sys
+
+path = sys.argv[1]
+source = open(path, encoding="utf-8").read()
+text = re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.S)
+compact = re.sub(r"\s+", "", text)
+
+
+def fail(message):
+    print(f"[x] {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def function(name):
+    match = re.search(r"\b" + re.escape(name) + r"\s*\([^;]*?\)\s*\{", text, re.S)
+    if not match:
+        fail(f"could not find {name}")
+    opening = text.find("{", match.start())
+    depth = 0
+    for index in range(opening, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return re.sub(r"\s+", "", text[match.start():index + 1])
+    fail(f"could not find the end of {name}")
+
+
+for forbidden in (
+    "kernel_sendmsg", "kernel_recvmsg", "sock_sendmsg", "sock_recvmsg",
+    "kernel_bind", "kernel_listen", "kernel_accept", "SOCK_RAW",
+    "MSG_DONTWAIT", "O_NONBLOCK", "nf_register", "register_kprobe",
+    "queue_work", "schedule_work", "kthread", "timer_setup", "msleep",
+):
+    if forbidden in compact:
+        fail(f"socket owner contains forbidden operation: {forbidden}")
+if re.search(r"if\([^)]*kernel_sock_shutdown\(", compact):
+    fail("release must never depend on the shutdown result")
+
+for call, count in (
+    ("sock_create_kern(", 1),
+    ("kernel_connect(", 1),
+    ("kernel_getsockname(", 1),
+    ("kernel_getpeername(", 1),
+    ("kernel_sock_shutdown(", 2),
+    ("sock_release(", 2),
+):
+    if compact.count(call) != count:
+        fail(f"expected {count} {call[:-1]} call(s)")
+
+opened = function("rk_socket_open")
+closed = function("rk_socket_close")
+snapshot = function("rk_socket_snapshot")
+
+for token in (
+    "&init_net", "AF_INET", "SOCK_STREAM", "IPPROTO_TCP",
+    "INADDR_LOOPBACK", ".sin_port", ".sin_family", ".sin_addr.s_addr",
+):
+    if token not in compact:
+        fail(f"configuration or endpoint validation is missing {token}")
+if len(re.findall(r"->net==&init_net", compact)) < 2:
+    fail("configuration must require the initial network namespace")
+if opened.count("-EINVAL") < 2:
+    fail("open must reject null and invalid configuration with EINVAL")
+if "-EBUSY" not in opened:
+    fail("open must reject an already-owned socket with EBUSY")
+if "connect_flags==0" not in compact and "connect_flags!=0" not in compact:
+    fail("configuration must require blocking connect flags")
+if not re.search(r"sin_port(?:!=|==)0", compact):
+    fail("configuration must require a nonzero peer port")
+if "sizeof(" not in opened or opened.count("sizeof(") < 3:
+    fail("open must pass and validate exact sockaddr lengths")
+if opened.count("-EPROTO") != 1:
+    fail("an impossible successful endpoint shape must return EPROTO")
+if "RK_FAIL_AFTER_CREATE" not in opened or "RK_FAIL_AFTER_CAPTURE" not in opened:
+    fail("open is missing a required rollback injection point")
+if opened.count("-ECANCELED") != 2:
+    fail("both injected rollback points must return ECANCELED")
+
+create = opened.find("sock_create_kern(")
+connect = opened.find("kernel_connect(")
+getsock = opened.find("kernel_getsockname(")
+getpeer = opened.find("kernel_getpeername(")
+publish_matches = list(re.finditer(r"(?:WRITE_ONCE\([^;]*->socket,[^;]+\)|[^;]*->socket=[^;]+);", opened))
+publish_matches = [m for m in publish_matches if "NULL" not in m.group(0)]
+if len(publish_matches) != 1:
+    fail("open must publish the owned socket pointer exactly once")
+publish = publish_matches[0].start()
+if not 0 <= create < connect < getsock < getpeer < publish:
+    fail("open must create, connect, capture both endpoints, then publish")
+
+
+def goto_after(pattern, description):
+    match = re.search(pattern, opened)
+    if not match:
+        fail(f"could not follow the {description} cleanup path")
+    label = match.group(1)
+    position = opened.find(label + ":")
+    if position < 0:
+        fail(f"could not find the {description} cleanup label")
+    return opened[position:]
+
+
+create_error = goto_after(
+    r"sock_create_kern\([^;]+\);if\([^)]*\)goto(\w+);",
+    "create-error",
+)
+if "sock_release(" in create_error:
+    fail("create failure must not release a socket it never acquired")
+connect_error = goto_after(
+    r"kernel_connect\([^;]+\);if\([^)]*\)goto(\w+);",
+    "connect-error",
+)
+if "sock_release(" not in connect_error:
+    fail("connect failure must release the created socket")
+after_create = goto_after(
+    r"RK_FAIL_AFTER_CREATE\)\{[^}]*goto(\w+);",
+    "after-create rollback",
+)
+if "sock_release(" not in after_create:
+    fail("the after-create rollback must release the socket")
+after_capture = goto_after(
+    r"RK_FAIL_AFTER_CAPTURE\)\{[^}]*goto(\w+);",
+    "post-connect rollback",
+)
+if ("kernel_sock_shutdown(" not in after_capture or
+        after_capture.find("kernel_sock_shutdown(") > after_capture.find("sock_release(")):
+    fail("post-connect rollback must attempt shutdown before release")
+if not re.search(r"return\w+;}$", opened):
+    fail("open must return the captured API or validation error unchanged")
+for field in (
+    "net", "family", "type", "protocol", "connect_flags", "connect_result",
+    "local_address", "local_port", "peer_address", "peer_port",
+):
+    matches = list(re.finditer(rf"->${field}=".replace("$", ""), opened))
+    if len(matches) != 1 or matches[0].start() > publish:
+        fail(f"open must commit {field} once before publishing ownership")
+if not re.search(r"connect_result=0;", opened):
+    fail("successful connect evidence must record zero")
+for captured in ("sin_addr.s_addr", "sin_port"):
+    if opened.count(captured) < 2:
+        fail(f"open must record both captured endpoint {captured} values")
+if opened.count("mutex_lock(") != 1 or opened.count("mutex_unlock(") < 2:
+    fail("open must serialize ownership with the supplied mutex")
+
+clear = re.search(r"(?:WRITE_ONCE\([^;]*->socket,NULL\)|[^;]*->socket=NULL);", closed)
+shutdown = closed.find("kernel_sock_shutdown(")
+release = closed.find("sock_release(")
+if not clear or not clear.start() < shutdown < release:
+    fail("close must invalidate ownership before shutdown and release")
+if re.search(r"if\([^)]*kernel_sock_shutdown\(", closed):
+    fail("release must not depend on the shutdown result")
+if closed.count("mutex_lock(") != 1 or closed.count("mutex_unlock(") < 2:
+    fail("close must serialize state invalidation and release")
+if not re.search(r"if\((?:!\w+|\w+==NULL)\)return;", closed):
+    fail("close must accept a null owner")
+
+if snapshot.count("mutex_lock(") != 1 or snapshot.count("mutex_unlock(") != 1:
+    fail("snapshot must copy its complete view under the owner mutex")
+for field in (
+    "family", "type", "protocol", "connect_flags", "connect_result",
+    "local_address", "local_port", "peer_address", "peer_port",
+):
+    if not re.search(rf"\w+->{field}=\w+->{field};", snapshot):
+        fail(f"snapshot must copy the owned {field} field")
+if not re.search(r"\w+->owned=\w+->socket!=NULL;", snapshot):
+    fail("snapshot ownership must come from the published socket pointer")
+if not re.search(r"\w+->init_namespace=\w+->net==&init_net;", snapshot):
+    fail("snapshot namespace must come from the owned namespace pointer")
+PY
+
+object=$build_dir/network/socket_owner.o
+for symbol in sock_create_kern kernel_connect kernel_getsockname \
+		kernel_getpeername kernel_sock_shutdown sock_release; do
+	count=$(nm -u "$object" | awk -v symbol="$symbol" '$2 == symbol { count++ } END { print count + 0 }')
+	[[ $count -eq 1 ]] || die "compiled socket owner does not reference $symbol once"
+done
+
+for forbidden in kernel_sendmsg kernel_recvmsg kernel_bind kernel_listen \
+		kernel_accept nf_register_net_hook register_kprobe; do
+	if nm -u "$object" | awk -v symbol="$forbidden" '$2 == symbol { found = 1 } END { exit !found }'; then
+		die "compiled socket owner references forbidden symbol: $forbidden"
+	fi
+done
+
+printf '[+] socket ownership structure and compiled calls verified\n'
