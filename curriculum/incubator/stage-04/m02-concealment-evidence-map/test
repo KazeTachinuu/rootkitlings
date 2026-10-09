@@ -41,14 +41,14 @@ expected=(core/main.c execution/worker.c instrumentation/getdents_probe.c \
 		"${expected[*]}" "${changed[*]}" >&2; exit 1;
 }
 
-for script in test host-check success-check m01-regression-check \
-	failure-check.in action-failure-check.in; do
+for script in test host-check success-check failure-check.in; do
 	bash -n "$HERE/$script"
 done
+bash -n "$M01/success-check" "$M01/action-failure-check.in"
 if command -v shellcheck >/dev/null; then
 	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
-	shellcheck -x -s sh "$HERE/success-check" "$HERE/m01-regression-check" \
-		"$HERE/failure-check.in" "$HERE/action-failure-check.in"
+	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check.in" \
+		"$M01/success-check" "$M01/action-failure-check.in"
 fi
 make -s -C "$ROOT" -B tools/getdents64_test tools/event_stream_test \
 	tools/cred_trigger_test tools/module_load_test tools/status_field_test \
@@ -144,6 +144,32 @@ static pid_t rk_target_number(const struct file *file)\
 rebuild_fixture "$wrong_namespace" wrong-namespace
 reject_fixture "$wrong_namespace" wrong-namespace
 
+numeric_namespace_fallback=$scratch/numeric-namespace-fallback
+cp -a "$scratch/success" "$numeric_namespace_fallback"
+sed -i '/static pid_t rk_target_number/,/^}/c\
+static pid_t rk_target_number(const struct file *file)\
+{\
+\t(void)pid_nr_ns(target_pid, proc_pid_ns(file_inode(file)->i_sb));\
+\treturn pid_nr(target_pid);\
+}' "$numeric_namespace_fallback/instrumentation/getdents_probe.c"
+rebuild_fixture "$numeric_namespace_fallback" numeric-namespace-fallback
+reject_fixture "$numeric_namespace_fallback" numeric-namespace-fallback
+
+numeric_worker_fallback=$scratch/numeric-worker-fallback
+cp -a "$scratch/success" "$numeric_worker_fallback"
+sed -i '/struct pid \*rk_worker_get_tgid/,/^}/c\
+struct pid *rk_worker_get_tgid(void)\
+{\
+\tstruct pid *owned;\
+\tif (!worker_task)\
+\t\treturn NULL;\
+\towned = get_task_pid(worker_task, PIDTYPE_TGID);\
+\tput_pid(owned);\
+\treturn find_get_pid(pid_nr(task_pid(worker_task)));\
+}' "$numeric_worker_fallback/execution/worker.c"
+rebuild_fixture "$numeric_worker_fallback" numeric-worker-fallback
+reject_fixture "$numeric_worker_fallback" numeric-worker-fallback
+
 false_claim=$scratch/false-evidence-claim
 cp -a "$scratch/success" "$false_claim"
 sed -i '/map_role=declared-filter-scope/a\
@@ -216,7 +242,7 @@ done
 for specification in '8 12 Credential preparation' '9 125 Credential cancellation'; do
 	read -r point expected label_rest <<< "$specification"
 	sed -e "s/@LABEL@/$label_rest/g" -e "s/@EXPECTED_ERRNO@/$expected/g" \
-		"$HERE/action-failure-check.in" > "$scratch/action-$point"
+		"$M01/action-failure-check.in" > "$scratch/action-$point"
 	chmod 0755 "$scratch/action-$point"
 	run_guest "$scratch/action-$point" \
 		"$scratch/failure-$point/rootkitlings.ko" \
@@ -226,7 +252,7 @@ done
 run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
 	--tool tools/getdents64_test --tool tools/status_field_test \
 	--tool tools/proc_write_test --tool tools/proc_read_test
-run_guest "$HERE/m01-regression-check" "$scratch/success/rootkitlings.ko" \
+run_guest "$M01/success-check" "$scratch/success/rootkitlings.ko" \
 	--tool tools/event_stream_test --tool tools/status_field_test \
 	--tool tools/proc_write_test --tool tools/proc_read_test \
 	--tool tools/cred_trigger_test --tool tools/rmdir_telemetry_test

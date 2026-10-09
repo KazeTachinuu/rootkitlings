@@ -248,6 +248,14 @@ while test "$attempt" -le 2; do
 
 	proc_write_test write "$control" "$fixtures/enable" > /dev/null ||
 		_fail "could not enable actions"
+	if /bin/busybox unshare -pf --mount-proc sh -c \
+		"grep -Fxq 'target_pid=0' /proc/rootkitlings_evidence && \
+		 getdents64_test visible /proc 32768 1 >/dev/null";
+	then
+		_ok "an invisible worker leaves a child PID namespace unchanged"
+	else
+		_fail "process filtering crossed into a child PID namespace"
+	fi
 	assert_named_views "$pid" hidden "enabled state"
 	assert_worker_direct_views "$pid" "enabled state"
 	if getdents64_test fdreuse /proc "$ordinary" 2000 "$pid" > /dev/null;

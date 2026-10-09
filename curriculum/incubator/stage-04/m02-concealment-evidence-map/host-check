@@ -146,6 +146,9 @@ grep -Eq 'get_task_pid\(worker_task,PIDTYPE_TGID\)' <<< "$worker" ||
 	die "worker must return an owned TGID identity"
 grep -Eq 'if\(!worker_task\)returnNULL;' <<< "$worker" ||
 	die "worker identity lookup must reject an absent worker"
+if grep -Eq 'find_get_pid\(|pid_nr\(|pid_vnr\(' <<< "$worker"; then
+	die "worker identity must not make a numeric PID round trip"
+fi
 
 integration=$(strip_comments < \
 	"$workspace/instrumentation/getdents_probe.c" | tr -d '[:space:]')
@@ -166,6 +169,9 @@ grep -Eq 'structrk_getdents_instance\{[^}]*chartarget\[RK_PID_TEXT_CAPACITY\][^}
 	<<< "$integration" || die "formatted target must belong to one return instance"
 if grep -Eq 'staticchar[^;]*(target|pid)' <<< "$integration"; then
 	die "do not keep a global formatted PID"
+fi
+if grep -Eq 'find_get_pid\(|pid_nr\(|pid_vnr\(' <<< "$integration"; then
+	die "translate the owned PID directly through the proc mount namespace"
 fi
 [[ $(grep -Eo 'rk_filter_dirents64\(' <<< "$integration" | wc -l) -eq 1 ]] ||
 	die "bind exactly one canonical packed-record filter"
