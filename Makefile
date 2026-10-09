@@ -5,7 +5,8 @@ GUEST_TOOLS := \
 	tools/icmp_send \
 	tools/ioctl_test \
 	tools/module_load_test \
-	tools/proc_read_test
+	tools/proc_read_test \
+	tools/proc_write_test
 
 .PHONY: all help module clean compile-db test-solutions doctor validate validate-quick tools
 
@@ -44,6 +45,9 @@ tools/module_load_test: tools/module_load_test.c
 
 tools/proc_read_test: tools/proc_read_test.c
 	$(CC) -static -o $@ $<
+
+tools/proc_write_test: tools/proc_write_test.c
+	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
 
 clean:
 	$(RM) $(GUEST_TOOLS)
