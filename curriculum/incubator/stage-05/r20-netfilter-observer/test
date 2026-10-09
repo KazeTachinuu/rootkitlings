@@ -194,6 +194,12 @@ sed -i 's/return -EBUSY;/return -EINVAL;/' \
 	"$wrong_repeat_error/instrumentation/netfilter_observer.c"
 expect_rejection "$wrong_repeat_error" wrong-repeat-error
 
+collapsed_register_error=$scratch/collapsed-register-error
+cp -a "$scratch/solution" "$collapsed_register_error"
+sed -i '0,/return error;/s//return -EIO;/' \
+	"$collapsed_register_error/instrumentation/netfilter_observer.c"
+expect_rejection "$collapsed_register_error" collapsed-registration-error
+
 early_publish=$scratch/early-publish
 cp -a "$scratch/solution" "$early_publish"
 sed -i '/error = nf_register_net_hook(observer->net, \&observer->ops);/i\
