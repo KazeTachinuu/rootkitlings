@@ -109,11 +109,13 @@ On the pinned x86 kernel with indirect-branch tracking, Kprobes moves its probe 
 The return probe admits only the native `getdents64()` callback with that exact actor, an enabled procfs root file, and an initial buffer count no larger than 32 KiB.
 
 The integration depends on the private Linux v7.2 `getdents_callback64` layout.
-That pinned layout is declared in the supplied file and checked through the callback actor identity; it is not a stable module API.
+The supplied file checks every field offset and the total size at compile time, then admits the private cast only when the callback actor is the pinned native `filldir64()` function.
+This is not a stable module API.
 The title's safety claim applies to the pinned contract and complete record validation, not arbitrary kernel versions.
 
 The entry handler allocates the exact bounded size with `GFP_ATOMIC` and stores the initial userspace pointer, capacity, and callback in one Kretprobe instance.
-The return handler copies the produced prefix with nofault helpers, calls your pure filter, and copies back only a changed prefix.
+The return handler copies the produced prefix with nofault helpers and checks that the remaining count, produced length, final-record length, and final-record boundary agree before calling your pure filter.
+It copies back only a changed prefix.
 It then adjusts `current_dir`, `prev_reclen`, and the remaining count so `getdents64()` itself writes the final cookie and computes the shorter return value.
 If copy-back fails, it clears `prev_reclen` and forces `-EFAULT`, preventing the outer syscall from replacing that error with a positive count.
 This rewrite is not transactional: another userspace thread can change, unmap, or protect the buffer between the syscall and return handler.

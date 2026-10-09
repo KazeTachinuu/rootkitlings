@@ -24,6 +24,8 @@ The supplied integration registers a managed identity Kprobe for local `filldir6
 The return-probe entry sees the actual file used by enumeration and accepts only an enabled procfs root call whose callback actor equals the resolved native `filldir64()` address and whose initial count is at most 32 KiB.
 On the pinned IBT-enabled x86 kernel, the identity helper reverses the architecture's four-byte function-entry Kprobe adjustment before comparing the actor.
 This removes numeric-descriptor close/reuse races while explicitly depending on the private Linux v7.2 `getdents_callback64` layout.
+Compile-time field-offset and size checks guard that pinned layout, and exact callback-actor identity confines the private cast to native `getdents64()` calls.
+Before mutation, the return handler also requires the remaining count and final-record boundary to agree with the produced byte range.
 After changed copy-back, it adjusts `current_dir`, `prev_reclen`, and `ctx.count`; the outer syscall then writes the final cookie and calculates the shortened result.
 Copy-back failure clears `prev_reclen` and forces `-EFAULT` so the outer syscall cannot replace the error with a positive count.
 The buffer copy-back remains nontransactional with concurrent userspace mapping changes.
@@ -43,7 +45,7 @@ directory_returns_missed=0
 
 Acquisition order is state, the inherited two-Kprobe set, the `filldir64` identity Kprobe, the `iterate_dir` return probe, the hidden proc entry, then public control/status.
 Release and every rollback path use the exact reverse order.
-Separate failures cover the missing getdents64 target, hidden publication, and public publication after all earlier resources exist.
+Separate failures cover the missing `iterate_dir` target, hidden publication, and public publication after all earlier resources exist.
 
 Host verification compiles the exact learner helper with address and undefined-behavior sanitizers.
 Its corpus covers valid, invalid, unaligned, overlapping, guarded, all-match, randomized, exact-name, and cookie-chain cases.

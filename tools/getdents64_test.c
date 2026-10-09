@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdatomic.h>
@@ -33,9 +34,14 @@ static void *reuse_descriptors(void *argument)
 	struct reuse_context *context = argument;
 
 	while (!atomic_load_explicit(&context->stop, memory_order_relaxed)) {
-		if (dup2(context->ordinary_source, context->target) < 0 ||
+		if (lseek(context->ordinary_source, 0, SEEK_SET) < 0 ||
+		    dup2(context->ordinary_source, context->target) < 0)
+			return (void *)1;
+		sched_yield();
+		if (lseek(context->proc_source, 0, SEEK_SET) < 0 ||
 		    dup2(context->proc_source, context->target) < 0)
 			return (void *)1;
+		sched_yield();
 	}
 	return NULL;
 }
@@ -48,6 +54,7 @@ static int fd_reuse_stress(const char *proc_path, const char *ordinary_path,
 	pthread_t thread;
 	void *thread_result;
 	unsigned long iteration;
+	unsigned long ordinary_chunks = 0;
 	int result = 0;
 
 	context.proc_source = open(proc_path, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
@@ -93,16 +100,21 @@ static int fd_reuse_stress(const char *proc_path, const char *ordinary_path,
 			result = result != 0 ? result : 4;
 			break;
 		}
+		if (ordinary_marker)
+			ordinary_chunks++;
 	}
 	atomic_store_explicit(&context.stop, true, memory_order_relaxed);
 	pthread_join(thread, &thread_result);
 	if (thread_result)
 		result = 5;
+	if (result == 0 && ordinary_chunks == 0)
+		result = 6;
 	close(context.target);
 	close(context.ordinary_source);
 	close(context.proc_source);
 	if (result == 0)
-		printf("fd_reuse_iterations=%lu\n", iterations);
+		printf("fd_reuse_iterations=%lu ordinary_chunks=%lu\n",
+		       iterations, ordinary_chunks);
 	return result;
 }
 

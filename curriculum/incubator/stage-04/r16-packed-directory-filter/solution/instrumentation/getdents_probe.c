@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/types.h>
+#include <linux/build_bug.h>
 #include <linux/dirent.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
@@ -24,6 +25,14 @@ struct rk_getdents_callback64 {
 	int prev_reclen;
 	int error;
 };
+
+/* Pinned Linux v7.2 x86-64 ABI; fail the build instead of guessing. */
+static_assert(sizeof(struct dir_context) == 24);
+static_assert(offsetof(struct rk_getdents_callback64, ctx) == 0);
+static_assert(offsetof(struct rk_getdents_callback64, current_dir) == 24);
+static_assert(offsetof(struct rk_getdents_callback64, prev_reclen) == 32);
+static_assert(offsetof(struct rk_getdents_callback64, error) == 36);
+static_assert(sizeof(struct rk_getdents_callback64) == 40);
 
 struct rk_getdents_instance {
 	struct rk_getdents_callback64 *callback;
@@ -117,6 +126,29 @@ static unsigned short rk_last_record_length(const void *buffer, size_t length)
 	return record_length;
 }
 
+static bool rk_result_is_consistent(const struct rk_getdents_callback64 *callback,
+				    const void *buffer, size_t capacity,
+				    size_t produced)
+{
+	const unsigned char *bytes = buffer;
+	unsigned short record_length;
+	size_t previous_length;
+
+	if (callback->ctx.count < 0 ||
+	    (size_t)callback->ctx.count != capacity - produced ||
+	    callback->prev_reclen <= 0)
+		return false;
+	previous_length = (size_t)callback->prev_reclen;
+	if (previous_length > produced ||
+	    previous_length < offsetof(struct linux_dirent64, d_name) + 1)
+		return false;
+	memcpy(&record_length,
+	       bytes + produced - previous_length +
+	       offsetof(struct linux_dirent64, d_reclen),
+	       sizeof(record_length));
+	return record_length == previous_length;
+}
+
 static int rk_iterate_return(struct kretprobe_instance *instance,
 			     struct pt_regs *registers)
 {
@@ -137,6 +169,9 @@ static int rk_iterate_return(struct kretprobe_instance *instance,
 		goto out;
 	if (copy_from_user_nofault(observation->scratch, observation->entries,
 				   produced))
+		goto out;
+	if (!rk_result_is_consistent(callback, observation->scratch,
+				     observation->capacity, produced))
 		goto out;
 	filter_result = rk_filter_dirents64(observation->scratch, produced,
 					    RK_DIRECTORY_TARGET,

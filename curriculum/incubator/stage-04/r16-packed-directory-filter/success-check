@@ -122,17 +122,10 @@ check_filtering()
 	getdents64_test isolate /proc "$endpoint" rootkitlings_hidden > "$fixtures/raw" &&
 		_ok "an isolated all-target chunk stays positive and makes progress" ||
 		_fail "all-target handling produced false EOF or repeated the record"
-	if getdents64_test fdreuse /proc "$ordinary" 2000 rootkitlings_hidden \
-		> "$fixtures/raw"; then
-		_ok "descriptor-reuse stress kept every returned chunk structurally valid"
-	else
-		reuse_result=$?
-		if [ "$reuse_result" -eq 4 ]; then
-			_ok "descriptor-reuse stress reached the documented unsupported ABA scope"
-		else
-			_fail "descriptor-reuse stress returned malformed data or a tool error"
-		fi
-	fi
+	getdents64_test fdreuse /proc "$ordinary" 2000 rootkitlings_hidden \
+		> "$fixtures/raw" &&
+		_ok "descriptor reuse cannot apply proc filtering to an ordinary directory" ||
+		_fail "descriptor reuse corrupted, filtered, or failed to exercise an ordinary result"
 }
 
 enumerate_many()
