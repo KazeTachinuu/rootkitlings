@@ -62,7 +62,7 @@ An unused general competency is omitted rather than attached to L00 as a course-
 | L10 | `transactional-credential-replacement` — Replace credentials transactionally | S3 | `bounded-control-switch`, `linux-credential-model` | `credential-replacement` | `kernel-allocation`, `copy-validate-commit`, `task-credentials`, `namespaced-capabilities` | privilege | L26 | adapt |
 | L11 | `one-use-authorization` — Authorize one credential change with a fresh token | S3 | `transactional-credential-replacement` | `kernel-randomness`, `one-use-authorization`, `authorization-vs-authentication`, `replay-rejection`, `mutexes`, `mutex-protected-invariants`, `bounded-typed-parsing`, `sensitive-state-zeroization` | `credential-replacement`, `action-control-switch`, `resource-ownership` | privilege, control, cryptography | L28, C03 state machine | adapt |
 | L12 | `managed-kprobe` — Manage named entry probes under a pinned ABI | S3 | `bounded-control-switch` | `named-kprobe-resolution`, `kernel-abi-contract`, `kprobes`, `hook-rollback`, `managed-hook-lifecycle` | `resource-ownership`, `proc-publication-lifetime`, `read-once-write-once` | instrumentation, detection, lifecycle | L27, L29, L33 | adapt |
-| L13 | `return-aware-syscall-telemetry` — Correlate function return and decode syscall arguments | S3 | `bounded-control-switch`, `managed-kprobe` | `kretprobes`, `syscall-argument-decoding`, `return-correlation` | `bounded-user-copy`, `action-control-switch`, `managed-hook-lifecycle` | instrumentation, detection | L30, L32 | adapt |
+| L13 | `return-aware-syscall-telemetry` — Correlate an rmdir path with its result | S3 | `managed-kprobe` | `kretprobes`, `syscall-argument-decoding`, `nofault-user-copy`, `return-correlation` | `bounded-user-copy`, `action-control-switch`, `kernel-abi-contract`, `managed-hook-lifecycle` | instrumentation, detection | L30, L32 | adapt |
 | L14 | `cross-view-evidence` — Distinguish an object from a rendered view | S4 | `proc-read-contract`, `managed-kprobe` | `cross-view-evidence`, `positive-negative-controls` | `proc-read`, `kprobes` | detection, concealment | implicit in L34–L39 | new |
 | L15 | `module-view-suppression` — Alter one module view without claiming invisibility | S4 | `cross-view-evidence` | `kernel-lists`, `module-list-hiding`, `sysfs-artifacts`, `reversible-view-suppression` | `cross-view-evidence` | concealment, detection | L34, L35 | adapt |
 | L16 | `packed-directory-filter` — Filter packed directory records safely | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `directory-filtering`, `packed-record-validation` | `kernel-allocation`, `syscall-argument-decoding`, `cross-view-evidence` | concealment, detection | L36 | adapt |
@@ -162,6 +162,7 @@ Add these genuinely new concepts:
 - `sensitive-state-zeroization`
 - `kernel-abi-contract`
 - `managed-hook-lifecycle`
+- `nofault-user-copy`
 - `return-correlation`
 - `cross-view-evidence`
 - `positive-negative-controls`

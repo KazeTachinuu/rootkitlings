@@ -338,14 +338,16 @@ R06-R08 are separate practice workspaces, so the learner applies their mechanism
 - Current sources: L27 contributes the export-versus-internal distinction only;
   L29 and L33 contribute the real named-probe and hook-set lifecycle.
 
-#### R14 - Correlate function return and decode syscall arguments
+#### R14 - Correlate an rmdir path with its result
 
 - Teaches: kretprobe entry/return state, `maxactive` and missed instances, syscall
-  wrapper registers, no-fault bounded copying, and architecture limitations.
-- Produces: attributable syscall telemetry.
-- Requires: R06 and R13.
-- Defensive evidence: success/failure return classes, exact matching argument,
-  ordinary calls unchanged, and missed-instance reporting.
+  wrapper registers, `nofault-user-copy`, exact bounded path matching, and
+  architecture limitations.
+- Produces: success/failure telemetry for one exact `rmdir()` path.
+- Requires: R13.
+- Defensive evidence: per-invocation return correlation under concurrency, exact
+  and near-match paths, hostile userspace pointers, ordinary calls unchanged,
+  missed-instance reporting, missing-target rollback, and probe-registry cleanup.
 - Current sources: L30 and L32.
 
 #### M01 - Authorized actions and telemetry
