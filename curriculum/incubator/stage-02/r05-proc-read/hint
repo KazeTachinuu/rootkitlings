@@ -1,0 +1,7 @@
+Keep struct rk_state private. Let core/state.c answer the one question the
+interface needs: whether the state is active.
+
+Pass the state pointer to proc_create_single_data(). In the show function,
+store output->private in one local state pointer, store the accessor result in
+one local bool, and print that value with seq_printf(). seq_file already
+implements the read behavior.
