@@ -628,6 +628,41 @@ class DerivedBaselineTests(unittest.TestCase):
             with self.assertRaisesRegex(CatalogError, "stray or empty"):
                 catalog.validate_workspace_lineage(consumer)
 
+    def test_solution_composes_supplied_additions_before_sparse_overlay(self) -> None:
+        provider = _exercise("provider", "template")
+        consumer = _exercise(
+            "consumer",
+            "previous-required",
+            files=("Kbuild", "main.c", "supplied.c"),
+            additions="additions",
+        )
+        provider = Exercise(**{
+            **provider.__dict__,
+            "resources": Resources("README", "check", "", "hint", "provider"),
+        })
+        consumer = Exercise(**{
+            **consumer.__dict__,
+            "resources": Resources("README", "check", "", "hint", "consumer"),
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("provider", "consumer", "additions"):
+                (root / name).mkdir()
+            (root / "provider/Kbuild").write_text("base build\n")
+            (root / "provider/main.c").write_text("base main\n")
+            (root / "additions/supplied.c").write_text("supplied\n")
+            (root / "consumer/main.c").write_text("completed main\n")
+
+            catalog = self.catalog((provider, consumer))
+            catalog.root = root
+            tree = catalog.solution_tree(consumer)
+            self.assertEqual(tree["supplied.c"].data, b"supplied\n")
+            self.assertEqual(tree["main.c"].data, b"completed main\n")
+
+            (root / "consumer/supplied.c").write_text("supplied\n")
+            with self.assertRaisesRegex(WorkspaceError, "byte-identical"):
+                catalog.solution_tree(consumer)
+
     def test_additive_inheritance_rejects_missing_additions_directory(self) -> None:
         provider = _exercise("provider", "template")
         consumer = _exercise(

@@ -904,10 +904,20 @@ class Catalog:
             # use it.
             result = full_solution_tree(solution, item.workspace.files)
         else:
+            provider_tree = self.solution_tree(provider, cache)
+            provider_files = provider.workspace.files
+            if item.workspace.additions:
+                provider_tree = overlay_solution_tree(
+                    provider_tree,
+                    self.root / item.workspace.additions,
+                    provider_files,
+                    item.workspace.files,
+                )
+                provider_files = item.workspace.files
             result = overlay_solution_tree(
-                self.solution_tree(provider, cache),
+                provider_tree,
                 solution,
-                provider.workspace.files,
+                provider_files,
                 item.workspace.files,
             )
         cache[item.id] = result
