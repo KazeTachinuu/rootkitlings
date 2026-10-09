@@ -302,7 +302,8 @@ R06-R08 are separate practice workspaces, so the learner applies their mechanism
   versus authentication, exact byte-oriented hex parsing, consume-before-action,
   rotation after either action outcome, replay rejection, explicit-zeroing limits,
   and one mutex protecting the complete multi-field transition.
-- Produces: a one-use bearer authorization protecting R11. The status endpoint is
+- Produces: a one-use bearer authorization protecting R11.
+  The status endpoint is
   root-readable and writable by the selected unprivileged caller; this controls
   token acquisition through that path but does not authenticate whoever presents
   a copied token.
