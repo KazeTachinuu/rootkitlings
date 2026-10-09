@@ -123,6 +123,8 @@ stop_text=$(extract_function "$authorization_source" rk_authorization_stop) ||
 	die "could not inspect rk_authorization_stop"
 rotate_text=$(extract_function "$authorization_source" rk_rotate_token) ||
 	die "could not inspect rk_rotate_token"
+tokens_equal_text=$(extract_function "$authorization_source" rk_tokens_equal) ||
+	die "could not inspect rk_tokens_equal"
 execute_text=$(extract_function "$authorization_source" rk_authorization_execute) ||
 	die "could not inspect rk_authorization_execute"
 authorization_undefined=$(nm -u "$success_dir/control/authorization.o")
@@ -155,6 +157,9 @@ assert_ordered "$rotate_text" \
 	"generate repeatedly until the replacement differs" \
 	'do\s*\{' 'get_random_bytes\s*\(' '\}\s*while\s*\(' \
 	'rk_tokens_equal\s*\(\s*active_token\s*,\s*previous\s*\)'
+grep -Eq 'while\s*\(\s*rk_tokens_equal\s*\(\s*active_token\s*,\s*previous\s*\)\s*\)\s*;' \
+	<<< "$rotate_text" ||
+	die "retry rotation exactly while the candidate equals the previous token"
 [[ $(grep -Eo '\bget_random_bytes[[:space:]]*\(' <<< "$rotate_text" |
 	wc -l) -eq 1 ]] || die "rotation must draw exactly one candidate per loop"
 grep -Eq 'length[[:space:]]*!=[[:space:]]*RK_ROOT_COMMAND_LENGTH' \
@@ -163,8 +168,12 @@ grep -Eq "byte[[:space:]]*>=[[:space:]]*'0'.*byte[[:space:]]*<=[[:space:]]*'9'.*
 	<<< "$authorization_text" || die "accept only lowercase hexadecimal token text"
 grep -Eq 'hex2bin[[:space:]]*\([^,]+,[^,]+,[[:space:]]*RK_AUTHORIZATION_TOKEN_BYTES[[:space:]]*\)' \
 	<<< "$authorization_text" || die "decode exactly one fixed-size binary token"
-grep -Eq 'crypto_memneq[[:space:]]*\(' "$authorization_source" ||
-	die "compare bearer tokens without content-dependent timing"
+grep -Eq 'return\s+crypto_memneq\s*\(\s*left\s*,\s*right\s*,\s*RK_AUTHORIZATION_TOKEN_BYTES\s*\)\s*==\s*0\s*;' \
+	<<< "$tokens_equal_text" ||
+	die "return the crypto_memneq result from the token comparison wrapper"
+if grep -Eq '\b(memcmp|bcmp)[[:space:]]*\(' <<< "$tokens_equal_text"; then
+	die "do not add a content-dependent token comparison"
+fi
 assert_ordered "$execute_text" \
 	"serialize gate, match, consumption, action, rotation, and accounting" \
 	'rk_parse_root_command\s*\(' 'mutex_lock\s*\(' \

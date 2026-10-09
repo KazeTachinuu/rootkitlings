@@ -152,12 +152,25 @@ fi
 
 no_retry=$scratch/host-no-retry
 cp -a "$scratch/success" "$no_retry"
-sed -i 's/} while (rk_tokens_equal(active_token, previous));/} while (false);/' \
+sed -i 's/} while (rk_tokens_equal(active_token, previous));/} while (rk_tokens_equal(active_token, previous) \&\& false);/' \
 	"$no_retry/control/authorization.c"
 if "$HERE/host-check" "$no_retry" "$no_retry/rootkitlings.ko" \
 	"$scratch/credential_prepare" "$scratch/credential_cancel" \
 	> "$scratch/host-no-retry.log" 2>&1; then
 	printf '[x] host checker accepted rotation without a freshness retry\n' >&2
+	exit 1
+fi
+
+timing_leak=$scratch/host-timing-leak
+cp -a "$scratch/success" "$timing_leak"
+sed -i '/return crypto_memneq(left, right, RK_AUTHORIZATION_TOKEN_BYTES) == 0;/c\
+\tcrypto_memneq(left, right, RK_AUTHORIZATION_TOKEN_BYTES);\
+\treturn memcmp(left, right, RK_AUTHORIZATION_TOKEN_BYTES) == 0;' \
+	"$timing_leak/control/authorization.c"
+if "$HERE/host-check" "$timing_leak" "$timing_leak/rootkitlings.ko" \
+	"$scratch/credential_prepare" "$scratch/credential_cancel" \
+	> "$scratch/host-timing-leak.log" 2>&1; then
+	printf '[x] host checker accepted a content-dependent token comparison\n' >&2
 	exit 1
 fi
 
