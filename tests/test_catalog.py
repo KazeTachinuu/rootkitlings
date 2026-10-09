@@ -354,7 +354,7 @@ def _exercise(
 ) -> Exercise:
     workspace = Workspace(
         mode="cumulative",
-        source="template" if baseline == "template" else "",
+        source="template" if baseline in {"template", "scaffold"} else "",
         files=files,
         editable=("main.c",),
         build=build,
@@ -434,6 +434,70 @@ class DerivedBaselineTests(unittest.TestCase):
         catalog = self.catalog((first, second), (elective,))
         self.assertEqual(catalog.baseline_provider(second), first)
         self.assertEqual(catalog.completion_dependencies(second), ("first",))
+
+    def test_scaffold_reuses_reference_without_a_completion_edge(self) -> None:
+        provider = _exercise("provider", "template")
+        consumer = _exercise(
+            "consumer",
+            "scaffold",
+            files=("Kbuild", "main.c", "new.c"),
+        )
+        consumer = Exercise(**{
+            **consumer.__dict__,
+            "workspace": Workspace(**{
+                **consumer.workspace.__dict__,
+                "parent": provider.id,
+                "source": "consumer-template",
+            }),
+            "resources": Resources("", "", "", "", "consumer-solution"),
+        })
+        provider = Exercise(**{
+            **provider.__dict__,
+            "resources": Resources("", "", "", "", "provider-solution"),
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for tree, files in {
+                "provider-solution": {
+                    "Kbuild": "obj-m += rootkitlings.o\n",
+                    "main.c": "int inherited;\n",
+                },
+                "consumer-template": {
+                    "main.c": "int todo;\n",
+                    "new.c": "int new_todo;\n",
+                },
+                "consumer-solution": {
+                    "main.c": "int solved;\n",
+                    "new.c": "int new_solved;\n",
+                },
+            }.items():
+                target = root / tree
+                target.mkdir()
+                for name, content in files.items():
+                    (target / name).write_text(content)
+
+            catalog = self.catalog((provider, consumer))
+            catalog.root = root
+            self.assertIsNone(catalog.baseline_provider(consumer))
+            self.assertEqual(catalog.scaffold_provider(consumer), provider)
+            self.assertEqual(catalog.completion_dependencies(consumer), ())
+            catalog.validate_scaffold_lineage(consumer)
+            starter = catalog.starter_tree(consumer)
+            self.assertEqual(
+                starter["main.c"].data,
+                b"int todo;\n",
+            )
+            self.assertEqual(
+                catalog.solution_tree(consumer)["new.c"].data,
+                b"int new_solved;\n",
+            )
+            work = root / "work"
+            work.mkdir()
+            materialized = catalog.materialize_starter(consumer, work)
+            self.assertEqual(
+                (materialized / "Kbuild").read_text(),
+                "obj-m += rootkitlings.o\n",
+            )
 
     def test_direct_prerequisites_reject_duplicates_and_transitive_edges(self) -> None:
         first = _exercise("first", "template")

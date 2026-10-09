@@ -40,6 +40,7 @@ BASELINES = {
     "template",
     "completion",
     "cumulative-root",
+    "scaffold",
     "previous-required",
     "previous-milestone",
 }
@@ -371,6 +372,8 @@ class Catalog:
             common.add("module_artifact")
         if baseline == "template":
             expected = common | {"source"}
+        elif baseline == "scaffold":
+            expected = common | {"source", "parent"}
         elif baseline == "completion":
             expected = common | {"parent"} | ({"additions"} if "additions" in value else set())
         else:
@@ -383,6 +386,12 @@ class Catalog:
         if baseline == "template":
             if not source or parent:
                 raise CatalogError(f"{path}: template baseline requires source and forbids parent")
+        elif baseline == "scaffold":
+            if not source or not parent:
+                raise CatalogError(
+                    f"{path}: scaffold baseline requires source and parent"
+                )
+            _identifier(parent, path)
         elif baseline == "completion":
             if source or not parent:
                 raise CatalogError(f"{path}: completion baseline requires parent and forbids source")
@@ -602,6 +611,9 @@ class Catalog:
                             f"{item.path}: completion parent must be earlier in required_route"
                         )
                 self.validate_workspace_lineage(item, provider)
+            scaffold = self.scaffold_provider(item)
+            if scaffold:
+                self.validate_scaffold_lineage(item, scaffold)
             self._validate_paths(item)
         self._validate_dag()
         self._validate_direct_prerequisites()
@@ -611,6 +623,13 @@ class Catalog:
                 self.solution_tree(item, solution_cache)
             except WorkspaceError as exc:
                 raise CatalogError(f"{item.path}: invalid solution: {exc}") from exc
+        for item in self.exercises:
+            if item.workspace.baseline != "scaffold":
+                continue
+            try:
+                self.starter_tree(item, solution_cache)
+            except WorkspaceError as exc:
+                raise CatalogError(f"{item.path}: invalid scaffold: {exc}") from exc
         for item in self.exercises:
             available = baseline | self.prerequisite_concepts(item)
             missing = set(item.requires) - available
@@ -759,7 +778,7 @@ class Catalog:
             raise CatalogError(f"{item.path}: solution must be an existing directory")
         if item.workspace.source and not (self.root / item.workspace.source).is_dir():
             raise CatalogError(f"{item.path}: workspace source must be an existing directory")
-        if item.workspace.source:
+        if item.workspace.source and item.workspace.baseline != "scaffold":
             source = self.root / item.workspace.source
             for relative in item.workspace.files:
                 if not (source / relative).is_file():
@@ -788,6 +807,9 @@ class Catalog:
             visiting.add(exercise_id)
             item = self.by_id[exercise_id]
             dependencies = list(self.completion_dependencies(item))
+            scaffold = self.scaffold_provider(item)
+            if scaffold is not None:
+                dependencies.append(scaffold.id)
             for parent in dependencies:
                 visit(parent)
             visiting.remove(exercise_id); visited.add(exercise_id)
@@ -859,7 +881,7 @@ class Catalog:
         """Resolve the module output name from its sparse workspace contract."""
         if item.workspace.module_artifact:
             return item.workspace.module_artifact
-        provider = self.baseline_provider(item)
+        provider = self.solution_provider(item)
         if provider is not None:
             return self.module_artifact(provider)
         return self.default_module_artifact
@@ -874,7 +896,7 @@ class Catalog:
         if item.id in cache:
             return dict(cache[item.id])
         solution = self.root / item.resources.solution
-        provider = self.baseline_provider(item)
+        provider = self.solution_provider(item)
         if provider is None or item.workspace.baseline == "completion":
             # Migration boundary: v2's six explicit-parent completions still
             # store full trees. Delete this branch with those assets during the
@@ -890,6 +912,35 @@ class Catalog:
             )
         cache[item.id] = result
         return dict(result)
+
+    def starter_tree(
+        self,
+        item: Exercise,
+        solution_cache: dict[str, SolutionTree] | None = None,
+    ) -> SolutionTree:
+        """Compose one immutable sparse starter over an earlier reference."""
+        provider = self.scaffold_provider(item)
+        if provider is None:
+            raise CatalogError(f"{item.path}: exercise does not use a scaffold")
+        return overlay_solution_tree(
+            self.solution_tree(provider, solution_cache),
+            self.root / item.workspace.source,
+            provider.workspace.files,
+            item.workspace.files,
+        )
+
+    def materialize_starter(
+        self,
+        item: Exercise,
+        destination_root: Path,
+        stable_id: str | None = None,
+    ) -> Path:
+        """Materialize an immutable composed starter as a learner workspace."""
+        return materialize_solution_tree(
+            self.starter_tree(item),
+            destination_root,
+            stable_id or item.id,
+        )
 
     def materialize_solution(
         self,
@@ -908,6 +959,8 @@ class Catalog:
         """Derive the sole workspace inheritance provider, if any."""
         baseline = item.workspace.baseline
         if baseline == "template":
+            return None
+        if baseline == "scaffold":
             return None
         if baseline == "completion":
             try:
@@ -957,6 +1010,31 @@ class Catalog:
                     return candidate
             raise CatalogError(f"{item.path}: no previous milestone baseline provider")
         raise CatalogError(f"{item.path}: unknown workspace baseline {baseline!r}")
+
+    def scaffold_provider(self, item: Exercise) -> Exercise | None:
+        """Return the static reference reused by a sparse starter, if any."""
+        if item.workspace.baseline != "scaffold":
+            return None
+        try:
+            provider = self.by_id[item.workspace.parent]
+        except KeyError as exc:
+            raise CatalogError(
+                f"{item.path}: unknown scaffold parent {item.workspace.parent!r}"
+            ) from exc
+        if provider.id not in self.required_route:
+            raise CatalogError(
+                f"{item.path}: scaffold parent must be on the required route"
+            )
+        if item.id in self.required_route:
+            if self.required_route.index(provider.id) >= self.required_route.index(item.id):
+                raise CatalogError(
+                    f"{item.path}: scaffold parent must be earlier in required_route"
+                )
+        return provider
+
+    def solution_provider(self, item: Exercise) -> Exercise | None:
+        """Return the reference tree beneath a sparse solution overlay."""
+        return self.scaffold_provider(item) or self.baseline_provider(item)
 
     def completion_dependencies(self, item: Exercise) -> tuple[str, ...]:
         """Return prerequisites plus lineage needed to credit completion."""
@@ -1023,8 +1101,39 @@ class Catalog:
             if actual != new_files:
                 raise CatalogError(
                     f"{item.path}: additions directory mismatch "
-                    f"(missing={sorted(new_files-actual)}, unknown={sorted(actual-new_files)})"
+                    f"(missing={sorted(new_files-actual)}, "
+                    f"unknown={sorted(actual-new_files)})"
                 )
+
+    def validate_scaffold_lineage(
+        self,
+        item: Exercise,
+        provider: Exercise | None = None,
+    ) -> None:
+        """Validate static source reuse without creating a completion edge."""
+        provider = provider or self.scaffold_provider(item)
+        if provider is None:
+            return
+        inherited = set(provider.workspace.files)
+        declared = set(item.workspace.files)
+        if not inherited <= declared:
+            raise CatalogError(
+                f"{item.path}: scaffold cannot remove or rename parent files"
+            )
+        if item.workspace.build != provider.workspace.build:
+            raise CatalogError(
+                f"{item.path}: scaffold build root must match parent exactly"
+            )
+        if item.workspace.additions:
+            raise CatalogError(f"{item.path}: scaffold forbids additions")
+        if (
+            item.workspace.module_artifact
+            and item.workspace.module_artifact != self.module_artifact(provider)
+        ):
+            raise CatalogError(
+                f"{item.path}: scaffold module artifact conflicts with parent "
+                f"{provider.id!r}"
+            )
 
     def prerequisite_exercises(self, item: Exercise) -> tuple[Exercise, ...]:
         ids = self.prerequisite_ids(item)

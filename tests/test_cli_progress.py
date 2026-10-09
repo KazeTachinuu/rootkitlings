@@ -838,6 +838,28 @@ class LearnerCLITests(unittest.TestCase):
         self.assertEqual(calls[0][4], ("main.c",))
         self.assertEqual(calls[0][5], ("main.c", "status.c"))
 
+    def test_scaffold_materialization_uses_static_composed_starter(self) -> None:
+        exercise = SimpleNamespace(
+            id="consumer",
+            workspace=SimpleNamespace(baseline="scaffold"),
+        )
+        calls = []
+        original_catalog = self.globals["CAT"]
+        try:
+            self.globals["CAT"] = SimpleNamespace(
+                materialize_starter=lambda *arguments: (
+                    calls.append(arguments) or Path("/workspace")
+                )
+            )
+            result = self.globals["materialize_workspace"](
+                exercise,
+                SimpleNamespace(),
+            )
+        finally:
+            self.globals["CAT"] = original_catalog
+        self.assertEqual(result, Path("/workspace"))
+        self.assertEqual(calls, [(exercise, self.globals["WORK"], "consumer")])
+
 
 if __name__ == "__main__":
     unittest.main()
