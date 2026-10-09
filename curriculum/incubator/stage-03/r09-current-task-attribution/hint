@@ -1,0 +1,7 @@
+The show callback runs in the task that materializes the record. Copy `current`
+to one local task pointer, pass that pointer to `task_pid_nr()`, and copy its
+name into the local `TASK_COMM_LEN` array with `get_task_comm()`.
+
+Print the thread ID with `seq_printf()`. Pass the copied command name to the
+supplied `rk_print_quoted_comm()` helper; raw `%s` output is not safe for a task
+name.

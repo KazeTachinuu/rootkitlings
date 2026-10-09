@@ -7,7 +7,8 @@ GUEST_TOOLS := \
 	tools/module_load_test \
 	tools/proc_read_test \
 	tools/proc_write_test \
-	tools/status_field_test
+	tools/status_field_test \
+	tools/task_attribution_test
 
 .PHONY: all help module clean compile-db test-solutions doctor validate validate-quick tools
 
@@ -52,6 +53,9 @@ tools/proc_write_test: tools/proc_write_test.c
 
 tools/status_field_test: tools/status_field_test.c
 	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
+
+tools/task_attribution_test: tools/task_attribution_test.c
+	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
 
 clean:
 	$(RM) $(GUEST_TOOLS)
