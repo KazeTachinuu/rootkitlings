@@ -1,6 +1,6 @@
 # Stage 4 architecture
 
-Status: R15 through R17 are independently validated.
+Status: R15 through R17 and M02 are independently validated.
 
 ## Module-list decision
 
@@ -112,3 +112,49 @@ Hostile mutations prove that string-only, hard-coded, off-by-one, overlapping, r
 Guest verification exercises raw `read`, `pread64`, `readv`, `preadv`, mapping, and `sendfile` paths; binary data; exact 512- and 513-byte results; a short result from a large request; split patterns; inode identity; deterministic copy failures; exact proc reads; registry state; concurrency; unload; and reload.
 
 Primary implementation sources are Linux v7.2 `fs/read_write.c`, `fs/splice.c`, `mm/filemap.c`, `mm/maccess.c`, `include/linux/kprobes.h`, `kernel/kprobes.c`, `Documentation/trace/kprobes.rst`, and `arch/x86/include/asm/ptrace.h`.
+
+## M02: process-view evidence map
+
+Stable ID: `concealment-evidence-map`.
+Title: Omit the resident worker and map the affected view.
+Direct prerequisites: `authorized-actions-telemetry` and `packed-directory-filter`.
+
+M02 starts from the complete M01 module and reuses the accepted L15 packed-record helper without modification.
+The learner adds only the worker TGID reference, proc-mount namespace translation, evidence rendering and publication, and the new resources in the cumulative lifetime graph.
+The private callback layout, process-view hook, and packed-record mutation machinery are supplied and structurally protected.
+
+The worker component returns an owned `PIDTYPE_TGID` reference with `get_task_pid()`.
+The process-view component retains that identity instead of a borrowed task pointer or process-wide numeric PID.
+For each selected procfs root it translates the identity with `pid_nr_ns()` in the namespace returned by `proc_pid_ns()` for that mount.
+A zero translation means the worker is not visible in that namespace and leaves the result unchanged.
+The positive decimal target is stored only in the active return-probe instance.
+
+While actions are enabled, the supplied integration observes `iterate_dir()` using the actual directory file and admits only a procfs root using the native `filldir64()` callback.
+The Linux v7.2 x86-64 private callback layout is guarded by exact size and offset assertions.
+The filter accepts at most 32 KiB, validates the produced range and final record, reuses the canonical L15 helper, and updates the outer callback state only after successful changed copy-back.
+Invalid input, allocation or copy-in failure, an invisible namespace, oversize, and all-match output are unchanged.
+Changed copy-back failure clears `prev_reclen` and forces `-EFAULT`.
+
+The separate read-only `/proc/rootkitlings_evidence` record declares:
+
+- the action gate sampled at `iterate_dir()` entry
+- the exact proc-root native `getdents64()` result view
+- exact translated-PID-name matching
+- retained nonmatches
+- the unchanged direct process, scheduler, module, sysfs, and non-proc-directory views
+- the pinned kernel ABI, bounded fail-open cases, and Kretprobe capacity diagnostics
+
+It deliberately does not state that the worker is hidden or that the declared scope proves successful omission.
+The endpoint translates its target through the namespace of the procfs mount used to read it and follows normal seq-file partial-read, EOF, seek, and rewind behavior.
+
+Acquisition extends M01 with the process-view hooks after the rmdir probe and the evidence endpoint after the event endpoint.
+Unload removes control, evidence, and events before stopping producers; it drains the process-view Kretprobe before releasing the PID and stops the worker only after that component is gone.
+Every rollback follows the same ownership order.
+
+Independent verification checked the Linux v7.2 callback and PID lifetime contracts against primary sources, reran the 2,060-case L15 corpus, built all twelve failpoint variants with `W=1`, rejected hostile namespace and ownership mutations, passed 97 M02 guest assertions, and passed all 121 canonical M01 regression assertions.
+Guest evidence includes both action states, unrelated numeric PIDs, actual-file descriptor-reuse stress, cookie seeks, all-match progress, oversize behavior, child PID namespaces, concurrent enumeration and gate changes, held evidence descriptors, unload, and reload.
+
+The mechanism intentionally remains pinned to Linux v7.2 x86-64 with `KALLSYMS_ALL`.
+Kretprobe misses are diagnostic, bounded admission failures are fail-open, and userspace copy-back cannot be transactional against a concurrent mapping change.
+
+Primary implementation sources are Linux v7.2 `fs/readdir.c`, `include/linux/fs.h`, `include/linux/pid.h`, `kernel/pid.c`, `fs/proc/base.c`, `fs/proc/root.c`, `fs/proc/inode.c`, `kernel/kprobes.c`, and `arch/x86/kernel/kprobes/core.c`.

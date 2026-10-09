@@ -85,7 +85,7 @@ Course-entry diagnostic
 |
 +-- Stage 4: Views, concealment and detection
 |   +-- R15-R17
-|   `-- M02 Concealment with an evidence map
+|   `-- M02 Omit the resident worker and map the affected view
 |
 +-- Stage 5: Networking and durable state
 |   +-- R18-R26
@@ -395,11 +395,27 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
 - Current source: L37 as the required implementation; L38 and L39 become
   comparative optional labs.
 
-#### M02 - Concealment with an evidence map
+#### M02 - Omit the resident worker and map the affected view
 
-Refactor C05 into the cumulative project.
-Hide the resident worker PID from proc root enumeration while preserving direct lookup, task evidence, scheduling, and control.
-The milestone produces a machine-readable evidence card stating which view changed and which views did not.
+- Teaches: namespace-aware filtering of one proc-root enumeration result and an
+  exact machine-readable declaration of the changed and unchanged views.
+- Produces: a cumulative M01-based module that omits its owned worker's translated
+  TGID name only from enabled native `getdents64()` results for a procfs root.
+- Requires: M01 and R16.
+- Preserves: direct `/proc/PID` lookup, `comm`, task execution, module inventory,
+  other directories, invisible PID namespaces, invalid records, oversized results,
+  and all-match results.
+- Owns: one `struct pid` reference, translated through each selected proc mount's
+  PID namespace; the formatted name belongs to one return-probe instance.
+- Evidence: `/proc/rootkitlings_evidence` declares the filter gate, exact view,
+  match rule, bounded fail-open cases, kernel ABI, and unaffected views without
+  claiming that the process itself is hidden.
+- Defensive evidence: 2,060 packed-record cases; all initialization and action
+  failures; descriptor reuse; cookies; all-match progress; unrelated live PIDs;
+  child PID-namespace enumeration; concurrency; unload; reload; and the canonical
+  M01 regression suite.
+- Accepted asset: `curriculum/incubator/stage-04/m02-concealment-evidence-map/`,
+  independently validated.
 
 ### Stage 5: Networking and durable state
 

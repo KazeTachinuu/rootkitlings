@@ -87,7 +87,7 @@ An unused general competency is omitted rather than attached to L00 as a course-
 |---|---|---|---|---|---|---|---|---|
 | M00 | `controlled-resident-core` — Unify timed and requested work | S2 | `timer-workqueue-scheduler`, `event-driven-kernel-thread` | `resident-core-integration` | `action-control-switch`, `read-once-write-once`, `fixed-command-grammar`, `kernel-timers`, `atomic-operations`, `bounded-event-admission`, `worker-stop-lifecycle` | control, execution, lifecycle | C00, C01 | new |
 | M01 | `authorized-actions-telemetry` — Record authorized actions and rmdir results | S3 | `controlled-resident-core`, `one-use-authorization`, `return-aware-syscall-telemetry` | `spinlocked-event-ring`, `authorized-telemetry-integration` | `resident-core-integration`, `one-use-authorization`, `return-correlation` | privilege, instrumentation, detection | C03, C04 | new |
-| M02 | `concealment-evidence-map` — Concealment with an evidence map | S4 | `authorized-actions-telemetry`, `packed-directory-filter` | `ghost-process-view`, `machine-readable-evidence-map` | `authorized-telemetry-integration`, `directory-filtering`, `cross-view-evidence` | concealment, detection | C05 | new |
+| M02 | `concealment-evidence-map` — Omit the resident worker and map the affected view | S4 | `authorized-actions-telemetry`, `packed-directory-filter` | `namespace-aware-process-view-filtering`, `machine-readable-evidence-map` | `authorized-telemetry-integration`, `packed-record-validation`, `directory-cookie-preservation`, `cross-view-evidence`, `namespace-id-translation`, `resource-ownership`, `proc-publication-lifetime` | concealment, detection | C05 | new |
 | M03 | `remote-resident-agent` — Remote resident agent | S5 | `concealment-evidence-map`, `tcp-framing-cancellation`, `guarded-file-transaction` | `remote-agent-integration`, `boot-load-persistence` | `machine-readable-evidence-map`, `connect-back-agent`, `kernel-file-transactions` | control, networking, persistence, lifecycle | C07, C08 | new |
 | C00 | `operation-glasshouse` — Operation Glasshouse: validate a rootkit through independent views | S6 | `remote-resident-agent`, `authenticated-dns-signal` | `adversarial-validation` | `remote-agent-integration`, `authenticated-dns-signals`, `machine-readable-evidence-map` | lifecycle, control, privilege, instrumentation, concealment, networking, persistence, cryptography, detection | C10 plus C03/C05/C08/C09 behavior | new |
 
@@ -194,6 +194,7 @@ Add these genuinely new concepts:
 - `resident-core-integration`
 - `spinlocked-event-ring`
 - `authorized-telemetry-integration`
+- `namespace-aware-process-view-filtering`
 - `machine-readable-evidence-map`
 - `remote-agent-integration`
 - `versioned-uapi`
@@ -221,8 +222,8 @@ Deprecate or reclassify these current product/API-shaped concepts:
   `component-ownership` inside `owned-kernel-state`.
 - `one-time-root-trigger` becomes `one-use-authorization`.
 - `hook-rollback` remains, paired with `managed-hook-lifecycle`.
-- `ghost-process-view` becomes a milestone output rather than a standalone
-  required mechanism.
+- The vague `ghost-process-view` label is replaced by the exact
+  `namespace-aware-process-view-filtering` milestone mechanism.
 - `connect-back-agent` becomes a transport output under
   `tcp-framing-cancellation`.
 - `xor-obfuscation` becomes a demonstration within
