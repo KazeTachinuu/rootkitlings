@@ -1,1 +1,0 @@
-The wait condition is persistent state; a wakeup alone is not. Publish the condition before notifying sleepers so a worker that runs immediately can observe why it was awakened.

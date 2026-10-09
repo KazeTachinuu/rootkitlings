@@ -1,1 +1,0 @@
-There are two deadlines to establish: the first during init and the next after each firing. A periodic timer is still a sequence of one-shot deadlines, so the callback must arrange its successor.

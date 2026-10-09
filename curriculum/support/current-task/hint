@@ -1,1 +1,0 @@
-The proc callback executes in the reader's process context. Inspect the task pointer that represents that context and select the fields matching the supplied numeric-ID and command-name format.

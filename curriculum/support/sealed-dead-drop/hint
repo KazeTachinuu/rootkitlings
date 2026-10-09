@@ -1,1 +1,0 @@
-The probe callback should perform only an exact-path state transition that is safe in its execution context.  Message locking and copying belong to the separate proc interface, not the probe path.

@@ -1,1 +1,0 @@
-The `miscdevice` object is the single resource owned by this module. Let registration's result decide whether init succeeds, and pair a successful registration with the inverse lifecycle operation during exit.

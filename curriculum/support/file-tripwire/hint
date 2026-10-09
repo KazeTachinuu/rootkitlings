@@ -1,1 +1,0 @@
-The probe path must remain bounded: decide whether the path is watched, update the fixed ring under its lock, and defer all potentially sleeping formatting to a copied snapshot.

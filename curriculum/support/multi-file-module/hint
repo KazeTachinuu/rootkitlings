@@ -1,1 +1,0 @@
-The module target and its component-object list are separate Kbuild concepts. List the objects that implement the lifecycle and calculator; the shared header only describes their interface.

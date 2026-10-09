@@ -1,1 +1,0 @@
-The attribute depends on the kobject that owns it. Teardown must be idempotent and reverse that dependency: remove the child artifact before dropping the parent's reference, then make the stored state reflect that nothing remains owned.

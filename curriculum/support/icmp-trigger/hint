@@ -1,1 +1,0 @@
-The trigger requires both the correct ICMP message kind and identifier. Remember that packet fields are in network byte order; set the supplied decision flag only when both predicates hold.

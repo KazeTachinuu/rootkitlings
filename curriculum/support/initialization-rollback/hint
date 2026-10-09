@@ -1,1 +1,0 @@
-At each failure point, list which resources are already owned. Both failures after the first allocation converge on the boundary that releases it; the successful lifetime releases resources in the reverse of their acquisition order.

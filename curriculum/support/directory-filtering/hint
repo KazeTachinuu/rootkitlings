@@ -1,1 +1,0 @@
-The supplied record loop already owns buffer compaction. Your decision should depend only on whether the current bounded name begins with the configured prefix; avoid requiring an exact-name match.

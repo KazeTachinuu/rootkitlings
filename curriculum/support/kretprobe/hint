@@ -1,1 +1,0 @@
-The return handler receives register state, not the function's C return value directly. Extract the architecture-independent return value, classify kernel errors by their sign, and update exactly one counter.

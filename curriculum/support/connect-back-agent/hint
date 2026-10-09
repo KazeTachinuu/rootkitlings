@@ -1,1 +1,0 @@
-Give the worker sole ownership of each published socket.  Shutdown may wake a blocked operation, but the same worker must release the socket before it waits to retry or exits.

@@ -1,1 +1,0 @@
-Read one immutable credential snapshot for the current caller. Its UID/GID fields are kernel namespace types, so convert them through the namespace supplied by the scaffold before formatting ordinary numbers.

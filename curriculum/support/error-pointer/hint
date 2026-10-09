@@ -1,1 +1,0 @@
-Inspect how the supplied caller distinguishes a valid pointer from an encoded error and how it recovers the errno. The simulated failure must use that same representation; `NULL` carries no specific error.

@@ -1,1 +1,0 @@
-Treat the temporary probe as a resource used only to make the kernel resolve a name. On success, capture the resolved address before undoing registration; on failure, return no address and do not unregister something never acquired.

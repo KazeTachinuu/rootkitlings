@@ -1,1 +1,0 @@
-Registration is the ownership boundary: init succeeds only if the callback is live, and exit must make it unreachable before module text disappears. Pair those transitions around the same probe object.

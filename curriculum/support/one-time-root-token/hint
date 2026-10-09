@@ -1,1 +1,0 @@
-The token is one-use only if authorization, elevation, accounting, and rotation form one serialized transition.  Do not consume or rotate it when elevation fails.

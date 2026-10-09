@@ -1,1 +1,0 @@
-The bucket is input to the keyed derivation, not the domain label itself. Compute one fixed-width keyed value from the bucket and format that derived value through the supplied bounded output path.

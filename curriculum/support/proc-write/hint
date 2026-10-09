@@ -1,1 +1,0 @@
-Treat parsing as a transaction: bound and copy into private temporary storage, make it a valid string, and validate it before touching shared state. Hold the lock only for the final commit.

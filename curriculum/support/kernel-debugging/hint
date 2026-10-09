@@ -1,1 +1,0 @@
-Watch the accumulator after every loop iteration and note the first point where its value no longer matches the mathematical sum. Then compare the required result with the range of the accumulator's declared type.

@@ -1,1 +1,0 @@
-Draw the ownership interval from successful init to exit. Allocate storage sized from the pointed-to type, check that ownership was actually acquired before dereferencing it, and release it exactly once at the other end of the interval.

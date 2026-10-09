@@ -1,4 +1,0 @@
-Configure the request completely before submitting it: completion behavior,
-associated-data boundary, and the in-place data/nonce mapping. The crypto
-operation may finish asynchronously, so return its final status rather than its
-initial submission status.

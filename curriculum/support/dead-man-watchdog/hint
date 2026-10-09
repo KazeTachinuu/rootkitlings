@@ -1,1 +1,0 @@
-Separate “a heartbeat happened” from the state protected by the mutex.  Each observed heartbeat begins a fresh deadline, and one uninterrupted stale period has only one healthy-to-stale transition.

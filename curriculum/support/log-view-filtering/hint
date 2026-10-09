@@ -1,1 +1,0 @@
-Make the hide decision within the current newline-delimited record. A string search that can cross `nl` could accidentally classify the next record, so derive the search bound from this line's endpoints.

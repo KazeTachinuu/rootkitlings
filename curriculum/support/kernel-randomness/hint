@@ -1,1 +1,0 @@
-The session identifier is one typed scalar, while the token is a byte buffer. Choose the random API whose output shape matches each destination and derive the buffer length from the destination itself.

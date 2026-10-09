@@ -1,1 +1,0 @@
-The create call returns the handle that represents ownership of the proc entry. Preserve it only on success, make a failed creation reject module load, and use the same handle to end the entry's lifetime during unload.

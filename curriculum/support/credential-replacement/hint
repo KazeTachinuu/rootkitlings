@@ -1,1 +1,0 @@
-Credential replacement is copy-modify-commit. If the copy succeeds, make every identity role consistent—real, effective, saved, and filesystem, for both user and group—before publishing it.

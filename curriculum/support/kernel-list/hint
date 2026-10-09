@@ -1,1 +1,0 @@
-Preserve insertion order when linking a new record. Reading needs ordinary traversal, but teardown needs a traversal form that remains valid after the current node is unlinked and freed.

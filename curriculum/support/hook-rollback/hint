@@ -1,1 +1,0 @@
-At the second registration failure, inventory the hook set: the first callback can already run, while the second was never acquired. Roll back only the live subset before returning the error.

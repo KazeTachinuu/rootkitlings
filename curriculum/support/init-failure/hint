@@ -1,1 +1,0 @@
-The loader commits the module only when init reports success. Choose the errno for invalid configuration and return it after the diagnostic; do not involve the exit path, which is never entered for a rejected load.

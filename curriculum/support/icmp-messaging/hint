@@ -1,1 +1,0 @@
-Separate untrusted packet extraction from shared-state publication. Build and validate a complete terminated candidate before taking the spinlock; inside the lock, publish the message bytes and their length as one consistent snapshot.

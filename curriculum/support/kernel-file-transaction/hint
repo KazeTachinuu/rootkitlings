@@ -1,1 +1,0 @@
-Construct the edited image as two adjacent byte ranges: the fixed prefix followed immediately by every saved original byte. Do not treat the original as a C string or omit bytes after an embedded zero.
