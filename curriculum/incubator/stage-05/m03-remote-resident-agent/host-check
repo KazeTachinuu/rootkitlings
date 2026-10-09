@@ -1,0 +1,91 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR MODULE"
+build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found"
+module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found"
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+m02=$here/../../stage-04/m02-concealment-evidence-map
+r26=$here/../r26-guarded-file-transaction
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m03-host.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+[[ -f $module && ! -L $module ]] || die "module must be a regular file"
+
+while IFS= read -r source; do
+	relative=${source#"$m02/solution/"}
+	case $relative in Kbuild|core/main.c) continue ;; esac
+	[[ -f $build_dir/$relative && ! -L $build_dir/$relative ]] ||
+		die "inherited M02 file is missing: $relative"
+	cmp -s "$source" "$build_dir/$relative" ||
+		die "inherited M02 file was changed: $relative"
+done < <(find "$m02/solution" -type f | sort)
+
+while IFS= read -r source; do
+	relative=${source#"$here/additions/"}
+	[[ -f $build_dir/$relative && ! -L $build_dir/$relative ]] ||
+		die "M03 addition is missing: $relative"
+	case $relative in network/agent.c) continue ;; esac
+	cmp -s "$source" "$build_dir/$relative" ||
+		die "supplied M03 file was changed: $relative"
+done < <(find "$here/additions" -type f | sort)
+
+for relative in core/main.o network/agent.o network/framing.o \
+		network/protocol.o persistence/platform.o persistence/transaction.o \
+		interface/agent_status.o; do
+	[[ -f $build_dir/$relative && ! -L $build_dir/$relative ]] ||
+		die "built component is missing: $relative"
+done
+
+gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
+	-fsanitize=address,undefined -fno-omit-frame-pointer \
+	-I"$build_dir/include" "$build_dir/network/protocol.c" \
+	"$here/fixtures/host/protocol_test.c" -o "$scratch/protocol-test"
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+	"$scratch/protocol-test"
+
+sed 's/rkling_demo/rootkitlings/g' \
+	"$r26/fixtures/host/transaction_test.c" > "$scratch/transaction-test.c"
+gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
+	-fsanitize=address,undefined -fno-omit-frame-pointer \
+	-I"$build_dir/include" "$scratch/transaction-test.c" \
+	"$build_dir/persistence/transaction.c" -o "$scratch/transaction-test"
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+	"$scratch/transaction-test"
+
+agent_object=$build_dir/network/agent.o
+for symbol in sock_create_kern kernel_connect kernel_sendmsg kernel_recvmsg \
+		kernel_sock_shutdown sock_release kthread_create_on_node \
+		wake_up_process kthread_stop __wake_up; do
+	nm -u "$agent_object" | awk -v symbol="$symbol" \
+		'$2 == symbol { found = 1 } END { exit !found }' ||
+		die "agent lacks required operation: $symbol"
+done
+for forbidden in call_usermodehelper request_module kernel_bind kernel_listen \
+		kernel_accept nf_register_net_hook filp_open; do
+	if nm -u "$agent_object" | awk -v symbol="$forbidden" \
+		'$2 == symbol { found = 1 } END { exit !found }'; then
+		die "agent references out-of-scope operation: $forbidden"
+	fi
+done
+
+main_object=$build_dir/core/main.o
+for symbol in rk_agent_start rk_agent_stop rk_transaction_apply \
+		rk_transaction_restore rk_transaction_dispose rk_platform_prepare \
+		rk_platform_finish rk_agent_status_publish rk_agent_status_unpublish; do
+	nm -u "$main_object" | awk -v symbol="$symbol" \
+		'$2 == symbol { found = 1 } END { exit !found }' ||
+		die "integration graph lacks operation: $symbol"
+done
+
+for symbol in security_path_rename security_path_unlink vfs_rename vfs_unlink; do
+	nm -u "$build_dir/persistence/platform.o" |
+		awk -v symbol="$symbol" '$2 == symbol { found = 1 } END { exit !found }' ||
+		die "guarded platform lacks VFS operation: $symbol"
+done
+
+printf '[+] M03 host behavior, cumulative boundary, and compiled operations verified\n'

@@ -1,0 +1,244 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Remote resident agent"
+
+root=/etc/modules-load.d
+target=$root/rootkitlings.conf
+sibling=$root/.rootkitlings.conf.rootkitlings
+status=/proc/rootkitlings_agent
+fixtures=/tmp/rootkitlings-m03
+helper=$fixtures/agent_fixture
+fixture_pid=
+
+cleanup()
+{
+	if test -d /sys/module/rootkitlings; then
+		rmmod rootkitlings 2>/dev/null || true
+	fi
+	if test -n "$fixture_pid"; then
+		kill "$fixture_pid" 2>/dev/null || true
+		wait "$fixture_pid" 2>/dev/null || true
+	fi
+	umount "$root" 2>/dev/null || true
+	rm -rf "$fixtures" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+wait_for_file()
+{
+	path=$1
+	index=0
+	while test ! -s "$path" && test "$index" -lt 800; do
+		sleep 0.01
+		index=$((index + 1))
+	done
+	test -s "$path"
+}
+
+wait_for_field()
+{
+	field=$1
+	minimum=$2
+	index=0
+	while test "$index" -lt 800; do
+		value=$(sed -n "s/^$field=//p" "$status" 2>/dev/null)
+		if test -n "$value" && test "$value" -ge "$minimum" 2>/dev/null; then
+			return 0
+		fi
+		sleep 0.01
+		index=$((index + 1))
+	done
+	return 1
+}
+
+probe_count()
+{
+	kind=$1
+	target_name=$2
+	awk -v kind="$kind" -v target="$target_name" '
+		$2 == kind { split($3, name, "+"); if (name[1] == target) count++ }
+		END { print count + 0 }
+	' /sys/kernel/debug/kprobes/list
+}
+
+worker_count()
+{
+	count=0
+	for comm in /proc/[0-9]*/comm; do
+		test -r "$comm" || continue
+		case $(cat "$comm") in
+		rkling_core|rkling_agent) count=$((count + 1)) ;;
+		esac
+	done
+	printf '%s\n' "$count"
+}
+
+assert_no_workers()
+{
+	if test "$(worker_count)" -eq 0; then
+		_ok "$1 left no resident worker"
+	else
+		_fail "$1 left a resident worker"
+	fi
+}
+
+mkdir -p "$fixtures" "$root"
+mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
+chmod 0700 "$root"
+ifconfig lo 127.0.0.1 up
+printf 'operator-original\n' > "$target"
+chmod 0600 "$target"
+cp "$target" "$fixtures/original"
+rmdir_before=$(probe_count r __x64_sys_rmdir)
+filldir_before=$(probe_count k filldir64)
+iterate_before=$(probe_count r iterate_dir)
+
+sed -n '/^__ROOTKITLINGS_AGENT_FIXTURE__$/,$p' /check |
+	sed '1d' | busybox base64 -d | busybox gzip -d > "$helper"
+chmod 0755 "$helper"
+"$helper" reserve "$fixtures/port"
+port=$(cat "$fixtures/port")
+
+if insmod /rootkitlings/rootkitlings.ko peer_port=0 2>/dev/null; then
+	_fail "zero peer port was accepted"
+	rmmod rootkitlings 2>/dev/null || true
+else
+	_ok "zero peer port is rejected"
+fi
+if insmod /rootkitlings/rootkitlings.ko peer_port="$port" \
+		retry_base_ms=100 retry_max_ms=99 2>/dev/null; then
+	_fail "an inverted retry range was accepted"
+	rmmod rootkitlings 2>/dev/null || true
+else
+	_ok "an inverted retry range is rejected"
+fi
+if insmod /rootkitlings/rootkitlings.ko peer_port="$port" \
+		retry_base_ms=0 retry_max_ms=80 2>/dev/null; then
+	_fail "a zero retry base was accepted"
+	rmmod rootkitlings 2>/dev/null || true
+else
+	_ok "a zero retry base is rejected"
+fi
+if insmod /rootkitlings/rootkitlings.ko peer_port="$port" \
+		retry_base_ms=20 retry_max_ms=5001 2>/dev/null; then
+	_fail "an excessive retry maximum was accepted"
+	rmmod rootkitlings 2>/dev/null || true
+else
+	_ok "an excessive retry maximum is rejected"
+fi
+if test ! -d /sys/module/rootkitlings &&
+	test ! -e /proc/rootkitlings &&
+	test ! -e /proc/rootkitlings_events &&
+	test ! -e /proc/rootkitlings_evidence &&
+	test ! -e "$status" &&
+	test "$(probe_count r __x64_sys_rmdir)" -eq "$rmdir_before" &&
+	test "$(probe_count k filldir64)" -eq "$filldir_before" &&
+	test "$(probe_count r iterate_dir)" -eq "$iterate_before" &&
+	test "$(worker_count)" -eq 0 &&
+	cmp -s "$fixtures/original" "$target" && test ! -e "$sibling"; then
+	_ok "parameter rejection leaves files, probes, endpoints, and workers untouched"
+else
+	_fail "parameter rejection changed state before returning"
+fi
+
+load rootkitlings.ko "peer_port=$port" retry_base_ms=20 retry_max_ms=80
+assert_loaded rootkitlings
+assert_exists /proc/rootkitlings
+assert_exists /proc/rootkitlings_events
+assert_exists /proc/rootkitlings_evidence
+assert_exists "$status"
+if test "$(stat -c '%a:%u:%g' "$status")" = 400:0:0; then
+	_ok "agent status is root-owned and read-only"
+else
+	_fail "agent status has the wrong ownership or mode"
+fi
+if wait_for_field retries 2 && wait_for_field transport_errors 2; then
+	_ok "refused connections enter bounded retry"
+else
+	_fail "refused connections did not update retry evidence"
+fi
+delay=$(sed -n 's/^retry_delay_ms=//p' "$status")
+case $delay in 20|40|80) _ok "retry delay stays within the declared bounds" ;;
+	*) _fail "retry delay escaped its declared bounds: $delay" ;;
+esac
+sleep 0.2
+attempts=$(sed -n 's/^attempts=//p' "$status")
+if test "$attempts" -ge 2 2>/dev/null && test "$attempts" -le 20 2>/dev/null; then
+	_ok "retry waiting bounds the attempt rate"
+else
+	_fail "retry attempt rate is unbounded: ${attempts:-missing}"
+fi
+
+mkdir -p "$fixtures/server"
+"$helper" serve "$fixtures/server" "$port" > "$fixtures/server.log" 2>&1 &
+fixture_pid=$!
+wait_for_file "$fixtures/server/ready" || _fail "listener did not start"
+if wait_for_file "$fixtures/server/first_complete" &&
+		wait_for_file "$fixtures/server/second_connected"; then
+	_ok "QUIT closed one framed session and the worker reconnected"
+else
+	_fail "the two framed sessions did not complete"
+fi
+if wait_for_field connections 2 && wait_for_field commands 6 &&
+		wait_for_field protocol_errors 2; then
+	_ok "fixed commands, invalid input, and oversized input updated counters"
+else
+	_fail "agent counters did not reach their behavioral values"
+fi
+if test "$(sed -n 's/^marker=//p' "$status")" = alpha_7; then
+	_ok "MARK stores only the accepted bounded label"
+else
+	_fail "MARK did not preserve the accepted label"
+fi
+if test "$(cat "$target")" = rootkitlings &&
+		test "$(wc -c < "$target")" -eq 13 &&
+		cmp -s "$fixtures/original" "$sibling"; then
+	_ok "the exact modules-load request replaced the retained original"
+else
+	_fail "the modules-load transaction has the wrong names or bytes"
+fi
+if grep -Fxq 'boot_request_state=applied' "$status" &&
+		grep -Fxq 'boot_request_exchanged=1' "$status"; then
+	_ok "status reports the applied transaction"
+else
+	_fail "status does not report the applied transaction"
+fi
+
+unload rootkitlings
+if wait_for_file "$fixtures/server/eof"; then
+	_ok "unload cancelled the blocked receive and released the socket"
+else
+	_fail "the blocked receive remained owned after unload"
+	kill "$fixture_pid" 2>/dev/null || true
+fi
+wait "$fixture_pid" || _fail "agent fixture failed"
+fixture_pid=
+assert_absent "$status"
+if cmp -s "$fixtures/original" "$target" && test ! -e "$sibling"; then
+	_ok "unload restored the original request and removed its candidate"
+else
+	_fail "unload did not restore the boot request transaction"
+fi
+assert_no_workers "blocked-receive unload"
+
+# Reload without a listener, then unload while the worker is in its retry wait.
+load rootkitlings.ko "peer_port=$port" retry_base_ms=200 retry_max_ms=200
+wait_for_field retries 1 || _fail "reload did not enter retry wait"
+unload rootkitlings
+assert_absent "$status"
+if cmp -s "$fixtures/original" "$target" && test ! -e "$sibling"; then
+	_ok "retry-wait unload joined the worker and restored the request"
+else
+	_fail "retry-wait unload left owned state"
+fi
+assert_no_workers "retry-wait unload"
+
+if dmesg | grep -Eqi '(BUG:|WARNING:|Oops:|KASAN:|UBSAN:|use-after-free|general protection fault)'; then
+	_fail "kernel log contains a fault report"
+else
+	_ok "kernel log contains no fault report"
+fi
+
+summary

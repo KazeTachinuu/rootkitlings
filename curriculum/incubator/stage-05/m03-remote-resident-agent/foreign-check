@@ -1,0 +1,42 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Foreign boot-request state is preserved"
+
+root=/etc/modules-load.d
+target=$root/rootkitlings.conf
+sibling=$root/.rootkitlings.conf.rootkitlings
+original=/tmp/rootkitlings-m03-original
+
+cleanup()
+{
+	if test -d /sys/module/rootkitlings; then
+		rmmod rootkitlings 2>/dev/null || true
+	fi
+	umount "$root" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+mkdir -p "$root"
+mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
+chmod 0700 "$root"
+printf 'operator-original\n' > "$target"
+chmod 0600 "$target"
+cp "$target" "$original"
+
+load rootkitlings.ko peer_port=47023 retry_base_ms=200 retry_max_ms=200
+printf 'foreign-change\n' > "$target"
+unload rootkitlings
+if test "$(cat "$target")" = foreign-change && cmp -s "$original" "$sibling"; then
+	_ok "foreign target bytes suppress rollback without losing either name"
+else
+	_fail "rollback overwrote or removed foreign state"
+fi
+if dmesg | grep -Fq 'transaction incomplete; stopping without further changes'; then
+	_ok "suppressed rollback emits one precise warning"
+else
+	_fail "suppressed rollback warning is missing"
+fi
+assert_absent /proc/rootkitlings_agent
+summary

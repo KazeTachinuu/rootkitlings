@@ -1,0 +1,69 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "@LABEL@"
+
+root=/etc/modules-load.d
+target=$root/rootkitlings.conf
+sibling=$root/.rootkitlings.conf.rootkitlings
+control=/proc/rootkitlings
+events=/proc/rootkitlings_events
+original=/tmp/rootkitlings-m03-original
+
+cleanup()
+{
+	if test -d /sys/module/rootkitlings; then
+		rmmod rootkitlings 2>/dev/null || true
+	fi
+	umount "$root" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+mkdir -p "$root"
+mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
+chmod 0700 "$root"
+printf 'operator-original\n' > "$target"
+chmod 0600 "$target"
+cp "$target" "$original"
+
+attempt=1
+while test "$attempt" -le 2; do
+	load rootkitlings.ko peer_port=47023 retry_base_ms=200 retry_max_ms=200
+	printf enable > "$control"
+	token=$(sed -n 's/^token=//p' "$control")
+	if run_as 65534 65534 cred_trigger_test token-race "$control" \
+			"$token" 24 @EXPECTED_ERRNO@ >/dev/null; then
+		_ok "attempt $attempt admits exactly one failing writer"
+	else
+		_fail "attempt $attempt violated one-use failure admission"
+	fi
+	if test "$(sed -n 's/^completed_actions=//p' "$control")" = 0 &&
+	   test "$(sed -n 's/^retained=//p' "$events")" = 0 &&
+	   test "$(sed -n 's/^overwritten=//p' "$events")" = 0; then
+		_ok "attempt $attempt records no completed action or event"
+	else
+		_fail "attempt $attempt counted a failed action"
+	fi
+	replacement=$(sed -n 's/^token=//p' "$control")
+	if test "$replacement" != "$token"; then
+		_ok "attempt $attempt consumes and rotates its token"
+	else
+		_fail "attempt $attempt retained its token"
+	fi
+	if run_as 65534 65534 cred_trigger_test token-unchanged \
+			"$control" "$token" 13 >/dev/null; then
+		_ok "attempt $attempt rejects the consumed token"
+	else
+		_fail "attempt $attempt accepted or mishandled stale replay"
+	fi
+	unload rootkitlings
+	if cmp -s "$original" "$target" && test ! -e "$sibling"; then
+		_ok "attempt $attempt restores the boot request"
+	else
+		_fail "attempt $attempt left a boot-request edit"
+	fi
+	attempt=$((attempt + 1))
+done
+
+summary
