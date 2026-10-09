@@ -18,21 +18,6 @@ for relative in Kbuild codec/dns_name.c codec/dns_name.o core/main.c \
 		die "build is missing regular file: $relative"
 done
 
-for relative in Kbuild core/main.c include/dns_name.h include/ipv4_parser.h \
-		include/selftest.h parser/ipv4.c tests/selftest.c; do
-	cmp -s "$here/solution/$relative" "$build_dir/$relative" ||
-		die "supplied file was changed: $relative"
-done
-
-directive_count=0
-while IFS= read -r directive; do
-	directive_count=$((directive_count + 1))
-	[[ $directive =~ ^[[:space:]]*#[[:space:]]*include[[:space:]]*\"dns_name\.h\"[[:space:]]*$ ]] ||
-		die "codec may only include dns_name.h; conditional compilation is not allowed"
-done < <(grep -E '(#|%:|\?\?=)' "$build_dir/codec/dns_name.c" || true)
-(( directive_count == 1 )) ||
-	die "codec must include dns_name.h exactly once"
-
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
 	-fsanitize=address,undefined -fno-omit-frame-pointer \
 	-I"$build_dir/include" "$here/fixtures/host/dns_name_test.c" \

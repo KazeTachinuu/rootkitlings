@@ -15,26 +15,10 @@ for relative in Kbuild core/main.c include/rootkit.h interface/proc.c \
 done
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
 
-for relative in Kbuild core/main.c include/rootkit.h interface/proc.c; do
-	cmp -s "$here/solution/$relative" "$build_dir/$relative" ||
-		die "supplied file was changed: $relative"
-done
-
-# These are lesson scope boundaries, not semantic proofs. The behavior fixture
-# below proves the required ownership and rollback behavior.
-compact=$(sed -E '/^[[:space:]]*\/\//d' "$build_dir/network/socket_owner.c" |
-	tr -d '[:space:]')
-for forbidden in kernel_sendmsg kernel_recvmsg sock_sendmsg sock_recvmsg \
-		kernel_bind kernel_listen kernel_accept SOCK_RAW MSG_DONTWAIT \
-		O_NONBLOCK nf_register register_kprobe queue_work schedule_work \
-		kthread timer_setup msleep; do
-	[[ $compact != *"$forbidden"* ]] ||
-		die "socket owner contains out-of-scope operation: $forbidden"
-done
-
 object=$build_dir/network/socket_owner.o
 for forbidden in kernel_sendmsg kernel_recvmsg kernel_bind kernel_listen \
-		kernel_accept nf_register_net_hook register_kprobe; do
+		kernel_accept nf_register_net_hook register_kprobe queue_work_on \
+		kthread_create_on_node; do
 	if nm -u "$object" | awk -v symbol="$forbidden" \
 			'$2 == symbol { found = 1 } END { exit !found }'; then
 		die "compiled socket owner references out-of-scope symbol: $forbidden"

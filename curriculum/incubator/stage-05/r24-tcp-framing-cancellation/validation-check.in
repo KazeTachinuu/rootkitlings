@@ -2,26 +2,17 @@
 # shellcheck source=/dev/null
 . /lib/check.sh
 
-begin "Framed session behavior rejects incomplete implementations"
+module=${1:?module basename argument is required}
+label=${2:?validation label argument is required}
 
-loader=/tmp/rootkitlings-module-loader
-sed -n '/^__ROOTKITLINGS_MODULE_LOADER__$/,$p' /check |
-	sed '1d' | busybox base64 -d | busybox gzip -d > "$loader"
-chmod 0755 "$loader"
+begin "$label"
 
-# The test generator replaces this token with several unquoted filenames.
-# shellcheck disable=SC2043
-for module in @MODULES@; do
-	marker=$(printf '%s' "$module" | tr '.-' '__')
-	sed -n "/^__ROOTKITLINGS_MODULE_${marker}__$/,/^__ROOTKITLINGS_END_${marker}__$/p" /check |
-		sed '1d;$d' | busybox base64 -d | busybox gzip -d > "/tmp/$module"
-	if "$loader" "/tmp/$module" 22 'peer_port=47023'; then
-		_ok "$module was rejected by instrumented behavior tests"
-	else
-		_fail "$module returned the wrong error"
-	fi
-	assert_absent /sys/module/rootkitlings
-	assert_absent /proc/rootkitlings
-done
+if module_load_params "/rootkitlings/$module" 22 'peer_port=47023'; then
+	_ok "$module was rejected by instrumented behavior tests"
+else
+	_fail "$module returned the wrong error"
+fi
+assert_absent /sys/module/rootkitlings
+assert_absent /proc/rootkitlings
 
 summary

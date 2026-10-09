@@ -21,7 +21,7 @@ grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
 	printf '[x] pinned kernel build is not configured for GCC\n' >&2
 	exit 1
 }
-for command in base64 gcc gzip make nm; do
+for command in gcc make nm; do
 	command -v "$command" >/dev/null || {
 		printf '[x] %s is required\n' "$command" >&2
 		exit 1
@@ -151,55 +151,7 @@ if make -s -C "$KDIR" M="$scratch/solution" W=1 \
 	exit 1
 fi
 
-gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
-	-o "$scratch/tcp_session_fixture" \
-	"$HERE/fixtures/host/tcp_session_fixture.c"
-gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
-	-o "$scratch/module_load_params" \
-	"$HERE/fixtures/host/module_load_params.c"
-
-append_loader()
-{
-	local script=$1
-	printf '\n__ROOTKITLINGS_MODULE_LOADER__\n' >> "$script"
-	gzip -c "$scratch/module_load_params" | base64 -w 76 >> "$script"
-}
-
-append_helpers()
-{
-	local script=$1
-	printf '\n__ROOTKITLINGS_TCP_HELPER__\n' >> "$script"
-	gzip -c "$scratch/tcp_session_fixture" | base64 -w 76 >> "$script"
-	append_loader "$script"
-	chmod 0755 "$script"
-}
-
 modules='template.ko short-send.ko short-receive.ko short-drain.ko late-publish.ko double-release.ko stop-error.ko connect-leak.ko'
-sed "s#@MODULES@#$modules#" "$HERE/validation-check.in" \
-	> "$scratch/validation-check"
-append_loader "$scratch/validation-check"
-for name in $modules; do
-	marker=${name//[-.]/_}
-	{
-		printf '\n__ROOTKITLINGS_MODULE_%s__\n' "$marker"
-		gzip -c "$scratch/$name" | base64 -w 76
-		printf '\n__ROOTKITLINGS_END_%s__\n' "$marker"
-	} >> "$scratch/validation-check"
-done
-chmod 0755 "$scratch/validation-check"
-
-sed -e 's/@LABEL@/Worker creation failure/g' \
-	-e 's/@EXPECTED_ERRNO@/4/g' -e 's/@NEEDS_LISTENER@/0/g' \
-	"$HERE/failure-check.in" > "$scratch/worker-failure-check"
-append_helpers "$scratch/worker-failure-check"
-sed -e 's/@LABEL@/Proc publication rollback/g' \
-	-e 's/@EXPECTED_ERRNO@/12/g' -e 's/@NEEDS_LISTENER@/1/g' \
-	"$HERE/failure-check.in" > "$scratch/proc-failure-check"
-append_helpers "$scratch/proc-failure-check"
-cp "$HERE/success-check" "$scratch/success-check"
-printf '\n__ROOTKITLINGS_TCP_HELPER__\n' >> "$scratch/success-check"
-gzip -c "$scratch/tcp_session_fixture" | base64 -w 76 >> "$scratch/success-check"
-chmod 0755 "$scratch/success-check"
 
 run_guest()
 {
@@ -218,13 +170,20 @@ run_guest()
 	}
 }
 
-run_guest "$scratch/validation-check" "$scratch/solution/rootkitlings.ko" \
-	validation
-run_guest "$scratch/worker-failure-check" \
-	"$scratch/worker-failure/rootkitlings.ko" worker-failure
-run_guest "$scratch/proc-failure-check" \
-	"$scratch/proc-failure/rootkitlings.ko" proc-failure
-run_guest "$scratch/success-check" "$scratch/solution/rootkitlings.ko" \
-	solution --tool tools/proc_read_test
+for name in $modules; do
+	run_guest "$HERE/validation-check.in" "$scratch/$name" "$name" \
+		--tool tools/module_load_params \
+		--check-arg "$name" --check-arg "Reject $name"
+done
+run_guest "$HERE/failure-check.in" \
+	"$scratch/worker-failure/rootkitlings.ko" worker-failure \
+	--tool tools/module_load_params --tool tools/tcp_session_fixture \
+	--check-arg 4 --check-arg 'Worker creation failure' --check-arg 0
+run_guest "$HERE/failure-check.in" \
+	"$scratch/proc-failure/rootkitlings.ko" proc-failure \
+	--tool tools/module_load_params --tool tools/tcp_session_fixture \
+	--check-arg 12 --check-arg 'Proc publication rollback' --check-arg 1
+run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" \
+	solution --tool tools/proc_read_test --tool tools/tcp_session_fixture
 
 printf '[+] R24 cancellable framed TCP session passed\n'

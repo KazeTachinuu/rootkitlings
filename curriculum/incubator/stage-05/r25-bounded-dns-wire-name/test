@@ -98,9 +98,9 @@ expect_host_rejection()
 
 build_mutant()
 {
-	local name=$1
+	local name=$1 verification=$2
+	shift 2
 	cp -a "$HERE/solution" "$scratch/$name"
-	shift
 	"$@" "$scratch/$name/codec/dns_name.c"
 	local log=$scratch/$name.log
 	if ! make -s -C "$KDIR" M="$scratch/$name" W=1 modules > "$log" 2>&1; then
@@ -113,20 +113,25 @@ build_mutant()
 		printf '[x] mutant build has warnings: %s\n' "$name" >&2
 		exit 1
 	fi
-	expect_host_rejection "$scratch/$name" "$name"
+	if [[ $verification == host ]]; then
+		expect_host_rejection "$scratch/$name" "$name"
+	else
+		"$HERE/host-check" "$scratch/$name" \
+			"$scratch/$name/rootkitlings.ko"
+	fi
 }
 
 mutate_compression()
 {
 	sed -i 's/return RK_DNS_NAME_UNSUPPORTED_COMPRESSION;/return RK_DNS_NAME_MALFORMED;/' "$1"
 }
-build_mutant compression-as-malformed mutate_compression
+build_mutant compression-as-malformed host mutate_compression
 
 mutate_root_room()
 {
 	sed -i 's/(size_t)length + 2 >/(size_t)length + 1 >/' "$1"
 }
-build_mutant no-root-room mutate_root_room
+build_mutant no-root-room host mutate_root_room
 
 mutate_binary_zero()
 {
@@ -134,13 +139,13 @@ mutate_binary_zero()
 \t\tif (!label->data[0])\
 \t\t\treturn RK_DNS_NAME_MALFORMED;' "$1"
 }
-build_mutant rejects-binary-zero mutate_binary_zero
+build_mutant rejects-binary-zero host mutate_binary_zero
 
 mutate_early_destination()
 {
 	sed -i 's/candidate\[length++\]/wire[length++]/g; s/candidate + length/wire + length/g' "$1"
 }
-build_mutant writes-before-commit mutate_early_destination
+build_mutant writes-before-commit host mutate_early_destination
 
 mutate_kernel_branch()
 {
@@ -149,26 +154,26 @@ mutate_kernel_branch()
 #define RK_DNS_NAME_OK RK_DNS_NAME_INVALID_ARGUMENT\
 #endif' "$1"
 }
-build_mutant kernel-only-behavior mutate_kernel_branch
+build_mutant kernel-only-behavior guest mutate_kernel_branch
 
 mutate_early_view()
 {
 	sed -i '/struct rk_dns_name_view parsed = { 0 };/a\
 \tview->consumed = 0;' "$1"
 }
-build_mutant writes-view-before-success mutate_early_view
+build_mutant writes-view-before-success host mutate_early_view
 
 mutate_capacity()
 {
 	sed -i 's/if (capacity < length)/if (capacity + 1 < length)/' "$1"
 }
-build_mutant accepts-short-destination mutate_capacity
+build_mutant accepts-short-destination host mutate_capacity
 
 mutate_root()
 {
 	sed -i 's/if (!length) {/if (!length \&\& offset) {/' "$1"
 }
-build_mutant rejects-root-name mutate_root
+build_mutant rejects-root-name host mutate_root
 
 cp -a "$HERE/solution" "$scratch/alternate"
 cp "$HERE/fixtures/alternate/dns_name.c" \
@@ -197,6 +202,9 @@ run_guest()
 run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" solution
 run_guest "$HERE/success-check" \
 	"$scratch/alternate-build/rootkitlings.ko" alternate
+run_guest "$HERE/failure-check" \
+	"$scratch/kernel-only-behavior/rootkitlings.ko" kernel-only-behavior \
+	--tool tools/module_load_test
 run_guest "$HERE/failure-check" "$scratch/template/rootkitlings.ko" template \
 	--tool tools/module_load_test
 

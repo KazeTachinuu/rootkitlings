@@ -6,7 +6,6 @@ begin "Cancellable framed TCP session"
 
 endpoint=/proc/rootkitlings
 fixtures=/tmp/rootkitlings-framed-session
-helper=$fixtures/tcp_session_fixture
 expected=$fixtures/expected
 actual=$fixtures/actual
 fixture_pid=
@@ -24,9 +23,6 @@ cleanup()
 trap cleanup EXIT
 
 mkdir -p "$fixtures"
-sed -n '/^__ROOTKITLINGS_TCP_HELPER__$/,$p' /check |
-	sed '1d' | busybox base64 -d | busybox gzip -d > "$helper"
-chmod 0755 "$helper"
 
 wait_for_file()
 {
@@ -54,7 +50,7 @@ start_fixture()
 {
 	directory=$1
 	mkdir -p "$directory"
-	"$helper" serve "$directory" > "$directory/log" 2>&1 &
+	tcp_session_fixture serve "$directory" > "$directory/log" 2>&1 &
 	fixture_pid=$!
 	if wait_for_file "$directory/ready"; then
 		_ok "dynamic loopback listener is ready"

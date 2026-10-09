@@ -2,19 +2,15 @@
 # shellcheck source=/dev/null
 . /lib/check.sh
 
-begin "@LABEL@"
+expected_errno=${1:?expected errno argument is required}
+label=${2:?check label argument is required}
+needs_listener=${3:?listener flag argument is required}
+
+begin "$label"
 
 fixtures=/tmp/rootkitlings-framed-failure
-helper=$fixtures/tcp_session_fixture
-loader=$fixtures/module_load_params
-needs_listener=@NEEDS_LISTENER@
 mkdir -p "$fixtures"
 
-sed -n '/^__ROOTKITLINGS_TCP_HELPER__$/,/^__ROOTKITLINGS_MODULE_LOADER__$/p' /check |
-	sed '1d;$d' | busybox base64 -d | busybox gzip -d > "$helper"
-sed -n '/^__ROOTKITLINGS_MODULE_LOADER__$/,$p' /check |
-	sed '1d' | busybox base64 -d | busybox gzip -d > "$loader"
-chmod 0755 "$helper" "$loader"
 ifconfig lo 127.0.0.1 up
 
 wait_for_file()
@@ -34,16 +30,16 @@ while [ "$attempt" -le 2 ]; do
 	mkdir -p "$directory"
 	fixture_pid=
 	if [ "$needs_listener" -eq 1 ]; then
-		"$helper" hold "$directory" > "$directory/log" 2>&1 &
+		tcp_session_fixture hold "$directory" > "$directory/log" 2>&1 &
 		fixture_pid=$!
 		wait_for_file "$directory/ready" || _fail "listener was not ready"
 		port=$(cat "$directory/port")
 	else
 		port=47023
 	fi
-	if "$loader" /rootkitlings/rootkitlings.ko @EXPECTED_ERRNO@ \
+	if module_load_params /rootkitlings/rootkitlings.ko "$expected_errno" \
 			"peer_port=$port"; then
-		_ok "attempt $attempt returned errno @EXPECTED_ERRNO@"
+		_ok "attempt $attempt returned errno $expected_errno"
 	else
 		_fail "attempt $attempt returned the wrong error"
 	fi

@@ -6,7 +6,6 @@ begin "Kernel TCP socket ownership"
 
 endpoint=/proc/rootkitlings
 fixtures=/tmp/rootkitlings-socket
-helper=$fixtures/tcp_fixture
 expected=$fixtures/expected
 actual=$fixtures/actual
 fixture_pid=
@@ -24,9 +23,6 @@ cleanup()
 trap cleanup EXIT
 
 mkdir -p "$fixtures"
-sed -n '/^__ROOTKITLINGS_TCP_FIXTURE__$/,$p' /check |
-	sed '1d' | busybox base64 -d | busybox gzip -d > "$helper"
-chmod 0755 "$helper"
 
 wait_for_file()
 {
@@ -44,7 +40,7 @@ start_fixture()
 	directory=$1
 	rm -rf "$directory"
 	mkdir -p "$directory"
-	"$helper" serve "$directory" > "$directory/log" 2>&1 &
+	socket_owner_fixture serve "$directory" > "$directory/log" 2>&1 &
 	fixture_pid=$!
 	if wait_for_file "$directory/ready"; then
 		_ok "loopback fixture is listening"
