@@ -27,12 +27,13 @@ static void usage(const char *program)
 	fprintf(stderr,
 		"usage:\n"
 		"  %s write PATH DATA_FILE\n"
+		"  %s outcome PATH DATA_FILE\n"
 		"  %s repeat PATH DATA_FILE COUNT\n"
 		"  %s errno PATH DATA_FILE ERRNO\n"
 		"  %s fault PATH DATA_FILE ERRNO\n"
 		"  %s offset PATH DATA_FILE OFFSET ERRNO\n"
 		"  %s unload PATH DATA_FILE MODULE\n",
-		program, program, program, program, program, program);
+		program, program, program, program, program, program, program);
 }
 
 static int parse_positive(const char *text, long maximum, const char *name,
@@ -165,6 +166,37 @@ static int expect_full_write(const char *path, const struct fixture *fixture)
 		return -1;
 	}
 	return result;
+}
+
+static int report_write_outcome(const char *path,
+				const struct fixture *fixture)
+{
+	ssize_t count;
+	int saved_errno;
+	int fd = open_endpoint(path);
+
+	if (fd < 0)
+		return -1;
+	errno = 0;
+	count = write_retry(fd, fixture->data, fixture->length);
+	saved_errno = errno;
+	if (close(fd) < 0) {
+		fprintf(stderr, "proc_write_test: close %s: %s\n", path,
+			strerror(errno));
+		return -1;
+	}
+	if (count < 0) {
+		printf("%d\n", saved_errno);
+		return 0;
+	}
+	if ((size_t)count != fixture->length) {
+		fprintf(stderr,
+			"proc_write_test: write %s returned %zd, expected %zu\n",
+			path, count, fixture->length);
+		return -1;
+	}
+	printf("ok\n");
+	return 0;
 }
 
 static int expect_repeated_writes(const char *path,
@@ -391,6 +423,8 @@ int main(int argc, char **argv)
 
 	if (strcmp(mode, "write") == 0 && argc == 4) {
 		result = expect_full_write(path, &fixture);
+	} else if (strcmp(mode, "outcome") == 0 && argc == 4) {
+		result = report_write_outcome(path, &fixture);
 	} else if (strcmp(mode, "repeat") == 0 && argc == 5) {
 		if (parse_positive(argv[4], MAX_REPEAT_COUNT, "count",
 				   &repetitions) < 0)
@@ -421,6 +455,8 @@ int main(int argc, char **argv)
 	free(fixture.data);
 	if (result < 0)
 		return 1;
+	if (strcmp(mode, "outcome") == 0)
+		return 0;
 	printf("proc_write_test: verified %s mode for %s\n", mode, path);
 	return 0;
 
