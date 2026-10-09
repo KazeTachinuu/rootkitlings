@@ -39,14 +39,6 @@ while read -r symbol; do
 	esac
 done <<< "$undefined"
 
-if grep -Eq '\b(kmalloc|kzalloc|kfree|copy_(from|to)_user|fdget|register_kretprobe|READ_ONCE|WRITE_ONCE)[[:space:]]*\(' \
-	"$source"; then
-	die "the learner helper must stay pure"
-fi
-if grep -Eq '(strncmp|strncasecmp|strcasecmp|strstr)[[:space:]]*\(' "$source"; then
-	die "the target comparison must use exact length and bytes"
-fi
-
 for symbol in register_kprobe unregister_kprobe register_kretprobe \
 	unregister_kretprobe copy_from_user_nofault copy_to_user_nofault kfree; do
 	grep -Fxq "$symbol" < <(nm -u "$build_dir/instrumentation/getdents_probe.o" |

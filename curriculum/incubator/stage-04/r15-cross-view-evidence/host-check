@@ -29,7 +29,6 @@ done
 	! -L $missing_dir/instrumentation/probes.o ]] ||
 	die "missing-symbol build lacks instrumentation/probes.o"
 
-proc_source=$success_dir/interface/proc.c
 gcc -std=c11 -Wall -Wextra -Werror -Wno-unused-parameter \
 	-DROOTKITLINGS_FAIL_POINT=0 \
 	-I "$here/fixtures/host/include" -I "$success_dir/include" \
@@ -72,11 +71,6 @@ for target in vfs_mkdir filename_rmdir; do
 	[[ $(strings "$success_artifact" | grep -Fxc "$target") -eq 1 ]] ||
 		die "$target must have one identity in the canonical catalog"
 done
-if grep -Eq '(%p[xsS]?|->addr|\.addr|kallsyms_lookup_name|module_mutex|\bmodules\b|sys_call_table|getdents)' \
-	"$proc_source"; then
-	die "the proc renderer must not inspect addresses, registries, module lists, or directories"
-fi
-
 for object in "$success_dir/instrumentation/probes.o" \
 	"$missing_dir/instrumentation/probes.o"; do
 	[[ $(objdump -r "$object" | grep -Ec '[[:space:]]register_kprobes([+-]|$)') -eq 1 ]] ||

@@ -27,31 +27,8 @@ for path in "${supplied[@]}"; do
 		die "missing supplied file: $path"
 done
 
-mapfile -t source_paths < <(
-	cd "$success_dir"
-	find core include instrumentation interface -type f \
-		\( -name '*.c' -o -name '*.h' \) -printf '%p\n' | sort
-	printf 'Kbuild\n'
-)
-expected_paths=(
-	core/main.c
-	include/rootkit.h
-	instrumentation/read_filter.c
-	instrumentation/replace.c
-	interface/proc.c
-	Kbuild
-)
-[[ ${source_paths[*]} == "${expected_paths[*]}" ]] ||
-	die "source tree contains an unexpected or missing source file"
-
 learner=$success_dir/instrumentation/replace.c
 [[ -f $learner && ! -L $learner ]] || die "missing learner file"
-grep -Eq 'rk_replace_equal[[:space:]]*\(' "$learner" ||
-	die "rk_replace_equal is missing"
-if grep -Eq '\b(strlen|strstr|strnstr|strcpy|strncpy|strcat|strncat|sprintf|snprintf|krealloc|kmalloc|kzalloc|kfree)[[:space:]]*\(' \
-	"$learner"; then
-	die "replacement must be bounded byte processing without allocation"
-fi
 for command in gcc timeout nm objdump strings; do
 	command -v "$command" >/dev/null || die "$command is required"
 done

@@ -121,6 +121,12 @@ static void check_start_and_callback(void)
 		      NF_ACCEPT);
 		CHECK((u64)atomic64_read(&observer.callbacks) == before + 1);
 	}
+	before = (u64)atomic64_read(&observer.callbacks);
+	CHECK(registered_ops->hook(registered_ops->priv,
+				   (struct sk_buff *)(uintptr_t)1,
+				   (const struct nf_hook_state *)(uintptr_t)1) ==
+	      NF_ACCEPT);
+	CHECK((u64)atomic64_read(&observer.callbacks) == before + 1);
 	CHECK(rk_netfilter_start(&observer) == -EBUSY);
 	CHECK(event_count == 1);
 }

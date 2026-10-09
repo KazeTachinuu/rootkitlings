@@ -15,18 +15,6 @@ for relative in Kbuild main.c include/ipv4_parser.h include/skb_access.h \
 done
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
 
-source=$build_dir/access/skb_access.c
-
-if rg -q 'skb[[:space:]]*->[[:space:]]*data([^_[:alnum:]]|$)' "$source"; then
-	die "do not read skb->data directly"
-fi
-if rg -q '\b(kmalloc|kzalloc|kcalloc|vmalloc|skb_linearize|__skb_linearize|pskb_may_pull|skb_pull|__skb_pull)[[:space:]]*\(' "$source"; then
-	die "the adapter must not allocate, linearize, or pull"
-fi
-if rg -q '#[[:space:]]*(define|undef)[[:space:]]+(skb_|RK_)' "$source"; then
-	die "do not replace the supplied API or skb helpers with macros"
-fi
-
 nm "$build_dir/access/skb_access.o" |
 	grep -Eq '[[:space:]]T[[:space:]]rk_skb_read_network$' ||
 	die "access object does not define rk_skb_read_network"

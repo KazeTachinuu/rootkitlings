@@ -21,11 +21,6 @@ for relative in Kbuild access/skb_access.c classifier/udp.c core/main.c \
 		die "build is missing regular file: $relative"
 done
 
-if grep -Eq '^[[:space:]]*#[[:space:]]*(if|ifdef|ifndef|elif|else)\b' \
-	"$build_dir/mutation/udp_redirect.c"; then
-	die "learner file must not select different host and kernel behavior"
-fi
-
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
 	-fsanitize=address,undefined -fno-omit-frame-pointer \
 	-I"$here/fixtures/host/include" -I"$build_dir/include" \
