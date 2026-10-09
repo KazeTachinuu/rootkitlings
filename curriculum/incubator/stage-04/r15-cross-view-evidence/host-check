@@ -66,11 +66,18 @@ template_span = function_span(template, "rk_proc_show")
 submitted_show = submitted[slice(*submitted_span)]
 template_show = template[slice(*template_span)]
 
+def parenthesized_identifier(name):
+    return rf"(?:\(\s*)*{name}(?:\s*\))*"
+
+comparison = (
+    rf"(?:{parenthesized_identifier('id')}\s*==\s*"
+    rf"{parenthesized_identifier('RK_PROBE_FILENAME_RMDIR')}|"
+    rf"{parenthesized_identifier('RK_PROBE_FILENAME_RMDIR')}\s*==\s*"
+    rf"{parenthesized_identifier('id')})"
+)
 decision = re.compile(
-    r"\bif\s*\(\s*(?:"
-    r"id\s*==\s*RK_PROBE_FILENAME_RMDIR|"
-    r"RK_PROBE_FILENAME_RMDIR\s*==\s*id"
-    r")\s*\)\s*(?:\{\s*)?return\s+SEQ_SKIP\s*;\s*(?:\})?",
+    rf"\bif\s*\(\s*(?:\(\s*)*{comparison}(?:\s*\))*\s*\)\s*"
+    rf"(?:\{{\s*)?return\s+SEQ_SKIP\s*;\s*(?:\}})?",
     re.S,
 )
 matches = list(decision.finditer(submitted_show))

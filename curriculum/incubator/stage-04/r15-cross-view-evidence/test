@@ -175,6 +175,14 @@ sed -i \
 "$HERE/host-check" "$formatted" "$formatted/rootkitlings.ko" \
 	"$scratch/missing" > "$scratch/host-formatting.log"
 
+parenthesized=$scratch/host-parenthesized
+cp -a "$scratch/success" "$parenthesized"
+sed -i \
+	's/if (id == RK_PROBE_FILENAME_RMDIR)/if (((id) == (RK_PROBE_FILENAME_RMDIR)))/' \
+	"$parenthesized/interface/proc.c"
+"$HERE/host-check" "$parenthesized" "$parenthesized/rootkitlings.ko" \
+	"$scratch/missing" > "$scratch/host-parenthesized.log"
+
 unconditional=$scratch/host-unconditional
 cp -a "$scratch/success" "$unconditional"
 sed -i 's/if (id == RK_PROBE_FILENAME_RMDIR)/if (true)/' \
