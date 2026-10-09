@@ -71,7 +71,7 @@ static void usage(const char *program)
 {
 	fprintf(stderr,
 		"usage:\n"
-		"  %s PATH COMMAND\n"
+		"  %s write PATH COMMAND\n"
 		"  %s unchanged PATH COMMAND ERRNO\n"
 		"  %s replace PATH CHROOT_DIR\n"
 		"  %s thread-scope PATH\n"
@@ -835,7 +835,7 @@ static int parse_errno(const char *text, int *value)
 	return parse_bounded_integer(text, 1, 4095, value);
 }
 
-static int run_legacy_trigger(const char *path, const char *command)
+static int run_write_trigger(const char *path, const char *command)
 {
 	int write_errno;
 
@@ -867,7 +867,13 @@ int main(int argc, char **argv)
 			strerror(errno));
 		return 1;
 	}
-	if (strcmp(argv[1], "unchanged") == 0) {
+	if (strcmp(argv[1], "write") == 0) {
+		if (argc != 4) {
+			usage(argv[0]);
+			return 2;
+		}
+		return run_write_trigger(argv[2], argv[3]) < 0 ? 1 : 0;
+	} else if (strcmp(argv[1], "unchanged") == 0) {
 		if (argc != 5 || parse_errno(argv[4], &expected_errno) < 0) {
 			usage(argv[0]);
 			return 2;
@@ -920,8 +926,6 @@ int main(int argc, char **argv)
 		}
 		result = verify_token_race(argv[2], argv[3], workers,
 					   expected_errno);
-	} else if (argc == 3) {
-		return run_legacy_trigger(argv[1], argv[2]) < 0 ? 1 : 0;
 	} else {
 		usage(argv[0]);
 		return 2;

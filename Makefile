@@ -115,7 +115,6 @@ clean:
 
 doctor:
 	@"$(CURDIR)/scripts/doctor"
-	@printf '%s\n' 'Next: ./rootkitlings setup'
 
 compile-db:
 	@"$(CURDIR)/rootkitlings" start L00

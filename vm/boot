@@ -4,19 +4,8 @@ export LC_ALL=C
 
 VM_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "$VM_DIR/.." && pwd)
-
-# -- marker output --
-
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != dumb ]; then
-    B='\033[1;34m' G='\033[1;32m' Y='\033[1;33m' R='\033[31m' D='\033[2m' N='\033[0m'
-else
-    B='' G='' Y='' R='' D='' N=''
-fi
-hdr()  { printf "${B}[*]${N} %s\n" "$1"; }
-ok()   { printf "${G}[+]${N} %s\n" "$1"; }
-skip() { printf "${D}[=] %s${N}\n" "$1"; }
-warn() { printf "${Y}[-]${N} %s\n" "$1" >&2; }
-die()  { printf "${R}[x]${N} %s\n" "$1" >&2; exit 1; }
+# shellcheck source=scripts/lib/ui.sh
+source "$ROOT_DIR/scripts/lib/ui.sh"
 
 # -- arguments --
 
@@ -24,6 +13,7 @@ MODULE=
 CHECK=
 GDB=
 NETWORK=
+GUEST_COLOR=
 ACCEL=auto
 declare -a TOOLS=() TOOL_PATHS=() CHECK_ARGS=()
 while (( $# )); do
@@ -34,42 +24,48 @@ while (( $# )); do
         --tool)  TOOLS+=("${2:?--tool requires an argument}"); shift 2 ;;
         --accel)
             ACCEL=${2:?--accel requires an argument}
-            case $ACCEL in auto|kvm|tcg) ;; *) die "Unknown VM accelerator: $ACCEL" ;; esac
+            case $ACCEL in auto|kvm|tcg) ;; *) ui_die "Unknown VM accelerator: $ACCEL" ;; esac
             shift 2
             ;;
         --cap)
             case ${2:?--cap requires an argument} in
                 network) NETWORK=1 ;;
-                *) die "Unknown VM capability: $2" ;;
+                *) ui_die "Unknown VM capability: $2" ;;
             esac
             shift 2
             ;;
-        -*)      die "Unknown option: $1" ;;
+        -*)      ui_die "Unknown option: $1" ;;
         *)
-            [[ -z $MODULE ]] || die "Unexpected argument: $1"
+            [[ -z $MODULE ]] || ui_die "Unexpected argument: $1"
             MODULE=$1
             shift
             ;;
     esac
 done
 if (( ${#CHECK_ARGS[@]} )) && [[ -z $CHECK ]]; then
-    die "--check-arg requires --check"
+    ui_die "--check-arg requires --check"
+fi
+if [[ -n $CHECK ]]; then
+	export ROOTKITLINGS_QUIET=1
+fi
+if [[ -t 1 && ${NO_COLOR+x} != x && ${TERM:-} != dumb ]]; then
+	GUEST_COLOR=1
 fi
 
 # -- self-cleaning temp --
 
-WORK=$(mktemp -d) || die "Could not create temporary directory"
+WORK=$(mktemp -d) || ui_die "Could not create temporary directory"
 trap 'rm -rf -- "$WORK"' EXIT
 trap 'exit 130' INT TERM
 
 ROOTFS="$WORK/rootfs"
 INITRAMFS="$WORK/initramfs.gz"
-RELEASE=$("$ROOT_DIR/scripts/kernel" release) || die "Course kernel manifest is invalid"
-KERNEL=$("$ROOT_DIR/scripts/kernel" image) || die "Course kernel is not ready; run: ./rootkitlings setup"
-VMLINUX=$("$ROOT_DIR/scripts/kernel" vmlinux) || die "Course kernel is not ready; run: ./rootkitlings setup"
+RELEASE=$("$ROOT_DIR/scripts/kernel" release) || ui_die "Course kernel manifest is invalid"
+KERNEL=$("$ROOT_DIR/scripts/kernel" image) || ui_die "Course kernel is not ready; run: ./rootkitlings setup"
+VMLINUX=$("$ROOT_DIR/scripts/kernel" vmlinux) || ui_die "Course kernel is not ready; run: ./rootkitlings setup"
 BUSYBOX=$(command -v busybox || true)
 
-readonly VM_DIR ROOT_DIR RELEASE KERNEL VMLINUX BUSYBOX WORK ROOTFS INITRAMFS MODULE CHECK GDB NETWORK ACCEL
+readonly VM_DIR ROOT_DIR RELEASE KERNEL VMLINUX BUSYBOX WORK ROOTFS INITRAMFS MODULE CHECK GDB NETWORK GUEST_COLOR ACCEL
 
 resolve_tools()
 {
@@ -79,35 +75,35 @@ resolve_tools()
 	if (( ${#TOOLS[@]} == 0 )); then
 		return 0
 	fi
-	source_root=$(realpath -e -- "$ROOT_DIR/vm/tools") || die "Tools directory not found"
+	source_root=$(realpath -e -- "$ROOT_DIR/vm/tools") || ui_die "Tools directory not found"
 	for requested in "${TOOLS[@]}"; do
-        [[ $requested != /* ]] || die "Tool path must be relative to the repository: $requested"
+        [[ $requested != /* ]] || ui_die "Tool path must be relative to the repository: $requested"
         case $requested in
             vm/tools/*) relative=${requested#vm/tools/} ;;
-            */*) die "Tool path must be under vm/tools/: $requested" ;;
+            */*) ui_die "Tool path must be under vm/tools/: $requested" ;;
             *) relative=$requested ;;
         esac
-        [[ -n $relative ]] || die "Tool path is empty"
+        [[ -n $relative ]] || ui_die "Tool path is empty"
         IFS=/ read -r -a components <<< "$relative"
 		candidate=$source_root
 		for component in "${components[@]}"; do
 			[[ $component =~ ^[A-Za-z0-9._-]+$ && $component != . && $component != .. ]] ||
-				die "Invalid tool path: $requested"
+				ui_die "Invalid tool path: $requested"
 			candidate+=/$component
-			[[ ! -L $candidate ]] || die "Tool path may not contain symlinks: $requested"
+			[[ ! -L $candidate ]] || ui_die "Tool path may not contain symlinks: $requested"
 		done
 		relatives+=("$relative")
 		targets+=("$WORK/tool-build/$relative")
 	done
 	env -i PATH="$PATH" LC_ALL=C LANG=C TZ=UTC CC=gcc HOSTCC=gcc \
 		make -C "$ROOT_DIR" --quiet TOOL_OUT="$WORK/tool-build" "${targets[@]}" ||
-		die "Could not build the requested guest tools"
-	tools_root=$(realpath -e -- "$WORK/tool-build") || die "Tool build directory not found"
+		ui_die "Could not build the requested guest tools"
+	tools_root=$(realpath -e -- "$WORK/tool-build") || ui_die "Tool build directory not found"
 	for relative in "${relatives[@]}"; do
 		candidate=$tools_root/$relative
-		resolved=$(realpath -e -- "$candidate" 2>/dev/null) || die "Unknown tool: $relative"
+		resolved=$(realpath -e -- "$candidate" 2>/dev/null) || ui_die "Unknown tool: $relative"
 		[[ $resolved == "$tools_root"/* && -f $resolved && -x $resolved && ! -L $candidate ]] ||
-			die "Tool is not a regular executable built from vm/tools/: $relative"
+			ui_die "Tool is not a regular executable built from vm/tools/: $relative"
 		TOOL_PATHS+=("$resolved")
 	done
 }
@@ -117,14 +113,14 @@ resolve_tools()
 check_prerequisites()
 {
     resolve_tools
-    [[ -n $BUSYBOX ]] || die "BusyBox not found; run make doctor for the package name"
+    [[ -n $BUSYBOX ]] || ui_die "BusyBox not found; run make doctor for the package name"
     file "$BUSYBOX" | grep -q 'statically linked' ||
-        die "BusyBox is not statically linked: $BUSYBOX"
-    command -v cpio >/dev/null || die "cpio not found"
-    command -v qemu-system-x86_64 >/dev/null || die "QEMU not found"
-    command -v python3 >/dev/null || die "python3 not found"
+        ui_die "BusyBox is not statically linked: $BUSYBOX"
+    command -v cpio >/dev/null || ui_die "cpio not found"
+    command -v qemu-system-x86_64 >/dev/null || ui_die "QEMU not found"
+    command -v python3 >/dev/null || ui_die "python3 not found"
     if [[ -n $NETWORK ]] && ! qemu-system-x86_64 -netdev help 2>&1 | grep -q '^user$'; then
-        die "QEMU user networking was requested but SLIRP support is unavailable"
+        ui_die "QEMU user networking was requested but SLIRP support is unavailable"
     fi
     if [[ -n $GDB ]] && ! python3 - 2>/dev/null <<'PY'
 import socket
@@ -133,11 +129,11 @@ with socket.socket() as listener:
     listener.bind(("127.0.0.1", 1234))
 PY
     then
-        die "GDB port 1234 is already in use; connect to the running VM or stop it first"
+        ui_die "GDB port 1234 is already in use; connect to the running VM or stop it first"
     fi
-    [[ -z $MODULE || -f $MODULE ]] || die "Module not found: $MODULE"
-    [[ -z $CHECK  || -f $CHECK  ]] || die "Check script not found: $CHECK"
-    ok "Prerequisites verified for Linux $RELEASE"
+    [[ -z $MODULE || -f $MODULE ]] || ui_die "Module not found: $MODULE"
+    [[ -z $CHECK  || -f $CHECK  ]] || ui_die "Check script not found: $CHECK"
+    ui_success "Prerequisites verified for Linux $RELEASE"
 }
 
 # -- rootfs --
@@ -146,7 +142,7 @@ build_rootfs()
 {
     local applet
 
-    hdr "Building the BusyBox root filesystem"
+    ui_heading "Building the BusyBox root filesystem"
     mkdir -p "$ROOTFS"/{bin,dev,etc,lib,proc,rootkitlings,sys,tmp,vm/checks} \
         "$ROOTFS/lib/modules/$RELEASE"
     : > "$ROOTFS/lib/modules/$RELEASE/modules.dep"
@@ -161,10 +157,11 @@ build_rootfs()
         ln -s busybox "$ROOTFS/bin/$applet"
     done
     cp "$VM_DIR/init" "$ROOTFS/init"
+    cp "$ROOT_DIR/scripts/lib/ui.sh" "$ROOTFS/vm/ui.sh"
     chmod 755 "$ROOTFS/init"
     if [[ -n $MODULE ]]; then
         cp "$MODULE" "$ROOTFS/rootkitlings/$(basename "$MODULE")"
-        ok "Module copied to /rootkitlings/$(basename "$MODULE")"
+        ui_success "Module copied to /rootkitlings/$(basename "$MODULE")"
     fi
     if [[ -n $CHECK ]]; then
         cp "$ROOT_DIR/vm/checks/lib.sh" "$ROOTFS/vm/checks/lib.sh"
@@ -173,25 +170,25 @@ build_rootfs()
         if (( ${#CHECK_ARGS[@]} )); then
             printf '%s\0' "${CHECK_ARGS[@]}" > "$ROOTFS/check.args"
         fi
-        ok "Check script copied to /check"
+        ui_success "Check script copied to /check"
     fi
     for tool in "${TOOL_PATHS[@]}"; do
 		install -m 0755 -- "$tool" "$ROOTFS/bin/$(basename "$tool")"
-        ok "Tool copied to /bin/$(basename "$tool")"
+        ui_success "Tool copied to /bin/$(basename "$tool")"
     done
-    ok "Root filesystem ready"
+    ui_success "Root filesystem ready"
 }
 
 # -- initramfs --
 
 pack_initramfs()
 {
-    hdr "Packing the compressed CPIO archive"
+    ui_heading "Packing the compressed CPIO archive"
     (
         cd "$ROOTFS"
         find . -print0 | cpio --null -o --format=newc --owner=0:0 --quiet
     ) | gzip -1 > "$INITRAMFS"
-    ok "Initramfs ready: $(du -h "$INITRAMFS" | cut -f1)"
+    ui_success "Initramfs ready: $(du -h "$INITRAMFS" | cut -f1)"
 }
 
 # -- qemu --
@@ -200,25 +197,25 @@ run_vm()
 {
 	local -a qemu_args
 	local cmdline='console=ttyS0 rdinit=/init panic=1 loglevel=4'
-	local debugger debugger_prompt qemu_status serial_log
+	local debugger debugger_prompt protocol_error protocol_status qemu_status serial_log
 
     case $ACCEL in
         kvm)
-            [[ -r /dev/kvm && -w /dev/kvm ]] || die "KVM was requested but /dev/kvm is unavailable"
+            [[ -r /dev/kvm && -w /dev/kvm ]] || ui_die "KVM was requested but /dev/kvm is unavailable"
             qemu_args=(-accel kvm -cpu host)
-            ok "KVM acceleration selected"
+            ui_success "KVM acceleration selected"
             ;;
         tcg)
             qemu_args=(-accel tcg -cpu max)
-            ok "TCG emulation selected"
+            ui_success "TCG emulation selected"
             ;;
         auto)
             if [[ -r /dev/kvm && -w /dev/kvm ]]; then
                 qemu_args=(-accel kvm -cpu host)
-                ok "KVM acceleration available"
+                ui_success "KVM acceleration available"
             else
                 qemu_args=(-accel tcg -cpu max)
-                warn "KVM unavailable; falling back to TCG"
+                ui_warning "KVM unavailable; falling back to TCG"
             fi
             ;;
     esac
@@ -229,12 +226,15 @@ run_vm()
     if [[ -n $NETWORK ]]; then
         cmdline+=' rootkitlings=network'
     fi
+    if [[ -n $GUEST_COLOR ]]; then
+        cmdline+=' rootkitlings=color'
+    fi
     if [[ -n $GDB ]]; then
         cmdline+=' nokaslr'
         qemu_args+=(-gdb 'tcp:127.0.0.1:1234' -S)
-        ok "GDB server on localhost:1234, VM paused waiting for debugger"
-        ok "The debugger socket is bound to 127.0.0.1 only"
-        ok "KASLR disabled for stable symbol addresses"
+        ui_success "GDB server on localhost:1234, VM paused waiting for debugger"
+        ui_success "The debugger socket is bound to 127.0.0.1 only"
+        ui_success "KASLR disabled for stable symbol addresses"
         if command -v pwndbg >/dev/null; then
             debugger=pwndbg
             debugger_prompt='pwndbg>'
@@ -242,7 +242,7 @@ run_vm()
             debugger=gdb
             debugger_prompt='(gdb)'
         fi
-        hdr "Connect from another terminal"
+        ui_heading "Connect from another terminal"
         printf '    $ %s %q\n' "$debugger" "$VMLINUX"
         printf '    %s target remote :1234\n' "$debugger_prompt"
         printf '    %s continue\n' "$debugger_prompt"
@@ -264,22 +264,45 @@ run_vm()
         qemu_args+=(-nic none)
     fi
 
-    hdr "Booting a separate guest kernel"
-    printf '%b    $ qemu-system-x86_64' "$D"
-    printf ' %q' "${qemu_args[@]}"
-    printf '%b\n' "$N"
+    if [[ -z $CHECK ]]; then
+        ui_heading "Booting a separate guest kernel"
+        printf '    $ qemu-system-x86_64'
+        printf ' %q' "${qemu_args[@]}"
+        printf '\n'
+    fi
 
 	serial_log=$WORK/serial.log
 	set +e
-	qemu-system-x86_64 "${qemu_args[@]}" 2>&1 | tee "$serial_log"
-	qemu_status=${PIPESTATUS[0]}
+	if [[ -n $CHECK ]]; then
+		qemu-system-x86_64 "${qemu_args[@]}" >"$serial_log" 2>&1
+		qemu_status=$?
+	else
+		qemu-system-x86_64 "${qemu_args[@]}" 2>&1 | tee "$serial_log"
+		qemu_status=${PIPESTATUS[0]}
+	fi
 	set -e
 	if (( qemu_status != 0 )); then
+		[[ -z $CHECK ]] || cat "$serial_log" >&2
 		return "$qemu_status"
 	fi
 	if [[ -n $CHECK ]]; then
-		grep -Fq '[+] PASSED' "$serial_log" &&
-			! grep -Fq '[x] FAILED' "$serial_log"
+		protocol_error=$WORK/protocol.error
+		set +e
+		python3 "$ROOT_DIR/engine/guest_protocol.py" "$serial_log" 2>"$protocol_error"
+		protocol_status=$?
+		set -e
+		case $protocol_status in
+			0) return 0 ;;
+			1)
+				cat "$protocol_error" >&2
+				return 1
+				;;
+			*)
+				cat "$serial_log" >&2
+				ui_error "Guest check protocol invalid: $(<"$protocol_error")"
+				return 1
+				;;
+		esac
 	fi
 }
 

@@ -1,21 +1,24 @@
 #!/usr/bin/bash
+# shellcheck disable=SC2317 # This file may be sourced or executed.
 
 ROOTKITLINGS_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd) || {
-	printf '[x] cannot locate the Rootkitlings repository\n' >&2
+	printf '[x] Could not locate the Rootkitlings repository\n' >&2
 	return 1 2>/dev/null || exit 1
 }
+# shellcheck source=scripts/lib/ui.sh
+source "$ROOTKITLINGS_ROOT/scripts/lib/ui.sh"
 
 KDIR=$("$ROOTKITLINGS_ROOT/scripts/kernel" build-dir) || {
-	printf '[x] course kernel is not ready; run: ./rootkitlings setup\n' >&2
+	ui_error 'course kernel is not ready; run: ./rootkitlings setup'
 	return 1 2>/dev/null || exit 1
 }
 if [[ ! -d $KDIR || -L $KDIR ]]; then
-	printf '[x] kernel build directory is unsafe or missing: %s\n' "$KDIR" >&2
+	ui_error "kernel build directory is unsafe or missing: $KDIR"
 	return 1 2>/dev/null || exit 1
 fi
 
 KERNEL_RELEASE=$("$ROOTKITLINGS_ROOT/scripts/kernel" release) || {
-	printf '[x] cannot read the pinned course-kernel release\n' >&2
+	ui_error 'cannot read the pinned course-kernel release'
 	return 1 2>/dev/null || exit 1
 }
 

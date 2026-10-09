@@ -136,7 +136,7 @@ check_successes()
 '
 	enable_unprivileged
 	identity=$(run_as 65534 65534 \
-		cred_trigger_test "$endpoint" "$root_lf")
+		cred_trigger_test write "$endpoint" "$root_lf")
 	if [ "$identity" = "uid=0 euid=0" ]; then
 		_ok "root with a final newline replaces only its writing process"
 	else

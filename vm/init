@@ -3,18 +3,12 @@
 export PATH=/bin
 export LC_ALL=C
 export PS1='(rootkitlings) \w # '
-
-if [ -t 1 ] && [ "${TERM:-}" != dumb ]; then
-	DIM='\033[2m'
-	RESET='\033[0m'
-else
-	DIM=''
-	RESET=''
-fi
+# shellcheck source=scripts/lib/ui.sh
+. /vm/ui.sh
 
 show()
 {
-	printf '%b    $ %s%b\n' "$DIM" "$*" "$RESET"
+	ui_transcript "$*"
 }
 
 run()
@@ -23,27 +17,32 @@ run()
 	"$@"
 }
 
-printf '[*] Mounting guest kernel interfaces\n'
-run mount -t devtmpfs devtmpfs /dev
-run mount -t proc proc /proc
-run mount -t sysfs sysfs /sys
-run mount -t debugfs debugfs /sys/kernel/debug
-run mount -t tracefs tracefs /sys/kernel/tracing
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t debugfs debugfs /sys/kernel/debug
+mount -t tracefs tracefs /sys/kernel/tracing
 
 read -r _cmdline < /proc/cmdline
 for _word in $_cmdline; do
 	case "$_word" in
 		rootkitlings=check) _check=1 ;;
 		rootkitlings=network) _network=1 ;;
+		rootkitlings=color) _color=1 ;;
 	esac
 done
+
+if [ "${_color:-}" != 1 ]; then
+	export NO_COLOR=1
+fi
 
 if [ "${_network:-}" = 1 ]; then
 	run ifconfig eth0 10.0.2.15 up
 fi
 
 if [ "${_check:-}" = 1 ]; then
-	printf '[*] Check mode\n'
+	export NO_COLOR=1
+	printf '\nROOTKITLINGS_CHECK_BEGIN\n'
 	if [ -f /check.args ]; then
 		xargs -0 /check < /check.args
 	else
@@ -51,26 +50,26 @@ if [ "${_check:-}" = 1 ]; then
 	fi
 	_rc=$?
 	if [ "$_rc" -eq 0 ]; then
-		printf '[+] PASSED\n'
+		printf 'ROOTKITLINGS_RESULT=pass\n'
 	else
-		printf '[x] FAILED (exit %s)\n' "$_rc"
+		printf 'ROOTKITLINGS_RESULT=fail:%s\n' "$_rc"
 	fi
 	reboot -f
 	while :; do sleep 1; done
 fi
 
-printf '[+] /init is PID %s\n' "$$"
-printf '[+] BusyBox shell ready on ttyS0\n'
-printf '[*] The root filesystem lives in RAM; exit powers off the VM\n'
+ui_success "/init is PID $$"
+ui_success 'BusyBox shell ready on ttyS0'
+ui_progress 'The root filesystem lives in RAM; exit powers off the VM'
 cd /rootkitlings || exit 1
-printf '[+] Working directory: /rootkitlings\n'
+ui_success 'Working directory: /rootkitlings'
 
 show 'setsid -c sh -i </dev/ttyS0 >/dev/ttyS0 2>&1'
 setsid -c sh -i </dev/ttyS0 >/dev/ttyS0 2>&1
 
 show 'reboot -f'
 reboot -f
-printf '[x] reboot failed\n' >&2
+ui_error 'reboot failed'
 while :; do
 	sleep 1
 done

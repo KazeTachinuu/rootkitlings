@@ -15,6 +15,6 @@ done
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
 	-fsanitize=address,undefined -fno-omit-frame-pointer \
 	-I"$build/include" "$here/../fixtures/host/aead_test.c" \
-	"$here/../fixtures/host/platform.c" "$build/crypto/aead.c" -o "$tmp/checks/test"
-ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 "$tmp/checks/test"
+	"$here/../fixtures/host/platform.c" "$build/crypto/aead.c" -o "$tmp/test"
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 "$tmp/test"
 printf '[+] authenticated-encryption host behavior passed\n'

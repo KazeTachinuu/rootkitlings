@@ -1,8 +1,11 @@
 #!/usr/bin/bash
+# shellcheck disable=SC1091 # /etc/os-release is a runtime host file.
 set -u
 export LC_ALL=C LANG=C
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# shellcheck source=scripts/lib/ui.sh
+source "$ROOT_DIR/scripts/lib/ui.sh"
 missing=0
 family=unknown
 if [[ -r /etc/os-release ]]; then
@@ -39,24 +42,25 @@ check_command()
 	local command=$1 package
 	package=$(package_name "$2")
 	if command -v "$command" >/dev/null; then
-		printf '[+] %-22s %s\n' "$command" "$(command -v "$command")"
+		ui_item pass "$command" "$(command -v "$command")"
 	else
-		printf '[x] %-22s missing (package: %s)\n' "$command" "$package"
+		ui_item fail "$command" "missing (package: $package)"
 		missing=$((missing + 1))
 	fi
 }
 
-printf '[*] Host\n'
-printf '[+] %-22s %s\n' distribution "${PRETTY_NAME:-unknown}"
+ui_heading 'Host'
+ui_item pass distribution "${PRETTY_NAME:-unknown}"
 if [[ $(uname -m) == x86_64 ]]; then
-	printf '[+] %-22s supported\n' architecture
+	ui_item pass architecture supported
 else
-	printf '[x] %-22s unsupported; the course currently targets x86-64\n' "$(uname -m)"
+	ui_item fail architecture "$(uname -m) is unsupported; the course targets x86-64"
 	missing=$((missing + 1))
 fi
-printf '[+] %-22s irrelevant (%s)\n' 'host kernel' "$(uname -r)"
+ui_item note 'host kernel' "irrelevant ($(uname -r))"
 
-printf '\n[*] Build and verification tools\n'
+printf '\n'
+ui_heading 'Build and verification tools'
 check_command bash bash
 check_command make build
 check_command gcc compiler
@@ -81,25 +85,25 @@ import sys, tarfile
 raise SystemExit(not (sys.version_info >= (3, 11) and hasattr(tarfile, "data_filter")))
 PY
 	then
-		printf '[+] %-22s maintained 3.11+ with safe tar filters\n' Python
+		ui_item pass Python 'maintained 3.11+ with safe tar filters'
 	else
-		printf '[x] %-22s requires maintained Python 3.11+ with tar extraction filters\n' Python
+		ui_item fail Python 'requires maintained 3.11+ with safe tar filters'
 		missing=$((missing + 1))
 	fi
 fi
 
 if command -v gcc >/dev/null; then
 	if printf '#include <libelf.h>\n#include <gelf.h>\nint main(void) { return elf_version(EV_CURRENT) == EV_NONE; }\n' | gcc -x c -o /dev/null - -lelf >/dev/null 2>&1; then
-		printf '[+] %-22s available\n' 'libelf development'
+		ui_item pass 'libelf development' available
 	else
-		printf '[x] %-22s missing (package: %s)\n' 'libelf development' "$(package_name libelf)"
+		ui_item fail 'libelf development' "missing (package: $(package_name libelf))"
 		missing=$((missing + 1))
 	fi
 	probe=$(mktemp "${TMPDIR:-/tmp}/rootkitlings-cc.XXXXXX")
 	if printf 'int main(void) { return 0; }\n' | gcc -static -x c -o "$probe" - >/dev/null 2>&1; then
-		printf '[+] %-22s available\n' 'static C linking'
+		ui_item pass 'static C linking' available
 	else
-		printf '[x] %-22s unavailable (package: %s)\n' 'static C linking' "$(package_name static-libc)"
+		ui_item fail 'static C linking' "unavailable (package: $(package_name static-libc))"
 		missing=$((missing + 1))
 	fi
 	rm -f -- "$probe"
@@ -107,9 +111,9 @@ fi
 
 if command -v busybox >/dev/null; then
 	if file "$(command -v busybox)" | grep -q 'statically linked'; then
-		printf '[+] %-22s statically linked\n' BusyBox
+		ui_item pass BusyBox 'statically linked'
 	else
-		printf '[x] %-22s must be statically linked (package: %s)\n' BusyBox "$(package_name busybox)"
+		ui_item fail BusyBox "must be statically linked (package: $(package_name busybox))"
 		missing=$((missing + 1))
 	fi
 	busybox_applets=$(busybox --list)
@@ -121,62 +125,65 @@ if command -v busybox >/dev/null; then
 		grep -qx "$applet" <<< "$busybox_applets" || missing_applets+=" $applet"
 	done
 	if [[ -z $missing_applets ]]; then
-		printf '[+] %-22s complete\n' 'BusyBox applets'
+		ui_item pass 'BusyBox applets' complete
 	else
-		printf '[x] %-22s missing:%s\n' 'BusyBox applets' "$missing_applets"
+		ui_item fail 'BusyBox applets' "missing:$missing_applets"
 		missing=$((missing + 1))
 	fi
 fi
 
 if command -v qemu-system-x86_64 >/dev/null; then
 	if qemu-system-x86_64 -netdev help 2>&1 | grep -q '^user$'; then
-		printf '[+] %-22s optional capability available\n' 'QEMU user network'
+		ui_item pass 'QEMU user network' 'optional capability available'
 	else
-		printf '[-] %-22s optional capability unavailable\n' 'QEMU user network'
+		ui_item note 'QEMU user network' 'optional capability unavailable'
 	fi
 fi
 
-printf '\n[*] Capacity\n'
+printf '\n'
+ui_heading 'Capacity'
 memory_kib=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
 if (( memory_kib >= 2 * 1024 * 1024 )); then
-	printf '[+] %-22s %.1f GiB (4 GiB recommended)\n' memory "$(awk -v value="$memory_kib" 'BEGIN { print value / 1048576 }')"
+	ui_item pass memory "$(awk -v value="$memory_kib" 'BEGIN { printf "%.1f GiB (4 GiB recommended)", value / 1048576 }')"
 else
-	printf '[x] %-22s %.1f GiB; at least 2 GiB is required\n' memory "$(awk -v value="$memory_kib" 'BEGIN { print value / 1048576 }')"
+	ui_item fail memory "$(awk -v value="$memory_kib" 'BEGIN { printf "%.1f GiB; at least 2 GiB is required", value / 1048576 }')"
 	missing=$((missing + 1))
 fi
 free_kib=$(df -Pk "$ROOT_DIR" | awk 'NR == 2 { print $4 }')
 if (( free_kib >= 4 * 1024 * 1024 )); then
-	printf '[+] %-22s %.1f GiB free (6 GiB recommended)\n' storage "$(awk -v value="$free_kib" 'BEGIN { print value / 1048576 }')"
+	ui_item pass storage "$(awk -v value="$free_kib" 'BEGIN { printf "%.1f GiB free (6 GiB recommended)", value / 1048576 }')"
 else
-	printf '[x] %-22s %.1f GiB free; at least 4 GiB is required\n' storage "$(awk -v value="$free_kib" 'BEGIN { print value / 1048576 }')"
+	ui_item fail storage "$(awk -v value="$free_kib" 'BEGIN { printf "%.1f GiB free; at least 4 GiB is required", value / 1048576 }')"
 	missing=$((missing + 1))
 fi
 cpus=$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf 1)
-printf '[+] %-22s %s logical (4 recommended)\n' processors "$cpus"
+ui_item pass processors "$cpus logical (4 recommended)"
 
-printf '\n[*] Course kernel\n'
-if "$ROOT_DIR/scripts/kernel" status; then
-	printf '[+] %-22s ready\n' 'pinned kernel'
+printf '\n'
+ui_heading 'Course kernel'
+if "$ROOT_DIR/scripts/kernel" status >/dev/null; then
+	ui_item pass 'pinned kernel' ready
 else
-	printf '[-] %-22s setup will build it from the pinned source\n' 'pinned kernel'
+	ui_item note 'pinned kernel' 'setup will build it from the pinned source'
 fi
 
-printf '\n[*] Acceleration\n'
+printf '\n'
+ui_heading 'Acceleration'
 if [[ -r /dev/kvm && -w /dev/kvm ]]; then
-	printf '[+] %-22s available\n' KVM
+	ui_item pass KVM available
 else
-	printf '[-] %-22s unavailable; tests use slower TCG emulation\n' KVM
+	ui_item note KVM 'unavailable; tests use slower TCG emulation'
 fi
 if command -v pwndbg >/dev/null; then
-	printf '[+] %-22s %s\n' pwndbg "$(command -v pwndbg)"
+	ui_item pass pwndbg "$(command -v pwndbg)"
 else
-	printf '[-] %-22s optional enhanced GDB interface\n' pwndbg
+	ui_item note pwndbg 'optional enhanced GDB interface'
 fi
 
 printf '\n'
 if (( missing == 0 )); then
-	printf '[+] Host ready for the pinned x86-64 course kernel\n'
+	ui_success 'Host ready for the pinned x86-64 course kernel'
 else
-	printf '[x] Not ready: %d required item(s) missing\n' "$missing"
+	ui_error "Not ready: $missing required item(s) missing"
 	exit 1
 fi

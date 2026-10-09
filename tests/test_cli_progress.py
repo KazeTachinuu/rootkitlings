@@ -16,7 +16,10 @@ ROOT = Path(__file__).resolve().parent.parent
 
 class LearnerCLITests(unittest.TestCase):
     def setUp(self) -> None:
-        namespace = runpy.run_path(ROOT / "rootkitlings", run_name="rootkitlings_test")
+        namespace = runpy.run_path(
+            ROOT / "engine/cli.py",
+            run_name="rootkitlings_test",
+        )
         self.globals = namespace["cmd_reset"].__globals__
         self.temporary = tempfile.TemporaryDirectory()
         runtime = Path(self.temporary.name) / ".rootkitlings"
@@ -62,7 +65,7 @@ class LearnerCLITests(unittest.TestCase):
             if command == [str(ROOT / "scripts/kernel"), "status"]:
                 return SimpleNamespace(returncode=0, stdout="ready\n")
             if command == [str(ROOT / "scripts/doctor")]:
-                return SimpleNamespace(returncode=0, stdout="[+] doctor passed\n")
+                return SimpleNamespace(returncode=0, stdout="[+] Host ready\n")
             if command == [str(ROOT / "scripts/kernel"), "ensure"]:
                 return SimpleNamespace(returncode=0, stdout=None)
             if command == [
@@ -70,7 +73,7 @@ class LearnerCLITests(unittest.TestCase):
                 "--check",
                 str(ROOT / "vm/checks/containment"),
             ]:
-                return SimpleNamespace(returncode=0, stdout="[+] PASSED\n")
+                return SimpleNamespace(returncode=0, stdout="[+] contained\n")
             self.fail(f"unexpected setup command: {command}")
 
         try:
@@ -103,7 +106,7 @@ class LearnerCLITests(unittest.TestCase):
             [
                 SimpleNamespace(returncode=0, stdout="doctor ok\n"),
                 SimpleNamespace(returncode=0, stdout=None),
-                SimpleNamespace(returncode=0, stdout="missing marker\n"),
+                SimpleNamespace(returncode=1, stdout="guest failed\n"),
             ],
         )
         try:
@@ -181,10 +184,25 @@ class LearnerCLITests(unittest.TestCase):
         finally:
             self.globals["course_kernel_ready"] = original_ready
         lines = output.getvalue().splitlines()
-        self.assertEqual(lines[0], "Kernel  ready")
-        self.assertRegex(lines[1], r"^Course  0/\d+ complete$")
-        self.assertIn("Workspace not started", lines)
-        self.assertIn("Next    ./rootkitlings start L00", lines)
+        self.assertEqual(lines[0], "Rootkitlings")
+        self.assertRegex(lines[1], r"^Course +0 of \d+ complete$")
+        self.assertIn("Kernel     Ready", lines)
+        self.assertIn("Workspace  Not started", lines)
+        self.assertIn("  ./rootkitlings read L00", lines)
+
+    def test_status_prioritizes_setup_when_kernel_is_missing(self) -> None:
+        output = io.StringIO()
+        original_ready = self.globals["course_kernel_ready"]
+        try:
+            self.globals["course_kernel_ready"] = lambda: False
+            with redirect_stdout(output):
+                self.globals["cmd_status"]([])
+        finally:
+            self.globals["course_kernel_ready"] = original_ready
+        text = output.getvalue()
+        self.assertIn("Kernel     Setup required", text)
+        self.assertIn("  ./rootkitlings setup", text)
+        self.assertNotIn("  ./rootkitlings read L00", text)
 
     def test_help_uses_short_reset_and_documents_current_default(self) -> None:
         output = io.StringIO()
@@ -194,6 +212,15 @@ class LearnerCLITests(unittest.TestCase):
         self.assertIn("reset --all --yes", help_text)
         self.assertNotIn("progress-reset", help_text)
         self.assertIn("current exercise is used", help_text)
+        self.assertIn("Commands also accept unambiguous prefixes", help_text)
+
+    def test_standard_help_flags_show_help(self) -> None:
+        for flag in ("-h", "--help"):
+            with self.subTest(flag=flag):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    self.assertEqual(self.globals["main"]([flag]), 0)
+                self.assertIn("./rootkitlings <COMMAND> [EXERCISE]", output.getvalue())
 
     def test_prereq_shows_only_assumptions_the_exercise_uses(self) -> None:
         output = io.StringIO()
@@ -337,9 +364,20 @@ class LearnerCLITests(unittest.TestCase):
             label="Invalid build setting",
             check="",
         )
+        repeated_success = SimpleNamespace(
+            id="second",
+            label="Second load",
+            check=exercise.resources.check,
+        )
         outcomes = (
             SimpleNamespace(
                 case=success,
+                build_root=build_root,
+                artifact=artifact,
+                output="",
+            ),
+            SimpleNamespace(
+                case=repeated_success,
                 build_root=build_root,
                 artifact=artifact,
                 output="",
@@ -376,15 +414,17 @@ class LearnerCLITests(unittest.TestCase):
         }
         attempts = []
         guest_runs = []
+        host_runs = []
         try:
             self.globals["build_verification_cases"] = fake_builds
             self.globals["course_kernel_build_dir"] = lambda: build_root
             self.globals["run_host_check"] = (
-                lambda *_args: SimpleNamespace(returncode=0, stdout="")
+                lambda *_args: host_runs.append(_args)
+                or SimpleNamespace(returncode=0, stdout="")
             )
             self.globals["run"] = (
                 lambda command, **_kwargs: guest_runs.append(command)
-                or SimpleNamespace(returncode=0, stdout="[+] PASSED\n")
+                or SimpleNamespace(returncode=0, stdout="[+] lifecycle\n")
             )
             self.globals["record_attempt"] = (
                 lambda item, passed, *_args: attempts.append((item.id, passed)) or False
@@ -394,10 +434,12 @@ class LearnerCLITests(unittest.TestCase):
                 self.globals["cmd_check"]([exercise.serial])
         finally:
             self.globals.update(originals)
-        self.assertIn("Check 1/2: Normal load", output.getvalue())
-        self.assertIn("Check 2/2: Invalid build setting", output.getvalue())
+        self.assertIn("[*] Case 1 of 3  Normal load", output.getvalue())
+        self.assertIn("[*] Case 2 of 3  Second load", output.getvalue())
+        self.assertIn("[*] Case 3 of 3  Invalid build setting", output.getvalue())
         self.assertIn("Build rejected as required", output.getvalue())
-        self.assertEqual(len(guest_runs), 1)
+        self.assertEqual(len(host_runs), 1)
+        self.assertEqual(len(guest_runs), 2)
         self.assertEqual(attempts, [(exercise.id, True)])
 
     def test_missing_workspace_is_not_an_attempt(self) -> None:

@@ -13,10 +13,35 @@ from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parent.parent
-TOOL = runpy.run_path(str(ROOT / "scripts/kernel"))
+TOOL = runpy.run_path(str(ROOT / "engine/kernel.py"))
 
 
 class KernelToolTests(unittest.TestCase):
+    def test_command_output_is_shown_only_when_the_command_fails(self) -> None:
+        with mock.patch.object(
+            TOOL["subprocess"],
+            "run",
+            return_value=mock.Mock(returncode=0, stdout="successful noise\n"),
+        ):
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
+                TOOL["run"](["example", "success"])
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertEqual(stderr.getvalue(), "")
+
+        with mock.patch.object(
+            TOOL["subprocess"],
+            "run",
+            return_value=mock.Mock(returncode=2, stdout="failure details"),
+        ):
+            stderr = io.StringIO()
+            with mock.patch("sys.stderr", stderr):
+                with self.assertRaisesRegex(TOOL["KernelError"], "status 2"):
+                    TOOL["run"](["example", "failure"])
+            self.assertIn("failure details", stderr.getvalue())
+            self.assertTrue(stderr.getvalue().endswith("\n"))
+
     def test_termination_is_converted_to_a_cleanup_exception(self) -> None:
         with self.assertRaises(KeyboardInterrupt):
             TOOL["interrupt_for_cleanup"](15, None)

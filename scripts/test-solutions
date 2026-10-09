@@ -13,6 +13,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT))
 
 from engine.catalog import Catalog, CatalogError  # noqa: E402
+from engine.console import Console  # noqa: E402
 from engine.process import ProcessError, ProcessTimeout, run_process  # noqa: E402
 from engine.verification import (  # noqa: E402
     VerificationError,
@@ -22,6 +23,9 @@ from engine.verification import (  # noqa: E402
 
 class SolutionCheckError(RuntimeError):
     pass
+
+
+UI = Console("rootkitlings.solution-tests")
 
 
 def run(command: list[str], timeout: int | None = None):
@@ -65,21 +69,23 @@ def verify_item(
         kernel_build_dir=kernel_build_dir,
     ) as verification:
         outcomes = verification.outcomes
+        host_check_pending = bool(item.resources.host_check)
         for index, outcome in enumerate(outcomes, 1):
-            print(f"[*] Case {index}/{len(outcomes)}: {outcome.case.label}")
+            UI.progress(f"Case {index} of {len(outcomes)}  {outcome.case.label}")
             if outcome.artifact is None:
-                print("[+] Build rejected as required")
+                UI.success("Build rejected as required")
                 continue
-            if item.resources.host_check:
+            if host_check_pending:
                 host = run([
                     str(ROOT / item.resources.host_check),
                     str(outcome.build_root),
                     str(outcome.artifact),
                 ], timeout)
                 if host.stdout:
-                    print(host.stdout, end="")
+                    UI.raw_block(host.stdout, error=bool(host.returncode))
                 if host.returncode:
                     raise SolutionCheckError("source and artifact check failed")
+                host_check_pending = False
             guest = run([
                 str(ROOT / "vm/boot"),
                 *arguments,
@@ -95,11 +101,13 @@ def verify_item(
                 str(outcome.artifact),
             ], timeout)
             if guest.stdout:
-                print(guest.stdout, end="")
-            if guest.returncode or "[+] PASSED" not in guest.stdout:
+                UI.raw_block(guest.stdout, error=bool(guest.returncode))
+            if guest.returncode:
                 raise SolutionCheckError(
                     f"guest check failed: {outcome.case.label}"
                 )
+        if host_check_pending:
+            raise SolutionCheckError("no successful artifact was available for host checks")
 
 
 def main(arguments: list[str]) -> int:
@@ -107,7 +115,7 @@ def main(arguments: list[str]) -> int:
         catalog = Catalog(ROOT)
         requested = {catalog.resolve(value).id for value in arguments}
     except CatalogError as error:
-        print(f"[x] {error}", file=sys.stderr)
+        UI.error(str(error))
         return 2
     items = sorted(
         catalog.exercises,
@@ -120,22 +128,24 @@ def main(arguments: list[str]) -> int:
     located = run([str(ROOT / "scripts/kernel"), "build-dir"], 10)
     kernel_build_dir = Path((located.stdout or "").strip())
     if located.returncode or not kernel_build_dir.is_dir() or kernel_build_dir.is_symlink():
-        print("[x] course kernel is not ready; run: scripts/kernel ensure", file=sys.stderr)
+        UI.error("course kernel is not ready; run: scripts/kernel ensure")
         return 1
     with tempfile.TemporaryDirectory(prefix="rootkitlings-solutions-") as temporary:
         solution_root = Path(temporary)
         for item in items:
             shown = item.serial or item.id
-            print(f"\n[*] {shown} ({item.id})")
+            UI.section(f"{shown}  {item.title}")
             try:
                 verify_item(catalog, item, solution_root, kernel_build_dir)
             except (OSError, SolutionCheckError, VerificationError) as error:
-                print(f"[x] {item.id} failed: {error}", file=sys.stderr)
+                UI.error(f"{item.id} failed: {error}")
                 failed += 1
             else:
-                print(f"[+] {item.id} passed")
+                UI.success(f"{item.id} passed")
                 passed += 1
-    print(f"\n[*] solution tests: {passed} passed, {failed} failed")
+    UI.section("Solution tests")
+    UI.field("Passed", str(passed), value_style="success")
+    UI.field("Failed", str(failed), value_style="error" if failed else None)
     return int(failed != 0)
 
 

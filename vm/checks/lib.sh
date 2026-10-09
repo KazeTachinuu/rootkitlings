@@ -1,31 +1,27 @@
 #!/bin/sh
 # shellcheck disable=SC3043 # BusyBox ash provides local; checks run under ash.
-# check.sh -- POSIX sh assertion library for rootkitlings
-# Sourced by per-ling check scripts inside the busybox QEMU VM.
+# Assertion library sourced by exercise checks inside the BusyBox guest.
+
+# shellcheck source=scripts/lib/ui.sh
+. /vm/ui.sh
 
 # -- marker output ----------------------------------------------------------
 
 _pass=0
 _fail=0
 
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != dumb ]; then
-    B='\033[1;34m' G='\033[1;32m' R='\033[31m' N='\033[0m'
-else
-    B='' G='' R='' N=''
-fi
-
 _ok() {
     _pass=$(( _pass + 1 ))
-    printf "${G}[+]${N} %s\n" "$*"
+    ui_pass "$*"
 }
 
 _fail() {
     _fail=$(( _fail + 1 ))
-    printf "${R}[x]${N} %s\n" "$*"
+    ui_fail "$*"
 }
 
 _hdr() {
-    printf "${B}[*]${N} %s\n" "$*"
+    ui_heading "$*"
 }
 
 # -- lifecycle ---------------------------------------------------------------
@@ -172,7 +168,7 @@ summary() {
     esac
 
     printf "\n"
-    _hdr "results: ${_pass} passed, ${_fail} failed"
+    ui_field Results "${_pass} passed, ${_fail} failed"
     if [ "$_fail" -gt 0 ]; then
         exit 1
     fi

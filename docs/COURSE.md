@@ -31,9 +31,12 @@ The exact graph is metadata, not prose:
 - Each `curriculum/<serial>-<stable-id>/exercise.toml` defines direct exercise
   prerequisites, concepts taught, knowledge used, workspace composition, and
   verification cases.
-- L, M, and C serials are generated presentation labels.
-  Stable IDs own state
-  and filesystem paths.
+- A resource-level host check validates the frozen source and artifact from the
+  first successful case once; every successful case still runs its own guest
+  check.
+- L, M, and C serials are derived from the route and prefix bundle directory
+  names.
+  Stable IDs remain the durable keys for metadata and learner state.
 
 ## Prerequisites
 
