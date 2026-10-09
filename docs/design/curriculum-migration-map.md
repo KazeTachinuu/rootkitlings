@@ -114,11 +114,9 @@ It is not repeated in every lesson.
 The diagnostic should link directly to focused remediation.
 It should not become a mandatory collection of introductory micro-lessons.
 
-Before the required route, every learner must pass an unscored authorized-lab setup gate.
-The gate records authorization, scope, stop conditions, reset, and cleanup evidence, then proves that the diskless guest exposes neither the host filesystem nor a network device.
-It produces no course credit and teaches no kernel mechanism.
-Its containment probe is `vm/checks/containment`; the learner records the local acknowledgement with `./rootkitlings setup --accept`.
-Later networking checks may enable only capabilities declared by their exercise metadata; the gate verifies the safer default guest.
+Before the required route, `./rootkitlings setup` prepares the pinned kernel and checks that the diskless guest exposes neither a host mount nor a network device.
+Setup produces no course credit and teaches no kernel mechanism.
+Later networking checks may enable only capabilities declared by their exercise metadata; setup verifies the safer default guest.
 
 ## Required route
 
@@ -131,7 +129,7 @@ Knowledge already reached through one of those dependencies is not repeated.
 
 - Teaches: external Kbuild, module metadata, init/exit, `insmod`, and `rmmod`.
 - Produces: a loadable module with a complete outer lifecycle.
-- Requires: the authorized disposable-lab setup gate.
+- Requires: the course-entry knowledge listed above.
 - Defensive evidence: static metadata and lifecycle symbols before loading, then
   agreement between `/sys/module` and module inventory across load, unload, and
   immediate reload. Logs are diagnostics, not residency or cleanup evidence.
@@ -1055,7 +1053,7 @@ Publish rounded quartile ranges only after a meaningful cohort has completed the
    metadata foundations.
 3. Make the route, serials, stages, concepts, tags, checks, and references derive
    from the single registry.
-4. Implement the mandatory unscored authorized-lab setup gate before exposing
+4. Prepare the pinned kernel and verify the disposable guest before exposing
    the required route.
 5. Build R01-R08 and M00 first; validate the complete novice-to-resident-core
    journey before migrating later stages.

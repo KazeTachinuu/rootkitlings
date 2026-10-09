@@ -6,7 +6,7 @@ A **ling** is a focused lesson; a **capstone** integrates mechanisms already lea
 The catalog currently contains 54 lings and 11 capstones in one metadata-defined route.
 
 All modules run against Linux 7.2.x in a disposable QEMU guest.
-Use them only in that guest or on systems you are authorized to test.
+Do not load them on the host.
 
 The course assumes working C, Unix shell, Linux process/file, and basic networking knowledge.
 Run `./rootkitlings prereq L00` for the canonical course-entry list.
@@ -16,7 +16,6 @@ Run `./rootkitlings prereq L00` for the canonical course-entry list.
 ```sh
 make doctor
 ./rootkitlings setup
-./rootkitlings setup --accept
 ./rootkitlings read L00
 ./rootkitlings start L00
 $EDITOR .rootkitlings/work/module-lifecycle/hello.c
@@ -24,8 +23,7 @@ $EDITOR .rootkitlings/work/module-lifecycle/hello.c
 ```
 
 `make doctor` reports missing kernel artifacts, tools, and module dependencies.
-`setup` shows the authorization and guest boundary.
-`setup --accept` verifies that boundary, then records the local acknowledgement.
+`setup` prepares the pinned kernel and verifies the disposable guest boundary.
 KVM is optional.
 
 ## Work

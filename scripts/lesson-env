@@ -6,7 +6,7 @@ ROOTKITLINGS_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd) || {
 }
 
 KDIR=$("$ROOTKITLINGS_ROOT/scripts/kernel" build-dir) || {
-	printf '[x] course kernel is not ready; run: ./rootkitlings setup --accept\n' >&2
+	printf '[x] course kernel is not ready; run: ./rootkitlings setup\n' >&2
 	return 1 2>/dev/null || exit 1
 }
 if [[ ! -d $KDIR || -L $KDIR ]]; then

@@ -5,39 +5,32 @@ Nothing here changes the public course route yet.
 
 ## Outcome
 
-A mandatory setup gate establishes authorization and containment before the scored course begins.
+`./rootkitlings setup` prepares the pinned kernel and checks the disposable guest.
 Stage 1 then grows one inspectable multi-file module through four mechanisms.
 Each checkpoint changes learner-owned source, demonstrates an observable result, and proves rejection or cleanup as well as success.
 
 | Unit | Learner-owned change | Observable success | Negative and cleanup evidence | Reused stable IDs |
 |---|---|---|---|---|
-| Setup gate (unscored) | Confirm authorization, scope, stop conditions, and disposable-lab settings | Pinned diskless guest boots inside the declared boundary | Unsafe settings stop before boot; guest shutdown removes temporary state | New setup flow, not an exercise |
+| Setup (unscored) | Prepare the pinned kernel and disposable guest | The guest boots with the expected kernel and isolation | Unsafe settings stop before boot; guest shutdown removes temporary state | Course tooling, not an exercise |
 | R01 Module build and lifecycle (public L00) | Build `rootkitlings.ko`; add metadata and init/exit callbacks | Metadata, symbols, `/sys/module`, and module inventory agree | Unload removes both inventory views; immediate reload succeeds | `module-lifecycle`, `module-build` |
 | R02 Precise rejection | Add one controlled init rejection that preserves its negative errno | Loader reports the selected error and the module remains absent | Both inventory views stay absent; rebuilding without injection permits a clean load | `init-failure` |
 | R03 Owned kernel state | Add the real header and state component; allocate and release private state | Composite module links and state ownership is statically inspectable | Forced allocation failure preserves `-ENOMEM` and publishes nothing; an independent successful lifecycle still passes | `multi-file-module`, `kernel-allocation`, `error-pointer` |
 | R04 Procfs entry and rollback | Publish a real procfs entry after state acquisition and complete the Stage 1 lifecycle | Proc path, mode, module inventory, and state allocation agree across repeated loads | Every failure point leaves no module or proc entry; publication failure releases state; repeated successful lifecycles pass independently | `initialization-rollback`, `proc-entry` |
 
-## Setup-gate acceptance contract
+## Setup contract
 
-The setup gate is mandatory but unscored.
-It must pass before `start`, `build`, `check`, `run`, or `gdb` can execute course work.
-It does not appear in the required route and grants no completion credit.
+Setup is course tooling, not an exercise, and grants no completion credit.
+Commands that build or run modules require the pinned course kernel.
 
-Acceptance requires:
+Setup must verify:
 
-- an explicit statement that the learner is authorized to use the local lab;
-- a disposable pinned guest with no persistent disk, production data, host mount, or network;
-- at least two clear stop conditions and an understood cleanup action;
+- a disposable pinned guest with no persistent disk or host mount;
 - a preflight rejection before QEMU starts when any boundary is weakened;
 - a guest probe that confirms the expected kernel interfaces and the absence of forbidden mounts and networking;
 - shutdown within the timeout and removal of temporary guest state.
 
 Later networking exercises may enable only their declared guest capability.
-The setup gate verifies the safer default; it does not claim that every course check is offline.
-
-The gate stores only the minimum local acknowledgement needed to avoid repeating a successful preflight.
-It has no reference solution because authorization cannot be copied from an example.
-Changing the relevant VM or scope settings invalidates the acknowledgement and requires the gate again.
+Setup verifies the safer default; it does not claim that every course check is offline.
 
 ## Cumulative source contract
 

@@ -65,8 +65,8 @@ trap 'exit 130' INT TERM
 ROOTFS="$WORK/rootfs"
 INITRAMFS="$WORK/initramfs.gz"
 RELEASE=$("$ROOT_DIR/scripts/kernel" release) || die "Course kernel manifest is invalid"
-KERNEL=$("$ROOT_DIR/scripts/kernel" image) || die "Course kernel is not ready; run: ./rootkitlings setup --accept"
-VMLINUX=$("$ROOT_DIR/scripts/kernel" vmlinux) || die "Course kernel is not ready; run: ./rootkitlings setup --accept"
+KERNEL=$("$ROOT_DIR/scripts/kernel" image) || die "Course kernel is not ready; run: ./rootkitlings setup"
+VMLINUX=$("$ROOT_DIR/scripts/kernel" vmlinux) || die "Course kernel is not ready; run: ./rootkitlings setup"
 BUSYBOX=$(command -v busybox || true)
 
 readonly VM_DIR ROOT_DIR RELEASE KERNEL VMLINUX BUSYBOX WORK ROOTFS INITRAMFS MODULE CHECK GDB NETWORK ACCEL

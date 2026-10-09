@@ -79,7 +79,7 @@ check_scripts()
 {
     bash -n vm/boot scripts/doctor scripts/lesson-env scripts/toolbox/bc scripts/validate
     sh -n vm/init vm/checks/containment lib/check.sh
-    python3 -m py_compile rootkitlings lib/catalog.py lib/setup_gate.py lib/verification.py scripts/catalog scripts/check-doc-links scripts/kernel scripts/test-solutions
+    python3 -m py_compile rootkitlings lib/catalog.py lib/verification.py scripts/catalog scripts/check-doc-links scripts/kernel scripts/test-solutions
     while IFS= read -r check; do bash -n "$check"; done < <(find curriculum/support -name check -o -name host-check)
     python3 scripts/format-docs --check
     python3 scripts/check-doc-links

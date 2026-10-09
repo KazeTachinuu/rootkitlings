@@ -18,15 +18,6 @@ from lib.route_migration import (
     active_destination_contract,
     migrate_core_route,
 )
-from lib.setup_gate import (
-    SETUP_STAMP_PATH,
-    SetupGateError,
-    SetupStamp,
-    SetupStatus,
-    boundary_hash,
-    setup_status,
-    write_setup_stamp,
-)
 from lib.state import StateStore, StateError
 from lib.verification import VerificationError, build_verification_cases
 from lib.workspace import (
@@ -46,15 +37,6 @@ STATE = RT / 'state.toml'
 WORK = RT / 'work'
 PASSED = RT / 'passed'
 ARCHIVE = RT / 'archive'
-SETUP_STAMP = ROOT / SETUP_STAMP_PATH
-SETUP_POLICY_VERSION = '1'
-SETUP_POLICY_TEXT = (
-    'I am authorized to use this local lab. I will stop on unexpected host '
-    'access, containment drift, or a kernel fault. The default guest is '
-    'disposable, has no host mount, persistent disk, production data, or '
-    'network beyond loopback. A check may explicitly enable only the access '
-    'it needs.'
-)
 DOCTOR_TIMEOUT = 30
 KERNEL_PREP_TIMEOUT = 3600
 SETUP_PROBE_TIMEOUT = 180
@@ -137,91 +119,23 @@ def initialize_runtime():
     STORE.migrate_v2(ARCHIVE)
 
 
-def expected_setup_stamp():
-    inputs = {'policy': SETUP_POLICY_TEXT}
-    for relative in (
-        'scripts/kernel',
-        'scripts/toolbox/bc',
-        'vm/kernel.toml',
-        'vm/kernel.config',
-        'vm/boot',
-        'vm/init',
-        'vm/checks/containment',
-    ):
-        path = ROOT / relative
-        if path.is_symlink() or not path.is_file():
-            raise SetupGateError(
-                f'setup boundary input is not a regular file: {relative}'
-            )
-        try:
-            inputs[relative] = path.read_bytes()
-        except OSError as error:
-            raise SetupGateError(
-                f'cannot read setup boundary input {relative}: {error}'
-            ) from error
-    release = run(
-        [str(ROOT / 'scripts/kernel'), 'release'],
-        timeout=5,
-        capture=True,
-    )
-    if release.returncode or not (release.stdout or '').strip():
-        raise SetupGateError('cannot read the course kernel release')
-    return SetupStamp(
-        policy_version=SETUP_POLICY_VERSION,
-        course_revision=CAT.revision,
-        kernel_release=release.stdout.strip(),
-        boundary_hash=boundary_hash(inputs),
-    )
-
-
-def current_setup_status():
-    status = setup_status(SETUP_STAMP, expected_setup_stamp())
-    if not status.ready:
-        return status
+def course_kernel_ready():
     kernel = run(
         [str(ROOT / 'scripts/kernel'), 'status'],
         timeout=10,
         capture=True,
     )
-    if kernel.returncode:
-        return SetupStatus(False, 'kernel-not-ready', status.stamp)
-    return status
+    return kernel.returncode == 0
 
 
 def require_setup():
-    status = current_setup_status()
-    if not status.ready:
-        die(
-            f'Setup required ({setup_reason(status.reason)}). '
-            'Run: ./rootkitlings setup --accept'
-        )
-
-
-def setup_reason(reason):
-    labels = {
-        'missing': 'not completed',
-        'policy-version-changed': 'setup policy changed',
-        'course-revision-changed': 'course revision changed',
-        'kernel-release-changed': 'course kernel changed',
-        'kernel-not-ready': 'course kernel missing or invalid',
-        'boundary-changed': 'guest boundary changed',
-    }
-    if reason.startswith('invalid: '):
-        return f'invalid stamp: {reason.removeprefix("invalid: ")}'
-    return labels.get(reason, reason)
+    if not course_kernel_ready():
+        die('Course kernel is not ready. Run: ./rootkitlings setup')
 
 
 def cmd_setup(a):
-    head('Authorized disposable lab')
-    print(SETUP_POLICY_TEXT)
-    if not a:
-        status = current_setup_status()
-        print(f'\nStatus: {"ready" if status.ready else setup_reason(status.reason)}')
-        if not status.ready:
-            info('Accept and verify: ./rootkitlings setup --accept')
-        return
-    if a != ['--accept']:
-        die('Usage: rootkitlings setup [--accept]')
+    none(a, 'setup')
+    head('Prepare course VM')
     info('Checking host tools')
     doctor = run(
         [str(ROOT / 'scripts/doctor')],
@@ -256,11 +170,6 @@ def cmd_setup(a):
             print(containment.stdout, end='')
         die('Setup failed: disposable guest containment check did not pass')
     done('Guest boundary verified')
-    write_setup_stamp(
-        SETUP_STAMP,
-        expected_setup_stamp(),
-        checks_passed=True,
-    )
     done('Setup ready')
     info('Next: ./rootkitlings read L00')
 
@@ -551,7 +460,7 @@ def course_kernel_build_dir():
     )
     output = (located.stdout or '').strip()
     if located.returncode or not output or '\n' in output:
-        die('Course kernel is not ready; run: ./rootkitlings setup --accept')
+        die('Course kernel is not ready; run: ./rootkitlings setup')
     path = Path(output)
     if path.is_symlink() or not path.is_dir():
         die('Course kernel build directory is unsafe or missing')
@@ -815,14 +724,10 @@ def cmd_run(a, gdb=False):
 
 def cmd_status(a):
     none(a, 'status')
-    gate = current_setup_status()
-    if gate.ready:
-        print('Setup   ready')
+    if course_kernel_ready():
+        print('Kernel  ready')
     else:
-        print(
-            f'Setup   required ({setup_reason(gate.reason)}); '
-            'run ./rootkitlings setup'
-        )
+        print('Kernel  not ready; run ./rootkitlings setup')
     with STORE.read_locked() as s:
         x = current(s)
         completed = len(set(ROUTE) & s.completed)
@@ -986,7 +891,7 @@ def usage():
         '''rootkitlings <COMMAND> [EXERCISE]
 
 Setup
-  setup [--accept]  Review the lab boundary; accept to verify and save it
+  setup              Prepare the kernel and verify the disposable guest
 
 Learn
   read [EXERCISE]   Read a lesson (default: current)
@@ -1062,7 +967,6 @@ if __name__ == '__main__':
     except (
         CLIError,
         MigrationError,
-        SetupGateError,
         StateError,
         VerificationError,
         WorkspaceError,

@@ -5,26 +5,21 @@ Status: approved design input; implementation in progress.
 The engine foundation is usable, but the repository does not yet model the target curriculum.
 It currently exposes 65 required checkpoints, no milestones, no electives, and no tracks.
 The target required route has 31 lessons, four milestones, and one capstone: 36 scored checkpoints.
-A mandatory authorization and containment setup gate sits before that route and carries no serial or completion credit.
+Setup is course tooling and carries no serial or completion credit.
 
 ## Requirements and progress
 
-### 0. Require the unscored setup gate
+### 0. Prepare the course environment
 
 Implementation: complete.
 
-The setup gate is outside the exercise catalog and required route.
-It grants no completion, has no learner solution, and must pass before commands that build or execute course work.
-It records only a local acknowledgement tied to the relevant course revision and VM boundary settings.
+Setup is outside the exercise catalog and required route.
+It grants no completion and has no learner solution.
 
-Acceptance requires explicit authorization, a disposable pinned guest, no persistent disk, production data, host mount, or network, at least two stop conditions, preflight rejection of weaker settings, a guest boundary probe, bounded shutdown, and removal of temporary guest state.
-Changing a relevant boundary setting invalidates the acknowledgement.
-Status and list output may report the gate separately but must not count it among the 36 scored checkpoints.
-Networking exercises may later enable only capabilities declared by their metadata; the gate verifies the default module-free guest, not a course-wide ban.
-
-`setup` shows the boundary and current state without recording acceptance.
-`setup --accept` prepares the pinned course kernel, runs the host diagnostic and module-free containment probe, then writes a private local stamp tied to the policy, course revision, course-kernel release, and exact VM boundary inputs.
-`start`, `build`, `check`, `run`, and `gdb` require a current stamp; reading and recovery commands remain available.
+`setup` runs the host diagnostic, prepares the pinned course kernel, and checks the module-free disposable guest.
+The default guest has no persistent disk, host mount, or network device; networking exercises enable only the capability declared in their metadata.
+The CLI reports kernel readiness separately from progress.
+Commands that build or run modules require the pinned course kernel; reading and recovery commands remain available.
 
 ### 1. Generate aliases from canonical course order
 

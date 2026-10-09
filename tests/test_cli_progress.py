@@ -26,7 +26,6 @@ class LearnerCLITests(unittest.TestCase):
             "WORK": runtime / "work",
             "PASSED": runtime / "passed",
             "ARCHIVE": runtime / "archive",
-            "SETUP_STAMP": runtime / "setup.toml",
         }
         self.globals.update(values)
         self.globals["STORE"] = self.globals["StateStore"](
@@ -54,14 +53,12 @@ class LearnerCLITests(unittest.TestCase):
             self.globals["cmd_reset"](arguments)
         return output.getvalue()
 
-    def test_setup_accept_prepares_kernel_then_probes_guest_and_stamps(self) -> None:
+    def test_setup_prepares_kernel_then_probes_guest(self) -> None:
         calls = []
         original_run = self.globals["run"]
 
         def fake_run(command, **kwargs):
             calls.append((command, kwargs))
-            if command == [str(ROOT / "scripts/kernel"), "release"]:
-                return SimpleNamespace(returncode=0, stdout="7.2.9-rootkitlings\n")
             if command == [str(ROOT / "scripts/kernel"), "status"]:
                 return SimpleNamespace(returncode=0, stdout="ready\n")
             if command == [str(ROOT / "scripts/doctor")]:
@@ -79,8 +76,8 @@ class LearnerCLITests(unittest.TestCase):
         try:
             self.globals["run"] = fake_run
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self.globals["cmd_setup"](["--accept"])
-            setup_ready = self.globals["current_setup_status"]().ready
+                self.globals["cmd_setup"]([])
+            setup_ready = self.globals["course_kernel_ready"]()
         finally:
             self.globals["run"] = original_run
         self.assertEqual(calls[0][0], [str(ROOT / "scripts/doctor")])
@@ -95,7 +92,7 @@ class LearnerCLITests(unittest.TestCase):
         self.assertTrue(calls[2][1]["capture"])
         self.assertTrue(setup_ready)
 
-    def test_setup_failure_never_writes_stamp(self) -> None:
+    def test_setup_stops_on_each_failed_check(self) -> None:
         original_run = self.globals["run"]
         cases = (
             [SimpleNamespace(returncode=1, stdout="doctor failed\n")],
@@ -112,87 +109,38 @@ class LearnerCLITests(unittest.TestCase):
         try:
             for results in cases:
                 with self.subTest(results=len(results)):
-                    if self.globals["SETUP_STAMP"].exists():
-                        self.globals["SETUP_STAMP"].unlink()
                     queue = list(results)
                     self.globals["run"] = lambda *_args, **_kwargs: queue.pop(0)
                     with self.assertRaisesRegex(self.globals["CLIError"], "Setup failed"):
                         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                            self.globals["cmd_setup"](["--accept"])
-                    self.assertFalse(self.globals["SETUP_STAMP"].exists())
+                            self.globals["cmd_setup"]([])
         finally:
             self.globals["run"] = original_run
-
-    def test_setup_without_accept_previews_policy_without_checks(self) -> None:
-        original_run = self.globals["run"]
-        try:
-            def release_only(command, **_kwargs):
-                self.assertEqual(command, [str(ROOT / "scripts/kernel"), "release"])
-                return SimpleNamespace(returncode=0, stdout="7.2.9-rootkitlings\n")
-
-            self.globals["run"] = release_only
-            output = io.StringIO()
-            errors = io.StringIO()
-            with redirect_stdout(output), redirect_stderr(errors):
-                self.globals["cmd_setup"]([])
-        finally:
-            self.globals["run"] = original_run
-        self.assertIn("Authorized disposable lab", output.getvalue())
-        self.assertIn("Status: not completed", output.getvalue())
-        self.assertIn("setup --accept", errors.getvalue())
 
     def test_setup_rejects_invalid_argument_shapes(self) -> None:
-        for arguments in (["accept"], ["--accept", "extra"]):
+        for arguments in (["--accept"], ["extra"]):
             with self.subTest(arguments=arguments):
-                with self.assertRaisesRegex(self.globals["CLIError"], r"setup \[--accept\]"):
+                with self.assertRaisesRegex(self.globals["CLIError"], r"rootkitlings setup"):
                     self.globals["cmd_setup"](arguments)
 
-    def test_setup_stale_reason_and_recovery_are_precise(self) -> None:
-        expected = self.globals["expected_setup_stamp"]()
-        stale = self.globals["SetupStamp"](
-            policy_version=expected.policy_version,
-            course_revision="old-revision",
-            kernel_release=expected.kernel_release,
-            boundary_hash=expected.boundary_hash,
-        )
-        self.globals["write_setup_stamp"](
-            self.globals["SETUP_STAMP"],
-            stale,
-            checks_passed=True,
-        )
-        self.assertEqual(
-            self.globals["current_setup_status"]().reason,
-            "course-revision-changed",
-        )
-        with self.assertRaisesRegex(
-            self.globals["CLIError"],
-            r"course revision changed.*rootkitlings setup --accept",
-        ):
-            self.globals["require_setup"]()
-
-    def test_missing_kernel_invalidates_an_otherwise_current_setup_stamp(self) -> None:
-        expected = self.globals["expected_setup_stamp"]()
-        self.globals["write_setup_stamp"](
-            self.globals["SETUP_STAMP"],
-            expected,
-            checks_passed=True,
-        )
+    def test_missing_kernel_requires_setup(self) -> None:
         original_run = self.globals["run"]
 
         def fake_run(command, **_kwargs):
-            if command == [str(ROOT / "scripts/kernel"), "release"]:
-                return SimpleNamespace(returncode=0, stdout=expected.kernel_release + "\n")
             if command == [str(ROOT / "scripts/kernel"), "status"]:
                 return SimpleNamespace(returncode=1, stdout="missing\n")
             self.fail(f"unexpected setup status command: {command}")
 
         try:
             self.globals["run"] = fake_run
-            status = self.globals["current_setup_status"]()
+            self.assertFalse(self.globals["course_kernel_ready"]())
+            with self.assertRaisesRegex(
+                self.globals["CLIError"],
+                r"Course kernel is not ready.*rootkitlings setup",
+            ):
+                self.globals["require_setup"]()
         finally:
             self.globals["run"] = original_run
-        self.assertFalse(status.ready)
-        self.assertEqual(status.reason, "kernel-not-ready")
 
     def test_main_gates_only_build_and_execution_commands(self) -> None:
         original_commands = self.globals["CMDS"]
@@ -223,12 +171,17 @@ class LearnerCLITests(unittest.TestCase):
             self.globals["initialize_runtime"] = original_initialize
             self.globals["require_setup"] = original_require
 
-    def test_status_reports_setup_separately_from_course_count(self) -> None:
+    def test_status_reports_kernel_separately_from_course_count(self) -> None:
         output = io.StringIO()
-        with redirect_stdout(output):
-            self.globals["cmd_status"]([])
+        original_ready = self.globals["course_kernel_ready"]
+        try:
+            self.globals["course_kernel_ready"] = lambda: True
+            with redirect_stdout(output):
+                self.globals["cmd_status"]([])
+        finally:
+            self.globals["course_kernel_ready"] = original_ready
         lines = output.getvalue().splitlines()
-        self.assertRegex(lines[0], r"^Setup   required \(not completed\)")
+        self.assertEqual(lines[0], "Kernel  ready")
         self.assertRegex(lines[1], r"^Course  0/\d+ complete$")
         self.assertIn("Workspace not started", lines)
         self.assertIn("Next    ./rootkitlings start L00", lines)
