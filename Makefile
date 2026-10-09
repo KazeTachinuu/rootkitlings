@@ -2,20 +2,28 @@ KDIR ?= $(shell scripts/kernel build-dir)
 MODULE_DIR ?=
 TOOL_OUT ?= tools
 GUEST_TOOL_NAMES := \
+	agent_fixture \
 	cred_trigger_test \
 	credential_snapshot_test \
 	event_stream_test \
 	getdents64_test \
 	icmp_send \
 	ioctl_test \
+	module_load_params \
 	module_load_test \
+	netfilter_udp_test \
+	packet_classifier_test \
+	packet_mutation_test \
 	proc_read_test \
 	proc_write_test \
 	read_result_test \
 	run_as \
 	rmdir_telemetry_test \
+	secure_agent_fixture \
+	socket_owner_fixture \
 	status_field_test \
-	task_attribution_test
+	task_attribution_test \
+	tcp_session_fixture
 GUEST_TOOLS := $(addprefix $(TOOL_OUT)/,$(GUEST_TOOL_NAMES))
 
 .PHONY: all help module clean compile-db test-solutions doctor validate validate-quick tools tool-output-directory
@@ -44,6 +52,9 @@ tools: $(GUEST_TOOLS)
 tool-output-directory:
 	mkdir -p "$(TOOL_OUT)"
 
+$(TOOL_OUT)/agent_fixture: tools/agent_fixture.c | tool-output-directory
+	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
+
 $(TOOL_OUT)/cred_trigger_test: tools/cred_trigger_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
 
@@ -62,8 +73,20 @@ $(TOOL_OUT)/icmp_send: tools/icmp_send.c | tool-output-directory
 $(TOOL_OUT)/ioctl_test: tools/ioctl_test.c | tool-output-directory
 	$(CC) -static -o $@ $<
 
+$(TOOL_OUT)/module_load_params: tools/module_load_params.c | tool-output-directory
+	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
+
 $(TOOL_OUT)/module_load_test: tools/module_load_test.c | tool-output-directory
 	$(CC) -static -o $@ $<
+
+$(TOOL_OUT)/netfilter_udp_test: curriculum/incubator/stage-05/r20-netfilter-observer/fixtures/host/udp_loopback_test.c | tool-output-directory
+	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -pthread -static -o $@ $<
+
+$(TOOL_OUT)/packet_classifier_test: curriculum/incubator/stage-05/r21-validated-packet-classification/fixtures/host/traffic_test.c | tool-output-directory
+	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -O2 -static -o $@ $<
+
+$(TOOL_OUT)/packet_mutation_test: curriculum/incubator/stage-05/r22-writable-packet-mutation/fixtures/host/traffic_test.c | tool-output-directory
+	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -O2 -static -o $@ $<
 
 $(TOOL_OUT)/proc_read_test: tools/proc_read_test.c | tool-output-directory
 	$(CC) -static -o $@ $<
@@ -80,11 +103,20 @@ $(TOOL_OUT)/run_as: tools/run_as.c | tool-output-directory
 $(TOOL_OUT)/rmdir_telemetry_test: tools/rmdir_telemetry_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
 
+$(TOOL_OUT)/secure_agent_fixture: curriculum/incubator/stage-06/c00-operation-glasshouse/fixtures/host/secure_agent_fixture.c | tool-output-directory
+	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
+
+$(TOOL_OUT)/socket_owner_fixture: curriculum/incubator/stage-05/r23-kernel-socket-ownership/fixtures/host/tcp_fixture.c | tool-output-directory
+	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
+
 $(TOOL_OUT)/status_field_test: tools/status_field_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
 
 $(TOOL_OUT)/task_attribution_test: tools/task_attribution_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
+
+$(TOOL_OUT)/tcp_session_fixture: curriculum/incubator/stage-05/r24-tcp-framing-cancellation/fixtures/host/tcp_session_fixture.c | tool-output-directory
+	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
 
 clean:
 	$(RM) $(GUEST_TOOLS)
