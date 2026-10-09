@@ -860,6 +860,36 @@ class LearnerCLITests(unittest.TestCase):
         self.assertEqual(result, Path("/workspace"))
         self.assertEqual(calls, [(exercise, self.globals["WORK"], "consumer")])
 
+    def test_edit_boundary_uses_the_recorded_start_not_reference_bytes(self) -> None:
+        exercise = SimpleNamespace(
+            workspace=SimpleNamespace(
+                files=("editable.c", "inherited.c"),
+                editable=("editable.c",),
+            )
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            starting = root / "starting"
+            frozen = root / "frozen"
+            starting.mkdir()
+            frozen.mkdir()
+            (starting / "editable.c").write_text("starter\n")
+            (starting / "inherited.c").write_text("valid alternative\n")
+            (frozen / "editable.c").write_text("learner answer\n")
+            (frozen / "inherited.c").write_text("valid alternative\n")
+
+            self.globals["verify_edit_boundary"](exercise, frozen, starting)
+            (frozen / "inherited.c").write_text("changed outside boundary\n")
+            with self.assertRaisesRegex(
+                self.globals["VerificationError"],
+                "non-editable files changed: inherited.c",
+            ):
+                self.globals["verify_edit_boundary"](
+                    exercise,
+                    frozen,
+                    starting,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

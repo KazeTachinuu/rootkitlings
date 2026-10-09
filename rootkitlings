@@ -604,6 +604,39 @@ def check_timeout(x):
     return int(value)
 
 
+def verify_edit_boundary(x, source, starting_snapshot):
+    """Reject changes outside the exercise's declared learner edit surface."""
+    editable = set(x.workspace.editable)
+    frozen = tuple(
+        relative
+        for relative in x.workspace.files
+        if relative not in editable
+    )
+    if not frozen:
+        return
+    try:
+        if canonical_tree_hash(source, frozen) == canonical_tree_hash(
+            starting_snapshot,
+            frozen,
+        ):
+            return
+        changed = [
+            relative
+            for relative in frozen
+            if canonical_tree_hash(source, (relative,)) != canonical_tree_hash(
+                starting_snapshot,
+                (relative,),
+            )
+        ]
+    except WorkspaceError as error:
+        raise VerificationError(
+            f'cannot verify the learner edit boundary: {error}'
+        ) from error
+    raise VerificationError(
+        'non-editable files changed: ' + ', '.join(changed)
+    )
+
+
 def record_attempt(x, passed, verified_source=None, verified_hash=None):
     changed = False
     with STORE.locked() as s:
@@ -638,7 +671,12 @@ def cmd_check(a):
     with STORE.read_locked() as s:
         x = resolve(one(a, 'check'), s)
         available(x, s)
+        record = s.exercises.get(x.id)
+        baseline_hash = record.baseline_hash if record else ''
     workspace = need(x)
+    if not baseline_hash:
+        die(f'{label(x)} has no recorded starting snapshot')
+    starting_snapshot = snap(baseline_hash)
     timeout = check_timeout(x)
     try:
         cases = CAT.verification_cases(x)
@@ -652,6 +690,11 @@ def cmd_check(a):
             timeout,
             kernel_build_dir=course_kernel_build_dir(),
         ) as verification:
+            verify_edit_boundary(
+                x,
+                verification.frozen_source,
+                starting_snapshot,
+            )
             outcomes = verification.outcomes
             for index, outcome in enumerate(outcomes, 1):
                 head(f'Check {index}/{len(outcomes)}: {outcome.case.label}')
