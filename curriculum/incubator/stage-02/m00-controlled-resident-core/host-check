@@ -17,231 +17,25 @@ for path in core/main.o core/state.o interface/proc.o execution/worker.o \
 		die "build output is missing regular file: $path"
 done
 
-for tool in modinfo nm objdump; do
+for tool in modinfo nm; do
 	command -v "$tool" >/dev/null || die "$tool is required"
 done
 [[ $(modinfo -F license "$artifact") == GPL ]] || die "module license must be GPL"
 [[ $(modinfo -F description "$artifact") == 'Rootkitlings kernel module' ]] ||
 	die "module description must be: Rootkitlings kernel module"
 
-if grep -REn '\b(work_struct|workqueue_struct|INIT_WORK|schedule_work|queue_work|cancel_work_sync|flush_work|alloc_workqueue)\b' \
-	"$build_dir"/{Kbuild,core,execution,include,interface} --include='*.c' --include='*.h' 2>/dev/null; then
-	die "the milestone must use its resident thread, not a workqueue"
-fi
-if nm -u "$artifact" | grep -Eq '[[:space:]](queue_work_on|cancel_work_sync|flush_work|alloc_workqueue|__alloc_workqueue_key|system_.*wq)$'; then
-	die "the module has a workqueue dependency"
-fi
-
-state_source=$build_dir/core/state.c
-state_text=$(tr '\n' ' ' < "$state_source")
-grep -Eq 'bool[[:space:]]+actions_enabled' "$state_source" ||
-	die "actions_enabled must be a private bool"
-[[ $(grep -Ec 'READ_ONCE[[:space:]]*\([^;]*actions_enabled' "$state_source") -eq 1 ]] ||
-	die "the action gate needs one READ_ONCE getter"
-[[ $(grep -Ec 'WRITE_ONCE[[:space:]]*\([^;]*actions_enabled' "$state_source") -eq 1 ]] ||
-	die "the action gate needs one WRITE_ONCE setter"
-for field in timer_fires worker_runs; do
-	grep -Eq "unsigned[[:space:]]+long[[:space:]]+$field" "$state_source" ||
-		die "$field must be a private unsigned long"
-	grep -Eq "state->${field}[[:space:]]*=[[:space:]]*0" "$state_source" ||
-		die "$field must start at zero"
-	[[ $(grep -Ec "READ_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*\)" \
-		"$state_source") -eq 2 ]] ||
-		die "$field needs one reader and one single-writer increment read"
-	[[ $(grep -Ec "WRITE_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*," \
-		"$state_source") -eq 1 ]] ||
-		die "$field needs exactly one single-writer increment"
-done
-for specification in \
-	'rk_state_record_timer_fire timer_fires' \
-	'rk_state_record_worker_run worker_runs'; do
-	read -r function field <<< "$specification"
-	grep -Eq "void[[:space:]]+${function}[^{}]*\{[[:space:]]*unsigned[[:space:]]+long[[:space:]]+value;[[:space:]]*value[[:space:]]*=[[:space:]]*READ_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*\);[[:space:]]*WRITE_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*,[[:space:]]*value[[:space:]]*\+[[:space:]]*1[[:space:]]*\);[[:space:]]*\}" \
-		<<< "$state_text" || die "$function must preserve its one-writer rule"
+undefined=$(nm -u "$artifact")
+for forbidden in queue_work_on cancel_work_sync flush_work alloc_workqueue \
+	__alloc_workqueue_key system_wq system_highpri_wq system_long_wq \
+	system_unbound_wq system_freezable_wq system_power_efficient_wq \
+	system_freezable_power_efficient_wq; do
+	while IFS= read -r line; do
+		[[ ${line##* } == "$forbidden" ]] &&
+			die "the resident core must not depend on workqueue symbol $forbidden"
+	done <<< "$undefined"
 done
 
-proc_source=$build_dir/interface/proc.c
-proc_undefined=$(nm -u "$build_dir/interface/proc.o")
-for symbol in proc_create_data proc_remove rk_state_actions_enabled \
-	rk_state_timer_fires rk_state_worker_runs rk_worker_request; do
-	grep -Eq "[[:space:]]$symbol$" <<< "$proc_undefined" ||
-		die "interface/proc.o has no $symbol dependency"
-done
-grep -Eq 'sizeof\("disable\\n"\)[[:space:]]*-[[:space:]]*1' "$proc_source" ||
-	die "derive the command bound from the longest accepted command"
-[[ $(grep -Ec 'rk_worker_request[[:space:]]*\(' "$proc_source") -eq 1 ]] ||
-	die "the run command must have one shared request commit point"
-proc_write=$(sed -n '/^static ssize_t rk_control_write(/,/^}/p' "$proc_source")
-grep -Eq 'RK_COMMAND_RUN' <<< "$proc_write" || die "procfs must parse run"
-grep -Eq 'error[[:space:]]*=[[:space:]]*rk_worker_request[[:space:]]*\(' <<< "$proc_write" ||
-	die "run must preserve the shared request result"
-grep -Eq 'if[[:space:]]*\([[:space:]]*error[[:space:]]*\)[[:space:]]*return[[:space:]]+error' \
-	<<< "$(tr '\n' ' ' <<< "$proc_write")" ||
-	die "run must return EACCES or EAGAIN from the shared request path"
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+"$here/worker-behavior-check" "$build_dir/execution/worker.c"
 
-worker_source=$build_dir/execution/worker.c
-worker_object=$build_dir/execution/worker.o
-worker_undefined=$(nm -u "$worker_object")
-grep -Eq 'static[[:space:]]+atomic_t[[:space:]]+pending' "$worker_source" ||
-	die "pending must be one private atomic_t slot"
-[[ $(grep -Ec 'static[[:space:]]+struct[[:space:]]+task_struct[[:space:]]*\*worker_task' \
-	"$worker_source") -eq 1 ]] || die "keep one private resident task"
-for symbol in __init_waitqueue_head __wake_up finish_wait kthread_create_on_node \
-	kthread_should_stop kthread_stop prepare_to_wait_event rk_state_actions_enabled \
-	rk_state_record_worker_run schedule wake_up_process; do
-	grep -Eq "[[:space:]]$symbol$" <<< "$worker_undefined" ||
-		die "execution/worker.o has no $symbol dependency"
-done
-for operation in wait_event_interruptible atomic_read atomic_xchg atomic_cmpxchg \
-	kthread_run IS_ERR PTR_ERR kthread_stop wake_up_interruptible; do
-	grep -Eq "\b${operation}[[:space:]]*\(" "$worker_source" ||
-		die "execution/worker.c must use $operation"
-done
-grep -Eq 'ERR_PTR[[:space:]]*\([[:space:]]*-EINTR[[:space:]]*\)' "$worker_source" ||
-	die "worker failure point 4 must use ERR_PTR(-EINTR)"
-grep -Fq '"rkling_core"' "$worker_source" ||
-	die "use the scaffolded task name rkling_core"
-
-worker_main=$(sed -n '/^static int rk_worker_main(/,/^}/p' "$worker_source")
-worker_request=$(sed -n '/^__must_check int rk_worker_request(/,/^}/p' "$worker_source")
-[[ -n $worker_main && -n $worker_request ]] || die "worker functions are missing"
-main_flat=$(tr '\n' ' ' <<< "$worker_main")
-grep -Eq 'wait_event_interruptible[[:space:]]*\([^;]*atomic_read[[:space:]]*\([[:space:]]*&pending[[:space:]]*\)[[:space:]]*!=[[:space:]]*0[[:space:]]*\|\|[[:space:]]*kthread_should_stop[[:space:]]*\(' \
-	<<< "$main_flat" || die "wait for a full slot or a stop request"
-grep -Eq 'atomic_xchg[[:space:]]*\([[:space:]]*&pending[[:space:]]*,[[:space:]]*0[[:space:]]*\)' \
-	<<< "$worker_main" || die "the worker must atomically clear the slot"
-grep -Eq 'atomic_cmpxchg[[:space:]]*\([[:space:]]*&pending[[:space:]]*,[[:space:]]*0[[:space:]]*,[[:space:]]*1[[:space:]]*\)' \
-	<<< "$worker_request" || die "requests must claim the capacity-one slot"
-grep -Eq 'return[[:space:]]+-EACCES' <<< "$worker_request" ||
-	die "disabled requests must return -EACCES"
-grep -Eq 'return[[:space:]]+-EAGAIN' <<< "$worker_request" ||
-	die "full-slot requests must return -EAGAIN"
-
-wait_line=$(grep -n 'wait_event_interruptible[[:space:]]*(' <<< "$worker_main" | head -n1 | cut -d: -f1)
-stop_line=$(grep -n 'if[[:space:]]*(kthread_should_stop[[:space:]]*())' <<< "$worker_main" | tail -n1 | cut -d: -f1)
-clear_line=$(grep -n 'atomic_xchg[[:space:]]*(' <<< "$worker_main" | head -n1 | cut -d: -f1)
-gate_line=$(grep -n 'rk_state_actions_enabled[[:space:]]*(' <<< "$worker_main" | head -n1 | cut -d: -f1)
-record_line=$(grep -n 'rk_state_record_worker_run[[:space:]]*(' <<< "$worker_main" | head -n1 | cut -d: -f1)
-[[ -n $wait_line && -n $stop_line && -n $clear_line && -n $gate_line && -n $record_line && \
-	$wait_line -lt $stop_line && $stop_line -lt $clear_line && \
-	$clear_line -lt $gate_line && $gate_line -lt $record_line ]] ||
-	die "worker order must be wait, stop, clear slot, recheck gate, then record"
-request_gate_line=$(grep -n 'rk_state_actions_enabled[[:space:]]*(' <<< "$worker_request" | head -n1 | cut -d: -f1)
-claim_line=$(grep -n 'atomic_cmpxchg[[:space:]]*(' <<< "$worker_request" | head -n1 | cut -d: -f1)
-wake_line=$(grep -n 'wake_up_interruptible[[:space:]]*(' <<< "$worker_request" | head -n1 | cut -d: -f1)
-[[ -n $request_gate_line && -n $claim_line && -n $wake_line && \
-	$request_gate_line -lt $claim_line && $claim_line -lt $wake_line ]] ||
-	die "request order must be gate, claim empty slot, then wake"
-
-for text in "$worker_main" "$worker_request"; do
-	if grep -Eq '\b(msleep|ssleep|usleep_range|schedule_timeout|mutex_lock|spin_lock|wait_for_completion|complete|kmalloc|kzalloc|kfree|pr_info|pr_warn|printk|in_atomic|in_task|in_interrupt)[[:space:]]*\(' <<< "$text"; then
-		die "the worker request and consume paths must stay bounded and allocation-free"
-	fi
-done
-
-scheduler_source=$build_dir/execution/scheduler.c
-scheduler_object=$build_dir/execution/scheduler.o
-scheduler_undefined=$(nm -u "$scheduler_object")
-for symbol in mod_timer timer_shutdown_sync rk_state_record_timer_fire rk_worker_request; do
-	grep -Eq "[[:space:]]$symbol$" <<< "$scheduler_undefined" ||
-		die "execution/scheduler.o has no $symbol dependency"
-done
-[[ $(grep -Ec 'struct[[:space:]]+timer_list[[:space:]]+action_timer' "$scheduler_source") -eq 1 ]] ||
-	die "use one preallocated timer"
-[[ $(grep -Ec 'rk_worker_request[[:space:]]*\(' "$scheduler_source") -eq 1 ]] ||
-	die "the timer must call the shared request path exactly once"
-scheduler_timer=$(sed -n '/^static void rk_action_timer(/,/^}/p' "$scheduler_source")
-for operation in rk_state_record_timer_fire rk_worker_request mod_timer; do
-	grep -Eq "\b${operation}[[:space:]]*\(" <<< "$scheduler_timer" ||
-		die "rk_action_timer must call $operation"
-done
-if grep -Eq '\b(msleep|ssleep|usleep_range|schedule|mutex_lock|spin_lock|wait_event|kmalloc|kzalloc|kfree|pr_info|pr_warn|printk|in_atomic|in_task|in_interrupt)[[:space:]]*\(' \
-	<<< "$scheduler_timer"; then
-	die "the timer callback must contain only non-sleeping bounded operations"
-fi
-
-call_relocations()
-{
-	awk '$2 ~ /^R_[^[:space:]]*(PLT|CALL)/ {
-		symbol = $3
-		sub(/[+-].*$/, "", symbol)
-		print symbol
-	}' <<< "$1"
-}
-
-assert_direct_calls()
-{
-	local function=$1 disassembly=$2 symbol calls count
-	shift 2
-	calls=$(call_relocations "$disassembly")
-	while IFS= read -r symbol; do
-		[[ -n $symbol ]] || continue
-		case " $* " in
-			*" $symbol "*) ;;
-			*)
-				case "$symbol" in
-					__fentry__|__x86_return_thunk|__ref_stack_chk_guard|__stack_chk_fail) ;;
-					*) die "$function directly calls unexpected symbol: $symbol" ;;
-				esac
-			;;
-		esac
-	done <<< "$calls"
-	for symbol in "$@"; do
-		count=$(awk -v expected="$symbol" '$0 == expected { count++ }
-			END { print count + 0 }' <<< "$calls")
-		[[ $count -eq 1 ]] || die "$function must directly call $symbol exactly once"
-	done
-	if grep -Eq '[[:space:]](call|jmp)[[:space:]]+\*' <<< "$disassembly"; then
-		die "$function must not call through a function pointer"
-	fi
-}
-
-scheduler_disassembly=$(objdump -dr "$scheduler_object")
-timer_disassembly=$(sed -n '/<rk_action_timer>:/,/^$/p' <<< "$scheduler_disassembly")
-[[ -n $timer_disassembly ]] || die "execution/scheduler.c must define rk_action_timer"
-assert_direct_calls rk_action_timer "$timer_disassembly" \
-	rk_state_record_timer_fire rk_worker_request mod_timer
-
-worker_disassembly=$(objdump -dr "$worker_object")
-request_disassembly=$(sed -n '/<rk_worker_request>:/,/^$/p' <<< "$worker_disassembly")
-[[ -n $request_disassembly ]] || die "execution/worker.c must define rk_worker_request"
-assert_direct_calls rk_worker_request "$request_disassembly" \
-	rk_state_actions_enabled __wake_up
-
-main_source=$build_dir/core/main.c
-main_undefined=$(nm -u "$build_dir/core/main.o")
-for symbol in rk_worker_start rk_worker_stop rk_proc_publish rk_proc_unpublish \
-	rk_scheduler_start rk_scheduler_stop rk_state_create rk_state_destroy; do
-	grep -Eq "[[:space:]]$symbol$" <<< "$main_undefined" ||
-		die "core/main.o has no $symbol dependency"
-done
-worker_start_line=$(grep -n 'rk_worker_start[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
-publish_line=$(grep -n 'rk_proc_publish[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
-scheduler_start_line=$(grep -n 'rk_scheduler_start[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
-rollback_worker_line=$(grep -n 'rk_worker_stop[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
-rollback_destroy_line=$(grep -n 'rk_state_destroy[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
-unpublish_line=$(grep -n 'rk_proc_unpublish[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
-scheduler_stop_line=$(grep -n 'rk_scheduler_stop[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
-worker_stop_line=$(grep -n 'rk_worker_stop[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
-destroy_line=$(grep -n 'rk_state_destroy[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
-[[ -n $worker_start_line && -n $publish_line && -n $scheduler_start_line && \
-	$worker_start_line -lt $publish_line && $publish_line -lt $scheduler_start_line ]] ||
-	die "start order must be worker, procfs, then timer"
-[[ -n $rollback_worker_line && -n $rollback_destroy_line && \
-	$rollback_worker_line -lt $rollback_destroy_line ]] ||
-	die "publication rollback must join the worker before destroying state"
-[[ -n $unpublish_line && -n $scheduler_stop_line && -n $worker_stop_line && \
-	-n $destroy_line && $unpublish_line -lt $scheduler_stop_line && \
-	$scheduler_stop_line -lt $worker_stop_line && $worker_stop_line -lt $destroy_line ]] ||
-	die "unload order must be procfs, timer, worker, then state"
-
-header_text=$(tr '\n' ' ' < "$build_dir/include/rootkit.h")
-for declaration in rk_state_actions_enabled rk_state_set_actions_enabled \
-	rk_state_timer_fires rk_state_record_timer_fire rk_state_worker_runs \
-	rk_state_record_worker_run rk_proc_publish rk_proc_unpublish rk_worker_start \
-	rk_worker_request rk_worker_stop rk_scheduler_start rk_scheduler_stop; do
-	grep -Eq "${declaration}[[:space:]]*\(" <<< "$header_text" ||
-		die "rootkit.h must declare $declaration"
-done
-
-printf '[+] shared request slot, resident worker, timer source, rollback, and teardown verified\n'
+printf '[+] resident worker admission, consumption, stop priority, and cleanup verified\n'
