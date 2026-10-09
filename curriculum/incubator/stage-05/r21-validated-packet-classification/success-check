@@ -1,0 +1,224 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Bounded IPv4 UDP classification"
+
+endpoint=/proc/rootkitlings
+fixtures=/tmp/rootkitlings-classifier
+actual=$fixtures/actual
+expected=$fixtures/expected
+mkdir -p "$fixtures"
+helper=$fixtures/traffic_test
+sed -n '/^__ROOTKITLINGS_TRAFFIC_HELPER__$/,$p' /check |
+	sed '1d' | busybox base64 -d | busybox gzip -d > "$helper"
+chmod 0755 "$helper"
+
+field()
+{
+	sed -n "s/^$1=//p" "$endpoint"
+}
+
+assert_delta()
+{
+	name=$1
+	before=$2
+	expected_delta=$3
+	label=$4
+	after=$(field "$name")
+	if [ "$after" -eq $((before + expected_delta)) ]; then
+		_ok "$label"
+	else
+		_fail "$label changed $name from $before to $after"
+	fi
+}
+
+assert_status()
+{
+	cat "$endpoint" > "$actual" || {
+		_fail "could not read classifier status"
+		return
+	}
+	for name in callbacks match other_protocol other_port truncated malformed \
+		access_error ipv4_rejected trailing; do
+		value=$(sed -n "s/^$name=//p" "$actual")
+		case "$value" in
+			''|*[!0-9]*) _fail "$name is not a decimal counter"; return ;;
+		esac
+	done
+	{
+		printf 'state=registered\ntarget_port=47021\n'
+		for name in callbacks match other_protocol other_port truncated \
+			malformed access_error ipv4_rejected trailing; do
+			printf '%s=%s\n' "$name" "$(field "$name")"
+		done
+	} > "$expected"
+	if cmp -s "$expected" "$actual"; then
+		_ok "status has the exact documented fields"
+	else
+		_fail "status is malformed or contains invented fields"
+	fi
+}
+
+status_is_well_formed()
+{
+	file=$1
+	[ "$(wc -l < "$file")" -eq 11 ] || return 1
+	[ "$(sed -n '1p' "$file")" = state=registered ] || return 1
+	[ "$(sed -n '2p' "$file")" = target_port=47021 ] || return 1
+	for name in callbacks match other_protocol other_port truncated malformed \
+		access_error ipv4_rejected trailing; do
+		value=$(sed -n "s/^$name=//p" "$file")
+		case "$value" in
+			''|*[!0-9]*) return 1 ;;
+		esac
+	done
+}
+
+assert_not_loaded()
+{
+	assert_absent /sys/module/rootkitlings
+	assert_absent "$endpoint"
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_fail "rootkitlings remains in /proc/modules"
+	else
+		_ok "rootkitlings is absent from /proc/modules"
+	fi
+}
+
+assert_not_loaded
+ifconfig lo 127.0.0.1 up
+load rootkitlings.ko target_port=47021
+assert_loaded rootkitlings
+assert_exists "$endpoint"
+if dmesg | grep -q \
+	'rootkitlings: packet classifier self-tests passed: 12 assertions'; then
+	_ok "real sk_buff fixtures passed before publication"
+else
+	_fail "real sk_buff fixture evidence is missing"
+fi
+assert_status
+cp "$actual" "$expected"
+if proc_read_test "$endpoint" "$expected"; then
+	_ok "small reads, EOF, seek, and rewind preserve one status snapshot"
+else
+	_fail "seq_file read behavior changed the status record"
+fi
+
+before=$(field match)
+if "$helper" ordinary 47021; then
+	_ok "ordinary UDP payload is delivered byte for byte"
+else
+	_fail "ordinary UDP delivery failed"
+fi
+assert_delta match "$before" 1 "ordinary target UDP matches once"
+
+before=$(field other_port)
+if "$helper" wrong-port 47021; then
+	_ok "wrong-port UDP payload is delivered byte for byte"
+else
+	_fail "wrong-port UDP delivery failed"
+fi
+assert_delta other_port "$before" 1 "wrong destination is classified separately"
+
+before=$(field match)
+if "$helper" options 47021; then
+	_ok "raw IPv4 options packet reaches its UDP receiver"
+else
+	_fail "raw IPv4 options packet failed"
+fi
+assert_delta match "$before" 1 "IPv4 options move the UDP offset without hiding it"
+
+before=$(field match)
+if "$helper" gso 47021; then
+	_ok "one UDP GSO send produces three intact datagrams"
+else
+	_fail "UDP GSO delivery failed"
+fi
+assert_delta match "$before" 1 "the LOCAL_OUT GSO traversal is classified once"
+
+before=$(field malformed)
+"$helper" malformed-short 47021 || _fail "short UDP length packet send failed"
+assert_delta malformed "$before" 1 "UDP length below eight is malformed"
+
+before=$(field malformed)
+"$helper" malformed-long 47021 || _fail "oversize UDP length packet send failed"
+assert_delta malformed "$before" 1 "UDP length beyond the IPv4 payload is malformed"
+
+before=$(field match)
+"$helper" bad-checksum 47021 || _fail "bad-checksum packet send failed"
+assert_delta match "$before" 1 "classification does not claim checksum validation"
+
+before_match=$(field match)
+before_trailing=$(field trailing)
+"$helper" surplus 47021 || _fail "surplus packet send failed"
+assert_delta match "$before_match" 1 "UDP length may be below the IPv4 payload bound"
+assert_delta trailing "$before_trailing" 1 "bytes after that UDP datagram stay explicit"
+
+before=$(field ipv4_rejected)
+"$helper" fragments 47021 || _fail "manual fragment sends failed"
+assert_delta ipv4_rejected "$before" 2 "both IPv4 fragments stop before UDP classification"
+
+if [ "$(field truncated)" -eq 0 ] && [ "$(field access_error)" -eq 0 ]; then
+	_ok "validated live packets need no invented truncation or access result"
+else
+	_fail "live traffic produced an unexpected truncation or access error"
+fi
+
+before=$(field match)
+"$helper" burst 47021 > "$fixtures/burst.log" 2>&1 &
+traffic=$!
+if kill -0 "$traffic" 2> /dev/null; then
+	_ok "controlled UDP traffic is active before concurrent status reads"
+else
+	_fail "controlled UDP traffic ended before concurrent status reads"
+fi
+reader_ok=1
+i=0
+while [ "$i" -lt 48 ]; do
+	cat "$endpoint" > "$actual" || reader_ok=0
+	status_is_well_formed "$actual" || reader_ok=0
+	i=$((i + 1))
+done
+wait "$traffic" || reader_ok=0
+after=$(field match)
+if [ "$reader_ok" -eq 1 ] && [ "$after" -eq $((before + 257)) ]; then
+	_ok "257 concurrent UDP payloads are intact and classified once"
+else
+	_fail "concurrent UDP epoch changed matches from $before to $after"
+fi
+
+"$helper" long-burst 47021 > "$fixtures/unload-traffic.log" 2>&1 &
+traffic=$!
+sleep 1
+if kill -0 "$traffic" 2> /dev/null; then
+	_ok "controlled UDP traffic is active before classifier teardown"
+else
+	_fail "controlled UDP traffic ended before classifier teardown"
+fi
+exec 3< "$endpoint"
+unload rootkitlings
+wait "$traffic" || _fail "UDP delivery failed across classifier unload"
+assert_not_loaded
+if cat <&3 > /dev/null 2>&1; then
+	_fail "a held proc descriptor remained readable after removal"
+else
+	_ok "proc removal retired a held status descriptor"
+fi
+exec 3<&-
+
+load rootkitlings.ko target_port=47021
+assert_loaded rootkitlings
+assert_status
+before=$(field match)
+if "$helper" ordinary 47021; then
+	_ok "ordinary UDP remains intact after reload"
+else
+	_fail "ordinary UDP delivery failed after reload"
+fi
+assert_delta match "$before" 1 "reloaded classifier starts a fresh match count"
+assert_status
+unload rootkitlings
+assert_not_loaded
+
+summary

@@ -1,0 +1,32 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "@LABEL@"
+
+endpoint=/proc/rootkitlings
+ifconfig lo 127.0.0.1 up
+
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	if module_load_test /rootkitlings/rootkitlings.ko @EXPECTED_ERRNO@; then
+		_ok "attempt $attempt returned errno @EXPECTED_ERRNO@"
+	else
+		_fail "attempt $attempt returned the wrong error"
+	fi
+	assert_absent /sys/module/rootkitlings
+	assert_absent "$endpoint"
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_fail "attempt $attempt left rootkitlings in /proc/modules"
+	else
+		_ok "attempt $attempt left no loaded module"
+	fi
+	if ping -4 -q -c 1 -W 1 127.0.0.1 > /dev/null 2>&1; then
+		_ok "IPv4 remains usable after attempt $attempt"
+	else
+		_fail "IPv4 failed after attempt $attempt"
+	fi
+	attempt=$((attempt + 1))
+done
+
+summary
