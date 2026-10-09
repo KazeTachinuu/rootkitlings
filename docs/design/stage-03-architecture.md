@@ -1,6 +1,6 @@
 # Stage 3 cumulative architecture
 
-Status: accepted design input for M01; implementation pending.
+Status: implemented and independently verified in M01.
 It does not change the public route.
 
 ## Boundary
@@ -70,9 +70,10 @@ The work is to:
 3. connect the protected `root TOKEN` command to the inherited authorization path
 4. add one event call after a successful credential replacement
 5. connect selected `rmdir()` returns to the same typed event API
-6. implement the spinlocked ring, overwrite rule, snapshot, and rendering
+6. implement the spinlocked ring, overwrite rule, and oldest-first snapshot
 
 This makes integration visible without turning the milestone into a verbatim repeat of L11 and L13.
+The event structs, fixed output renderer, and proc publication are supplied so the learner's new algorithm remains the ring itself.
 
 ## Procfs interfaces
 

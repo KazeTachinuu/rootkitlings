@@ -37,59 +37,31 @@ static struct proc_dir_entry *events_entry;
 
 void rk_events_reset(void)
 {
-	spin_lock(&event_lock);
-	memset(event_ring, 0, sizeof(event_ring));
-	oldest = 0;
-	retained = 0;
-	next_sequence = 1;
-	overwritten = 0;
-	spin_unlock(&event_lock);
+	/* Reset the complete ring invariant while holding event_lock. */
 }
 
 static void rk_events_append(enum rk_event_kind kind, bool rmdir_success)
 {
-	struct rk_event *record;
-	unsigned int index;
-
-	spin_lock(&event_lock);
-	if (retained < RK_EVENT_CAPACITY) {
-		index = (oldest + retained) % RK_EVENT_CAPACITY;
-		retained++;
-	} else {
-		index = oldest;
-		oldest = (oldest + 1U) % RK_EVENT_CAPACITY;
-		overwritten++;
-	}
-	record = &event_ring[index];
-	record->sequence = next_sequence++;
-	record->tid = task_pid_nr(current);
-	record->kind = kind;
-	record->rmdir_success = rmdir_success;
-	spin_unlock(&event_lock);
+	/* Append or overwrite one complete record while holding event_lock. */
+	(void)kind;
+	(void)rmdir_success;
 }
 
 void rk_events_record_credential_change(void)
 {
-	/* Add the typed credential-change producer. */
+	/* Append one credential-change event. */
 }
 
 void rk_events_record_rmdir(long result)
 {
-	/* Add the typed rmdir producer. */
+	/* Append one success or failure event for a completed syscall. */
 	(void)result;
 }
 
 static void rk_events_snapshot(struct rk_event_snapshot *snapshot)
 {
-	unsigned int index;
-
-	spin_lock(&event_lock);
-	snapshot->retained = retained;
-	snapshot->overwritten = overwritten;
-	for (index = 0; index < retained; index++)
-		snapshot->records[index] =
-			event_ring[(oldest + index) % RK_EVENT_CAPACITY];
-	spin_unlock(&event_lock);
+	/* Replace this safe empty view with a locked oldest-first copy. */
+	memset(snapshot, 0, sizeof(*snapshot));
 }
 
 static int rk_events_show(struct seq_file *output, void *unused)

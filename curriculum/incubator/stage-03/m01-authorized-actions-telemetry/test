@@ -70,6 +70,9 @@ build_variant()
 
 build_variant success 0
 for point in {1..9}; do build_variant "failure-$point" "$point"; done
+"$HERE/../r12-one-use-authorization/host-check" \
+	"$scratch/success" "$scratch/success/rootkitlings.ko" \
+	"$scratch/failure-8" "$scratch/failure-9"
 "$HERE/host-check" "$scratch/success" "$scratch/success/rootkitlings.ko"
 
 rebuild_fixture()
@@ -105,6 +108,10 @@ void rk_events_record_rmdir(long result)\
 \t\treturn;\
 \trk_events_append(RK_EVENT_RMDIR, result == 0);\
 }' "$formatted/instrumentation/events.c"
+sed -i 's/retained++;/++retained;/; s/overwritten++;/++overwritten;/' \
+	"$formatted/instrumentation/events.c"
+sed -i 's/record->sequence = next_sequence++;/record->sequence = next_sequence; ++next_sequence;/' \
+	"$formatted/instrumentation/events.c"
 rebuild_fixture "$formatted" valid-equivalent
 "$HERE/host-check" "$formatted" "$formatted/rootkitlings.ko" \
 	>"$scratch/valid-equivalent-host.log"
@@ -129,6 +136,12 @@ cp -a "$scratch/success" "$caller_tid"
 sed -i 's/rk_events_record_credential_change(void)/rk_events_record_credential_change(pid_t tid)/' \
 	"$caller_tid/include/rootkit.h"
 reject_fixture "$caller_tid" caller-supplied-attribution
+
+supplied_change=$scratch/changed-supplied-file
+cp -a "$scratch/success" "$supplied_change"
+sed -i '$a /* learner edit outside the declared surface */' \
+	"$supplied_change/execution/worker.c"
+reject_fixture "$supplied_change" changed-supplied-file
 
 format_lock=$scratch/format-under-lock
 cp -a "$scratch/success" "$format_lock"
@@ -167,12 +180,15 @@ sed -i '/static void rk_events_snapshot/,/^}/ {
 rebuild_fixture "$unlocked_snapshot" unlocked-snapshot
 reject_fixture "$unlocked_snapshot" unlocked-snapshot-copy
 
-wrong_index=$scratch/wrong-full-index
-cp -a "$scratch/success" "$wrong_index"
-sed -i 's/index = oldest;/index = (oldest + 1U) % RK_EVENT_CAPACITY;/' \
-	"$wrong_index/instrumentation/events.c"
-rebuild_fixture "$wrong_index" wrong-full-index
-reject_fixture "$wrong_index" wrong-full-ring-index
+unlocked_reset=$scratch/unlocked-reset
+cp -a "$scratch/success" "$unlocked_reset"
+sed -i '/void rk_events_reset/,/^}/ {
+	/next_sequence = 1;/d
+	/spin_unlock(&event_lock);/a\
+\tnext_sequence = 1;
+}' "$unlocked_reset/instrumentation/events.c"
+rebuild_fixture "$unlocked_reset" unlocked-reset
+reject_fixture "$unlocked_reset" unlocked-reset-mutation
 
 second_lock=$scratch/second-lock
 cp -a "$scratch/success" "$second_lock"

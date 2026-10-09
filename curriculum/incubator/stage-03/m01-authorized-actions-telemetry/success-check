@@ -8,8 +8,37 @@ control=/proc/rootkitlings
 events=/proc/rootkitlings_events
 selected=/tmp/rootkitlings-rmdir-watch
 fixtures=/tmp/rootkitlings-m01
-mkdir -p "$fixtures"
+mkdir -p "$fixtures/root"
+chmod 0755 "$fixtures" "$fixtures/root"
+: > "$fixtures/empty"
+printf enable > "$fixtures/enable"
+printf 'enable\n' > "$fixtures/enable-lf"
+printf disable > "$fixtures/disable"
+printf 'disable\n' > "$fixtures/disable-lf"
 printf run > "$fixtures/run"
+printf 'run\n' > "$fixtures/run-lf"
+printf '\n' > "$fixtures/lone-lf"
+printf 'ena\nble' > "$fixtures/interior-lf"
+printf 'enable\n\n' > "$fixtures/double-lf"
+printf 'run\000' > "$fixtures/run-nul"
+printf ru > "$fixtures/run-prefix"
+printf runner > "$fixtures/run-suffix"
+printf xrun > "$fixtures/run-prefixed"
+printf root > "$fixtures/root-only"
+printf 'root ' > "$fixtures/root-space"
+printf 00000000000000000000000000000000 > "$fixtures/token-only"
+printf 'root 0000000000000000000000000000000' > "$fixtures/root-short"
+printf 'root 000000000000000000000000000000000' > "$fixtures/root-long"
+printf 'root AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' > "$fixtures/root-uppercase"
+printf 'root 0000000000000000000000000000000g' > "$fixtures/root-nonhex"
+printf ' root 00000000000000000000000000000000' > "$fixtures/root-leading-space"
+printf 'root  00000000000000000000000000000000' > "$fixtures/root-double-space"
+printf 'root 0x000000000000000000000000000000' > "$fixtures/root-prefix"
+printf 'root 00000000000000000000000000000000 ' > "$fixtures/root-trailing-space"
+printf 'root 00000000000000000000000000000000\r\n' > "$fixtures/root-crlf"
+printf 'root 00000000000000000000000000000000\n\n' > "$fixtures/root-double-lf"
+printf 'root 000000000000000\0000000000000000' > "$fixtures/root-nul"
+printf 'root 0000000000000000000000000000000000' > "$fixtures/root-oversized"
 registry=/sys/kernel/debug/kprobes/list
 
 probe_count()
@@ -40,6 +69,58 @@ assert_status_shape()
 	else
 		_fail "$1 returned malformed cumulative status"
 	fi
+}
+
+read_token()
+{
+	sed -n 's/^token=//p' "$control"
+}
+
+assert_control_unchanged()
+{
+	expected_token=$1
+	expected_events=$2
+	label=$3
+	actual_token=$(read_token)
+	actual_retained=$(sed -n 's/^retained=//p' "$events")
+	actual_overwritten=$(sed -n 's/^overwritten=//p' "$events")
+	if test "$actual_token" = "$expected_token" &&
+	   test "$actual_retained:$actual_overwritten" = "$expected_events"; then
+		_ok "$label preserves authorization and event state"
+	else
+		_fail "$label changed authorization or event state"
+	fi
+}
+
+expect_rejected_write()
+{
+	fixture=$1
+	errno=$2
+	label=$3
+	token_before=$(read_token)
+	events_before=$(sed -n 's/^retained=//p' "$events"):$(
+		sed -n 's/^overwritten=//p' "$events")
+	if chpst -u 65534:65534 proc_write_test errno "$control" \
+		"$fixtures/$fixture" "$errno" >/dev/null; then
+		_ok "$label returns errno $errno"
+	else
+		_fail "$label returned the wrong error"
+	fi
+	assert_control_unchanged "$token_before" "$events_before" "$label"
+}
+
+settle_worker_runs()
+{
+	settle_attempt=1
+	while test "$settle_attempt" -le 3; do
+		settled_runs=$(status_field_test read "$control" worker_runs)
+		if status_field_test unchanged "$control" worker_runs \
+			"$settled_runs" 300 >/dev/null 2>&1; then
+			return 0
+		fi
+		settle_attempt=$((settle_attempt + 1))
+	done
+	return 1
 }
 
 cleanup()
@@ -110,6 +191,11 @@ else
 fi
 assert_empty_ring "initial load"
 assert_status_shape "initial load"
+if chpst -u 65534:65534 cat "$control" >/dev/null 2>&1; then
+	_fail "an unprivileged task read the bearer token"
+else
+	_ok "an unprivileged task cannot read the bearer token"
+fi
 probe_before=$(( $(probe_count) - 1 ))
 if test "$(probe_count)" -eq $((probe_before + 1)); then
 	_ok "load registers one rmdir return probe"
@@ -118,22 +204,67 @@ else
 fi
 initial_runs=$(sed -n 's/^worker_runs=//p' "$control")
 initial_fires=$(sed -n 's/^timer_fires=//p' "$control")
-if proc_write_test errno "$control" "$fixtures/run" 13; then
-	_ok "disabled run returns EACCES"
-else
-	_fail "disabled run returned the wrong error"
-fi
+expect_rejected_write run 13 "disabled run"
+expect_rejected_write run-lf 13 "disabled newline-terminated run"
+disabled_token=$(read_token)
+printf 'root %s' "$disabled_token" > "$fixtures/root-current"
+expect_rejected_write root-current 13 "disabled current token"
 if status_field_test advance "$control" timer_fires "$initial_fires" 1200 >/dev/null &&
 	status_field_test unchanged "$control" worker_runs "$initial_runs" 200 >/dev/null; then
 	_ok "disabled timer fires without completing worker work"
 else
 	_fail "disabled timer or worker accounting is wrong"
 fi
+mkdir "$selected"
+rmdir "$selected" || _fail "disabled selected rmdir changed a successful call"
 rmdir "$selected" 2>/dev/null || true
 assert_empty_ring "disabled selected rmdir"
+for malformed in empty lone-lf interior-lf double-lf run-nul run-prefix \
+	run-suffix run-prefixed root-only root-space token-only root-short \
+	root-long root-uppercase root-nonhex root-leading-space root-double-space \
+	root-prefix root-trailing-space root-crlf root-double-lf root-nul \
+	root-oversized; do
+	expect_rejected_write "$malformed" 22 "$malformed command"
+done
+if proc_write_test fault "$control" "$fixtures/root-current" 14 >/dev/null; then
+	_ok "partial user copy returns EFAULT"
+else
+	_fail "partial user copy returned the wrong error"
+fi
+assert_control_unchanged "$disabled_token" 0:0 "partial user copy"
+if proc_write_test fault "$control" "$fixtures/root-oversized" 22 >/dev/null; then
+	_ok "oversized input is rejected before user access"
+else
+	_fail "oversized input touched userspace"
+fi
+assert_control_unchanged "$disabled_token" 0:0 "oversized input"
+if proc_write_test offset "$control" "$fixtures/root-current" 1 22 >/dev/null; then
+	_ok "nonzero write offset returns EINVAL"
+else
+	_fail "nonzero write offset returned the wrong error"
+fi
+assert_control_unchanged "$disabled_token" 0:0 "nonzero write offset"
+if chpst -u 65534:65534 proc_write_test write "$control" \
+	"$fixtures/enable-lf" >/dev/null; then
+	_ok "unprivileged newline-terminated enable succeeds"
+else
+	_fail "unprivileged newline-terminated enable failed"
+fi
+if chpst -u 65534:65534 proc_write_test write "$control" \
+	"$fixtures/disable-lf" >/dev/null; then
+	_ok "unprivileged newline-terminated disable succeeds"
+else
+	_fail "unprivileged newline-terminated disable failed"
+fi
+assert_control_unchanged "$disabled_token" 0:0 "switch round trip"
 printf enable > "$control"
 mkdir /tmp/rootkitlings-rmdir-watch-extra
 rmdir /tmp/rootkitlings-rmdir-watch-extra
+if rmdir /tmp/rootkitlings-rmdir-other 2>/dev/null; then
+	_fail "unrelated missing path unexpectedly succeeded"
+else
+	_ok "unrelated path keeps its normal failure result"
+fi
 rmdir_telemetry_test invalid || _fail "invalid pointer handling failed"
 rmdir_telemetry_test boundary || _fail "unterminated boundary handling failed"
 assert_empty_ring "unmatched and invalid paths"
@@ -162,12 +293,36 @@ assert_empty_ring "immediate reload"
 assert_status_shape "immediate reload"
 printf enable > "$control"
 token=$(sed -n 's/^token=//p' "$control")
+wrong=00000000000000000000000000000000
+if test "$wrong" = "$token"; then
+	wrong=11111111111111111111111111111111
+fi
+if chpst -u 65534:65534 cred_trigger_test token-unchanged "$control" \
+	"$wrong" 13 >/dev/null; then
+	_ok "a well-formed wrong token returns EACCES"
+else
+	_fail "wrong-token handling changed its caller or returned the wrong error"
+fi
+assert_control_unchanged "$token" 0:0 "wrong token"
 if event_stream_test credential-race "$control" "$events" "$token"; then
-	_ok "one raced token records the successful writer's TID"
+	_ok "one raced token changes its writer and records that writer's TID"
 else
 	_fail "credential race admission or TID attribution is wrong"
 fi
 assert_ring 1 0 1 1 "one authorized action"
+replacement=$(read_token)
+if test "$replacement" != "$token"; then
+	_ok "the successful action rotates its token"
+else
+	_fail "the successful action retained its token"
+fi
+if chpst -u 65534:65534 cred_trigger_test token-unchanged "$control" \
+	"$token" 13 >/dev/null; then
+	_ok "the consumed token is rejected as stale"
+else
+	_fail "stale-token replay handling is incorrect"
+fi
+assert_control_unchanged "$replacement" 1:0 "stale token replay"
 
 i=1
 while test "$i" -le 14; do
@@ -185,6 +340,23 @@ while test "$i" -le 16; do
 	i=$((i + 1))
 done
 assert_ring 16 17 18 33 "more than twice capacity"
+
+token=$(read_token)
+if chpst -u 65534:65534 cred_trigger_test token-thread-scope "$control" \
+	"$token" >/dev/null; then
+	_ok "an authorized action changes its writer but not an existing sibling"
+else
+	_fail "credential replacement escaped the writing thread"
+fi
+assert_ring 16 18 19 34 "thread-scoped authorized action"
+token=$(read_token)
+if chpst -u 65534:65534 cred_trigger_test token-replace "$control" \
+	"$token" "$fixtures/root" >/dev/null; then
+	_ok "a final newline authorizes one same-caller credential change"
+else
+	_fail "newline-terminated credential action failed"
+fi
+assert_ring 16 19 20 35 "newline-terminated authorized action"
 
 token=$(sed -n 's/^token=//p' "$control")
 event_stream_test credential-race "$control" "$events" "$token" &
@@ -206,7 +378,7 @@ if test "$mixed_ok" -eq 1; then
 else
 	_fail "a mixed producer failed"
 fi
-assert_ring 16 26 27 42 "mixed concurrent producers"
+assert_ring 16 28 29 44 "mixed concurrent producers"
 if grep -q 'kind=credential-change' "$fixtures/events" &&
 	   grep -q 'kind=rmdir' "$fixtures/events"; then
 	_ok "the retained mixed window contains both typed event kinds"
@@ -219,17 +391,89 @@ if test "$(sed -n 's/^returns_missed=//p' "$events")" = 0; then
 else
 	_fail "Kretprobe reports missed returns"
 fi
-before_runs=$(sed -n 's/^worker_runs=//p' "$control")
-printf run > "$control" || _fail "enabled run was rejected"
-if status_field_test advance "$control" worker_runs "$before_runs" 1200 >/dev/null; then
-	_ok "the inherited resident worker executes admitted run requests"
+if rmdir_telemetry_test concurrent; then
+	_ok "selected and unrelated concurrent rmdir calls keep their results"
 else
-	_fail "the inherited worker did not execute run"
+	_fail "concurrent rmdir return correlation failed"
 fi
+assert_ring 16 92 93 108 "concurrent return correlation"
+if test "$(sed -n 's/^returns_missed=//p' "$events")" = 0; then
+	_ok "the concurrent return workload fits the instance pool"
+else
+	_fail "the concurrent return workload missed an instance"
+fi
+
+printf disable > "$control"
+if settle_worker_runs; then
+	_ok "worker activity settles while actions are disabled"
+else
+	_fail "worker activity did not settle"
+fi
+before_runs=$settled_runs
+before_fires=$(status_field_test read "$control" timer_fires)
+printf enable > "$control"
+pids=
+writer=1
+while test "$writer" -le 4; do
+	(
+		i=0
+		while test "$i" -lt 64; do
+			proc_write_test outcome "$control" "$fixtures/run" || exit 1
+			i=$((i + 1))
+		done
+	) > "$fixtures/run-outcomes-$writer" &
+	pids="$pids $!"
+	writer=$((writer + 1))
+done
+writers_ok=1
+for pid in $pids; do
+	wait "$pid" || writers_ok=0
+done
+if test "$writers_ok" -eq 1 &&
+	! grep -h -Ev '^(ok|11)$' "$fixtures"/run-outcomes-* \
+		> "$fixtures/bad-run-outcomes"; then
+	_ok "concurrent run requests return only success or EAGAIN"
+else
+	_fail "a concurrent run request returned an invalid outcome"
+fi
+ok_count=0
+again_count=0
+for outcome_file in "$fixtures"/run-outcomes-*; do
+	count=$(grep -c '^ok$' "$outcome_file" 2>/dev/null || true)
+	ok_count=$((ok_count + count))
+	count=$(grep -c '^11$' "$outcome_file" 2>/dev/null || true)
+	again_count=$((again_count + count))
+done
+if test $((ok_count + again_count)) -eq 256 &&
+	   test "$ok_count" -gt 0 && test "$again_count" -gt 0; then
+	_ok "the shared capacity-one slot admits work and returns EAGAIN when full"
+else
+	_fail "capacity-one outcomes: success=$ok_count EAGAIN=$again_count"
+fi
+printf disable > "$control"
+if settle_worker_runs; then
+	after_runs=$settled_runs
+	after_fires=$(status_field_test read "$control" timer_fires)
+	worker_delta=$((after_runs - before_runs))
+	timer_delta=$((after_fires - before_fires))
+	maximum=$((ok_count + timer_delta))
+	if test "$worker_delta" -ge 0 && test "$worker_delta" -le "$maximum"; then
+		_ok "only admitted worker requests can increment worker_runs"
+	else
+		_fail "worker delta $worker_delta exceeds $maximum admitted requests"
+	fi
+else
+	_fail "worker activity did not settle after concurrent requests"
+fi
+expect_rejected_write run 13 "run after disable"
 
 rmdir_telemetry_test stress 2 &
 stress_pid=$!
-unload rootkitlings
+if proc_write_test unload "$control" "$fixtures/run" rootkitlings >/dev/null; then
+	_ok "a held control descriptor rejects work after unload"
+else
+	_fail "held control descriptor teardown failed"
+fi
 if wait "$stress_pid"; then
 	_ok "rmdir workload remains valid across unload"
 else

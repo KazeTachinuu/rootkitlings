@@ -3,6 +3,8 @@
 This milestone joins the resident worker, one-use credential action, and selected `rmdir()` return probe in one module.
 Those mechanisms are supplied.
 Your new mechanism is a bounded event ring shared by two producers.
+The fixed capacity bounds memory use and avoids allocation in a probe handler.
+The lock keeps simultaneous credential and probe events from reusing a slot or sequence number.
 
 The control endpoint remains `/proc/rootkitlings` with mode `0622`.
 It accepts exactly:
@@ -65,6 +67,7 @@ The Kretprobe calls its typed function only for the exact selected path after th
 
 Copy retained records and counters into a bounded local snapshot while holding the lock.
 Release the lock before calling any `seq_*()` function.
+This keeps formatting and user-visible reads out of the short producer critical section.
 
 Opening the events endpoint does not take a snapshot.
 The first read at offset zero fills the seq-file buffer from one snapshot.

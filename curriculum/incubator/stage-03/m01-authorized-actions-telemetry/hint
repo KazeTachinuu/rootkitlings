@@ -3,6 +3,6 @@ spinlock. For a non-full append, use (oldest + retained) % capacity. For a full
 append, replace oldest, advance oldest, and increment overwritten.
 
 The show callback copies a complete bounded snapshot under the lock, unlocks,
-then formats it. Record task_pid_nr(current) inside the typed event functions.
-Call those functions only after a successful credential change or a selected
+then formats it. Let the shared append path record task_pid_nr(current). Call
+the typed functions only after a successful credential change or a selected
 rmdir return.

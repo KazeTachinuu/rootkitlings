@@ -19,6 +19,12 @@
 struct result {
 	pid_t tid;
 	int error;
+	uid_t ruid;
+	uid_t euid;
+	uid_t suid;
+	gid_t rgid;
+	gid_t egid;
+	gid_t sgid;
 };
 
 static ssize_t read_all(int fd, char *buffer, size_t capacity)
@@ -137,6 +143,9 @@ static int check_credential_race(const char *control, const char *events,
 				_exit(2);
 			result.tid = getpid();
 			result.error = write_command(control, token);
+			if (getresuid(&result.ruid, &result.euid, &result.suid) < 0 ||
+			    getresgid(&result.rgid, &result.egid, &result.sgid) < 0)
+				_exit(2);
 			if (write(result_pipe[1], &result, sizeof(result)) !=
 			    (ssize_t)sizeof(result))
 				_exit(2);
@@ -158,9 +167,20 @@ static int check_credential_race(const char *control, const char *events,
 		if (count != (ssize_t)sizeof(results[index]))
 			return 1;
 		if (results[index].error == 0) {
+			if (results[index].ruid != 0 || results[index].euid != 0 ||
+			    results[index].suid != 0 || results[index].rgid != 0 ||
+			    results[index].egid != 0 || results[index].sgid != 0)
+				return 1;
 			successes++;
 			winner = results[index].tid;
 		} else if (results[index].error != EACCES) {
+			return 1;
+		} else if (results[index].ruid != 65534 ||
+			   results[index].euid != 65534 ||
+			   results[index].suid != 65534 ||
+			   results[index].rgid != 65534 ||
+			   results[index].egid != 65534 ||
+			   results[index].sgid != 65534) {
 			return 1;
 		}
 	}
