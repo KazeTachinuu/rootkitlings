@@ -429,6 +429,10 @@ TRACE-24  Tracepoints as a more stable alternative
 TRACE-25  BPF-based observation as a defensive comparison
 ```
 
+Export status, kernel configuration, release and architecture are prerequisites of one managed-probe lesson, not a separate address-resolution product.
+The learner registers named Kprobes through `.symbol_name`, manages the complete hook set transactionally and retains no raw kernel address.
+This keeps the exercise tied to the pinned guest ABI without presenting internal symbols as a stable module interface.
+
 ## View manipulation and concealment
 
 The atomic concept is that a kernel object and a rendered view of that object are different things.
