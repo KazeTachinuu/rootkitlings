@@ -24,7 +24,7 @@ for option in CC_IS_GCC CRYPTO_GCM CRYPTO_AES CRYPTO_HMAC CRYPTO_SHA256 \
 		printf '[x] capstone requires CONFIG_%s\n' "$option" >&2; exit 1;
 	}
 done
-for command in base64 gcc gzip make nm openssl; do
+for command in base64 gcc gzip make nm objdump openssl; do
 	command -v "$command" >/dev/null || { printf '[x] %s is required\n' "$command" >&2; exit 1; }
 done
 for script in test host-check success-check signal-failure-check; do
@@ -60,10 +60,6 @@ cmp -s "$R30/solution/include/aead.h" "$HERE/../starter/include/aead.h" ||
 sed 's/"aead_platform.h"/"platform.h"/' "$HERE/../starter/crypto/aead.c" > "$scratch/aead.c"
 cmp -s "$R30/solution/crypto/aead.c" "$scratch/aead.c" ||
 	{ printf '[x] supplied authenticated-encryption operation changed\n' >&2; exit 1; }
-sed -e 's/"aead_platform.h"/"platform.h"/' -e 's/> 14/> 3/' \
-	"$HERE/../starter/crypto/aead_platform.c" > "$scratch/aead-platform.c"
-cmp -s "$R30/solution/crypto/platform.c" "$scratch/aead-platform.c" ||
-	{ printf '[x] supplied authenticated-encryption platform changed\n' >&2; exit 1; }
 sed -e 's/> 14/> 3/' -e 's/between 0 and 14/between 0 and 3/' \
 	"$HERE/../starter/crypto/auth_platform.c" > "$scratch/auth-platform.c"
 cmp -s "$R31/starter/crypto/platform.c" "$scratch/auth-platform.c" || {
@@ -116,6 +112,39 @@ make -s -C "$KDIR" M="$scratch/solution" W=1 modules > "$scratch/solution.log" 2
 ! grep -q 'warning:' "$scratch/solution.log" || { cat "$scratch/solution.log"; exit 1; }
 "$HERE/host-check" "$scratch/solution" "$scratch/solution/rootkitlings.ko"
 
+# C00 renames the AEAD platform header because platform.h belongs to the
+# authenticated-signal adapter, and extends the shared failure-point range.
+# Compare the code emitted by the pinned kernel toolchain instead of source
+# spelling so comments, formatting, and parameter names remain pedagogical.
+platform_contract()
+{
+	local object=$1
+
+	objdump -dr "$object" | sed '1,2d'
+	objdump -r "$object" | sed '1,2d'
+	objdump -s -j .rodata -j .rodata.str1.1 "$object" | sed '1,3d'
+	nm -an "$object" | grep -v ' [aA] '
+}
+
+mkdir -p "$scratch/r30-platform"
+cp -a "$R30/solution/." "$scratch/r30-platform/"
+for failure_point in 0 1 2 3; do
+	make -s -C "$KDIR" M="$scratch/solution" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$failure_point" crypto/aead_platform.o
+	make -s -C "$KDIR" M="$scratch/r30-platform" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$failure_point" crypto/platform.o
+	platform_contract "$scratch/solution/crypto/aead_platform.o" \
+		> "$scratch/c00-aead-platform-$failure_point.contract"
+	platform_contract "$scratch/r30-platform/crypto/platform.o" \
+		> "$scratch/r30-aead-platform-$failure_point.contract"
+	cmp -s "$scratch/r30-aead-platform-$failure_point.contract" \
+		"$scratch/c00-aead-platform-$failure_point.contract" || {
+		printf '[x] supplied authenticated-encryption platform contract changed at failure point %s\n' \
+			"$failure_point" >&2
+		exit 1
+	}
+done
+
 compose "$scratch/alternate"
 mkdir -p "$scratch/alternate/security"
 cp -a "$HERE/../solution/." "$scratch/alternate/"
@@ -163,6 +192,8 @@ gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
 	-o "$scratch/module_load_params" \
 	"$ROOT/vm/tools/module_load_params.c"
+
+mkdir -p "$scratch/checks"
 
 run_guest()
 {

@@ -9,7 +9,7 @@ grep -Eq '^CONFIG_CRYPTO_GCM=[ym]$' "$KDIR/.config" || { printf '[x] CONFIG_CRYP
 grep -Eq '^CONFIG_CRYPTO_AES=[ym]$' "$KDIR/.config" || { printf '[x] CONFIG_CRYPTO_AES required\n' >&2; exit 1; }
 generated=$(find "$here" -type f \( -name '*.o' -o -name '*.ko' -o -name '*.mod' -o -name '*.mod.c' -o -name Module.symvers -o -name modules.order -o -name '.*.cmd' \) -print -quit)
 [[ -z $generated ]] || { printf '[x] generated artifact in lesson: %s\n' "$generated" >&2; exit 1; }
-mapfile -t changed < <(diff -qr "$here/../starter" "$here/../solution" | sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p')
+mapfile -t changed < <(diff -qr "$here/../starter" "$here/../solution" | sed -nE 's#^Files .*/starter/(.*) and .*/solution/.* differ$#\1#p')
 [[ ${#changed[@]} == 1 && ${changed[0]} == crypto/aead.c ]] || { printf '[x] learner edit boundary is not one file\n' >&2; exit 1; }
 
 build(){ local src=$1 dst=$2 point=${3:-0}; cp -a "$src" "$dst"; make -s -C "$KDIR" M="$dst" W=1 ROOTKITLINGS_FAIL_POINT="$point" modules >"$dst.log" 2>&1 || { cat "$dst.log"; exit 1; }; ! grep -q 'warning:' "$dst.log" || { cat "$dst.log"; exit 1; }; }
