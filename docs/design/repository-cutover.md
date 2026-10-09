@@ -93,7 +93,7 @@ If several such files are added, place them in one tracked `references/` directo
 
 1. Finish and validate every v3 required and elective bundle while v2 remains public.
 2. Freeze stable IDs, the route and the per-exercise bundle schema.
-3. Implement and test the explicit 65-to-37 learner-state and workspace migration.
+3. Implement and test the explicit 65-to-36 learner-state and workspace migration.
 4. Move incubator bundles to stable-ID paths under `curriculum/required/` and `curriculum/electives/`.
 5. Adopt the v3 `course.toml`, bundled-asset validation, README, links and compile-database discovery together.
 6. Validate the new catalog, every reference solution, migration from representative old states, a clean checkout and the learner CLI.

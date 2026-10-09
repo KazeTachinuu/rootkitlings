@@ -31,7 +31,8 @@ The action switch is a `bool` read with `READ_ONCE()` and written with `WRITE_ON
 These operations force one compiler-visible scalar access; they do not provide an atomic read-modify-write operation or protect compound state.
 Concurrent valid writers use last-writer-wins semantics, and readers must observe one complete old-or-new Boolean value.
 The first genuine atomic read-modify-write operation appears in L07, where it bounds a counted pending-event queue at `INT_MAX` without coalescing successful requests.
-The first real multi-field invariant will introduce its mutex at one-use authorization, and the first real list consumer will introduce kernel list mechanics at module-view suppression.
+The first real multi-field invariant introduces its mutex at one-use authorization.
+The required route has no kernel-list consumer after unsupported module-list mutation was retired.
 
 L06 uses a timer callback only to record a firing, submit one preallocated work item, and rearm the timer.
 The normal workqueue callback owns the observable action and is the first sleep-capable execution boundary.

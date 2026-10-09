@@ -54,6 +54,10 @@ Without both controls, an empty result could mean either "absent" or "the check 
 There is no supported userspace command here for directly looking up one registered Kprobe.
 The evidence comes from comparing inventories and behavior, not from claiming a direct object lookup.
 
+The kernel module list is not an external-module extension point.
+Linux v7.2 serializes its writers with an internal mutex and RCU, so this course does not unlink `THIS_MODULE->list`.
+The module remains visible in `/proc/modules` and `/sys/module`; later exercises alter bounded rendered results instead.
+
 ## How `SEQ_SKIP` changes one item
 
 The supplied `seq_file` iterator visits exactly two catalog IDs.
@@ -95,4 +99,6 @@ The checker covers exact output, small reads, EOF, seek and rewind, repeated ope
 - [Linux v7.2 Kprobe declarations](https://github.com/torvalds/linux/blob/v7.2/include/linux/kprobes.h)
 - [Linux v7.2 procfs file operations](https://github.com/torvalds/linux/blob/v7.2/fs/proc/inode.c)
 - [Linux v7.2 directory-operation targets](https://github.com/torvalds/linux/blob/v7.2/fs/namei.c)
+- [Linux v7.2 module-list locking and RCU updates](https://github.com/torvalds/linux/blob/v7.2/kernel/module/main.c#L68-L77)
+- [Linux v7.2 `/proc/modules` iterator locking](https://github.com/torvalds/linux/blob/v7.2/kernel/module/procfs.c#L48-L117)
 - [Kprobes API and debugfs registry](https://docs.kernel.org/7.2/trace/kprobes.html)

@@ -11,8 +11,8 @@ Stage keys: `S1=module-core`, `S2=control-execution`, `S3=identity-observation`,
 
 Asset status: `adapt` means current material is useful but does not satisfy the new contract; `new` means no adequate target exercise exists; `reuse` means the existing contract is substantially sufficient.
 
-The scored route contains 32 required mechanism lessons, four cumulative milestones, and one final capstone.
-Aliases run from L00 through L31, M00 through M03, and C00.
+The scored route contains 31 required mechanism lessons, four cumulative milestones, and one final capstone.
+Aliases run from L00 through L30, M00 through M03, and C00.
 
 ## Mandatory setup gate
 
@@ -36,10 +36,10 @@ They appear in `prereq` only where first needed, through the same `requires` fie
 | `c-pointers-and-structs` | Work with pointers, `NULL`, struct declarations, arrays, and function declarations. | L02 |
 | `linux-process-basics` | Recognize processes, threads, PIDs, signals, and the current executing task. | L08 |
 | `linux-identity-basics` | Recognize users, groups, real/effective IDs, and namespaces as distinct identity contexts. | L09 |
-| `ipv4-packet-basics` | Recognize the IPv4 header and distinguish ICMP, TCP, and UDP payloads. | L18 |
-| `transport-endpoint-basics` | Recognize addresses, ports, stream sockets, and datagram sockets. | L23 |
-| `dns-name-basics` | Read a dot-separated DNS name as a sequence of labels. | L25 |
-| `linux-file-permission-basics` | Understand paths, ownership, permission bits, and file descriptors. | L26 |
+| `ipv4-packet-basics` | Recognize the IPv4 header and distinguish ICMP, TCP, and UDP payloads. | L17 |
+| `transport-endpoint-basics` | Recognize addresses, ports, stream sockets, and datagram sockets. | L22 |
+| `dns-name-basics` | Read a dot-separated DNS name as a sequence of labels. | L24 |
+| `linux-file-permission-basics` | Understand paths, ownership, permission bits, and file descriptors. | L25 |
 | `file-descriptor-basics` | Understand open file descriptors and userspace read, write, and ioctl calls. | E02 |
 
 Final metadata must be checked against each completed asset.
@@ -64,23 +64,22 @@ An unused general competency is omitted rather than attached to L00 as a course-
 | L12 | `managed-kprobe` — Manage two named Kprobes | S3 | `bounded-control-switch` | `named-kprobe-resolution`, `kernel-abi-contract`, `kprobes`, `hook-rollback`, `managed-hook-lifecycle` | `resource-ownership`, `proc-publication-lifetime`, `read-once-write-once` | instrumentation, detection, lifecycle | L27, L29, L33 | adapt |
 | L13 | `return-aware-syscall-telemetry` — Correlate an rmdir path with its result | S3 | `managed-kprobe` | `kretprobes`, `syscall-argument-decoding`, `nofault-user-copy`, `return-correlation` | `bounded-user-copy`, `action-control-switch`, `kernel-abi-contract`, `managed-hook-lifecycle` | instrumentation, detection | L30, L32 | adapt |
 | L14 | `cross-view-evidence` — Omit one live probe from a proc view | S4 | `managed-kprobe` | `cross-view-evidence`, `positive-negative-controls` | `proc-read`, `kprobes` | detection, concealment | implicit in L34–L39 | new |
-| L15 | `module-view-suppression` — Alter one module view without claiming invisibility | S4 | `cross-view-evidence` | `kernel-lists`, `module-list-hiding`, `sysfs-artifacts`, `reversible-view-suppression` | `cross-view-evidence` | concealment, detection | L34, L35 | adapt |
-| L16 | `packed-directory-filter` — Filter packed directory records safely | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `directory-filtering`, `packed-record-validation` | `kernel-allocation`, `syscall-argument-decoding`, `cross-view-evidence` | concealment, detection | L36 | adapt |
-| L17 | `bounded-rendered-filter` — Filter a bounded rendered result | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `read-view-filtering`, `bounded-rendered-filter` | `kretprobes`, `cross-view-evidence` | concealment, detection | L37 | adapt |
-| L18 | `hostile-packet-lengths` — Parse hostile packet lengths before touching payload | S5 | — | `packet-length-validation`, `network-byte-order-policy` | `ipv4-packet-basics` | networking, detection | fragments in L41/L42/L44/L46 | new |
-| L19 | `safe-skb-access` — Read an sk_buff without assuming linear storage | S5 | `hostile-packet-lengths` | `skb-safe-access`, `nonlinear-packet-access` | `packet-length-validation` | networking | hidden in current scaffolds | new |
-| L20 | `netfilter-observer` — Register a non-disruptive Netfilter observer | S5 | `safe-skb-access`, `proc-publication` | `netfilter-hooks`, `accept-by-default-observation`, `netfilter-callback-constraints` | `resource-ownership`, `skb-safe-access` | networking, instrumentation, detection | L40 | adapt |
-| L21 | `validated-packet-classification` — Classify only fully validated packets | S5 | `netfilter-observer` | `packet-classification`, `malformed-input-state-preservation` | `netfilter-hooks`, `skb-safe-access` | networking, detection | L41, predicate portion of L42 | adapt |
-| L22 | `writable-packet-mutation` — Mutate a writable packet and repair checksum state | S5 | `validated-packet-classification` | `packet-redirection`, `packet-copy-on-write`, `checksum-repair` | `packet-classification` | networking | L44 | adapt |
-| L23 | `kernel-socket-ownership` — Own a kernel socket from creation through release | S5 | `proc-publication` | `kernel-sockets`, `socket-lifecycle`, `kernel-socket-context-constraints` | `resource-ownership`, `transport-endpoint-basics` | networking, lifecycle, detection | L43 | adapt |
-| L24 | `tcp-framing-cancellation` — Frame and cancel a TCP client correctly | S5 | `event-driven-kernel-thread`, `kernel-socket-ownership` | `tcp-framing`, `blocked-io-cancellation`, `connect-back-agent` | `worker-stop-lifecycle`, `socket-lifecycle` | networking, control, execution | transport portion of C07 | adapt |
-| L25 | `bounded-dns-wire-name` — Encode and decode a bounded DNS wire name | S5 | `hostile-packet-lengths` | `dns-wire-encoding` | `packet-length-validation`, `dns-name-basics` | networking | L47 | adapt |
-| L26 | `guarded-file-transaction` — Apply and conditionally roll back a file transaction | S5 | `proc-publication` | `kernel-file-transactions`, `foreign-file-ownership`, `kernel-file-context-constraints` | `kernel-allocation`, `resource-ownership`, `linux-file-permission-basics` | persistence, lifecycle, detection | L48 | adapt |
-| L27 | `protection-property-selection` — Choose the protection property before the primitive | S6 | `bounded-dns-wire-name` | `protection-property-selection`, `xor-obfuscation`, `traffic-analysis-limits` | `dns-wire-encoding` | cryptography, detection | L49 demonstration | adapt |
-| L28 | `sha256-verification` — Compute and verify SHA-256 correctly | S6 | `protection-property-selection` | `kernel-crypto-api`, `sha256-verification` | `kernel-allocation`, `protection-property-selection` | cryptography, detection | L51 | adapt |
-| L29 | `authenticated-replay-safe-message` — Authenticate a message and reject replay | S6 | `one-use-authorization`, `sha256-verification` | `hmac-authentication`, `replay-resistant-state` | `replay-rejection`, `kernel-crypto-api`, `sha256-verification` | cryptography, control, detection | L52 plus missing replay policy | adapt |
-| L30 | `authenticated-encryption` — Use AEAD without releasing unauthenticated plaintext | S6 | `authenticated-replay-safe-message` | `authenticated-encryption`, `aead-plaintext-gating` | `kernel-allocation`, `hmac-authentication`, `replay-resistant-state` | cryptography | L50 | adapt |
-| L31 | `authenticated-dns-signal` — Emit an authenticated DNS-shaped signal | S6 | `cross-view-evidence`, `kernel-socket-ownership`, `authenticated-replay-safe-message` | `authenticated-dns-signals`, `paired-network-detection` | `cross-view-evidence`, `socket-lifecycle`, `dns-wire-encoding`, `hmac-authentication`, `replay-resistant-state` | networking, cryptography, detection | C09, bounded-label idea from L53 | adapt |
+| L15 | `packed-directory-filter` — Filter packed directory records safely | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `directory-filtering`, `packed-record-validation` | `kernel-allocation`, `syscall-argument-decoding`, `cross-view-evidence` | concealment, detection | L36 | adapt |
+| L16 | `bounded-rendered-filter` — Filter a bounded rendered result | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `read-view-filtering`, `bounded-rendered-filter` | `kretprobes`, `cross-view-evidence` | concealment, detection | L37 | adapt |
+| L17 | `hostile-packet-lengths` — Parse hostile packet lengths before touching payload | S5 | — | `packet-length-validation`, `network-byte-order-policy` | `ipv4-packet-basics` | networking, detection | fragments in L41/L42/L44/L46 | new |
+| L18 | `safe-skb-access` — Read an sk_buff without assuming linear storage | S5 | `hostile-packet-lengths` | `skb-safe-access`, `nonlinear-packet-access` | `packet-length-validation` | networking | hidden in current scaffolds | new |
+| L19 | `netfilter-observer` — Register a non-disruptive Netfilter observer | S5 | `safe-skb-access`, `proc-publication` | `netfilter-hooks`, `accept-by-default-observation`, `netfilter-callback-constraints` | `resource-ownership`, `skb-safe-access` | networking, instrumentation, detection | L40 | adapt |
+| L20 | `validated-packet-classification` — Classify only fully validated packets | S5 | `netfilter-observer` | `packet-classification`, `malformed-input-state-preservation` | `netfilter-hooks`, `skb-safe-access` | networking, detection | L41, predicate portion of L42 | adapt |
+| L21 | `writable-packet-mutation` — Mutate a writable packet and repair checksum state | S5 | `validated-packet-classification` | `packet-redirection`, `packet-copy-on-write`, `checksum-repair` | `packet-classification` | networking | L44 | adapt |
+| L22 | `kernel-socket-ownership` — Own a kernel socket from creation through release | S5 | `proc-publication` | `kernel-sockets`, `socket-lifecycle`, `kernel-socket-context-constraints` | `resource-ownership`, `transport-endpoint-basics` | networking, lifecycle, detection | L43 | adapt |
+| L23 | `tcp-framing-cancellation` — Frame and cancel a TCP client correctly | S5 | `event-driven-kernel-thread`, `kernel-socket-ownership` | `tcp-framing`, `blocked-io-cancellation`, `connect-back-agent` | `worker-stop-lifecycle`, `socket-lifecycle` | networking, control, execution | transport portion of C07 | adapt |
+| L24 | `bounded-dns-wire-name` — Encode and decode a bounded DNS wire name | S5 | `hostile-packet-lengths` | `dns-wire-encoding` | `packet-length-validation`, `dns-name-basics` | networking | L47 | adapt |
+| L25 | `guarded-file-transaction` — Apply and conditionally roll back a file transaction | S5 | `proc-publication` | `kernel-file-transactions`, `foreign-file-ownership`, `kernel-file-context-constraints` | `kernel-allocation`, `resource-ownership`, `linux-file-permission-basics` | persistence, lifecycle, detection | L48 | adapt |
+| L26 | `protection-property-selection` — Choose the protection property before the primitive | S6 | `bounded-dns-wire-name` | `protection-property-selection`, `xor-obfuscation`, `traffic-analysis-limits` | `dns-wire-encoding` | cryptography, detection | L49 demonstration | adapt |
+| L27 | `sha256-verification` — Compute and verify SHA-256 correctly | S6 | `protection-property-selection` | `kernel-crypto-api`, `sha256-verification` | `kernel-allocation`, `protection-property-selection` | cryptography, detection | L51 | adapt |
+| L28 | `authenticated-replay-safe-message` — Authenticate a message and reject replay | S6 | `one-use-authorization`, `sha256-verification` | `hmac-authentication`, `replay-resistant-state` | `replay-rejection`, `kernel-crypto-api`, `sha256-verification` | cryptography, control, detection | L52 plus missing replay policy | adapt |
+| L29 | `authenticated-encryption` — Use AEAD without releasing unauthenticated plaintext | S6 | `authenticated-replay-safe-message` | `authenticated-encryption`, `aead-plaintext-gating` | `kernel-allocation`, `hmac-authentication`, `replay-resistant-state` | cryptography | L50 | adapt |
+| L30 | `authenticated-dns-signal` — Emit an authenticated DNS-shaped signal | S6 | `cross-view-evidence`, `kernel-socket-ownership`, `authenticated-replay-safe-message` | `authenticated-dns-signals`, `paired-network-detection` | `cross-view-evidence`, `socket-lifecycle`, `dns-wire-encoding`, `hmac-authentication`, `replay-resistant-state` | networking, cryptography, detection | C09, bounded-label idea from L53 | adapt |
 
 ## Required milestones and capstone
 
@@ -166,7 +165,6 @@ Add these genuinely new concepts:
 - `return-correlation`
 - `cross-view-evidence`
 - `positive-negative-controls`
-- `reversible-view-suppression`
 - `packed-record-validation`
 - `bounded-rendered-filter`
 - `packet-length-validation`
@@ -229,13 +227,18 @@ Deprecate or reclassify these current product/API-shaped concepts:
 
 Do not delete an old concept merely because it leaves the required route; retain it while an elective still teaches or requires it.
 
+`module-list-hiding` and `sysfs-artifacts` have no v3 consumer and are retired at cutover.
+The proposed `reversible-view-suppression` concept is not added.
+`kernel-lists` also leaves the required route; retain it only if a completed elective teaches and uses intrusive lists.
+The removed `module-view-suppression` checkpoint receives no replacement alias.
+
 ## Asset reality
 
 No complete target asset set currently exists for the redesigned route.
 
 - Validated incubation assets exist for L00 through L05, but they are not yet the public route or final metadata.
 
-- L14, L18, and L19 have no adequate standalone current exercise
+- L14, L17, and L18 have no adequate standalone current exercise
   satisfying their contracts.
 - Every milestone and the final capstone require new cumulative checks, hints,
   and sparse solution overlays on the declared project lineage.

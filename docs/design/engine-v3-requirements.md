@@ -4,7 +4,7 @@ Status: approved design input; implementation in progress.
 
 The engine foundation is usable, but the repository does not yet model the target curriculum.
 It currently exposes 65 required checkpoints, no milestones, no electives, and no tracks.
-The target required route has 32 lessons, four milestones, and one capstone: 37 scored checkpoints.
+The target required route has 31 lessons, four milestones, and one capstone: 36 scored checkpoints.
 A mandatory authorization and containment setup gate sits before that route and carries no serial or completion credit.
 
 ## Requirements and progress
@@ -19,7 +19,7 @@ It records only a local acknowledgement tied to the relevant course revision and
 
 Acceptance requires explicit authorization, a disposable pinned guest, no persistent disk, production data, host mount, or network, at least two stop conditions, preflight rejection of weaker settings, a guest boundary probe, bounded shutdown, and removal of temporary guest state.
 Changing a relevant boundary setting invalidates the acknowledgement.
-Status and list output may report the gate separately but must not count it among the 37 scored checkpoints.
+Status and list output may report the gate separately but must not count it among the 36 scored checkpoints.
 Networking exercises may later enable only capabilities declared by their metadata; the gate verifies the default module-free guest, not a course-wide ban.
 
 `setup` shows the boundary and current state without recording acceptance.
@@ -203,7 +203,7 @@ Still pending:
 ### 4. Support explicit state migration
 
 Implementation: generic state and migration foundations are complete.
-The reviewed 65-to-37 mapping, workspace relocation, and route-specific migration orchestration remain pending.
+The reviewed 65-to-36 mapping, workspace relocation, and route-specific migration orchestration remain pending.
 
 The former exact-prefix rule conflicted with the requirement that a curriculum reorder not change the meaning of saved progress.
 Inserting a new checkpoint before completed stable IDs turns valid historical completion into a non-prefix set.
@@ -241,7 +241,7 @@ This permits sparse historical credit after a route insertion without changing s
 
 Still pending:
 
-- Encode and review the one-time 65-to-37 migration plan because many IDs are
+- Encode and review the one-time 65-to-36 migration plan because many IDs are
   merged or replaced.
 - Verify compatible snapshots and relocate/archive workspaces before committing
   the state replacement.
@@ -315,7 +315,7 @@ Broad assumption bundles must be split when final assets need only part of the b
 Tests:
 
 - Generated L/M/C serials are deterministic.
-- The required route contains exactly 32 lessons, four milestones, and one
+- The required route contains exactly 31 lessons, four milestones, and one
   capstone.
 - Alias generation is independent of filesystem discovery order.
 - Every elective belongs to exactly one of eight tracks.
