@@ -1,0 +1,10 @@
+Put one timer_list, one work_struct, and one borrowed rk_state pointer in
+execution/scheduler.c. Initialize both callback objects before the first
+mod_timer().
+
+The timer callback should only increment timer_fires, call schedule_work(), and
+rearm itself. The work callback reads actions_enabled once and increments
+actions_completed when it is true.
+
+On unload, remove procfs first. Then use timer_shutdown_sync() before
+cancel_work_sync(), and destroy state only after both calls return.

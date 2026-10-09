@@ -1,0 +1,132 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR ARTIFACT_PATH"
+build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
+artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+"$here/../r06-control-switch/host-check" "$build_dir" "$artifact"
+
+for path in execution/scheduler.c execution/scheduler.o; do
+	[[ -f $build_dir/$path && ! -L $build_dir/$path ]] ||
+		die "build output is missing regular file: $path"
+done
+
+command -v objdump >/dev/null || die "objdump is required"
+
+for symbol in rk_state_timer_fires rk_state_record_timer_fire \
+	rk_state_actions_completed rk_state_record_action; do
+	nm "$build_dir/core/state.o" | grep -Eq "[[:space:]]T[[:space:]]+$symbol$" ||
+		die "core/state.o must define $symbol"
+done
+
+state_source=$build_dir/core/state.c
+grep -Eq 'atomic_long_t[[:space:]]+timer_fires' "$state_source" ||
+	die "timer_fires must be a private atomic_long_t"
+grep -Eq 'atomic_long_t[[:space:]]+actions_completed' "$state_source" ||
+	die "actions_completed must be a private atomic_long_t"
+[[ $(grep -Ec 'atomic_long_set[[:space:]]*\(' "$state_source") -ge 2 ]] ||
+	die "initialize both counters with atomic_long_set"
+[[ $(grep -Ec 'atomic_long_read[[:space:]]*\(' "$state_source") -ge 2 ]] ||
+	die "read both counters with atomic_long_read"
+[[ $(grep -Ec 'atomic_long_inc[[:space:]]*\(' "$state_source") -eq 2 ]] ||
+	die "increment each counter through its state operation"
+
+proc_undefined=$(nm -u "$build_dir/interface/proc.o")
+for symbol in rk_state_timer_fires rk_state_actions_completed; do
+	grep -Eq "[[:space:]]$symbol$" <<< "$proc_undefined" ||
+		die "interface/proc.o has no $symbol dependency"
+done
+
+scheduler=$build_dir/execution/scheduler.o
+scheduler_undefined=$(nm -u "$scheduler")
+for symbol in mod_timer timer_shutdown_sync cancel_work_sync queue_work_on system_percpu_wq \
+	rk_state_actions_enabled rk_state_record_action rk_state_record_timer_fire; do
+	grep -Eq "[[:space:]]$symbol$" <<< "$scheduler_undefined" ||
+		die "execution/scheduler.o has no $symbol dependency"
+done
+if grep -Eq '[[:space:]](alloc_workqueue|apply_workqueue_attrs|__alloc_workqueue_key)$' \
+	<<< "$scheduler_undefined"; then
+	die "use the normal system workqueue through schedule_work"
+fi
+if grep -Eq '[[:space:]](__kmalloc|__kmalloc_cache_noprof|kmalloc_noprof|kfree|kvfree|vfree)$' \
+	<<< "$scheduler_undefined"; then
+	die "scheduler callbacks must use preallocated timer and work objects"
+fi
+if grep -Eq '[[:space:]](_printk|printk)$' <<< "$scheduler_undefined"; then
+	die "scheduler behavior must be observable through owned state, not logging"
+fi
+
+scheduler_source=$build_dir/execution/scheduler.c
+if grep -Eq '\b(in_atomic|in_task|in_interrupt)[[:space:]]*\(' "$scheduler_source"; then
+	die "do not branch on context predicates"
+fi
+
+state_line=$(grep -n 'scheduler_state[[:space:]]*=[[:space:]]*state' "$scheduler_source" |
+	head -n1 | cut -d: -f1)
+work_init_line=$(grep -n 'INIT_WORK[[:space:]]*(' "$scheduler_source" | head -n1 | cut -d: -f1)
+timer_init_line=$(grep -n 'timer_setup[[:space:]]*(' "$scheduler_source" | head -n1 | cut -d: -f1)
+arm_line=$(grep -n 'mod_timer[[:space:]]*(' "$scheduler_source" | tail -n1 | cut -d: -f1)
+[[ -n $state_line && -n $work_init_line && -n $timer_init_line && -n $arm_line && \
+	$state_line -lt $work_init_line && $work_init_line -lt $timer_init_line && \
+	$timer_init_line -lt $arm_line ]] ||
+	die "initialize state, work, and timer before arming the timer"
+
+shutdown_line=$(grep -n 'timer_shutdown_sync[[:space:]]*(' "$scheduler_source" |
+	head -n1 | cut -d: -f1)
+cancel_line=$(grep -n 'cancel_work_sync[[:space:]]*(' "$scheduler_source" |
+	head -n1 | cut -d: -f1)
+clear_line=$(grep -n 'scheduler_state[[:space:]]*=[[:space:]]*NULL' "$scheduler_source" |
+	head -n1 | cut -d: -f1)
+[[ -n $shutdown_line && -n $cancel_line && -n $clear_line && \
+	$shutdown_line -lt $cancel_line && $cancel_line -lt $clear_line ]] ||
+	die "stop order must be timer shutdown, work cancellation, state release"
+
+scheduler_disassembly=$(objdump -dr "$scheduler")
+timer_disassembly=$(sed -n '/<rk_action_timer>:/,/^$/p' <<< "$scheduler_disassembly")
+work_disassembly=$(sed -n '/<rk_action_run>:/,/^$/p' <<< "$scheduler_disassembly")
+[[ -n $timer_disassembly ]] || die "execution/scheduler.c must define rk_action_timer"
+[[ -n $work_disassembly ]] || die "execution/scheduler.c must define rk_action_run"
+
+for symbol in rk_state_record_timer_fire queue_work_on mod_timer; do
+	grep -Eq "[[:space:]]$symbol([+-]|$)" <<< "$timer_disassembly" ||
+		die "rk_action_timer must call $symbol"
+done
+for symbol in rk_state_actions_enabled rk_state_record_action; do
+	grep -Eq "[[:space:]]$symbol([+-]|$)" <<< "$work_disassembly" ||
+		die "rk_action_run must call $symbol"
+done
+if grep -Eq '[[:space:]](msleep|usleep_range|schedule_timeout|mutex_lock|down|wait_for_completion|_copy_from_user|copy_from_user)([+-]|$)' \
+	<<< "$timer_disassembly"; then
+	die "rk_action_timer contains an operation that may sleep"
+fi
+
+main_undefined=$(nm -u "$build_dir/core/main.o")
+for symbol in rk_scheduler_start rk_scheduler_stop; do
+	grep -Eq "[[:space:]]$symbol$" <<< "$main_undefined" ||
+		die "core/main.o has no $symbol dependency"
+done
+
+main_source=$build_dir/core/main.c
+publish_line=$(grep -n 'rk_proc_publish[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
+start_line=$(grep -n 'rk_scheduler_start[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
+unpublish_line=$(grep -n 'rk_proc_unpublish[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
+stop_line=$(grep -n 'rk_scheduler_stop[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
+destroy_line=$(grep -n 'rk_state_destroy[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
+[[ -n $publish_line && -n $start_line && $publish_line -lt $start_line ]] ||
+	die "start the scheduler only after procfs publication succeeds"
+[[ -n $unpublish_line && -n $stop_line && -n $destroy_line && \
+	$unpublish_line -lt $stop_line && $stop_line -lt $destroy_line ]] ||
+	die "unload order must be proc unpublish, scheduler stop, state destroy"
+
+header_text=$(tr '\n' ' ' < "$build_dir/include/rootkit.h")
+for declaration in rk_state_timer_fires rk_state_record_timer_fire \
+	rk_state_actions_completed rk_state_record_action rk_scheduler_start rk_scheduler_stop; do
+	grep -Eq "${declaration}[[:space:]]*\(" <<< "$header_text" ||
+		die "rootkit.h must declare $declaration"
+done
+
+printf '[+] timer deferral, normal workqueue, counters, and teardown verified\n'

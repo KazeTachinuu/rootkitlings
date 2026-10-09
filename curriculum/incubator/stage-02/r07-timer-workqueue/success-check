@@ -1,0 +1,288 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Timer to workqueue scheduler"
+
+endpoint=/proc/rootkitlings
+fixtures=/tmp/rootkitlings-scheduler
+actual=$fixtures/actual
+mkdir -p "$fixtures"
+
+: > "$fixtures/empty"
+printf 'enable' > "$fixtures/enable"
+printf 'enable\n' > "$fixtures/enable-lf"
+printf 'disable' > "$fixtures/disable"
+printf 'disable\n' > "$fixtures/disable-lf"
+printf '\n' > "$fixtures/lone-lf"
+printf 'ena\nble' > "$fixtures/interior-lf"
+printf 'enable\n\n' > "$fixtures/double-lf"
+printf 'enable\000' > "$fixtures/nul"
+printf 'enabl' > "$fixtures/prefix"
+printf 'enabled' > "$fixtures/suffix"
+printf 'xenable' > "$fixtures/prefixed"
+printf 'disable\nx' > "$fixtures/oversized"
+chmod 0644 "$fixtures"/*
+
+assert_not_loaded()
+{
+	assert_absent /sys/module/rootkitlings
+	assert_absent "$endpoint"
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_fail "rootkitlings appears in /proc/modules"
+	else
+		_ok "rootkitlings is absent from /proc/modules"
+	fi
+}
+
+read_status()
+{
+	expected=$1
+	label=$2
+	if cat "$endpoint" > "$actual" &&
+	   awk -v expected="$expected" '
+		BEGIN { valid = 1 }
+		NR == 1 { if ($0 != "active=1") valid = 0 }
+		NR == 2 { if ($0 != "actions=" expected) valid = 0 }
+		NR == 3 { if ($0 !~ /^timer_fires=[0-9]+$/) valid = 0 }
+		NR == 4 { if ($0 !~ /^actions_completed=[0-9]+$/) valid = 0 }
+		END { exit !(valid && NR == 4) }
+	   ' "$actual"; then
+		status_timer=$(sed -n 's/^timer_fires=//p' "$actual")
+		status_completed=$(sed -n 's/^actions_completed=//p' "$actual")
+		_ok "$label returns one complete $expected record"
+		return 0
+	fi
+	status_timer=0
+	status_completed=0
+	_fail "$label: malformed or unexpected proc record"
+	return 1
+}
+
+expect_errno()
+{
+	fixture=$1
+	errno=$2
+	label=$3
+	if proc_write_test errno "$endpoint" "$fixtures/$fixture" "$errno" > /dev/null; then
+		_ok "$label returns errno $errno"
+	else
+		_fail "$label did not return errno $errno"
+	fi
+	read_status disabled "$label" > /dev/null || true
+	if [ "$status_completed" -eq 0 ]; then
+		_ok "$label preserves disabled action state"
+	else
+		_fail "$label completed an action while disabled"
+	fi
+}
+
+check_loaded()
+{
+	assert_loaded rootkitlings
+	assert_exists "$endpoint"
+	metadata=$(stat -c '%a:%u:%g' "$endpoint")
+	if [ "$metadata" = 644:0:0 ]; then
+		_ok "$endpoint is mode 0644 and owned by 0:0"
+	else
+		_fail "$endpoint metadata: expected 644:0:0, got $metadata"
+	fi
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_ok "rootkitlings appears in /proc/modules"
+	else
+		_fail "rootkitlings is absent from /proc/modules"
+	fi
+	read_status disabled "module load" || true
+	if [ "$status_completed" -eq 0 ]; then
+		_ok "actions begin with no completed work"
+	else
+		_fail "actions_completed starts at $status_completed"
+	fi
+}
+
+check_rejections()
+{
+	expect_errno empty 22 "empty write"
+	expect_errno lone-lf 22 "lone newline"
+	expect_errno interior-lf 22 "interior newline"
+	expect_errno double-lf 22 "second trailing newline"
+	expect_errno nul 22 "embedded NUL"
+	expect_errno prefix 22 "short prefix"
+	expect_errno suffix 22 "suffix"
+	expect_errno prefixed 22 "prefixed command"
+	expect_errno oversized 7 "nine-byte command"
+
+	if proc_write_test fault "$endpoint" "$fixtures/enable" 14 > /dev/null; then
+		_ok "partial user copy returns errno 14"
+	else
+		_fail "partial user copy did not return errno 14"
+	fi
+	read_status disabled "partial user copy" > /dev/null || true
+
+	if proc_write_test fault "$endpoint" "$fixtures/oversized" 7 > /dev/null; then
+		_ok "oversized write is rejected before user copy"
+	else
+		_fail "oversized write touched user memory before rejection"
+	fi
+	read_status disabled "oversized partial user buffer" > /dev/null || true
+
+	if proc_write_test offset "$endpoint" "$fixtures/enable" 1 22 > /dev/null; then
+		_ok "nonzero offset returns errno 22"
+	else
+		_fail "nonzero offset did not return errno 22"
+	fi
+	read_status disabled "nonzero offset" > /dev/null || true
+
+	if chpst -u 65534:65534 proc_write_test write "$endpoint" \
+		"$fixtures/enable" > "$fixtures/unprivileged.log" 2>&1; then
+		_fail "unprivileged writer changed the root control"
+	else
+		_ok "unprivileged writer is denied"
+	fi
+	read_status disabled "unprivileged write" > /dev/null || true
+}
+
+check_scheduler()
+{
+	read_status disabled "disabled scheduler" || true
+	before_timer=$status_timer
+	before_completed=$status_completed
+	if status_timer=$(status_field_test advance "$endpoint" timer_fires \
+		"$before_timer" 1000); then
+		_ok "timer fires while actions are disabled"
+	else
+		_fail "timer did not advance while actions were disabled"
+	fi
+	if status_field_test unchanged "$endpoint" actions_completed \
+		"$before_completed" 300 > /dev/null; then
+		_ok "disabled worker does not complete actions"
+	else
+		_fail "disabled worker changed actions_completed"
+	fi
+
+	if proc_write_test write "$endpoint" "$fixtures/enable" > /dev/null; then
+		_ok "enable returns its full byte count"
+	else
+		_fail "enable failed"
+	fi
+	read_status enabled "enable" > /dev/null || true
+	enabled_before=$status_completed
+	if status_completed=$(status_field_test advance "$endpoint" \
+		actions_completed "$enabled_before" 1000); then
+		_ok "normal worker completes enabled actions"
+	else
+		_fail "enabled worker did not complete an action"
+	fi
+
+	if proc_write_test write "$endpoint" "$fixtures/disable-lf" > /dev/null; then
+		_ok "disable with newline returns its full byte count"
+	else
+		_fail "disable with newline failed"
+	fi
+	settled=0
+	settle_attempt=1
+	while [ "$settle_attempt" -le 3 ]; do
+		disabled_completed=$(status_field_test read "$endpoint" actions_completed)
+		if status_field_test unchanged "$endpoint" actions_completed \
+			"$disabled_completed" 300 > /dev/null 2>&1; then
+			settled=1
+			break
+		fi
+		settle_attempt=$((settle_attempt + 1))
+	done
+	if [ "$settled" -eq 1 ]; then
+		_ok "completed-action count stabilizes while disabled"
+	else
+		_fail "worker keeps completing actions while disabled"
+	fi
+	read_status disabled "disabled scheduler remains active" > /dev/null || true
+	disabled_timer=$status_timer
+	if status_field_test advance "$endpoint" timer_fires \
+		"$disabled_timer" 1000 > /dev/null; then
+		_ok "timer continues after actions are disabled"
+	else
+		_fail "timer stopped after actions were disabled"
+	fi
+}
+
+check_repeated_writes()
+{
+	if proc_write_test repeat "$endpoint" "$fixtures/enable-lf" 3 > /dev/null; then
+		_ok "one descriptor accepts three enable writes"
+	else
+		_fail "repeated enable writes on one descriptor failed"
+	fi
+	read_status enabled "repeated enable" > /dev/null || true
+
+	if proc_write_test repeat "$endpoint" "$fixtures/disable" 3 > /dev/null; then
+		_ok "one descriptor accepts three disable writes"
+	else
+		_fail "repeated disable writes on one descriptor failed"
+	fi
+	read_status disabled "repeated disable" > /dev/null || true
+}
+
+concurrent_writer()
+{
+	i=0
+	while [ "$i" -lt 32 ]; do
+		proc_write_test write "$endpoint" "$fixtures/enable" || return 1
+		proc_write_test write "$endpoint" "$fixtures/disable" || return 1
+		i=$((i + 1))
+	done
+}
+
+check_concurrency()
+{
+	concurrent_writer > /dev/null &
+	writer=$!
+	read_ok=1
+	i=0
+	while [ "$i" -lt 96 ]; do
+		if ! cat "$endpoint" > "$actual"; then
+			read_ok=0
+			break
+		fi
+		if ! awk '
+			NR == 1 { if ($0 != "active=1") exit 1 }
+			NR == 2 { if ($0 != "actions=disabled" && $0 != "actions=enabled") exit 1 }
+			NR == 3 { if ($0 !~ /^timer_fires=[0-9]+$/) exit 1 }
+			NR == 4 { if ($0 !~ /^actions_completed=[0-9]+$/) exit 1 }
+			END { if (NR != 4) exit 1 }
+		' "$actual"; then
+			read_ok=0
+			break
+		fi
+		i=$((i + 1))
+	done
+	if ! wait "$writer"; then
+		_fail "concurrent writer failed"
+	elif [ "$read_ok" -eq 1 ]; then
+		_ok "concurrent reads return 96 complete records"
+	else
+		_fail "concurrent read returned a malformed record"
+	fi
+	proc_write_test write "$endpoint" "$fixtures/disable" > /dev/null ||
+		_fail "could not restore disabled state"
+	read_status disabled "concurrent access" > /dev/null || true
+}
+
+assert_not_loaded
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	load rootkitlings.ko
+	check_loaded
+	check_rejections
+	check_scheduler
+	check_repeated_writes
+	check_concurrency
+	if proc_write_test unload "$endpoint" "$fixtures/enable" rootkitlings > /dev/null; then
+		_ok "attempt $attempt rejects a held descriptor after unload"
+	else
+		_fail "attempt $attempt failed the held-descriptor unload check"
+	fi
+	assert_not_loaded
+	attempt=$((attempt + 1))
+done
+
+summary
