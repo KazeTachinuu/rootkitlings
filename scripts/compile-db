@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+"""Generate compile_commands.json for Rootkitlings course sources."""
+
+from pathlib import Path
+import sys
+
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(ROOT))
+
+from engine.compile_database import CompileDatabaseError, generate  # noqa: E402
+from engine.console import Console  # noqa: E402
+
+
+UI = Console("rootkitlings.compile-db")
+
+
+def main() -> int:
+    UI.progress("Capturing pinned-kernel compile flags")
+    try:
+        count = generate()
+    except CompileDatabaseError as error:
+        UI.error(str(error))
+        return 1
+    UI.success(f"compile_commands.json: {count} curriculum sources")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

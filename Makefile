@@ -117,9 +117,7 @@ doctor:
 	@"$(CURDIR)/scripts/doctor"
 
 compile-db:
-	@"$(CURDIR)/rootkitlings" start L00
-	bear -- "$(CURDIR)/rootkitlings" build L00
-	@python3 scripts/expand-compile-db
+	@"$(CURDIR)/scripts/compile-db"
 
 validate:
 	@"$(CURDIR)/scripts/validate"

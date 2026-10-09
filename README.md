@@ -101,4 +101,5 @@ vm/                                pinned guest runtime and shared guest tools
 Learner edits belong under `.rootkitlings/`; files under `curriculum/` define the immutable course bundles.
 
 See [`vm/README.md`](vm/README.md) for the guest runtime.
-Run `./rootkitlings help` for all learner commands, `make compile-db` for clangd metadata, and `make validate` for repository maintenance checks.
+Run `./rootkitlings help` for all learner commands and `make validate` for repository maintenance checks.
+`make compile-db` uses Bear to generate clangd metadata for every physical starter and solution source without changing learner workspaces or progress.
