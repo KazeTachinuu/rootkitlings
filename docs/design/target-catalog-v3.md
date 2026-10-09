@@ -58,9 +58,9 @@ An unused general competency is omitted rather than attached to L00 as a course-
 | L06 | `timer-workqueue-scheduler` — Defer timer work to a worker | S2 | `bounded-control-switch` | `kernel-timers`, `workqueues`, `timer-to-worker-deferral`, `deferred-work-lifecycle` | `resource-ownership`, `read-once-write-once`, `action-control-switch`, `state-invariant-selection` | execution, lifecycle | L17, L18 | adapt |
 | L07 | `event-driven-kernel-thread` — Run and stop an event-driven kernel thread | S2 | `bounded-control-switch` | `kernel-threads`, `wait-queues`, `atomic-operations`, `bounded-event-admission`, `worker-stop-lifecycle` | `error-pointers`, `read-once-write-once`, `action-control-switch`, `state-invariant-selection` | execution, lifecycle | L19, L20, L23, part of L12 | adapt |
 | L08 | `current-task-attribution` — Attribute an operation to the current task | S3 | `proc-read-contract` | `current-task`, `task-attribution` | `proc-read`, `linux-process-basics` | instrumentation, detection | L24 | adapt |
-| L09 | `linux-credential-model` — Interpret Linux credentials correctly | S3 | `current-task-attribution` | `task-credentials`, `namespace-id-translation` | `current-task`, `linux-identity-basics` | privilege, detection | L25 | adapt |
-| L10 | `transactional-credential-replacement` — Replace credentials transactionally | S3 | `bounded-control-switch`, `linux-credential-model` | `credential-replacement` | `kernel-allocation`, `copy-validate-commit`, `task-credentials` | privilege | L26 | adapt |
-| L11 | `one-use-authorization` — Authorize a one-use action with fresh state | S3 | `transactional-credential-replacement` | `kernel-randomness`, `one-use-authorization`, `replay-rejection`, `mutexes`, `mutex-protected-invariants`, `bounded-typed-parsing` | `credential-replacement` | privilege, control, cryptography | L28, C03 state machine | adapt |
+| L09 | `linux-credential-model` — Interpret Linux credentials correctly | S3 | `current-task-attribution` | `task-credentials`, `namespace-id-translation`, `namespaced-capabilities` | `current-task`, `linux-identity-basics` | privilege, detection | L25 | adapt |
+| L10 | `transactional-credential-replacement` — Replace credentials transactionally | S3 | `bounded-control-switch`, `linux-credential-model` | `credential-replacement` | `kernel-allocation`, `copy-validate-commit`, `task-credentials`, `namespaced-capabilities` | privilege | L26 | adapt |
+| L11 | `one-use-authorization` — Authorize one credential change with a fresh token | S3 | `transactional-credential-replacement` | `kernel-randomness`, `one-use-authorization`, `authorization-vs-authentication`, `replay-rejection`, `mutexes`, `mutex-protected-invariants`, `bounded-typed-parsing`, `sensitive-state-zeroization` | `credential-replacement`, `action-control-switch`, `resource-ownership` | privilege, control, cryptography | L28, C03 state machine | adapt |
 | L12 | `pinned-symbol-resolution` — Resolve symbols under a pinned ABI contract | S3 | `owned-kernel-state` | `symbol-resolution`, `kernel-abi-contract` | `component-ownership` | instrumentation, lifecycle | L27 | adapt |
 | L13 | `managed-kprobe` — Observe function entry with a managed kprobe | S3 | `pinned-symbol-resolution` | `kprobes`, `hook-rollback`, `managed-hook-lifecycle` | `resource-ownership`, `symbol-resolution` | instrumentation, detection | L29, L33 | adapt |
 | L14 | `return-aware-syscall-telemetry` — Correlate function return and decode syscall arguments | S3 | `bounded-control-switch`, `managed-kprobe` | `kretprobes`, `syscall-argument-decoding`, `return-correlation` | `bounded-user-copy`, `action-control-switch`, `managed-hook-lifecycle` | instrumentation, detection | L30, L32 | adapt |
@@ -156,8 +156,11 @@ Add these genuinely new concepts:
 - `worker-stop-lifecycle`
 - `task-attribution`
 - `namespace-id-translation`
+- `namespaced-capabilities`
 - `one-use-authorization`
+- `authorization-vs-authentication`
 - `replay-rejection`
+- `sensitive-state-zeroization`
 - `kernel-abi-contract`
 - `managed-hook-lifecycle`
 - `return-correlation`

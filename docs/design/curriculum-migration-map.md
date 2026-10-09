@@ -271,29 +271,46 @@ R06-R08 are separate practice workspaces, so the learner applies their mechanism
 #### R10 - Interpret Linux credentials correctly
 
 - Teaches: real, effective, saved, and filesystem IDs; capabilities; namespace-aware
-  ID translation; and read-only credential access.
+  ID translation; the namespace that scopes a capability set; and read-only
+  credential access.
 - Produces: an authorization-context snapshot.
 - Requires: R09.
-- Defensive evidence: reads under distinct users and namespaces.
+- Defensive evidence: reads under distinct ID roles, a credential change after
+  open, a nested user namespace, and a descriptor opened in one namespace but
+  read in another. The last case distinguishes the current task supplying the
+  credential from the opener namespace supplying the numeric ID view.
 - Current source: L25.
 
 #### R11 - Replace credentials transactionally
 
-- Teaches: prepare, populate, commit, abort, and same-caller effect.
-- Produces: one bounded privilege action.
+- Teaches: constructing a complete private credential from `init_task`, handling
+  preparation failure, consuming it exactly once through commit or abort, and
+  the same-caller effect of `commit_creds()`.
+- Produces: one bounded action that replaces the writing task's entire
+  credential without manually mutating UID, GID, capability, namespace,
+  accounting, keyring, or security fields.
 - Requires: R06 and R10.
-- Defensive evidence: wrong command has no effect; the exact writing process changes;
-  failed preparation leaves credentials unchanged.
+- Defensive evidence: malformed or disabled commands have no effect; the exact
+  writing thread receives one internally consistent initial credential while an
+  unrelated process and a pre-existing sibling thread do not; preparation and
+  post-preparation cancellation failures leave the caller unchanged.
 - Current source: L26.
 
-#### R12 - Authorize a one-use action with fresh state
+#### R12 - Authorize one credential change with a fresh token
 
-- Teaches: kernel randomness, unpredictability, authorization versus authentication,
-  rotation, erasure limits, replay rejection, bounded typed parsing, and a mutex
-  protecting the multi-field one-use invariant.
-- Produces: a one-use challenge protecting R11.
+- Teaches: kernel-random readiness, a fixed 128-bit bearer token, authorization
+  versus authentication, exact byte-oriented hex parsing, consume-before-action,
+  rotation after either action outcome, replay rejection, explicit-zeroing limits,
+  and one mutex protecting the complete multi-field transition.
+- Produces: a one-use bearer authorization protecting R11. The status endpoint is
+  root-readable and writable by the selected unprivileged caller; this controls
+  token acquisition through that path but does not authenticate whoever presents
+  a copied token.
 - Requires: R11.
-- Defensive evidence: malformed, stale, reused, and current values are distinguished.
+- Defensive evidence: malformed, wrong, disabled, stale, reused, and current
+  tokens are distinguished without state drift; many callers racing one token
+  produce exactly one accepted transition; a matched token is consumed and
+  replaced even when credential preparation or the post-prepare action fails.
 - Current sources: L28 and the state machine in C03.
 
 #### R13 - Resolve symbols under a pinned ABI contract

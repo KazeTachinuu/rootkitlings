@@ -386,11 +386,11 @@ TASK-05  struct cred snapshots
 TASK-06  Credentials are immutable after publication
 TASK-07  Real, effective, saved and filesystem IDs
 TASK-08  Supplementary groups
-TASK-09  Capabilities
-TASK-10  User namespaces and ID translation
+TASK-09  Capability sets and the user namespace that scopes them
+TASK-10  User namespaces and opener-relative ID translation
 TASK-11  current_cred and caller attribution
-TASK-12  prepare_creds
-TASK-13  Populate a complete replacement credential
+TASK-12  Private credential construction: prepare_creds versus prepare_kernel_cred
+TASK-13  Complete associated credential state and the exported-API boundary
 TASK-14  commit_creds
 TASK-15  abort_creds on failure
 TASK-16  A task changes its own credentials
