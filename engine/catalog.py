@@ -28,7 +28,7 @@ KINDS = {"lesson", "milestone", "capstone"}
 STATUSES = {"required", "elective", "retired"}
 WORKSPACE_MODES = {"cumulative", "single-file", "project"}
 BASELINES = {
-    "template",
+    "starter",
     "parent",
     "scaffold",
 }
@@ -353,7 +353,7 @@ class Catalog:
         common = {"mode", "files", "editable", "build", "baseline"}
         if "module_artifact" in value:
             common.add("module_artifact")
-        if baseline == "template":
+        if baseline == "starter":
             expected = common | {"source"}
         elif baseline == "scaffold":
             expected = common | {"source", "parent"}
@@ -366,9 +366,9 @@ class Catalog:
         parent = value.get("parent", "")
         additions = value.get("additions", "")
         module_artifact = value.get("module_artifact", "")
-        if baseline == "template":
+        if baseline == "starter":
             if not source or parent:
-                raise CatalogError(f"{path}: template baseline requires source and forbids parent")
+                raise CatalogError(f"{path}: starter baseline requires source and forbids parent")
         elif baseline == "scaffold":
             if not source or not parent:
                 raise CatalogError(
@@ -939,7 +939,7 @@ class Catalog:
     def baseline_provider(self, item: Exercise) -> Exercise | None:
         """Derive the sole workspace inheritance provider, if any."""
         baseline = item.workspace.baseline
-        if baseline == "template":
+        if baseline == "starter":
             return None
         if baseline == "scaffold":
             return None

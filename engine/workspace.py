@@ -112,10 +112,10 @@ def _copy_declared(
             target.chmod(source_file.stat().st_mode & 0o777)
 
 
-def materialize(template: Path, work_root: Path, stable_id: str, declared_files: Iterable[str]) -> Path:
-    """Atomically create one workspace from an immutable template."""
+def materialize(starter: Path, work_root: Path, stable_id: str, declared_files: Iterable[str]) -> Path:
+    """Atomically create one workspace from an immutable starter."""
     stable_id = _stable_id(stable_id)
-    template = _real_directory(Path(template), "template")
+    starter = _real_directory(Path(starter), "starter")
     work_root = _real_directory(Path(work_root), "workspace root")
     destination = work_root / stable_id
     if destination.exists() or destination.is_symlink():
@@ -123,7 +123,7 @@ def materialize(template: Path, work_root: Path, stable_id: str, declared_files:
     paths = _declared(declared_files)
     temporary = Path(tempfile.mkdtemp(prefix=f".{stable_id}.", dir=work_root))
     try:
-        _copy_declared(template, temporary, paths, learner_writable=True)
+        _copy_declared(starter, temporary, paths, learner_writable=True)
         os.replace(temporary, destination)
     finally:
         if temporary.exists():

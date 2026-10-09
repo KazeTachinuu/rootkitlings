@@ -1,6 +1,6 @@
 """Validate, compose, and safely materialize reference solution trees.
 
-Template solutions are complete trees. Derived solutions are sparse replacement
+Starter solutions are complete trees. Derived solutions are sparse replacement
 overlays applied recursively to their catalog-derived provider solution.
 """
 

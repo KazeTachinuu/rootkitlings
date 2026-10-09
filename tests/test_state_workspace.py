@@ -169,7 +169,7 @@ class StateTests(unittest.TestCase):
                 IDS, ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS
             )
 
-    def test_template_baseline_records_no_provider(self) -> None:
+    def test_starter_baseline_records_no_provider(self) -> None:
         state = new_state(ROUTE, IDS, REVISION, PREREQUISITES, BASELINE_PROVIDERS)
         record = state.exercise("module-core")
         record.baseline_hash = "a" * 64
@@ -234,24 +234,24 @@ class WorkspaceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
-        self.templates = self.root / "templates"
+        self.starters = self.root / "starters"
         self.work = self.root / "work"
         self.archive = self.root / "archive"
         self.passed = self.root / "passed"
-        for path in (self.templates, self.work, self.archive, self.passed):
+        for path in (self.starters, self.work, self.archive, self.passed):
             path.mkdir()
-        self.template = self.templates / "module-core"
-        (self.template / "src").mkdir(parents=True)
-        (self.template / "src/main.c").write_text("int value = 1;\n")
-        (self.template / "Kbuild").write_text("obj-m += hello.o\n")
+        self.starter = self.starters / "module-core"
+        (self.starter / "src").mkdir(parents=True)
+        (self.starter / "src/main.c").write_text("int value = 1;\n")
+        (self.starter / "Kbuild").write_text("obj-m += hello.o\n")
         self.files = ("Kbuild", "src/main.c")
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
     def test_hash_is_order_independent_and_name_sensitive(self) -> None:
-        first = canonical_tree_hash(self.template, self.files)
-        second = canonical_tree_hash(self.template, reversed(self.files))
+        first = canonical_tree_hash(self.starter, self.files)
+        second = canonical_tree_hash(self.starter, reversed(self.files))
         self.assertEqual(first, second)
         other = self.root / "other"
         (other / "src").mkdir(parents=True)
@@ -260,23 +260,23 @@ class WorkspaceTests(unittest.TestCase):
         self.assertNotEqual(first, canonical_tree_hash(other, ("Kbuild", "src/renamed.c")))
 
     def test_hash_is_executable_mode_sensitive(self) -> None:
-        before = canonical_tree_hash(self.template, self.files)
-        (self.template / "src/main.c").chmod(0o755)
-        after = canonical_tree_hash(self.template, self.files)
+        before = canonical_tree_hash(self.starter, self.files)
+        (self.starter / "src/main.c").chmod(0o755)
+        after = canonical_tree_hash(self.starter, self.files)
         self.assertNotEqual(before, after)
 
     def test_materialize_copies_only_declared_files_once(self) -> None:
-        (self.template / "not-declared.txt").write_text("ignore\n")
-        workspace = materialize(self.template, self.work, "module-core", self.files)
+        (self.starter / "not-declared.txt").write_text("ignore\n")
+        workspace = materialize(self.starter, self.work, "module-core", self.files)
         self.assertEqual((workspace / "src/main.c").read_text(), "int value = 1;\n")
         self.assertFalse((workspace / "not-declared.txt").exists())
         with self.assertRaisesRegex(WorkspaceError, "already exists"):
-            materialize(self.template, self.work, "module-core", self.files)
+            materialize(self.starter, self.work, "module-core", self.files)
 
     def test_materialize_normalizes_snapshot_style_modes_for_learning(self) -> None:
-        (self.template / "Kbuild").chmod(0o444)
-        (self.template / "src/main.c").chmod(0o555)
-        workspace = materialize(self.template, self.work, "module-core", self.files)
+        (self.starter / "Kbuild").chmod(0o444)
+        (self.starter / "src/main.c").chmod(0o555)
+        workspace = materialize(self.starter, self.work, "module-core", self.files)
         self.assertEqual(stat.S_IMODE((workspace / "Kbuild").stat().st_mode), 0o644)
         self.assertEqual(
             stat.S_IMODE((workspace / "src/main.c").stat().st_mode),
@@ -284,7 +284,7 @@ class WorkspaceTests(unittest.TestCase):
         )
 
     def test_inherited_materialization_combines_verified_snapshot_and_additions(self) -> None:
-        provider = materialize(self.template, self.work, "module-core", self.files)
+        provider = materialize(self.starter, self.work, "module-core", self.files)
         _, snapshot = create_snapshot(provider, self.passed, self.files)
         additions = self.root / "additions"
         (additions / "status").mkdir(parents=True)
@@ -310,7 +310,7 @@ class WorkspaceTests(unittest.TestCase):
         )
 
     def test_inherited_materialization_rejects_missing_or_extra_additions(self) -> None:
-        provider = materialize(self.template, self.work, "module-core", self.files)
+        provider = materialize(self.starter, self.work, "module-core", self.files)
         _, snapshot = create_snapshot(provider, self.passed, self.files)
         additions = self.root / "bad-additions"
         additions.mkdir()
@@ -326,7 +326,7 @@ class WorkspaceTests(unittest.TestCase):
             )
 
     def test_inherited_materialization_rejects_empty_directory(self) -> None:
-        provider = materialize(self.template, self.work, "module-core", self.files)
+        provider = materialize(self.starter, self.work, "module-core", self.files)
         _, snapshot = create_snapshot(provider, self.passed, self.files)
         additions = self.root / "additions-with-empty"
         additions.mkdir()
@@ -344,24 +344,24 @@ class WorkspaceTests(unittest.TestCase):
 
     def test_paths_symlinks_and_special_files_are_rejected(self) -> None:
         with self.assertRaisesRegex(WorkspaceError, "unsafe relative"):
-            canonical_tree_hash(self.template, ("../outside",))
-        (self.template / "link").symlink_to("src/main.c")
+            canonical_tree_hash(self.starter, ("../outside",))
+        (self.starter / "link").symlink_to("src/main.c")
         with self.assertRaisesRegex(WorkspaceError, "symlink"):
-            canonical_tree_hash(self.template, ("link",))
-        fifo = self.template / "fifo"
+            canonical_tree_hash(self.starter, ("link",))
+        fifo = self.starter / "fifo"
         os.mkfifo(fifo)
         try:
             with self.assertRaisesRegex(WorkspaceError, "regular file"):
-                canonical_tree_hash(self.template, ("fifo",))
+                canonical_tree_hash(self.starter, ("fifo",))
         finally:
             fifo.unlink()
-        template_link = self.root / "template-link"
-        template_link.symlink_to(self.template, target_is_directory=True)
+        starter_link = self.root / "starter-link"
+        starter_link.symlink_to(self.starter, target_is_directory=True)
         with self.assertRaisesRegex(WorkspaceError, "must not be a symlink"):
-            materialize(template_link, self.work, "proc-status", self.files)
+            materialize(starter_link, self.work, "proc-status", self.files)
 
     def test_snapshot_manifest_detects_tampering_and_extra_files(self) -> None:
-        workspace = materialize(self.template, self.work, "module-core", self.files)
+        workspace = materialize(self.starter, self.work, "module-core", self.files)
         tree_hash, snapshot = create_snapshot(workspace, self.passed, self.files)
         self.assertEqual(verify_snapshot(snapshot), tree_hash)
         self.assertEqual(stat.S_IMODE(snapshot.stat().st_mode), 0o555)
@@ -371,7 +371,7 @@ class WorkspaceTests(unittest.TestCase):
             verify_snapshot(snapshot, tree_hash)
 
     def test_snapshot_rejects_undeclared_extra_file(self) -> None:
-        workspace = materialize(self.template, self.work, "module-core", self.files)
+        workspace = materialize(self.starter, self.work, "module-core", self.files)
         tree_hash, snapshot = create_snapshot(workspace, self.passed, self.files)
         snapshot.chmod(0o755)
         (snapshot / "extra").write_text("unexpected")
@@ -379,8 +379,8 @@ class WorkspaceTests(unittest.TestCase):
             verify_snapshot(snapshot, tree_hash)
 
     def test_snapshot_preserves_and_verifies_executable_class(self) -> None:
-        (self.template / "src/main.c").chmod(0o755)
-        workspace = materialize(self.template, self.work, "module-core", self.files)
+        (self.starter / "src/main.c").chmod(0o755)
+        workspace = materialize(self.starter, self.work, "module-core", self.files)
         tree_hash, snapshot = create_snapshot(workspace, self.passed, self.files)
         self.assertTrue((snapshot / "src/main.c").stat().st_mode & 0o111)
         self.assertEqual(verify_snapshot(snapshot), tree_hash)
@@ -389,22 +389,22 @@ class WorkspaceTests(unittest.TestCase):
             verify_snapshot(snapshot, tree_hash)
 
     def test_archive_is_content_addressed_and_idempotent(self) -> None:
-        workspace = materialize(self.template, self.work, "module-core", self.files)
+        workspace = materialize(self.starter, self.work, "module-core", self.files)
         first = archive_workspace(workspace, self.archive, "module-core")
         second = archive_workspace(workspace, self.archive, "module-core")
         self.assertEqual(first, second)
         self.assertIn(canonical_tree_hash(workspace, self.files), first.name)
 
     def test_existing_archive_rejects_extra_file(self) -> None:
-        workspace = materialize(self.template, self.work, "module-core", self.files)
+        workspace = materialize(self.starter, self.work, "module-core", self.files)
         archive = archive_workspace(workspace, self.archive, "module-core")
         (archive / "extra").write_text("corrupt")
         with self.assertRaisesRegex(WorkspaceError, "undeclared"):
             archive_workspace(workspace, self.archive, "module-core")
 
     def test_restore_archives_then_restores_baseline(self) -> None:
-        (self.template / "src/main.c").chmod(0o755)
-        workspace = materialize(self.template, self.work, "module-core", self.files)
+        (self.starter / "src/main.c").chmod(0o755)
+        workspace = materialize(self.starter, self.work, "module-core", self.files)
         baseline_hash, baseline = create_snapshot(workspace, self.passed, self.files)
         (workspace / "src/main.c").write_text("learner edit\n")
         restored, archived = restore_workspace(self.work, self.archive, "module-core", baseline, self.files)
@@ -417,7 +417,7 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE((restored / "Kbuild").stat().st_mode), 0o644)
 
     def test_archive_and_remove_is_safe_when_some_workspaces_are_absent(self) -> None:
-        workspace = materialize(self.template, self.work, "module-core", self.files)
+        workspace = materialize(self.starter, self.work, "module-core", self.files)
         (workspace / "src/main.c").write_text("learner edit\n")
         archives = archive_and_remove_workspaces(
             self.work,
@@ -432,7 +432,7 @@ class WorkspaceTests(unittest.TestCase):
         )
 
     def test_clean_removes_only_declared_outputs(self) -> None:
-        workspace = materialize(self.template, self.work, "module-core", self.files)
+        workspace = materialize(self.starter, self.work, "module-core", self.files)
         (workspace / "build").mkdir()
         (workspace / "build/hello.o").write_bytes(b"object")
         (workspace / "keep.txt").write_text("keep")
@@ -441,7 +441,7 @@ class WorkspaceTests(unittest.TestCase):
         self.assertTrue((workspace / "keep.txt").exists())
 
     def test_clean_rejects_symlink(self) -> None:
-        workspace = materialize(self.template, self.work, "module-core", self.files)
+        workspace = materialize(self.starter, self.work, "module-core", self.files)
         (workspace / "output").symlink_to(self.root)
         with self.assertRaisesRegex(WorkspaceError, "symlink"):
             clean_paths(workspace, ("output",))
@@ -454,7 +454,7 @@ class WorkspaceTests(unittest.TestCase):
         (outside / "src/main.c").write_text("outside")
         (self.work / "module-core").symlink_to(outside, target_is_directory=True)
         with self.assertRaisesRegex(WorkspaceError, "must not be a symlink"):
-            restore_workspace(self.work, self.archive, "module-core", self.template, self.files)
+            restore_workspace(self.work, self.archive, "module-core", self.starter, self.files)
 
 
 if __name__ == "__main__":

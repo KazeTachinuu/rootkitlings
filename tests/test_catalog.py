@@ -123,7 +123,7 @@ class GeneratedSerialTests(unittest.TestCase):
 
 class ElectiveTrackTests(unittest.TestCase):
     def exercise(self, stable_id: str, status: str) -> Exercise:
-        item = _exercise(stable_id, "template")
+        item = _exercise(stable_id, "starter")
         return Exercise(**{**item.__dict__, "status": status})
 
     def catalog(
@@ -249,7 +249,7 @@ class VerificationCaseTests(unittest.TestCase):
         self.assertEqual(verification.cases[1].expect_build, "fail")
 
     def test_implicit_default_case_preserves_existing_manifests(self) -> None:
-        exercise = _exercise("existing", "template")
+        exercise = _exercise("existing", "starter")
         catalog = Catalog.__new__(Catalog)
         self.assertEqual(
             catalog.verification_cases(exercise),
@@ -379,7 +379,7 @@ def _exercise(
 ) -> Exercise:
     workspace = Workspace(
         mode="cumulative",
-        source="template" if baseline in {"template", "scaffold"} else "",
+        source="starter" if baseline in {"starter", "scaffold"} else "",
         files=files,
         editable=("main.c",),
         build=build,
@@ -427,6 +427,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             "build": ".",
         }
         for baseline in (
+            "template",
             "completion",
             "cumulative-root",
             "previous-required",
@@ -441,8 +442,8 @@ class WorkspaceInheritanceTests(unittest.TestCase):
                     )
 
     def test_parent_baseline_resolves_its_explicit_parent(self) -> None:
-        first = _exercise("first", "template")
-        intervening = _exercise("intervening", "template")
+        first = _exercise("first", "starter")
+        intervening = _exercise("intervening", "starter")
         second = _exercise("second", "parent", parent="first")
         catalog = self.catalog((first, intervening, second))
         self.assertEqual(catalog.baseline_provider(second), first)
@@ -450,13 +451,13 @@ class WorkspaceInheritanceTests(unittest.TestCase):
 
     def test_workspace_parent_must_be_earlier_on_required_route(self) -> None:
         first = _exercise("first", "parent", parent="second")
-        second = _exercise("second", "template")
+        second = _exercise("second", "starter")
         catalog = self.catalog((first, second))
         with self.assertRaisesRegex(CatalogError, "parent must be earlier"):
             catalog._validate_required_route()
 
         elective = Exercise(**{
-            **_exercise("elective", "template").__dict__,
+            **_exercise("elective", "starter").__dict__,
             "status": "elective",
         })
         consumer = _exercise("consumer", "parent", parent="elective")
@@ -466,11 +467,11 @@ class WorkspaceInheritanceTests(unittest.TestCase):
 
     def test_required_exercise_cannot_depend_on_non_required_exercise(self) -> None:
         elective = Exercise(**{
-            **_exercise("elective", "template").__dict__,
+            **_exercise("elective", "starter").__dict__,
             "status": "elective",
         })
         required = Exercise(**{
-            **_exercise("required", "template").__dict__,
+            **_exercise("required", "starter").__dict__,
             "prerequisites": ("elective",),
         })
         catalog = self.catalog((required,), (elective,))
@@ -479,27 +480,27 @@ class WorkspaceInheritanceTests(unittest.TestCase):
 
     def test_capstone_is_optional_unique_and_final(self) -> None:
         lessons = tuple(
-            _exercise(f"lesson-{index}", "template") for index in range(3)
+            _exercise(f"lesson-{index}", "starter") for index in range(3)
         )
         milestones = tuple(
-            _exercise(f"milestone-{index}", "template", kind="milestone")
+            _exercise(f"milestone-{index}", "starter", kind="milestone")
             for index in range(6)
         )
         self.catalog((*lessons, *milestones))._validate_required_route()
 
-        capstone = _exercise("capstone", "template", kind="capstone")
+        capstone = _exercise("capstone", "starter", kind="capstone")
         self.catalog((*lessons, *milestones, capstone))._validate_required_route()
 
-        trailing = _exercise("trailing", "template")
+        trailing = _exercise("trailing", "starter")
         with self.assertRaisesRegex(CatalogError, "final required-route"):
             self.catalog((*lessons, capstone, trailing))._validate_required_route()
 
-        other = _exercise("other-capstone", "template", kind="capstone")
+        other = _exercise("other-capstone", "starter", kind="capstone")
         with self.assertRaisesRegex(CatalogError, "capstone must be unique"):
             self.catalog((*lessons, capstone, other))._validate_required_route()
 
     def test_scaffold_reuses_reference_without_a_completion_edge(self) -> None:
-        provider = _exercise("provider", "template")
+        provider = _exercise("provider", "starter")
         consumer = _exercise(
             "consumer",
             "scaffold",
@@ -510,7 +511,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             "workspace": Workspace(**{
                 **consumer.workspace.__dict__,
                 "parent": provider.id,
-                "source": "consumer-template",
+                "source": "consumer-starter",
             }),
             "resources": Resources("", "", "", "", "consumer-solution"),
         })
@@ -525,7 +526,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
                     "Kbuild": "obj-m += rootkitlings.o\n",
                     "main.c": "int inherited;\n",
                 },
-                "consumer-template": {
+                "consumer-starter": {
                     "main.c": "int todo;\n",
                     "new.c": "int new_todo;\n",
                     "supplied.c": "int supplied;\n",
@@ -568,13 +569,13 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             )
 
     def test_direct_prerequisites_reject_duplicates_and_transitive_edges(self) -> None:
-        first = _exercise("first", "template")
+        first = _exercise("first", "starter")
         second = Exercise(**{
-            **_exercise("second", "template").__dict__,
+            **_exercise("second", "starter").__dict__,
             "prerequisites": ("first",),
         })
         duplicate = Exercise(**{
-            **_exercise("duplicate", "template").__dict__,
+            **_exercise("duplicate", "starter").__dict__,
             "prerequisites": ("second", "second"),
         })
         catalog = self.catalog((first, second, duplicate))
@@ -582,7 +583,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             catalog._validate_direct_prerequisites()
 
         redundant = Exercise(**{
-            **_exercise("redundant", "template").__dict__,
+            **_exercise("redundant", "starter").__dict__,
             "prerequisites": ("first", "second"),
         })
         catalog = self.catalog((first, second, redundant))
@@ -599,7 +600,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             catalog.baseline_provider(consumer)
 
     def test_inherited_mode_and_build_root_must_match(self) -> None:
-        provider = _exercise("provider", "template")
+        provider = _exercise("provider", "starter")
         incompatible_files = _exercise(
             "files",
             "parent",
@@ -617,7 +618,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
         with self.assertRaisesRegex(CatalogError, "mode/build must match"):
             catalog.validate_workspace_lineage(incompatible_build)
 
-        different_mode_provider = _exercise("mode-provider", "template")
+        different_mode_provider = _exercise("mode-provider", "starter")
         different_mode_provider = Exercise(
             **{
                 **different_mode_provider.__dict__,
@@ -637,7 +638,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             catalog.validate_workspace_lineage(consumer)
 
     def test_additive_inheritance_requires_exact_additions_tree(self) -> None:
-        provider = _exercise("provider", "template")
+        provider = _exercise("provider", "starter")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             additions = root / "additions"
@@ -668,7 +669,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
                 catalog.validate_workspace_lineage(consumer)
 
     def test_parent_solution_composes_additions_before_sparse_overlay(self) -> None:
-        provider = _exercise("provider", "template")
+        provider = _exercise("provider", "starter")
         consumer = _exercise(
             "consumer",
             "parent",
@@ -701,7 +702,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             self.assertEqual(tree["supplied.c"].data, b"supplied\n")
 
     def test_additive_inheritance_rejects_missing_additions_directory(self) -> None:
-        provider = _exercise("provider", "template")
+        provider = _exercise("provider", "starter")
         consumer = _exercise(
             "consumer",
             "parent",
@@ -716,7 +717,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
                 catalog.validate_workspace_lineage(consumer)
 
     def test_additions_presence_matches_actual_file_delta(self) -> None:
-        provider = _exercise("provider", "template")
+        provider = _exercise("provider", "starter")
         missing = _exercise(
             "missing",
             "parent",
@@ -738,10 +739,10 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             catalog.validate_workspace_lineage(unnecessary)
 
     def test_module_artifact_uses_default_override_and_provider(self) -> None:
-        defaulted = _exercise("defaulted", "template")
+        defaulted = _exercise("defaulted", "starter")
         overridden = _exercise(
             "overridden",
-            "template",
+            "starter",
             module_artifact="rootkitlings.ko",
         )
         inherited = _exercise(
@@ -755,7 +756,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
     def test_inherited_module_artifact_cannot_conflict(self) -> None:
         provider = _exercise(
             "provider",
-            "template",
+            "starter",
             module_artifact="rootkitlings.ko",
         )
         consumer = _exercise(
@@ -777,7 +778,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
                 (solution / "Kbuild").write_text("obj-m += hello.o\n")
                 (solution / "main.c").write_text("int value;\n")
 
-            provider = _exercise("provider", "template")
+            provider = _exercise("provider", "starter")
             provider = Exercise(**{
                 **provider.__dict__,
                 "resources": Resources("", "", "", "", "provider"),

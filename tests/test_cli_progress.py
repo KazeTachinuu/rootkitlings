@@ -536,12 +536,12 @@ class LearnerCLITests(unittest.TestCase):
         with self.globals["STORE"].read_locked() as state:
             self.assertEqual(state.exercises[exercise.id].attempts, 1)
 
-    def test_template_solution_renders_recursive_paths_in_order(self) -> None:
+    def test_starter_solution_renders_recursive_paths_in_order(self) -> None:
         exercise = SimpleNamespace(
-            id="template",
+            id="starter",
             serial="L00",
-            title="Template lesson",
-            workspace=SimpleNamespace(baseline="template"),
+            title="Starter lesson",
+            workspace=SimpleNamespace(baseline="starter"),
         )
         tree = {
             "status/main.c": SimpleNamespace(data=b"status\n"),
@@ -641,7 +641,7 @@ class LearnerCLITests(unittest.TestCase):
         finally:
             self.globals["solution_output"] = original_output
 
-    def test_start_records_template_and_inherited_baseline_provenance(self) -> None:
+    def test_start_records_starter_and_inherited_baseline_provenance(self) -> None:
         first, second = (
             self.globals["CAT"].by_id[stable_id]
             for stable_id in self.globals["ROUTE"][:2]

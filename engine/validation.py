@@ -290,7 +290,7 @@ class Validator:
                         f"{item.id}: composed solution contains executable source"
                     )
 
-                if item.workspace.baseline == "template":
+                if item.workspace.baseline == "starter":
                     starter = full_solution_tree(
                         self.root / item.workspace.source,
                         item.workspace.files,
@@ -461,7 +461,7 @@ class Validator:
                 f"kernel build directory not found: {kernel_build}"
             )
 
-        templates = 0
+        starters = 0
         derived = 0
         solutions = 0
         with tempfile.TemporaryDirectory(
@@ -474,7 +474,7 @@ class Validator:
             solution_root.mkdir()
 
             for item in catalog.exercises:
-                if item.workspace.baseline == "template":
+                if item.workspace.baseline == "starter":
                     starter = full_solution_tree(
                         catalog.root / item.workspace.source,
                         item.workspace.files,
@@ -483,14 +483,14 @@ class Validator:
                 catalog.materialize_solution(item, solution_root, item.id)
 
             for item in catalog.display_order():
-                if item.workspace.baseline == "template":
+                if item.workspace.baseline == "starter":
                     self._build_module(
                         kernel_build,
                         starter_root / item.id,
                         item.workspace.build,
-                        f"template starter does not build warning-free: {item.id}",
+                        f"starter does not build warning-free: {item.id}",
                     )
-                    templates += 1
+                    starters += 1
                 else:
                     derived += 1
                 self._build_module(
@@ -502,7 +502,7 @@ class Validator:
                 solutions += 1
 
         self.console.success(
-            f"Template starters: {templates} warning-free builds; "
+            f"Starters: {starters} warning-free builds; "
             f"{derived} derived starters structurally validated"
         )
         self.console.success(f"Solutions: {solutions} warning-free builds")
