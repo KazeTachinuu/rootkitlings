@@ -118,7 +118,7 @@ class GeneratedSerialTests(unittest.TestCase):
                 "check_arguments": [],
             }],
         )
-        self.assertEqual(data["cumulative_root"], "proc-publication")
+        self.assertNotIn("cumulative_root", data)
 
 
 class ElectiveTrackTests(unittest.TestCase):
@@ -375,6 +375,7 @@ def _exercise(
     build: str = ".",
     additions: str = "",
     module_artifact: str = "",
+    parent: str = "",
 ) -> Exercise:
     workspace = Workspace(
         mode="cumulative",
@@ -383,7 +384,7 @@ def _exercise(
         editable=("main.c",),
         build=build,
         baseline=baseline,
-        parent="",
+        parent=parent,
         additions=additions,
         module_artifact=module_artifact,
     )
@@ -407,57 +408,95 @@ def _exercise(
     )
 
 
-class DerivedBaselineTests(unittest.TestCase):
+class WorkspaceInheritanceTests(unittest.TestCase):
     def catalog(self, route: tuple[Exercise, ...], extras=()) -> Catalog:
         catalog = Catalog.__new__(Catalog)
         catalog.required_route = tuple(item.id for item in route)
         catalog.exercises = list(route) + list(extras)
         catalog.by_id = {item.id: item for item in catalog.exercises}
         catalog.default_module_artifact = "hello.ko"
-        catalog.cumulative_root = ""
         return catalog
 
-    def test_cumulative_root_resolves_the_declared_project_lesson(self) -> None:
-        root = _exercise("project-root", "template")
-        practice = _exercise("practice", "template")
-        first = _exercise("first-milestone", "cumulative-root", kind="milestone")
-        catalog = self.catalog((root, practice, first))
-        catalog.cumulative_root = root.id
-        self.assertEqual(catalog.baseline_provider(first), root)
-        self.assertEqual(catalog.completion_dependencies(first), (root.id,))
+    def test_only_explicit_workspace_baselines_are_accepted(self) -> None:
+        catalog = Catalog.__new__(Catalog)
+        catalog.root = ROOT
+        workspace = {
+            "mode": "cumulative",
+            "files": ["Kbuild", "main.c"],
+            "editable": ["main.c"],
+            "build": ".",
+        }
+        for baseline in (
+            "completion",
+            "cumulative-root",
+            "previous-required",
+            "previous-milestone",
+        ):
+            with self.subTest(baseline=baseline):
+                with self.assertRaisesRegex(
+                    CatalogError, "invalid workspace baseline"
+                ):
+                    catalog._workspace(
+                        {**workspace, "baseline": baseline}, Path("exercise.toml")
+                    )
 
-    def test_declared_cumulative_route_has_one_root_and_fixed_milestone_chain(self) -> None:
-        root = _exercise("project-root", "template")
-        milestones = (
-            _exercise("m0", "cumulative-root", kind="milestone"),
-            _exercise("m1", "previous-milestone", kind="milestone"),
-            _exercise("m2", "previous-milestone", kind="milestone"),
-            _exercise("m3", "previous-milestone", kind="milestone"),
-        )
-        capstone = _exercise("final", "previous-milestone", kind="capstone")
-        catalog = self.catalog((root, *milestones, capstone))
-        catalog.cumulative_root = root.id
-        catalog._validate_cumulative_route()
-
-        wrong = Exercise(**{
-            **milestones[0].__dict__,
-            "workspace": Workspace(**{
-                **milestones[0].workspace.__dict__,
-                "baseline": "previous-required",
-            }),
-        })
-        catalog = self.catalog((root, wrong, *milestones[1:], capstone))
-        catalog.cumulative_root = root.id
-        with self.assertRaisesRegex(CatalogError, "first milestone"):
-            catalog._validate_cumulative_route()
-
-    def test_previous_required_is_immediate_required_route_item(self) -> None:
+    def test_parent_baseline_resolves_its_explicit_parent(self) -> None:
         first = _exercise("first", "template")
-        elective = _exercise("elective", "template")
-        second = _exercise("second", "previous-required")
-        catalog = self.catalog((first, second), (elective,))
+        intervening = _exercise("intervening", "template")
+        second = _exercise("second", "parent", parent="first")
+        catalog = self.catalog((first, intervening, second))
         self.assertEqual(catalog.baseline_provider(second), first)
         self.assertEqual(catalog.completion_dependencies(second), ("first",))
+
+    def test_workspace_parent_must_be_earlier_on_required_route(self) -> None:
+        first = _exercise("first", "parent", parent="second")
+        second = _exercise("second", "template")
+        catalog = self.catalog((first, second))
+        with self.assertRaisesRegex(CatalogError, "parent must be earlier"):
+            catalog._validate_required_route()
+
+        elective = Exercise(**{
+            **_exercise("elective", "template").__dict__,
+            "status": "elective",
+        })
+        consumer = _exercise("consumer", "parent", parent="elective")
+        catalog = self.catalog((consumer,), (elective,))
+        with self.assertRaisesRegex(CatalogError, "parent must be earlier"):
+            catalog._validate_required_route()
+
+    def test_required_exercise_cannot_depend_on_non_required_exercise(self) -> None:
+        elective = Exercise(**{
+            **_exercise("elective", "template").__dict__,
+            "status": "elective",
+        })
+        required = Exercise(**{
+            **_exercise("required", "template").__dict__,
+            "prerequisites": ("elective",),
+        })
+        catalog = self.catalog((required,), (elective,))
+        with self.assertRaisesRegex(CatalogError, "cannot depend on non-required"):
+            catalog._validate_required_route()
+
+    def test_capstone_is_optional_unique_and_final(self) -> None:
+        lessons = tuple(
+            _exercise(f"lesson-{index}", "template") for index in range(3)
+        )
+        milestones = tuple(
+            _exercise(f"milestone-{index}", "template", kind="milestone")
+            for index in range(6)
+        )
+        self.catalog((*lessons, *milestones))._validate_required_route()
+
+        capstone = _exercise("capstone", "template", kind="capstone")
+        self.catalog((*lessons, *milestones, capstone))._validate_required_route()
+
+        trailing = _exercise("trailing", "template")
+        with self.assertRaisesRegex(CatalogError, "final required-route"):
+            self.catalog((*lessons, capstone, trailing))._validate_required_route()
+
+        other = _exercise("other-capstone", "template", kind="capstone")
+        with self.assertRaisesRegex(CatalogError, "capstone must be unique"):
+            self.catalog((*lessons, capstone, other))._validate_required_route()
 
     def test_scaffold_reuses_reference_without_a_completion_edge(self) -> None:
         provider = _exercise("provider", "template")
@@ -553,59 +592,27 @@ class DerivedBaselineTests(unittest.TestCase):
         ):
             catalog._validate_direct_prerequisites()
 
-    def test_previous_milestone_ignores_intervening_lessons_and_electives(self) -> None:
-        milestone = _exercise("milestone", "template", kind="milestone")
-        lesson = _exercise("lesson", "template")
-        elective_milestone = _exercise(
-            "elective-milestone",
-            "template",
-            kind="milestone",
-        )
-        later = _exercise("later", "previous-milestone", kind="milestone")
-        catalog = self.catalog(
-            (milestone, lesson, later),
-            (elective_milestone,),
-        )
-        self.assertEqual(catalog.baseline_provider(later), milestone)
-
-    def test_missing_derived_provider_is_rejected(self) -> None:
-        first = _exercise("first", "previous-required")
-        catalog = self.catalog((first,))
-        with self.assertRaisesRegex(CatalogError, "no previous required"):
-            catalog.baseline_provider(first)
-
-        lesson = _exercise("lesson", "template")
-        milestone = _exercise("milestone", "previous-milestone", kind="milestone")
-        catalog = self.catalog((lesson, milestone))
-        with self.assertRaisesRegex(CatalogError, "no previous milestone"):
-            catalog.baseline_provider(milestone)
-
-        lesson = _exercise("consumer", "previous-milestone")
-        catalog = self.catalog((
-            _exercise("earlier", "template", kind="milestone"),
-            lesson,
-        ))
-        with self.assertRaisesRegex(CatalogError, "milestone or capstone kind"):
-            catalog.baseline_provider(lesson)
-
-        required = _exercise("required", "template")
-        elective = _exercise("elective", "previous-required")
-        catalog = self.catalog((required,), (elective,))
-        with self.assertRaisesRegex(CatalogError, "only valid on the required route"):
-            catalog.baseline_provider(elective)
+    def test_unknown_workspace_parent_is_rejected(self) -> None:
+        consumer = _exercise("consumer", "parent", parent="missing")
+        catalog = self.catalog((consumer,))
+        with self.assertRaisesRegex(CatalogError, "unknown workspace parent"):
+            catalog.baseline_provider(consumer)
 
     def test_inherited_mode_and_build_root_must_match(self) -> None:
         provider = _exercise("provider", "template")
         incompatible_files = _exercise(
             "files",
-            "previous-required",
+            "parent",
             files=("Kbuild", "other.c"),
+            parent="provider",
         )
         catalog = self.catalog((provider, incompatible_files))
         with self.assertRaisesRegex(CatalogError, "cannot remove or rename"):
             catalog.validate_workspace_lineage(incompatible_files)
 
-        incompatible_build = _exercise("build", "previous-required", build="src")
+        incompatible_build = _exercise(
+            "build", "parent", build="src", parent="provider"
+        )
         catalog = self.catalog((provider, incompatible_build))
         with self.assertRaisesRegex(CatalogError, "mode/build must match"):
             catalog.validate_workspace_lineage(incompatible_build)
@@ -622,7 +629,9 @@ class DerivedBaselineTests(unittest.TestCase):
                 ),
             }
         )
-        consumer = _exercise("mode-consumer", "previous-required")
+        consumer = _exercise(
+            "mode-consumer", "parent", parent="mode-provider"
+        )
         catalog = self.catalog((different_mode_provider, consumer))
         with self.assertRaisesRegex(CatalogError, "mode/build must match"):
             catalog.validate_workspace_lineage(consumer)
@@ -636,9 +645,10 @@ class DerivedBaselineTests(unittest.TestCase):
             (additions / "new.c").write_text("int new_value;\n")
             consumer = _exercise(
                 "consumer",
-                "previous-required",
+                "parent",
                 files=("Kbuild", "main.c", "new.c"),
                 additions="additions",
+                parent="provider",
             )
             catalog = self.catalog((provider, consumer))
             catalog.root = root
@@ -657,13 +667,14 @@ class DerivedBaselineTests(unittest.TestCase):
             with self.assertRaisesRegex(CatalogError, "stray or empty"):
                 catalog.validate_workspace_lineage(consumer)
 
-    def test_solution_composes_supplied_additions_before_sparse_overlay(self) -> None:
+    def test_parent_solution_composes_additions_before_sparse_overlay(self) -> None:
         provider = _exercise("provider", "template")
         consumer = _exercise(
             "consumer",
-            "previous-required",
+            "parent",
             files=("Kbuild", "main.c", "supplied.c"),
             additions="additions",
+            parent="provider",
         )
         provider = Exercise(**{
             **provider.__dict__,
@@ -685,20 +696,18 @@ class DerivedBaselineTests(unittest.TestCase):
             catalog = self.catalog((provider, consumer))
             catalog.root = root
             tree = catalog.solution_tree(consumer)
-            self.assertEqual(tree["supplied.c"].data, b"supplied\n")
+            self.assertEqual(tree["Kbuild"].data, b"base build\n")
             self.assertEqual(tree["main.c"].data, b"completed main\n")
-
-            (root / "consumer/supplied.c").write_text("supplied\n")
-            with self.assertRaisesRegex(WorkspaceError, "byte-identical"):
-                catalog.solution_tree(consumer)
+            self.assertEqual(tree["supplied.c"].data, b"supplied\n")
 
     def test_additive_inheritance_rejects_missing_additions_directory(self) -> None:
         provider = _exercise("provider", "template")
         consumer = _exercise(
             "consumer",
-            "previous-required",
+            "parent",
             files=("Kbuild", "main.c", "new.c"),
             additions="missing",
+            parent="provider",
         )
         catalog = self.catalog((provider, consumer))
         with tempfile.TemporaryDirectory() as directory:
@@ -710,8 +719,9 @@ class DerivedBaselineTests(unittest.TestCase):
         provider = _exercise("provider", "template")
         missing = _exercise(
             "missing",
-            "previous-required",
+            "parent",
             files=("Kbuild", "main.c", "new.c"),
+            parent="provider",
         )
         catalog = self.catalog((provider, missing))
         with self.assertRaisesRegex(CatalogError, "no additions directory"):
@@ -719,8 +729,9 @@ class DerivedBaselineTests(unittest.TestCase):
 
         unnecessary = _exercise(
             "unnecessary",
-            "previous-required",
+            "parent",
             additions="additions",
+            parent="provider",
         )
         catalog = self.catalog((provider, unnecessary))
         with self.assertRaisesRegex(CatalogError, "forbidden when no files"):
@@ -733,7 +744,9 @@ class DerivedBaselineTests(unittest.TestCase):
             "template",
             module_artifact="rootkitlings.ko",
         )
-        inherited = _exercise("inherited", "previous-required")
+        inherited = _exercise(
+            "inherited", "parent", parent="overridden"
+        )
         catalog = self.catalog((overridden, inherited), (defaulted,))
         self.assertEqual(catalog.module_artifact(defaulted), "hello.ko")
         self.assertEqual(catalog.module_artifact(overridden), "rootkitlings.ko")
@@ -747,17 +760,18 @@ class DerivedBaselineTests(unittest.TestCase):
         )
         consumer = _exercise(
             "consumer",
-            "previous-required",
+            "parent",
             module_artifact="other.ko",
+            parent="provider",
         )
         catalog = self.catalog((provider, consumer))
         with self.assertRaisesRegex(CatalogError, "module artifact conflicts"):
             catalog.validate_workspace_lineage(consumer)
 
-    def test_only_explicit_completion_keeps_full_solution_tree(self) -> None:
+    def test_parent_solution_rejects_redundant_sparse_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ("provider", "completion", "derived"):
+            for name in ("provider", "consumer"):
                 solution = root / name
                 solution.mkdir()
                 (solution / "Kbuild").write_text("obj-m += hello.o\n")
@@ -768,32 +782,18 @@ class DerivedBaselineTests(unittest.TestCase):
                 **provider.__dict__,
                 "resources": Resources("", "", "", "", "provider"),
             })
-            completion = _exercise("completion", "completion")
-            completion = Exercise(**{
-                **completion.__dict__,
-                "workspace": Workspace(**{
-                    **completion.workspace.__dict__,
-                    "parent": "provider",
-                }),
-                "resources": Resources("", "", "", "", "completion"),
-            })
-            derived = _exercise("derived", "previous-required")
-            derived = Exercise(**{
-                **derived.__dict__,
-                "resources": Resources("", "", "", "", "derived"),
-            })
-
-            catalog = self.catalog((provider, completion))
-            catalog.root = root
-            self.assertEqual(
-                set(catalog.solution_tree(completion)),
-                {"Kbuild", "main.c"},
+            consumer = _exercise(
+                "consumer", "parent", parent="provider"
             )
+            consumer = Exercise(**{
+                **consumer.__dict__,
+                "resources": Resources("", "", "", "", "consumer"),
+            })
 
-            catalog = self.catalog((provider, derived))
+            catalog = self.catalog((provider, consumer))
             catalog.root = root
             with self.assertRaisesRegex(WorkspaceError, "byte-identical"):
-                catalog.solution_tree(derived)
+                catalog.solution_tree(consumer)
 
 
 class ModuleArtifactValidationTests(unittest.TestCase):

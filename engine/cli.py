@@ -149,7 +149,7 @@ def label(item):
 def kind_label(item):
     return {
         'lesson': 'Lesson',
-        'milestone': 'Integration lab',
+        'milestone': 'Milestone',
         'capstone': 'Capstone',
     }.get(item.kind, 'Exercise')
 
@@ -416,7 +416,7 @@ def solution_output(x, completed):
         if hasattr(CAT, 'solution_provider')
         else CAT.baseline_provider(x)
     )
-    derived = provider is not None and x.workspace.baseline != 'completion'
+    derived = provider is not None
     lines = []
     if not derived:
         lines.append(

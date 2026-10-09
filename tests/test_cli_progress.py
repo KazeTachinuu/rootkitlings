@@ -247,7 +247,7 @@ class LearnerCLITests(unittest.TestCase):
     def test_prereq_shows_assumption_where_it_is_first_used(self) -> None:
         output = io.StringIO()
         with redirect_stdout(output), redirect_stderr(io.StringIO()):
-            self.globals["cmd_prereq"](["L17"])
+            self.globals["cmd_prereq"](["L16"])
         text = output.getvalue()
         self.assertIn("IPv4 packet basics:", text)
         self.assertIn("Recognize an IPv4 header", text)
@@ -568,7 +568,7 @@ class LearnerCLITests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
         self.assertNotIn("--- main.c ---", output)
 
-    def test_derived_solution_shows_only_delta_and_provider(self) -> None:
+    def test_parent_solution_shows_only_delta_and_provider(self) -> None:
         provider = SimpleNamespace(
             id="provider",
             serial="L00",
@@ -578,7 +578,7 @@ class LearnerCLITests(unittest.TestCase):
             id="consumer",
             serial="L01",
             title="Consumer lesson",
-            workspace=SimpleNamespace(baseline="previous-required"),
+            workspace=SimpleNamespace(baseline="parent"),
         )
         provider_tree = {
             "Kbuild": SimpleNamespace(data=b"unchanged sentinel\n"),
@@ -614,28 +614,6 @@ class LearnerCLITests(unittest.TestCase):
         self.assertIn("+++ b/core/main.c", output)
         self.assertIn("--- /dev/null", output)
         self.assertIn("+++ b/include/api.h", output)
-
-    def test_explicit_completion_solution_remains_complete(self) -> None:
-        provider = SimpleNamespace(id="provider", serial="L00", title="Provider")
-        exercise = SimpleNamespace(
-            id="completion",
-            serial="L01",
-            title="Completion boundary",
-            workspace=SimpleNamespace(baseline="completion"),
-        )
-        tree = {"main.c": SimpleNamespace(data=b"complete\n")}
-        original_catalog = self.globals["CAT"]
-        try:
-            self.globals["CAT"] = SimpleNamespace(
-                solution_tree=lambda _exercise: tree,
-                baseline_provider=lambda _exercise: provider,
-            )
-            output = self.globals["solution_output"](exercise, set())
-        finally:
-            self.globals["CAT"] = original_catalog
-        self.assertIn("Complete reference files", output)
-        self.assertIn("--- main.c ---", output)
-        self.assertNotIn("--- a/main.c", output)
 
     def test_solution_view_does_not_mutate_learner_state(self) -> None:
         exercise = self.globals["CAT"].ordered()[0]
