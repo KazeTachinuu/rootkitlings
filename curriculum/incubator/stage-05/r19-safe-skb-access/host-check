@@ -23,10 +23,6 @@ for relative in Kbuild main.c include/ipv4_parser.h include/skb_access.h \
 done
 
 source=$build_dir/access/skb_access.c
-for required in skb_network_offset skb_headroom skb_frags_readable \
-	skb_headlen skb_header_pointer_careful INT_MIN S64_MAX copy_offset; do
-	rg -q "${required}" "$source" || die "missing required operation: $required"
-done
 
 if rg -q 'skb[[:space:]]*->[[:space:]]*data([^_[:alnum:]]|$)' "$source"; then
 	die "do not read skb->data directly"

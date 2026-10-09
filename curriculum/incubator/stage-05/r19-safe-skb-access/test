@@ -22,7 +22,7 @@ grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
 	printf '[x] pinned kernel build is not configured for GCC\n' >&2
 	exit 1
 }
-for command in make nm rg; do
+for command in make nm python3 rg; do
 	command -v "$command" >/dev/null || {
 		printf '[x] %s is required\n' "$command" >&2
 		exit 1
@@ -176,6 +176,30 @@ build_mutant last-failure-byte mutate_last_failure_byte
 run_guest "$HERE/failure-check" "$scratch/last-failure-byte/rootkitlings.ko" \
 	"partial failure-output mutation" --tool tools/module_load_test
 
+mutate_direct_data()
+{
+	python3 - "$1" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+source = path.read_text(encoding="utf-8")
+source, count = re.subn(
+    r"source = skb_header_pointer_careful\([^;]+;",
+    "source = skb->data + (int)copy_offset;",
+    source,
+    count=1,
+)
+if count != 1:
+    raise SystemExit("could not create direct-data mutant")
+path.write_text(source, encoding="utf-8")
+PY
+}
+build_mutant direct-data mutate_direct_data
+run_guest "$HERE/failure-check" "$scratch/direct-data/rootkitlings.ko" \
+	"direct linear-data access" --tool tools/module_load_test
+
 expect_host_rejection()
 {
 	local directory=$1 label=$2
@@ -186,17 +210,12 @@ expect_host_rejection()
 	fi
 }
 
-direct_data=$scratch/direct-data
-cp -a "$scratch/solution" "$direct_data"
-sed -i 's/source = skb_header_pointer_careful.*/source = skb->data + (int)copy_offset;/' \
-	"$direct_data/access/skb_access.c"
-expect_host_rejection "$direct_data" direct-data
-
-plain_helper=$scratch/plain-helper
-cp -a "$scratch/solution" "$plain_helper"
-sed -i 's/skb_header_pointer_careful/skb_header_pointer/' \
-	"$plain_helper/access/skb_access.c"
-expect_host_rejection "$plain_helper" non-careful-helper
+build_mutant plain-helper \
+	sed -i 's/skb_header_pointer_careful/skb_header_pointer/'
+"$HERE/host-check" "$scratch/plain-helper" \
+	"$scratch/plain-helper/rootkitlings.ko"
+run_guest "$HERE/success-check" "$scratch/plain-helper/rootkitlings.ko" \
+	"equivalent explicit-readability implementation"
 
 protected=$scratch/protected
 cp -a "$scratch/solution" "$protected"
