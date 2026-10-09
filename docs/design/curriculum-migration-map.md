@@ -527,12 +527,42 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
 
 #### R25 - Encode and decode a bounded DNS wire name
 
-- Teaches: length-prefixed labels, terminal root, exact 63/255 bounds, compression
-  policy, and failure without prior-output mutation.
-- Produces: a DNS-shaped message component.
+- Teaches: raw length-prefixed labels, the terminal root label, exact 63-octet
+  label and 255-octet wire-name bounds, compression-marker recognition, and
+  transactional output.
+- Produces: one allocation-free encoder and one bounded parser for an
+  uncompressed DNS wire name.
+  The label API carries explicit byte spans, so it
+  can represent zero bytes, dots, and non-ASCII label data without pretending a
+  dotted C string is a lossless DNS representation.
 - Requires: R18.
-- Defensive evidence: boundary vectors and malformed names.
+- Parser policy: accept the root name and an uncompressed sequence of nonempty
+  1-through-63-octet labels terminated within the first 255 bytes; report the
+  exact bytes consumed so the name can precede more message fields.
+  Reject the reserved `01` and `10` label types as malformed.
+  Recognize `11` as a
+  compression pointer but return a distinct unsupported result because resolving
+  it safely requires the complete DNS message, its base offset, backward-target
+  validation, and bounded traversal.
+- Failure policy: validate an encoding completely into a local candidate before
+  publishing bytes or length.
+  Parse into a local offset-and-length view and commit it only after the root
+  label.
+  Every failure leaves caller output
+  unchanged.
+- Scope: this is the exact uncompressed component needed by the later outbound
+  signal, not a general recursive DNS-message decompressor, hostname validator,
+  resolver, or claim that arbitrary labels are suitable for every application.
+- Defensive evidence: every first length octet; every legal label length; root;
+  one-byte-label and 63-byte-label maximum names; every input truncation and
+  destination capacity; binary labels; unaligned input; bytes after the root;
+  missing roots; reserved types; compression markers; overlong names;
+  unchanged-output failures; sanitizer-backed host tests; pinned-kernel build;
+  and guest lifecycle evidence.
 - Current source: L47.
+  Its dotted-string-only API, rejection of the root name,
+  supplied learner-visible decoder, and narrow shell-only boundary checks are
+  replaced.
 
 #### R26 - Apply and conditionally roll back a file transaction
 
