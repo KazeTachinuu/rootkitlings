@@ -10,10 +10,10 @@ int rk_credentials_replace_current(void)
 	struct cred *replacement;
 
 	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_CREDENTIAL_PREPARE)
-		return -ENOMEM;
-
-	/* Prepare one complete credential based on init_task. */
-	replacement = NULL;
+		replacement = NULL;
+	else
+		/* Prepare one complete credential based on init_task. */
+		replacement = NULL;
 	if (!replacement)
 		return -ENOMEM;
 

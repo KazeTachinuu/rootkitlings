@@ -28,6 +28,9 @@ done
 if grep -Eq '[[:space:]]prepare_creds$' <<< "$success_undefined"; then
 	die "use a complete init-task credential, not a partial current-credential copy"
 fi
+if grep -Eq '[[:space:]]abort_creds$' <<< "$success_undefined"; then
+	die "the successful replacement path must not abort a committed credential"
+fi
 
 cancel_undefined=$(nm -u "$cancel_dir/privilege/credentials.o")
 for symbol in abort_creds init_task prepare_kernel_cred; do
@@ -62,26 +65,26 @@ grep -Eq "rk_credentials_replace_current[[:space:]]*\([^)]*\)[[:space:]]*\{[^}]*
 	die "declare the prepared credential inside rk_credentials_replace_current"
 grep -Eq "${credential_var}[[:space:]]*=[[:space:]]*prepare_kernel_cred" \
 	<<< "$credentials_text" || die "store the prepared credential in the local pointer"
-grep -Eq "![[:space:]]*${credential_var}|${credential_var}[[:space:]]*==[[:space:]]*NULL|NULL[[:space:]]*==[[:space:]]*${credential_var}" \
-	<<< "$credentials_text" || die "check preparation for NULL"
+grep -Eq "if[[:space:]]*\([[:space:]]*(![[:space:]]*${credential_var}|${credential_var}[[:space:]]*==[[:space:]]*NULL|NULL[[:space:]]*==[[:space:]]*${credential_var})[[:space:]]*\)[[:space:]]*(\{[[:space:]]*)?return[[:space:]]+-ENOMEM[[:space:]]*;" \
+	<<< "$credentials_text" || die "return -ENOMEM when preparation returns NULL"
 grep -Eq "commit_creds[[:space:]]*\([[:space:]]*${credential_var}[[:space:]]*\)" \
 	<<< "$credentials_text" || die "commit the prepared credential"
 grep -Eq "abort_creds[[:space:]]*\([[:space:]]*${credential_var}[[:space:]]*\)" \
 	<<< "$credentials_text" || die "abort the prepared credential on cancellation"
 
-if grep -Eq '\bprepare_creds[[:space:]]*\(' "$credentials_source"; then
+if grep -Eq '\bprepare_creds[[:space:]]*\(' <<< "$credentials_text"; then
 	die "do not copy the caller and mutate only selected identity fields"
 fi
 if grep -Eq -- '->[[:space:]]*(uid|euid|suid|fsuid|gid|egid|sgid|fsgid|user|user_ns|ucounts|group_info|securebits|cap_[[:alnum:]_]+)[[:space:]]*=' \
-	"$credentials_source"; then
+	<<< "$credentials_text"; then
 	die "install the complete init-task credential without field mutation"
 fi
 if grep -Eq '\b(current_cred|current_real_cred|override_creds|revert_creds|get_task_cred)[[:space:]]*\(' \
-	"$credentials_source"; then
+	<<< "$credentials_text"; then
 	die "do not read, override, or retain a published credential"
 fi
 if grep -Eq '\bstatic[[:space:]]+struct[[:space:]]+cred[[:space:]]*\*' \
-	"$credentials_source"; then
+	<<< "$credentials_text"; then
 	die "do not retain a prepared credential in static storage"
 fi
 
@@ -175,12 +178,12 @@ fi
 
 grep -Eq 'proc_create_data[[:space:]]*\([[:space:]]*"rootkitlings"[[:space:]]*,[[:space:]]*0*666' \
 	<<< "$proc_text" || die "publish the educational endpoint with mode 0666"
-[[ $(grep -Ec '\brk_credentials_replace_current[[:space:]]*\(' "$proc_source") -eq 1 ]] ||
+[[ $(grep -Eo '\brk_credentials_replace_current[[:space:]]*\(' <<< "$proc_text" | wc -l) -eq 1 ]] ||
 	die "the exact root command must have one credential replacement call"
-grep -Eq 'rk_state_actions_enabled[[:space:]]*\(' "$proc_source" ||
+grep -Eq 'rk_state_actions_enabled[[:space:]]*\(' <<< "$proc_text" ||
 	die "check the action switch before replacing credentials"
 if grep -Eq '\b(prepare_creds|prepare_kernel_cred|commit_creds|abort_creds)[[:space:]]*\(' \
-	"$proc_source"; then
+	<<< "$proc_text"; then
 	die "keep credential ownership in privilege/credentials.c"
 fi
 for command in enable disable root; do

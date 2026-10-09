@@ -50,6 +50,21 @@ for compiler in gcc clang; do
 done
 make -s -C "$HERE/../../../.." -B tools/cred_trigger_test
 
+legacy_target=$scratch/legacy-target
+: > "$legacy_target"
+legacy_expected="uid=$(id -ru) euid=$(id -u)"
+legacy_output=$("$HERE/../../../../tools/cred_trigger_test" \
+	"$legacy_target" root)
+[[ $legacy_output == "$legacy_expected" ]] || {
+	printf '[x] legacy trigger output: expected %s, got %s\n' \
+		"$legacy_expected" "$legacy_output" >&2
+	exit 1
+}
+[[ $(< "$legacy_target") == root ]] || {
+	printf '[x] legacy trigger did not write the exact command\n' >&2
+	exit 1
+}
+
 mapfile -t changed_files < <(
 	diff -qr "$HERE/template" "$HERE/solution" |
 		sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p'
@@ -158,6 +173,42 @@ sed -i '/replacement = prepare_kernel_cred/a\	replacement->uid = GLOBAL_ROOT_UID
 if "$HERE/host-check" "$partial" "$partial/rootkitlings.ko" \
 	"$scratch/credential_cancel" > "$scratch/host-partial.log" 2>&1; then
 	printf '[x] host checker accepted partial credential field mutation\n' >&2
+	exit 1
+fi
+
+wrong_null=$scratch/host-wrong-null
+cp -a "$scratch/success" "$wrong_null"
+sed -i '/if (!replacement)/{n;s/return -ENOMEM;/return 0;/;}' \
+	"$wrong_null/privilege/credentials.c"
+if "$HERE/host-check" "$wrong_null" "$wrong_null/rootkitlings.ko" \
+	"$scratch/credential_cancel" > "$scratch/host-wrong-null.log" 2>&1; then
+	printf '[x] host checker accepted an incorrect NULL result\n' >&2
+	exit 1
+fi
+
+abort_after_commit=$scratch/host-abort-after-commit
+cp -a "$scratch/success" "$abort_after_commit"
+
+sed -i '/struct cred \*replacement;/a\	int error;' \
+	"$abort_after_commit/privilege/credentials.c"
+sed -i '/abort_creds(replacement);/d' \
+	"$abort_after_commit/privilege/credentials.c"
+sed -i '/return commit_creds(replacement);/c\	error = commit_creds(replacement);\
+\tabort_creds(replacement);\
+\treturn error;' \
+	"$abort_after_commit/privilege/credentials.c"
+make -s -C "$KDIR" M="$abort_after_commit" W=1 \
+	ROOTKITLINGS_FAIL_POINT=0 modules \
+	> "$scratch/host-abort-after-commit-build.log" 2>&1
+if grep -q 'warning:' "$scratch/host-abort-after-commit-build.log"; then
+	cat "$scratch/host-abort-after-commit-build.log" >&2
+	printf '[x] abort-after-commit fixture builds with warnings\n' >&2
+	exit 1
+fi
+if "$HERE/host-check" "$abort_after_commit" \
+	"$abort_after_commit/rootkitlings.ko" "$scratch/credential_cancel" \
+	> "$scratch/host-abort-after-commit.log" 2>&1; then
+	printf '[x] host checker accepted abort after commit\n' >&2
 	exit 1
 fi
 

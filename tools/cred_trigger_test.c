@@ -642,7 +642,7 @@ int main(int argc, char **argv)
 		}
 		result = verify_outcome(argv[2]);
 	} else if (argc == 3) {
-		result = run_legacy_trigger(argv[1], argv[2]);
+		return run_legacy_trigger(argv[1], argv[2]) < 0 ? 1 : 0;
 	} else {
 		usage(argv[0]);
 		return 2;

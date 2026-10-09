@@ -12,6 +12,7 @@ chmod 0755 "$fixtures" "$fixtures/root"
 printf 'enable' > "$fixtures/enable"
 printf 'enable\n' > "$fixtures/enable-lf"
 printf 'disable' > "$fixtures/disable"
+printf 'disable\n' > "$fixtures/disable-lf"
 printf 'rooted' > "$fixtures/rooted"
 printf 'rootx' > "$fixtures/rootx"
 printf ' root' > "$fixtures/leading-space"
@@ -21,7 +22,7 @@ printf 'root\000' > "$fixtures/nul"
 printf 'root\n\n' > "$fixtures/double-lf"
 printf 'disable\nx' > "$fixtures/oversized"
 chmod 0644 "$fixtures/empty" "$fixtures/enable" "$fixtures/enable-lf" \
-	"$fixtures/disable" "$fixtures/rooted" "$fixtures/rootx" \
+	"$fixtures/disable" "$fixtures/disable-lf" "$fixtures/rooted" "$fixtures/rootx" \
 	"$fixtures/leading-space" "$fixtures/trailing-space" "$fixtures/crlf" \
 	"$fixtures/nul" "$fixtures/double-lf" "$fixtures/oversized"
 
@@ -131,7 +132,16 @@ enable_unprivileged()
 
 check_successes()
 {
+	root_lf='root
+'
 	enable_unprivileged
+	identity=$(chpst -u 65534:65534 \
+		cred_trigger_test "$endpoint" "$root_lf")
+	if [ "$identity" = "uid=0 euid=0" ]; then
+		_ok "root with a final newline replaces only its writing process"
+	else
+		_fail "root with a final newline returned: ${identity:-nothing}"
+	fi
 	if chpst -u 65534:65534 cred_trigger_test replace "$endpoint" \
 		"$fixtures/root" > /dev/null; then
 		_ok "root installs the complete init credential only on its writing process"
@@ -145,8 +155,8 @@ check_successes()
 		_fail "credential replacement escaped the writing thread"
 	fi
 	if chpst -u 65534:65534 proc_write_test write "$endpoint" \
-		"$fixtures/disable" > /dev/null; then
-		_ok "an unprivileged writer can disable the operational switch"
+		"$fixtures/disable-lf" > /dev/null; then
+		_ok "an unprivileged writer can disable with a final newline"
 	else
 		_fail "unprivileged disable failed"
 	fi
