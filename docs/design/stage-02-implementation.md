@@ -26,7 +26,7 @@ Every failure preserves the prior state.
 The action switch is a `bool` read with `READ_ONCE()` and written with `WRITE_ONCE()`.
 These operations force one compiler-visible scalar access; they do not provide an atomic read-modify-write operation or protect compound state.
 Concurrent valid writers use last-writer-wins semantics, and readers must observe one complete old-or-new Boolean value.
-The first genuine atomic read-modify-write operation appears in L07, where it bounds pending event admission to one request.
+The first genuine atomic read-modify-write operation appears in L07, where it bounds a counted pending-event queue at `INT_MAX` without coalescing successful requests.
 The first real multi-field invariant will introduce its mutex at one-use authorization, and the first real list consumer will introduce kernel list mechanics at module-view suppression.
 
 ## Runtime evidence
@@ -38,8 +38,11 @@ The R06 matrix builds the same variants and checks all four accepted command for
 ## Remaining Stage 2 work
 
 - L06 `timer-workqueue-scheduler`: keep the timer callback bounded, use one writer per `unsigned long` counter, defer sleep-capable work to a worker, and close both lifetimes on unload.
-- L07 `event-driven-kernel-thread`: admit at most one pending event with an atomic read-modify-write operation, then wake, stop, and join a resident worker without polling.
+- L07 `event-driven-kernel-thread`: admit counted events with `atomic_add_unless(..., INT_MAX)`, report `EOVERFLOW` only at saturation, consume one with each successful `atomic_dec_if_positive()`, and preserve exact sequential, burst, and concurrent success accounting until stop or unload.
 - M00 `controlled-resident-core`: unify the timer and proc producers through one capacity-one request path consumed by the resident thread, without retaining a redundant workqueue.
+
+M00 intentionally changes L07's non-coalescing counted admission to capacity one.
+A periodic producer must coalesce demand rather than accumulate work faster than the resident thread can consume it.
 
 M00 starts from the learner's passed R04 cumulative snapshot.
 L05-L07 are separate practice workspaces: their completion proves the prerequisite knowledge, but the learner applies those mechanisms again in M00.

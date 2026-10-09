@@ -98,6 +98,8 @@ Milestone workspace parents are `proc-publication → M00 → M01 → M02 → M0
 Workspace inheritance is separate from knowledge prerequisites.
 M00 therefore starts from the learner's passed `proc-publication` tree, not from any L05-L07 lesson workspace.
 Those lessons practice mechanisms separately; M00 asks the learner to apply them together and does not imply an automatic workspace merge.
+L07's bounded admission counts every accepted request up to `INT_MAX`.
+M00 intentionally refactors that mechanism to capacity one so periodic demand coalesces instead of building a backlog.
 
 ## Elective tracks
 

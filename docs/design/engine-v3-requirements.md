@@ -108,6 +108,7 @@ Arbitrary earlier completion parents are too permissive and duplicate route stru
 For M00, L05-L07 are knowledge prerequisites, not workspace providers.
 The learner starts with their own passed R04 tree and applies the separately practiced control, timer, and thread mechanisms to it.
 The resulting design unifies timer and proc producers behind one capacity-one atomic request path consumed by the resident thread; it does not retain L06's practice workqueue.
+Capacity one is an intentional integration refactor of L07's counted, non-coalescing admission because periodic demand must not accumulate a backlog.
 This is ordinary `cumulative-root` materialization, not an automatic merge of lesson workspaces or a new engine feature.
 
 Required course schema:

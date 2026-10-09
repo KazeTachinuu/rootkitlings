@@ -228,14 +228,19 @@ Knowledge already reached through one of those dependencies is not repeated.
 #### R08 - Run and stop an event-driven kernel thread
 
 - Teaches: thread creation and pointer errors, wait queues, condition-loop waiting,
-  the first genuine atomic read-modify-write operation, capacity-one event
-  admission, publish-before-wake, stop checks, wakeup, join, and the local rule
-  that the thread may sleep between events.
+  the first genuine atomic read-modify-write operation, counted non-coalescing
+  event admission, publish-before-wake, stop checks, wakeup, join, and the local
+  rule that the thread may sleep between events.
+- Admission: `atomic_add_unless(..., INT_MAX)` accepts every request until the
+  counter saturates and returns `-EOVERFLOW` only at that bound.
+  The thread consumes one accepted request per successful
+  `atomic_dec_if_positive()`.
+  Successful-run accounting is preserved exactly unless stop or unload begins.
 - Produces: the resident worker.
 - Requires: R06.
-- Defensive evidence: exactly one of two concurrent requests is admitted, the
-  other receives the declared busy result, one event is consumed, stop while
-  blocked completes, and the task disappears after unload.
+- Defensive evidence: sequential, burst, and concurrent request totals agree
+  exactly with successful submissions and consumed events; stop while blocked
+  completes; and the task disappears after unload.
 - Current sources: L19, L20, and L23; L12's real pointer-error application is
   reinforced here.
 
@@ -244,6 +249,7 @@ Knowledge already reached through one of those dependencies is not repeated.
 Merge the useful integration work of C00 and C01.
 The Boolean control switch gates both producers.
 The timer callback and a fixed proc command submit to one capacity-one atomic request path, and the resident thread consumes admitted requests.
+This deliberately refactors R08's counted non-coalescing queue: a periodic producer must coalesce demand instead of accumulating a growing work backlog.
 The integrated result has no workqueue: L07 taught timer-to-workqueue deferral as an isolated callback-boundary mechanism, while M00 reuses the bounded timer producer and gives all sleep-capable work to the already-owned thread.
 Both producers stop when disabled and unload closes the timer, request, wake, and thread lifetimes cleanly.
 Requires R07 and R08 directly.
@@ -616,7 +622,7 @@ This table is exhaustive.
 | L17 | Merge | R07 | Timer exists to motivate context deferral. |
 | L18 | Merge | R07 | Workqueue completes the timer/context mechanism. |
 | L19 | Merge | R08 | Resident thread plus wait/stop lifecycle is the meaningful unit. |
-| L20 | Merge | R08 | Atomic read-modify-write implements capacity-one event admission. |
+| L20 | Merge | R08 | Atomic read-modify-write implements counted bounded event admission. |
 | L21 | Optional | E04 | Completion is useful but has no required downstream consumer. |
 | L22 | Merge | R12 | Mutex protection is taught where a real multi-field one-use invariant needs it. |
 | L23 | Merge | R08 | Wait queue is part of the event-driven worker lifecycle. |
