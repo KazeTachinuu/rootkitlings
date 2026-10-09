@@ -1,0 +1,83 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR ARTIFACT_PATH"
+build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
+artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
+
+[[ -d $build_dir && ! -L $build_dir ]] || die "build directory must be a real directory"
+[[ -f $artifact && ! -L $artifact ]] || die "artifact must be a regular file"
+[[ $artifact == "$build_dir/rootkitlings.ko" ]] ||
+	die "expected artifact at: $build_dir/rootkitlings.ko"
+
+for path in core/main.o core/state.o interface/proc.o include/rootkit.h; do
+	[[ -f $build_dir/$path && ! -L $build_dir/$path ]] ||
+		die "build output is missing regular file: $path"
+done
+
+command -v modinfo >/dev/null || die "modinfo is required"
+command -v nm >/dev/null || die "nm is required"
+[[ $(modinfo -F license "$artifact") == GPL ]] || die "module license must be GPL"
+[[ $(modinfo -F description "$artifact") == 'Rootkitlings kernel module' ]] ||
+	die "module description must be: Rootkitlings kernel module"
+
+for symbol in rk_state_create rk_state_is_active rk_state_actions_enabled \
+	rk_state_set_actions_enabled rk_state_destroy; do
+	nm "$build_dir/core/state.o" | grep -Eq "[[:space:]]T[[:space:]]+$symbol$" ||
+		die "core/state.o must define $symbol"
+done
+
+proc_undefined=$(nm -u "$build_dir/interface/proc.o")
+for symbol in proc_create_data proc_remove rk_state_is_active \
+	rk_state_actions_enabled rk_state_set_actions_enabled seq_printf seq_read seq_lseek \
+	single_open single_release; do
+	grep -Eq "[[:space:]]$symbol$" <<< "$proc_undefined" ||
+		die "interface/proc.o has no $symbol dependency"
+done
+grep -Eq '[[:space:]](_copy_from_user|copy_from_user)$' <<< "$proc_undefined" ||
+	die "interface/proc.o has no copy_from_user dependency"
+if grep -Eq '[[:space:]]proc_create_single_data$' <<< "$proc_undefined"; then
+	die "use proc_create_data with explicit proc_ops"
+fi
+
+for object in core/main.o interface/proc.o; do
+	undefined=$(nm -u "$build_dir/$object")
+	if grep -Eq '[[:space:]](__kmalloc|__kmalloc_cache_noprof|kmalloc_noprof|kfree|kvfree|vfree)$' \
+		<<< "$undefined"; then
+		die "$object must not allocate or free module state"
+	fi
+done
+
+header_text=$(tr '\n' ' ' < "$build_dir/include/rootkit.h")
+grep -Eq 'struct[[:space:]]+rk_state[[:space:]]*;' <<< "$header_text" ||
+	die "rootkit.h must forward-declare struct rk_state"
+if grep -Eq 'struct[[:space:]]+rk_state[[:space:]]*\{' <<< "$header_text"; then
+	die "struct rk_state layout must remain private to core/state.c"
+fi
+grep -Eq 'bool[[:space:]]+rk_state_actions_enabled[[:space:]]*\(' <<< "$header_text" ||
+	die "rootkit.h must expose a bool action-switch getter"
+grep -Eq 'void[[:space:]]+rk_state_set_actions_enabled[[:space:]]*\([^;]*bool' \
+	<<< "$header_text" || die "rootkit.h must expose a bool action-switch setter"
+
+state_source=$build_dir/core/state.c
+grep -Eq 'atomic_t[[:space:]]+actions_enabled' "$state_source" ||
+	die "actions_enabled must be a private atomic_t"
+grep -Eq 'atomic_read[[:space:]]*\(' "$state_source" ||
+	die "the action-switch getter must use atomic_read"
+grep -Eq 'atomic_set[[:space:]]*\(' "$state_source" ||
+	die "the action switch must be initialized and set with atomic_set"
+
+proc_source=$build_dir/interface/proc.c
+grep -Eq 'struct[[:space:]]+proc_ops' "$proc_source" ||
+	die "interface/proc.c must define explicit proc_ops"
+state_undefined=$(nm -u "$build_dir/core/state.o")
+if grep -Eq '[[:space:]]mutex_(lock|unlock)' <<< "$state_undefined" ||
+	grep -Eq '[[:space:]]mutex_(lock|unlock)' <<< "$proc_undefined"; then
+	die "one independent atomic switch does not need a mutex"
+fi
+[[ $(grep -Ec 'rk_state_set_actions_enabled[[:space:]]*\(' "$proc_source") -eq 1 ]] ||
+	die "proc write must have one action-switch commit point"
+
+printf '[+] private atomic switch and proc write dependencies verified\n'

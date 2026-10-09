@@ -1,0 +1,10 @@
+Keep the switch inside struct rk_state as an atomic_t. Give interface/proc.c
+only a bool getter and setter.
+
+The write callback needs one eight-byte stack buffer. Check *position, the raw
+count, and the empty case before copy_from_user(). After a complete copy, strip
+at most one final newline, compare exact lengths and bytes, then call the setter
+once. Return the original count without changing *position.
+
+Use proc_create_data() with explicit proc_ops. single_open() receives the state
+from pde_data(inode); the show callback receives it as output->private.

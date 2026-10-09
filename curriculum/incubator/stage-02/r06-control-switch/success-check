@@ -1,0 +1,212 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Procfs control switch"
+
+endpoint=/proc/rootkitlings
+fixtures=/tmp/rootkitlings-control
+actual=$fixtures/actual
+mkdir -p "$fixtures"
+
+: > "$fixtures/empty"
+printf 'enable' > "$fixtures/enable"
+printf 'enable\n' > "$fixtures/enable-lf"
+printf 'disable' > "$fixtures/disable"
+printf 'disable\n' > "$fixtures/disable-lf"
+printf '\n' > "$fixtures/lone-lf"
+printf 'ena\nble' > "$fixtures/interior-lf"
+printf 'enable\n\n' > "$fixtures/double-lf"
+printf 'enable\000' > "$fixtures/nul"
+printf 'enabl' > "$fixtures/prefix"
+printf 'enabled' > "$fixtures/suffix"
+printf 'xenable' > "$fixtures/prefixed"
+printf 'disable\nx' > "$fixtures/oversized"
+printf 'active=1\nactions=disabled\n' > "$fixtures/status-disabled"
+printf 'active=1\nactions=enabled\n' > "$fixtures/status-enabled"
+chmod 0644 "$fixtures"/*
+
+assert_not_loaded()
+{
+	assert_absent /sys/module/rootkitlings
+	assert_absent "$endpoint"
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_fail "rootkitlings appears in /proc/modules"
+	else
+		_ok "rootkitlings is absent from /proc/modules"
+	fi
+}
+
+assert_status()
+{
+	expected=$1
+	label=$2
+	if cat "$endpoint" > "$actual" && cmp -s "$fixtures/status-$expected" "$actual"; then
+		_ok "$label leaves the complete $expected record"
+	else
+		_fail "$label: unexpected proc record"
+	fi
+}
+
+expect_errno()
+{
+	fixture=$1
+	errno=$2
+	label=$3
+	if proc_write_test errno "$endpoint" "$fixtures/$fixture" "$errno" > /dev/null; then
+		_ok "$label returns errno $errno"
+	else
+		_fail "$label did not return errno $errno"
+	fi
+	assert_status disabled "$label"
+}
+
+check_loaded()
+{
+	assert_loaded rootkitlings
+	assert_exists "$endpoint"
+	metadata=$(stat -c '%a:%u:%g' "$endpoint")
+	if [ "$metadata" = 644:0:0 ]; then
+		_ok "$endpoint is mode 0644 and owned by 0:0"
+	else
+		_fail "$endpoint metadata: expected 644:0:0, got $metadata"
+	fi
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_ok "rootkitlings appears in /proc/modules"
+	else
+		_fail "rootkitlings is absent from /proc/modules"
+	fi
+	assert_status disabled "module load"
+}
+
+check_rejections()
+{
+	expect_errno empty 22 "empty write"
+	expect_errno lone-lf 22 "lone newline"
+	expect_errno interior-lf 22 "interior newline"
+	expect_errno double-lf 22 "second trailing newline"
+	expect_errno nul 22 "embedded NUL"
+	expect_errno prefix 22 "short prefix"
+	expect_errno suffix 22 "suffix"
+	expect_errno prefixed 22 "prefixed command"
+	expect_errno oversized 7 "nine-byte command"
+
+	if proc_write_test fault "$endpoint" "$fixtures/enable" 14 > /dev/null; then
+		_ok "partial user copy returns errno 14"
+	else
+		_fail "partial user copy did not return errno 14"
+	fi
+	assert_status disabled "partial user copy"
+
+	if proc_write_test fault "$endpoint" "$fixtures/oversized" 7 > /dev/null; then
+		_ok "oversized write is rejected before user copy"
+	else
+		_fail "oversized write touched user memory before rejection"
+	fi
+	assert_status disabled "oversized partial user buffer"
+
+	if proc_write_test offset "$endpoint" "$fixtures/enable" 1 22 > /dev/null; then
+		_ok "nonzero offset returns errno 22"
+	else
+		_fail "nonzero offset did not return errno 22"
+	fi
+	assert_status disabled "nonzero offset"
+
+	if chpst -u 65534:65534 proc_write_test write "$endpoint" \
+		"$fixtures/enable" > "$fixtures/unprivileged.log" 2>&1; then
+		_fail "unprivileged writer changed the root control"
+	else
+		_ok "unprivileged writer is denied"
+	fi
+	assert_status disabled "unprivileged write"
+}
+
+check_successes()
+{
+	if proc_write_test write "$endpoint" "$fixtures/enable" > /dev/null; then
+		_ok "bare enable returns its full byte count"
+	else
+		_fail "bare enable failed"
+	fi
+	assert_status enabled "bare enable"
+
+	if proc_write_test write "$endpoint" "$fixtures/disable-lf" > /dev/null; then
+		_ok "disable with newline returns its full byte count"
+	else
+		_fail "disable with newline failed"
+	fi
+	assert_status disabled "disable with newline"
+
+	if proc_write_test repeat "$endpoint" "$fixtures/enable-lf" 3 > /dev/null; then
+		_ok "one descriptor accepts three enable writes"
+	else
+		_fail "repeated enable writes on one descriptor failed"
+	fi
+	assert_status enabled "repeated enable"
+
+	if proc_write_test repeat "$endpoint" "$fixtures/disable" 3 > /dev/null; then
+		_ok "one descriptor accepts three disable writes"
+	else
+		_fail "repeated disable writes on one descriptor failed"
+	fi
+	assert_status disabled "repeated disable"
+}
+
+concurrent_writer()
+{
+	i=0
+	while [ "$i" -lt 32 ]; do
+		proc_write_test write "$endpoint" "$fixtures/enable" || return 1
+		proc_write_test write "$endpoint" "$fixtures/disable" || return 1
+		i=$((i + 1))
+	done
+}
+
+check_concurrency()
+{
+	concurrent_writer > /dev/null &
+	writer=$!
+	read_ok=1
+	i=0
+	while [ "$i" -lt 96 ]; do
+		if ! cat "$endpoint" > "$actual"; then
+			read_ok=0
+			break
+		fi
+		if ! cmp -s "$fixtures/status-disabled" "$actual" &&
+		   ! cmp -s "$fixtures/status-enabled" "$actual"; then
+			read_ok=0
+			break
+		fi
+		i=$((i + 1))
+	done
+	if ! wait "$writer"; then
+		_fail "concurrent writer failed"
+	elif [ "$read_ok" -eq 1 ]; then
+		_ok "concurrent reads return 96 complete records"
+	else
+		_fail "concurrent read returned a partial or mixed record"
+	fi
+	proc_write_test write "$endpoint" "$fixtures/disable" > /dev/null ||
+		_fail "could not restore disabled state"
+	assert_status disabled "concurrent access"
+}
+
+assert_not_loaded
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	load rootkitlings.ko
+	check_loaded
+	check_rejections
+	check_successes
+	check_concurrency
+	if proc_write_test unload "$endpoint" "$fixtures/enable" rootkitlings > /dev/null; then
+		_ok "attempt $attempt rejects a held descriptor after unload"
+	else
+		_fail "attempt $attempt failed the held-descriptor unload check"
+	fi
+	assert_not_loaded
+	attempt=$((attempt + 1))
+done
+
+summary
