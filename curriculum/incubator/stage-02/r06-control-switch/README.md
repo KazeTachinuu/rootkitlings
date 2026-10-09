@@ -14,16 +14,19 @@ Both commands may have one trailing newline.
 
 ## Keep the state private
 
-Add `atomic_t actions_enabled` to the private `struct rk_state` and initialize it to disabled.
+Add `bool actions_enabled` to the private `struct rk_state` and initialize it to `false` before the state is published.
 Expose only `rk_state_actions_enabled()` and `rk_state_set_actions_enabled()` in `rootkit.h`; both use bool values.
 
 The proc read and write callbacks may run at the same time.
 Read the switch once before printing a record.
 Parse a complete command before the single setter call; a rejected write must not change state.
 
-An atomic value fits this one independent on/off switch: each reader observes one complete value while a writer replaces it in one operation.
-It does not protect a rule involving several fields.
-Such a rule would need a lock around the related reads and writes.
+Use `READ_ONCE()` for the getter and `WRITE_ONCE()` for the setter.
+They mark the intentional concurrent access and prevent the compiler from combining, inventing, or splitting that source access.
+They are not an atomic read-modify-write operation, a lock, a memory barrier, or a quiescence guarantee.
+
+That limited contract fits this switch because it is one independent scalar and every write replaces the complete bool without depending on its previous value.
+A rule involving several fields would need synchronization that protects the complete invariant.
 
 ## Define the write boundary
 
@@ -76,5 +79,6 @@ The checker covers every accepted form, malformed input, exact error codes, part
 - [procfs declarations](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/linux/proc_fs.h?h=v7.2)
 - [procfs callback wrappers](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/fs/proc/inode.c?h=v7.2)
 - [user-memory access helpers](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/linux/uaccess.h?h=v7.2)
-- [atomic types](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/Documentation/core-api/wrappers/atomic_t.rst?h=v7.2)
+- [`READ_ONCE()` and `WRITE_ONCE()`](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/Documentation/memory-barriers.txt?h=v7.2)
+- [Atomic types: when not to use them](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/Documentation/atomic_t.txt?h=v7.2)
 - [seq_file](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/Documentation/filesystems/seq_file.rst?h=v7.2)

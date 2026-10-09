@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/atomic.h>
 #include <linux/bug.h>
+#include <linux/compiler.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
@@ -9,7 +9,7 @@
 
 struct rk_state {
 	bool active;
-	/* TODO: add an atomic action switch. */
+	/* TODO: add a bool action switch. */
 };
 
 __must_check struct rk_state *rk_state_create(void)
@@ -24,7 +24,7 @@ __must_check struct rk_state *rk_state_create(void)
 		return ERR_PTR(-ENOMEM);
 
 	state->active = true;
-	/* TODO: initialize actions as disabled. */
+	/* TODO: initialize the switch to false before publication. */
 	return state;
 }
 
@@ -33,7 +33,7 @@ bool rk_state_is_active(const struct rk_state *state)
 	return state->active;
 }
 
-/* TODO: implement the bool getter and setter with atomic_read()/atomic_set(). */
+/* TODO: implement the bool getter and setter with READ_ONCE()/WRITE_ONCE(). */
 
 void rk_state_destroy(struct rk_state *state)
 {

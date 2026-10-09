@@ -1,5 +1,5 @@
-Keep the switch inside struct rk_state as an atomic_t. Give interface/proc.c
-only a bool getter and setter.
+Keep the switch inside struct rk_state as a bool. Initialize it directly before
+publication, then use READ_ONCE() in the getter and WRITE_ONCE() in the setter.
 
 The write callback needs one eight-byte stack buffer. Check *position, the raw
 count, and the empty case before copy_from_user(). After a complete copy, strip

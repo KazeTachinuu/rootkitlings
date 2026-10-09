@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/atomic.h>
 #include <linux/bug.h>
+#include <linux/compiler.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
@@ -9,7 +9,7 @@
 
 struct rk_state {
 	bool active;
-	atomic_t actions_enabled;
+	bool actions_enabled;
 };
 
 __must_check struct rk_state *rk_state_create(void)
@@ -24,7 +24,7 @@ __must_check struct rk_state *rk_state_create(void)
 		return ERR_PTR(-ENOMEM);
 
 	state->active = true;
-	atomic_set(&state->actions_enabled, 0);
+	state->actions_enabled = false;
 	return state;
 }
 
@@ -35,12 +35,12 @@ bool rk_state_is_active(const struct rk_state *state)
 
 bool rk_state_actions_enabled(const struct rk_state *state)
 {
-	return atomic_read(&state->actions_enabled) != 0;
+	return READ_ONCE(state->actions_enabled);
 }
 
 void rk_state_set_actions_enabled(struct rk_state *state, bool enabled)
 {
-	atomic_set(&state->actions_enabled, enabled ? 1 : 0);
+	WRITE_ONCE(state->actions_enabled, enabled);
 }
 
 void rk_state_destroy(struct rk_state *state)
