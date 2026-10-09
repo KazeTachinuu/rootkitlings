@@ -112,7 +112,7 @@ static int fd_reuse_stress(const char *proc_path, const char *ordinary_path,
 	pthread_t thread;
 	void *thread_result;
 	unsigned long iteration;
-	unsigned long ordinary_chunks = 0;
+	unsigned long race_ordinary_chunks = 0;
 	unsigned long cycles;
 	int startup;
 	int result = 0;
@@ -155,8 +155,6 @@ static int fd_reuse_stress(const char *proc_path, const char *ordinary_path,
 			result = 3;
 		else if (!ordinary_marker || !target_seen)
 			result = 4;
-		else
-			ordinary_chunks++;
 	}
 	atomic_store_explicit(&context.start_race, true, memory_order_release);
 	for (iteration = 0; result == 0 && iteration < iterations;
@@ -175,8 +173,12 @@ static int fd_reuse_stress(const char *proc_path, const char *ordinary_path,
 			result = 3;
 			break;
 		}
-		if (ordinary_marker && target_seen)
-			ordinary_chunks++;
+		if (ordinary_marker && !target_seen) {
+			result = 4;
+			break;
+		}
+		if (ordinary_marker)
+			race_ordinary_chunks++;
 		sched_yield();
 	}
 	atomic_store_explicit(&context.stop, true, memory_order_relaxed);
@@ -186,11 +188,13 @@ static int fd_reuse_stress(const char *proc_path, const char *ordinary_path,
 	cycles = atomic_load_explicit(&context.cycles, memory_order_relaxed);
 	if (result == 0 && cycles == 0)
 		result = 6;
+	if (result == 0 && race_ordinary_chunks == 0)
+		result = 7;
 	close(context.target);
 	if (result == 0)
-		printf("fd_reuse_iterations=%lu ordinary_chunks=%lu "
+		printf("fd_reuse_iterations=%lu race_ordinary_chunks=%lu "
 		       "replacement_cycles=%lu\n",
-		       iterations, ordinary_chunks, cycles);
+		       iterations, race_ordinary_chunks, cycles);
 	return result;
 }
 
