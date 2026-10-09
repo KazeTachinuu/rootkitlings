@@ -1,0 +1,42 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "@LABEL@"
+control=/proc/rootkitlings
+events=/proc/rootkitlings_events
+
+cleanup()
+{
+	if test -d /sys/module/rootkitlings; then rmmod rootkitlings 2>/dev/null || true; fi
+}
+trap cleanup EXIT INT TERM
+
+load rootkitlings.ko
+printf enable > "$control"
+token=$(sed -n 's/^token=//p' "$control")
+if chpst -u 65534:65534 cred_trigger_test token-race "$control" "$token" 24 \
+	@EXPECTED_ERRNO@ >/dev/null; then
+	_ok "exactly one raced writer receives the injected action error"
+else
+	_fail "one-use failure admission is incorrect"
+fi
+if test "$(sed -n 's/^completed_actions=//p' "$control")" = 0; then
+	_ok "failed replacement does not increment completed_actions"
+else
+	_fail "failed replacement changed completed_actions"
+fi
+if test "$(sed -n 's/^retained=//p' "$events")" = 0 &&
+	   test "$(sed -n 's/^overwritten=//p' "$events")" = 0; then
+	_ok "failed replacement appends no event"
+else
+	_fail "failed replacement appended an event"
+fi
+replacement=$(sed -n 's/^token=//p' "$control")
+if test "$replacement" != "$token"; then
+	_ok "the accepted failing action consumes and rotates its token"
+else
+	_fail "the accepted failing action retained its token"
+fi
+unload rootkitlings
+summary

@@ -1,0 +1,253 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Record authorized actions and rmdir results"
+
+control=/proc/rootkitlings
+events=/proc/rootkitlings_events
+selected=/tmp/rootkitlings-rmdir-watch
+fixtures=/tmp/rootkitlings-m01
+mkdir -p "$fixtures"
+printf run > "$fixtures/run"
+registry=/sys/kernel/debug/kprobes/list
+
+probe_count()
+{
+	awk '$2 == "r" { split($3,n,"+"); if (n[1] == "__x64_sys_rmdir") c++ }
+		END { print c + 0 }' "$registry"
+}
+
+assert_status_shape()
+{
+	cat "$control" > "$fixtures/status"
+	if awk '
+		NR==1 { ok=$0=="active=1" }
+		NR==2 { ok=ok && $0~/^actions=(enabled|disabled)$/ }
+		NR==3 { ok=ok && $0~/^timer_fires=[0-9]+$/ }
+		NR==4 { ok=ok && $0~/^worker_runs=[0-9]+$/ }
+		NR==5 { ok=ok && $0~/^reader_tid=[1-9][0-9]*$/ }
+		NR==6 { ok=ok && $0~/^reader_comm="([^"\\]|\\.)*"$/ }
+		NR==7 { ok=ok && $0~/^uids=[0-9]+ [0-9]+ [0-9]+ [0-9]+$/ }
+		NR==8 { ok=ok && $0~/^gids=[0-9]+ [0-9]+ [0-9]+ [0-9]+$/ }
+		NR==9 { ok=ok && $0~/^cap_userns=(initial|nested)$/ }
+		NR==10 { ok=ok && $0~/^cap_permitted=[0-9a-f]{16}$/ }
+		NR==11 { ok=ok && $0~/^cap_effective=[0-9a-f]{16}$/ }
+		NR==12 { ok=ok && $0~/^completed_actions=[0-9]+$/ }
+		NR==13 { ok=ok && $0~/^token=[0-9a-f]{32}$/ && $0!="token=00000000000000000000000000000000" }
+		END { exit !(ok && NR==13) }' "$fixtures/status"; then
+		_ok "$1 returns the exact cumulative status record"
+	else
+		_fail "$1 returned malformed cumulative status"
+	fi
+}
+
+cleanup()
+{
+	if test -d /sys/module/rootkitlings; then
+		rmmod rootkitlings 2>/dev/null || true
+	fi
+	rm -rf "$fixtures" "$selected" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+assert_empty_ring()
+{
+	if cat "$events" > "$fixtures/events" &&
+	   cmp -s "$fixtures/events" "$fixtures/empty-events"; then
+		_ok "$1 has an empty event ring"
+	else
+		_fail "$1 did not reset the event ring"
+	fi
+}
+
+assert_ring()
+{
+	retained=$1
+	overwrite_count=$2
+	first=$3
+	last=$4
+	label=$5
+	if cat "$events" > "$fixtures/events" && awk \
+		-v retained="$retained" -v overwritten="$overwrite_count" \
+		-v first="$first" -v last="$last" '
+		NR == 1 { good = $0 == "event_capacity=16" }
+		NR == 2 { good = good && $0 == "retained=" retained }
+		NR == 3 { good = good && $0 == "overwritten=" overwritten }
+		NR == 4 { good = good && $0 == "return_capacity=16" }
+		NR == 5 { good = good && $0 ~ /^returns_missed=[0-9]+$/ }
+		NR > 5 {
+			if ($1 !~ /^sequence=[0-9]+$/) good = 0
+			split($1, value, "=")
+			if (value[2] != first + NR - 6) good = 0
+			if ($2 != "kind=rmdir" && $2 != "kind=credential-change") good = 0
+			if ($3 !~ /^tid=[1-9][0-9]*$/) good = 0
+			if ($2 == "kind=rmdir" && $4 !~ /^result=(success|failure)$/) good = 0
+			if ($2 == "kind=credential-change" && NF != 3) good = 0
+		}
+		END { exit !(good && NR == retained + 5 &&
+			(retained == 0 || first + retained - 1 == last)) }
+	' "$fixtures/events"; then
+		_ok "$label retains the expected contiguous sequence window"
+	else
+		_fail "$label returned a malformed ring snapshot"
+		cat "$fixtures/events" >&2
+	fi
+}
+
+printf 'event_capacity=16\nretained=0\noverwritten=0\nreturn_capacity=16\nreturns_missed=0\n' \
+	> "$fixtures/empty-events"
+
+load rootkitlings.ko
+assert_loaded rootkitlings
+assert_exists "$control"
+assert_exists "$events"
+if test "$(stat -c '%a:%u:%g' "$control")" = 622:0:0 &&
+	   test "$(stat -c '%a:%u:%g' "$events")" = 400:0:0; then
+	_ok "control and observation endpoints have distinct access modes"
+else
+	_fail "procfs endpoint ownership or mode is wrong"
+fi
+assert_empty_ring "initial load"
+assert_status_shape "initial load"
+probe_before=$(( $(probe_count) - 1 ))
+if test "$(probe_count)" -eq $((probe_before + 1)); then
+	_ok "load registers one rmdir return probe"
+else
+	_fail "return probe registry delta is wrong"
+fi
+initial_runs=$(sed -n 's/^worker_runs=//p' "$control")
+initial_fires=$(sed -n 's/^timer_fires=//p' "$control")
+if proc_write_test errno "$control" "$fixtures/run" 13; then
+	_ok "disabled run returns EACCES"
+else
+	_fail "disabled run returned the wrong error"
+fi
+if status_field_test advance "$control" timer_fires "$initial_fires" 1200 >/dev/null &&
+	status_field_test unchanged "$control" worker_runs "$initial_runs" 200 >/dev/null; then
+	_ok "disabled timer fires without completing worker work"
+else
+	_fail "disabled timer or worker accounting is wrong"
+fi
+rmdir "$selected" 2>/dev/null || true
+assert_empty_ring "disabled selected rmdir"
+printf enable > "$control"
+mkdir /tmp/rootkitlings-rmdir-watch-extra
+rmdir /tmp/rootkitlings-rmdir-watch-extra
+rmdir_telemetry_test invalid || _fail "invalid pointer handling failed"
+rmdir_telemetry_test boundary || _fail "unterminated boundary handling failed"
+assert_empty_ring "unmatched and invalid paths"
+if event_stream_test snapshot "$events"; then
+	_ok "first read, buffered EOF, and rewind follow seq_file snapshot semantics"
+else
+	_fail "event snapshot semantics are incorrect"
+fi
+assert_ring 3 0 1 3 "snapshot exercise"
+cat "$events" > "$fixtures/held-events"
+if proc_read_test "$events" "$fixtures/held-events" rootkitlings; then
+	_ok "a held events descriptor is safe across unload"
+else
+	_fail "held events descriptor teardown failed"
+fi
+assert_absent "$control"
+assert_absent "$events"
+if test "$(probe_count)" -eq "$probe_before"; then
+	_ok "unload removes the return probe"
+else
+	_fail "unload left the return probe registered"
+fi
+
+load rootkitlings.ko
+assert_empty_ring "immediate reload"
+assert_status_shape "immediate reload"
+printf enable > "$control"
+token=$(sed -n 's/^token=//p' "$control")
+if event_stream_test credential-race "$control" "$events" "$token"; then
+	_ok "one raced token records the successful writer's TID"
+else
+	_fail "credential race admission or TID attribution is wrong"
+fi
+assert_ring 1 0 1 1 "one authorized action"
+
+i=1
+while test "$i" -le 14; do
+	rmdir "$selected" 2>/dev/null || true
+	i=$((i + 1))
+done
+assert_ring 15 0 1 15 "fifteen events"
+rmdir "$selected" 2>/dev/null || true
+assert_ring 16 0 1 16 "full ring"
+rmdir "$selected" 2>/dev/null || true
+assert_ring 16 1 2 17 "first overwrite"
+i=1
+while test "$i" -le 16; do
+	rmdir "$selected" 2>/dev/null || true
+	i=$((i + 1))
+done
+assert_ring 16 17 18 33 "more than twice capacity"
+
+token=$(sed -n 's/^token=//p' "$control")
+event_stream_test credential-race "$control" "$events" "$token" &
+race_pid=$!
+i=1
+mixed_pids=
+while test "$i" -le 8; do
+	(rmdir "$selected" 2>/dev/null || true) &
+	mixed_pids="$mixed_pids $!"
+	i=$((i + 1))
+done
+mixed_ok=1
+wait "$race_pid" || mixed_ok=0
+for pid in $mixed_pids; do
+	wait "$pid" || mixed_ok=0
+done
+if test "$mixed_ok" -eq 1; then
+	_ok "credential and Kretprobe producers completed concurrently"
+else
+	_fail "a mixed producer failed"
+fi
+assert_ring 16 26 27 42 "mixed concurrent producers"
+if grep -q 'kind=credential-change' "$fixtures/events" &&
+	   grep -q 'kind=rmdir' "$fixtures/events"; then
+	_ok "the retained mixed window contains both typed event kinds"
+else
+	_fail "the mixed window lost a producer kind"
+fi
+
+if test "$(sed -n 's/^returns_missed=//p' "$events")" = 0; then
+	_ok "bounded workload misses no return instances"
+else
+	_fail "Kretprobe reports missed returns"
+fi
+before_runs=$(sed -n 's/^worker_runs=//p' "$control")
+printf run > "$control" || _fail "enabled run was rejected"
+if status_field_test advance "$control" worker_runs "$before_runs" 1200 >/dev/null; then
+	_ok "the inherited resident worker executes admitted run requests"
+else
+	_fail "the inherited worker did not execute run"
+fi
+
+rmdir_telemetry_test stress 2 &
+stress_pid=$!
+unload rootkitlings
+if wait "$stress_pid"; then
+	_ok "rmdir workload remains valid across unload"
+else
+	_fail "rmdir workload failed across unload"
+fi
+assert_absent "$control"
+assert_absent "$events"
+load rootkitlings.ko
+assert_empty_ring "second reload"
+if test "$(sed -n 's/^completed_actions=//p' "$control")" = 0 &&
+	   test "$(sed -n 's/^worker_runs=//p' "$control")" = 0; then
+	_ok "action counters reset on reload"
+else
+	_fail "an action counter survived reload"
+fi
+printf enable > "$control"
+rmdir "$selected" 2>/dev/null || true
+assert_ring 1 0 1 1 "post-reload first event"
+unload rootkitlings
+
+summary

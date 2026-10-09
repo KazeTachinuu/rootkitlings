@@ -1,0 +1,163 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+strip_comments()
+{
+	python3 -c 'import re,sys; s=sys.stdin.read(); print(re.sub(r"/\*.*?\*/|//[^\n]*", "", s, flags=re.S))'
+}
+
+extract_function()
+{
+	local source=$1 name=$2
+	awk -v name="$name" '
+		BEGIN { found=0; depth=0; opened=0 }
+		!found && $0 ~ name "[[:space:]]*\\(" { found=1 }
+		found {
+			print
+			line=$0; opens=gsub(/\{/, "{", line)
+			line=$0; closes=gsub(/\}/, "}", line)
+			if (opens) opened=1
+			depth += opens-closes
+			if (opened && depth == 0) exit
+		}' "$source"
+}
+
+(( $# == 2 )) || die "usage: ${0##*/} WORKSPACE MODULE"
+workspace=$(realpath -e -- "$1") || die "workspace not found"
+module=$(realpath -e -- "$2") || die "module not found"
+
+for file in Kbuild include/rootkit.h core/main.c core/state.c interface/proc.c \
+	execution/worker.c execution/scheduler.c control/authorization.c \
+	privilege/credentials.c instrumentation/return_probe.c \
+	instrumentation/events.c; do
+	[[ -f $workspace/$file && ! -L $workspace/$file ]] ||
+		die "missing regular file: $file"
+done
+
+for object in core/main.o interface/proc.o control/authorization.o \
+	instrumentation/return_probe.o instrumentation/events.o; do
+	[[ -f $workspace/$object ]] || die "missing built object: $object"
+done
+
+for symbol in rk_events_reset rk_events_record_credential_change \
+	rk_events_record_rmdir rk_events_publish rk_events_unpublish; do
+	nm -g --defined-only "$workspace/instrumentation/events.o" |
+		awk '{print $3}' | grep -Fxq "$symbol" ||
+		die "events.c must define $symbol"
+done
+
+events=$workspace/instrumentation/events.c
+events_text=$(strip_comments < "$events")
+events_flat=$(tr -d '[:space:]' <<< "$events_text")
+grep -Eq 'DEFINE_SPINLOCK[[:space:]]*\(' <<< "$events_text" ||
+	die "protect the event ring with one spinlock"
+[[ $(grep -Ec 'DEFINE_SPINLOCK[[:space:]]*\(' <<< "$events_text") -eq 1 ]] ||
+	die "one spinlock must own the complete ring invariant"
+[[ $(grep -Eo 'spin_lock\(' <<< "$events_flat" | wc -l) -eq 3 ]] ||
+	die "reset, append, and snapshot must each acquire the event lock once"
+[[ $(grep -Eo 'spin_unlock\(' <<< "$events_flat" | wc -l) -eq 3 ]] ||
+	die "every event lock acquisition must have one release"
+grep -Eq 'task_pid_nr\(current\)' <<< "$events_flat" ||
+	die "the event owner must snapshot the current thread ID"
+grep -Eq 'next_sequence\+\+' <<< "$events_flat" ||
+	die "allocate sequence numbers inside append"
+grep -Eq 'overwritten\+\+' <<< "$events_flat" ||
+	die "count each displaced record"
+grep -Eq '\(oldest\+[[:alnum:]_]+\)%RK_EVENT_CAPACITY' <<< "$events_flat" ||
+	die "walk the ring from its oldest retained record"
+
+append=$(extract_function "$events" rk_events_append | strip_comments | tr -d '[:space:]')
+snapshot=$(extract_function "$events" rk_events_snapshot | strip_comments | tr -d '[:space:]')
+show=$(extract_function "$events" rk_events_show | strip_comments | tr -d '[:space:]')
+[[ -n $append && -n $snapshot && -n $show ]] || die "event functions are incomplete"
+append_critical=${append#*spin_lock(&event_lock);}
+append_critical=${append_critical%%spin_unlock(&event_lock);*}
+for mutation in 'retained++' 'oldest=' 'overwritten++' 'next_sequence++' \
+	'record->tid=task_pid_nr(current)' 'record->kind=kind'; do
+	grep -Fq "$mutation" <<< "$append_critical" ||
+		die "append must perform $mutation while holding the ring lock"
+done
+grep -Eq 'else\{index=oldest;oldest=\(oldest\+1U\)%RK_EVENT_CAPACITY;overwritten\+\+;' \
+	<<< "$append_critical" || die "a full ring must replace and advance exactly its oldest record"
+snapshot_critical=${snapshot#*spin_lock(&event_lock);}
+snapshot_critical=${snapshot_critical%%spin_unlock(&event_lock);*}
+for copy in 'snapshot->retained=retained' 'snapshot->overwritten=overwritten' \
+	'event_ring[(oldest+index)%RK_EVENT_CAPACITY]'; do
+	grep -Fq "$copy" <<< "$snapshot_critical" ||
+		die "snapshot must copy $copy while holding the ring lock"
+done
+for body in "$append" "$snapshot"; do
+	if grep -Eq '(seq_|copy_(from|to)_user|k(malloc|zalloc|free)|mutex_|schedule|sleep|unregister_|proc_)[[:alnum:]_]*\(' <<< "$body"; then
+		die "ring critical sections must not format, allocate, sleep, copy userspace, or change lifecycle"
+	fi
+done
+grep -Eq 'rk_events_snapshot\([^)]*\).*seq_' <<< "$show" ||
+	die "show must snapshot before formatting"
+
+all_sources=$(find "$workspace" -name '*.c' -print0 | xargs -0 cat | strip_comments)
+outside_events=$(find "$workspace" -name '*.c' ! -path '*/instrumentation/events.c' -print0 |
+	xargs -0 cat | strip_comments)
+if grep -Eq '\b(event_ring|next_sequence|overwritten)\b' \
+	<<< "$outside_events"; then
+	die "ring storage and indices belong only to events.c"
+fi
+if grep -Eq '^[[:space:]]*#[[:space:]]*define[[:space:]]+' "$events"; then
+	die "events.c must not hide operations behind preprocessor aliases"
+fi
+if grep -Eq '(^|[^[:alnum:]_])(kallsyms_lookup|sprint_symbol|lookup_symbol|\.addr)([^[:alnum:]_]|$)' \
+	<<< "$all_sources"; then
+	die "do not resolve, copy, or publish raw probe addresses"
+fi
+
+header=$(tr -d '[:space:]' < "$workspace/include/rootkit.h")
+grep -Eq '#defineRK_FAIL_KRETPROBE_TARGET6' <<< "$header" ||
+	die "use one canonical Kretprobe failure-point definition"
+if grep -Eq 'RK_FAIL_KRETPROBE_TARGET_(VALUE|ID)' <<< "$header"; then
+	die "do not duplicate the Kretprobe failure-point identity"
+fi
+grep -Eq 'voidrk_events_record_credential_change\(void\);' <<< "$header" ||
+	die "use a typed credential event API without caller-supplied attribution"
+grep -Eq 'voidrk_events_record_rmdir\(longresult\);' <<< "$header" ||
+	die "use a typed rmdir event API without caller-supplied attribution"
+
+auth=$(strip_comments < "$workspace/control/authorization.c" | tr -d '[:space:]')
+[[ $(grep -Eo 'rk_events_record_credential_change\(' <<< "$auth" | wc -l) -eq 1 ]] ||
+	die "authorization must record exactly one successful credential event"
+grep -Eq 'rk_credentials_replace_current\(\);.*if\(!error\).*rk_events_record_credential_change\(\)' \
+	<<< "$auth" || die "record credentials only after successful replacement"
+
+probe=$(strip_comments < "$workspace/instrumentation/return_probe.c" | tr -d '[:space:]')
+[[ $(grep -Eo 'rk_events_record_rmdir\(' <<< "$probe" | wc -l) -eq 1 ]] ||
+	die "the selected return path must call one typed event API"
+grep -Eq 'observation->selected.*regs_return_value\([^)]*\).*rk_events_record_rmdir\(' \
+	<<< "$probe" || die "rmdir event recording must use per-instance selection and return value"
+if grep -Eq 'selected_(success|failure)_seen|rk_state_mark_selected' <<< "$all_sources"; then
+	die "the cumulative milestone must replace monotonic flags with event records"
+fi
+
+proc=$(strip_comments < "$workspace/interface/proc.c" | tr -d '[:space:]')
+grep -Eq 'proc_create_data\("rootkitlings",0622,' <<< "$proc" ||
+	die "control/status must remain mode 0622"
+grep -Eq 'proc_create\("rootkitlings_events",0400,' <<< "$events_flat" ||
+	die "events must use a separate mode 0400 endpoint"
+for command in enable disable run; do
+	grep -Fq "\"$command\"" <<< "$proc" || die "control parser lost $command"
+done
+
+main=$(strip_comments < "$workspace/core/main.c" | tr -d '[:space:]')
+init_order='rk_state_create.*rk_events_reset.*rk_worker_start.*rk_authorization_start.*rk_return_probe_start.*rk_events_publish.*rk_proc_publish.*rk_scheduler_start'
+exit_order='rk_proc_unpublish.*rk_events_unpublish.*rk_scheduler_stop.*rk_return_probe_stop.*rk_authorization_stop.*rk_worker_stop.*rk_state_destroy'
+grep -Eq "$init_order" <<< "$main" || die "initialization order violates resource ownership"
+grep -Eq "$exit_order" <<< "$main" || die "unload order violates resource ownership"
+
+for forbidden in copy_from_user strncpy_from_user_nofault usleep_range msleep schedule kmalloc kzalloc; do
+	if nm -u "$workspace/instrumentation/return_probe.o" "$workspace/instrumentation/events.o" |
+		awk '{print $NF}' | grep -Fxq "$forbidden"; then
+		die "instrumentation object depends on forbidden $forbidden"
+	fi
+done
+
+nm -u "$module" >/dev/null
+printf '[+] M01 host checks passed\n'
