@@ -1,0 +1,138 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r18-test.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
+[[ -d $KDIR ]] || {
+	printf '[x] kernel build directory not found: %s\n' "$KDIR" >&2
+	exit 1
+}
+case $(uname -r) in
+	7.2.*|7.2-*) ;;
+	*) printf '[x] this lesson requires Linux 7.2.x\n' >&2; exit 1 ;;
+esac
+[[ $(uname -m) == x86_64 ]] || {
+	printf '[x] this lesson requires x86_64\n' >&2
+	exit 1
+}
+grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
+	printf '[x] pinned kernel build is not configured for GCC\n' >&2
+	exit 1
+}
+for command in gcc nm; do
+	command -v "$command" >/dev/null || {
+		printf '[x] %s is required\n' "$command" >&2
+		exit 1
+	}
+done
+
+for script in test host-check success-check; do
+	bash -n "$HERE/$script"
+done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
+	shellcheck -x -s sh "$HERE/success-check"
+fi
+
+mapfile -t changed_files < <(
+	diff -qr "$HERE/template" "$HERE/solution" |
+		sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p'
+)
+(( ${#changed_files[@]} == 1 )) || {
+	printf '[x] expected one learner-edited file, found %d\n' \
+		"${#changed_files[@]}" >&2
+	exit 1
+}
+[[ ${changed_files[0]} == parser/ipv4.c ]] || {
+	printf '[x] learner edit surface is %s, expected parser/ipv4.c\n' \
+		"${changed_files[0]}" >&2
+	exit 1
+}
+
+build_tree()
+{
+	local source=$1 destination=$2
+	local log=$destination.log
+	cp -a "$source" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 modules > "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] %s build failed\n' "${source##*/}" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] %s build has warnings\n' "${source##*/}" >&2
+		exit 1
+	fi
+}
+
+build_tree "$HERE/template" "$scratch/template"
+build_tree "$HERE/solution" "$scratch/solution"
+"$HERE/host-check" "$scratch/solution" \
+	"$scratch/solution/rootkitlings.ko"
+
+if gcc -std=c11 -Wall -Wextra -Werror -pedantic \
+	-fsanitize=address,undefined -I "$HERE/template/include" \
+	"$HERE/fixtures/host/parser_test.c" \
+	"$HERE/template/parser/ipv4.c" -o "$scratch/template-test" &&
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+	UBSAN_OPTIONS=halt_on_error=1 "$scratch/template-test" \
+	> "$scratch/template-test.log" 2>&1; then
+	printf '[x] unfinished template passed the parser corpus\n' >&2
+	exit 1
+fi
+
+expect_rejection()
+{
+	local directory=$1 label=$2
+	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+		> "$scratch/$label.log" 2>&1; then
+		printf '[x] host checker accepted %s\n' "$label" >&2
+		exit 1
+	fi
+}
+
+wrong_endian=$scratch/wrong-endian
+cp -a "$scratch/solution" "$wrong_endian"
+sed -i 's/((unsigned int)bytes\[0\] << 8) | bytes\[1\]/bytes[0] | ((unsigned int)bytes[1] << 8)/' \
+	"$wrong_endian/parser/ipv4.c"
+expect_rejection "$wrong_endian" wrong-byte-order
+
+fixed_header=$scratch/fixed-header
+cp -a "$scratch/solution" "$fixed_header"
+sed -i 's/header_length = header_words \* 4;/header_length = 20;/' \
+	"$fixed_header/parser/ipv4.c"
+expect_rejection "$fixed_header" fixed-header-length
+
+accepted_fragment=$scratch/accepted-fragment
+cp -a "$scratch/solution" "$accepted_fragment"
+sed -i 's/return RK_IPV4_PARSE_FRAGMENTED;/return RK_IPV4_PARSE_OK;/' \
+	"$accepted_fragment/parser/ipv4.c"
+expect_rejection "$accepted_fragment" accepted-fragment
+
+early_output=$scratch/early-output
+cp -a "$scratch/solution" "$early_output"
+sed -i '/if (!packet || !view)/a\
+\t\tview->protocol = 0;' "$early_output/parser/ipv4.c"
+expect_rejection "$early_output" failure-output-mutation
+
+run_guest()
+{
+	local output
+	if ! output=$("$HERE/../../../../vm/boot" --check \
+		"$HERE/success-check" "$scratch/solution/rootkitlings.ko" 2>&1); then
+		printf '%s\n' "$output" >&2
+		printf '[x] disposable guest did not complete\n' >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+	grep -Fq '[+] PASSED' <<< "$output" || {
+		printf '[x] guest checks did not pass\n' >&2
+		exit 1
+	}
+}
+
+run_guest

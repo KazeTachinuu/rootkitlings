@@ -1,0 +1,5 @@
+Read the fixed 20-byte header before using any field. Check version and IHL,
+then prove the full IHL is available. Decode Total Length in big-endian order,
+prove it is at least IHL and at most available, and only then subtract. Treat
+the reserved bit as malformed; reject only More Fragments or a nonzero offset
+as fragmented. Commit a local output structure only after every check passes.

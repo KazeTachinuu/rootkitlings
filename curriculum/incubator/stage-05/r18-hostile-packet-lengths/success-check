@@ -1,0 +1,23 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Bounded IPv4 parser"
+
+assert_absent /sys/module/rootkitlings
+load rootkitlings.ko
+assert_loaded rootkitlings
+if grep -q '^rootkitlings ' /proc/modules; then
+	_ok "module appears in /proc/modules"
+else
+	_fail "module is absent from /proc/modules"
+fi
+unload rootkitlings
+assert_absent /sys/module/rootkitlings
+if grep -q '^rootkitlings ' /proc/modules; then
+	_fail "module remains in /proc/modules"
+else
+	_ok "module left /proc/modules"
+fi
+
+summary
