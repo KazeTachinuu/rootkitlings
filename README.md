@@ -2,11 +2,9 @@
 
 Build a Linux kernel rootkit one mechanism at a time.
 
-The course has 31 lessons (`L00`–`L30`), four integration milestones
-(`M00`–`M03`), and one final challenge (`C00`). Each exercise adds one bounded
-mechanism or combines mechanisms already completed. Modules are built against
-the course kernel and loaded only in a disposable QEMU guest, never into the
-host kernel.
+The course has 31 lessons (`L00`–`L30`), four integration milestones (`M00`–`M03`), and one final challenge (`C00`).
+Each exercise adds one bounded mechanism or combines mechanisms already completed.
+Modules are built against the course kernel and loaded only in a disposable QEMU guest, never into the host kernel.
 
 ## Requirements
 
@@ -17,11 +15,11 @@ Use an x86-64 Linux host with:
 - a statically linked BusyBox, `cpio`, `gzip`, QEMU, GDB, OpenSSL, and libelf
   development files.
 
-`make doctor` checks the exact tools, BusyBox applets, static-link support, and
-capacity. It prints package hints for Arch, Debian/Ubuntu, and Fedora/RHEL
-families. KVM is optional; QEMU uses slower TCG emulation when KVM is not
-available. The host kernel version and headers are not used. Every exercise uses
-the pinned Linux 7.2.9 x86-64 guest defined in [`vm/kernel.toml`](vm/kernel.toml).
+`make doctor` checks the exact tools, BusyBox applets, static-link support, and capacity.
+It prints package hints for Arch, Debian/Ubuntu, and Fedora/RHEL families.
+KVM is optional; QEMU uses slower TCG emulation when KVM is not available.
+The host kernel version and headers are not used.
+Every exercise uses the pinned Linux 7.2.9 x86-64 guest defined in [`vm/kernel.toml`](vm/kernel.toml).
 
 ## Start
 
@@ -35,15 +33,14 @@ make doctor
 ./rootkitlings check L00
 ```
 
-`setup` builds the pinned kernel and verifies the guest boundary. `prereq` lists
-the exercises and concepts needed directly by the selected exercise. `read`
-explains the mechanism and task. `start` creates or reopens the workspace and
-prints its editable paths. `check` builds the module and runs its declared host
-and guest checks.
+`setup` builds the pinned kernel and verifies the guest boundary.
+`prereq` lists the exercises and concepts needed directly by the selected exercise.
+`read` explains the mechanism and task.
+`start` creates or reopens the workspace and prints its editable paths.
+`check` builds the module and runs its declared host and guest checks.
 
-Exercise commands accept a serial such as `L19`, a stable ID such as
-`netfilter-observer`, or an unambiguous prefix. With no exercise argument, most
-commands use the current exercise.
+Exercise commands accept a serial such as `L19`, a stable ID such as `netfilter-observer`, or an unambiguous prefix.
+With no exercise argument, most commands use the current exercise.
 
 ```sh
 ./rootkitlings status
@@ -63,9 +60,9 @@ commands use the current exercise.
 | Network state | L17–L25, M03 | Validate packet bounds, access and mutate socket buffers, own sockets and framed sessions, encode DNS names, and update one owned boot request transactionally. |
 | Authenticated operations | L26–L30, C00 | Choose the required protection property, verify hashes, reject replay, use authenticated encryption, and independently verify an authenticated resident agent. |
 
-Milestones are cumulative workspaces. They integrate only mechanisms taught by
-the preceding lessons. Run `./rootkitlings list` for the live route and
-`./rootkitlings prereq EXERCISE` for the direct dependency list.
+Milestones are cumulative workspaces.
+They integrate only mechanisms taught by the preceding lessons.
+Run `./rootkitlings list` for the live route and `./rootkitlings prereq EXERCISE` for the direct dependency list.
 
 ## Recovery
 
@@ -101,9 +98,7 @@ vm/                                pinned guest runtime and shared guest tools
 .rootkitlings/                     ignored learner work, state, and archives
 ```
 
-Learner edits belong under `.rootkitlings/`; files under
-`curriculum/required/` define the immutable course bundles.
+Learner edits belong under `.rootkitlings/`; files under `curriculum/required/` define the immutable course bundles.
 
-See [`vm/README.md`](vm/README.md) for the guest runtime. Run
-`./rootkitlings help` for all learner commands, `make compile-db` for clangd
-metadata, and `make validate` for repository maintenance checks.
+See [`vm/README.md`](vm/README.md) for the guest runtime.
+Run `./rootkitlings help` for all learner commands, `make compile-db` for clangd metadata, and `make validate` for repository maintenance checks.

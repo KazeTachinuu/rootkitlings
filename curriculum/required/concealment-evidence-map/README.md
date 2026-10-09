@@ -24,8 +24,7 @@ Do not store a process-wide formatted target.
 
 ## Directory result
 
-Reuse the supplied `rk_filter_dirents64()` helper from the packed-directory
-filter exercise.
+Reuse the supplied `rk_filter_dirents64()` helper from the packed-directory filter exercise.
 Do not add another parser.
 
 The supplied integration resolves the private `filldir64()` callback with a managed Kprobe and observes `iterate_dir()` with a Kretprobe.
@@ -139,10 +138,7 @@ Run:
 ./rootkitlings check
 ```
 
-The checker covers both gate states, namespace translation, direct-view
-controls, packed-record boundaries and cookies, concurrency, every
-initialization rollback, unload, reload, and the complete inherited
-authorization and telemetry behavior.
+The checker covers both gate states, namespace translation, direct-view controls, packed-record boundaries and cookies, concurrency, every initialization rollback, unload, reload, and the complete inherited authorization and telemetry behavior.
 
 ## Official Linux v7.2 references
 

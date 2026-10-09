@@ -10,8 +10,7 @@ Your classifier receives the validated IPv4 view and a separate buffer containin
 It decides whether those bytes are a complete UDP header for the configured destination port.
 It does not touch the packet.
 
-`ipv4` must be an unchanged view returned by a successful bounded IPv4 parser
-call.
+`ipv4` must be an unchanged view returned by a successful bounded IPv4 parser call.
 That precondition guarantees a 20-to-60-byte header, equal `header_length` and `payload_offset`, a 16-bit-bounded `packet_length`, and `payload_length == packet_length - header_length`.
 The classifier does not duplicate those IPv4 checks.
 
@@ -71,8 +70,7 @@ Run:
 ```
 
 The checker accepts equivalent bounded C implementations.
-Every non-null IPv4 view in the corpus is produced by the supplied bounded IPv4
-parser.
+Every non-null IPv4 view in the corpus is produced by the supplied bounded IPv4 parser.
 The host corpus exercises every 16-bit UDP length, source port, destination port, and checksum field under AddressSanitizer and UndefinedBehaviorSanitizer.
 It checks all valid IPv4 header lengths, unaligned input, result precedence, a guarded buffer for non-UDP traffic, and unchanged failure outputs.
 It rejects implementations that confuse the eight-byte buffer extent with a packet length.

@@ -14,8 +14,7 @@ They call the same nonblocking request function.
 One kernel thread owns action execution.
 
 This milestone starts from your passed procfs-publication module.
-Extend it with the status fields, command, request sources, thread, and teardown
-described below.
+Extend it with the status fields, command, request sources, thread, and teardown described below.
 
 ## Interface
 

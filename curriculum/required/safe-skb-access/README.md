@@ -5,9 +5,8 @@ The linear head may be followed by page fragments or a `frag_list`.
 The network header may also begin before or after the current data pointer.
 
 This exercise adds one bounded, network-relative read primitive.
-A supplied adapter uses it to copy the fixed 20-byte IPv4 prefix for the
-bounded IPv4 parser. Later packet code can reuse the same primitive at a
-validated transport-header offset instead of repeating buffer geometry.
+A supplied adapter uses it to copy the fixed 20-byte IPv4 prefix for the bounded IPv4 parser.
+Later packet code can reuse the same primitive at a validated transport-header offset instead of repeating buffer geometry.
 
 ## Your task
 

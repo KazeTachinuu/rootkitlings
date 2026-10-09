@@ -25,8 +25,7 @@ DNS header
 00 01  QCLASS=IN
 ```
 
-The authenticated body is the fixed 20-byte body from the authenticated
-replay-safe message exercise:
+The authenticated body is the fixed 20-byte body from the authenticated replay-safe message exercise:
 
 | Offset | Size | Field |
 |---:|---:|---|
