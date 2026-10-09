@@ -358,13 +358,12 @@ Spinlock ownership and ring overwrite semantics must be taught before or within 
 
 ### Stage 4: Views, concealment and detection
 
-#### R15 - Distinguish an object from a rendered view
+#### R15 - Omit one live probe from a proc view
 
-- Teaches: underlying object, enumeration path, direct lookup, positive and negative
-  controls, cross-view comparison, and independent evidence.
+- Teaches: registered object versus selected rendering, positive and negative controls, cross-view comparison, and independent evidence.
 - Produces: the evidence model used by every concealment mechanism.
-- Requires: R05 and R13.
-- Defensive evidence: a view can disagree while the object continues to exist.
+- Requires: R13; R05 is already in R13's prerequisite closure.
+- Defensive evidence: the proc view omits one probe while the kernel registry and live handler behavior prove that both probes remain active.
 - Current source: currently implicit across L34-L39; make it explicit.
 
 #### R16 - Alter one module view without claiming invisibility
