@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c"]
 editable = ["Kbuild", "core/main.c"]
 build = "."
 baseline = "previous-required"
-module_artifact = "rootkitlings.ko"
 
 [resources]
 readme = "curriculum/required/precise-init-failure/README.md"

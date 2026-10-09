@@ -6,7 +6,7 @@ kind = "lesson"
 status = "required"
 tradecraft = ["networking", "instrumentation", "detection"]
 difficulty = "advanced"
-prerequisites = ["proc-publication"]
+prerequisites = ["event-driven-kernel-thread"]
 teaches = ["netfilter-hooks", "accept-by-default-observation", "netfilter-callback-constraints", "rcu-grace-period-teardown"]
 requires = ["resource-ownership", "proc-publication-lifetime", "atomic-operations"]
 
@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "include/rootkit.h", "instrumentation/netfilte
 editable = ["instrumentation/netfilter_observer.c"]
 build = "."
 baseline = "template"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/netfilter-observer/starter"
 
 [resources]

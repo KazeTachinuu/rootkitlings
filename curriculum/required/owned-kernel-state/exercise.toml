@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h"]
 editable = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h"]
 build = "."
 baseline = "previous-required"
-module_artifact = "rootkitlings.ko"
 additions = "curriculum/required/owned-kernel-state/starter"
 
 [resources]

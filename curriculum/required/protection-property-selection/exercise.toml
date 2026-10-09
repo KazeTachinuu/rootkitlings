@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "include/protection.h", "include/selftest.h", 
 editable = ["protection/properties.c"]
 build = "."
 baseline = "template"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/protection-property-selection/starter"
 
 [resources]

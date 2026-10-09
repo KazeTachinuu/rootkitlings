@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interfac
 editable = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interface/proc.c", "execution/worker.c", "execution/scheduler.c"]
 build = "."
 baseline = "cumulative-root"
-module_artifact = "rootkitlings.ko"
 additions = "curriculum/required/controlled-resident-core/starter"
 
 [resources]

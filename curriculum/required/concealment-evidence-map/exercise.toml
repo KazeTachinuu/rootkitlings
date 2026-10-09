@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interfac
 editable = ["Kbuild", "include/rootkit.h", "core/main.c", "execution/worker.c", "instrumentation/getdents_probe.c", "interface/evidence.c"]
 build = "."
 baseline = "previous-milestone"
-module_artifact = "rootkitlings.ko"
 additions = "curriculum/required/concealment-evidence-map/starter"
 
 [resources]

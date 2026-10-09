@@ -96,7 +96,6 @@ editable = [
 ]
 build = "."
 baseline = "previous-milestone"
-module_artifact = "rootkitlings.ko"
 additions = "curriculum/required/authenticated-resident-agent/starter"
 
 [resources]

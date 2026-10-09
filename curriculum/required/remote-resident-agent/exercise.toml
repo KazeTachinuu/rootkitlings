@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interfac
 editable = ["Kbuild", "core/main.c", "network/agent.c"]
 build = "."
 baseline = "previous-milestone"
-module_artifact = "rootkitlings.ko"
 additions = "curriculum/required/remote-resident-agent/starter"
 
 [resources]

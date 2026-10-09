@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interfac
 editable = ["Kbuild", "include/rootkit.h", "core/main.c", "interface/proc.c", "control/authorization.c", "instrumentation/return_probe.c", "instrumentation/events.c"]
 build = "."
 baseline = "previous-milestone"
-module_artifact = "rootkitlings.ko"
 additions = "curriculum/required/authorized-actions-telemetry/starter"
 
 [resources]

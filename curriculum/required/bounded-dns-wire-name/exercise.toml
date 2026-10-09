@@ -16,7 +16,6 @@ files = ["Kbuild", "codec/dns_name.c", "core/main.c", "include/dns_name.h", "inc
 editable = ["codec/dns_name.c"]
 build = "."
 baseline = "template"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/bounded-dns-wire-name/starter"
 
 [resources]

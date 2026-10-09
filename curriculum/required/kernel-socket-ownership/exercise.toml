@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "include/rootkit.h", "interface/proc.c", "netw
 editable = ["network/socket_owner.c"]
 build = "."
 baseline = "template"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/kernel-socket-ownership/starter"
 
 [resources]

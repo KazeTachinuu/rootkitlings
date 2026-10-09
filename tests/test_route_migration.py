@@ -191,7 +191,7 @@ class RouteMigrationTests(unittest.TestCase):
         self.assertTrue(workspace.exists())
         self.assertEqual(list(self.archive_root.iterdir()), [])
 
-    def test_cli_does_not_invoke_route_migration_for_the_live_v2_revision(self) -> None:
+    def test_cli_invokes_route_migration_for_the_live_core_revision(self) -> None:
         cli_path = Path(__file__).resolve().parent.parent / "rootkitlings"
         namespace = runpy.run_path(cli_path, run_name="route_migration_wiring_test")
         globals_ = namespace["initialize_runtime"].__globals__
@@ -217,8 +217,13 @@ class RouteMigrationTests(unittest.TestCase):
 
         globals_["initialize_runtime"]()
 
-        self.assertEqual(globals_["CAT"].revision, SOURCE_REVISION)
-        migration.assert_not_called()
+        self.assertEqual(globals_["CAT"].revision, DESTINATION_REVISION)
+        migration.assert_called_once_with(
+            values["STATE"],
+            values["WORK"],
+            values["ARCHIVE"],
+            DESTINATION_CONTRACT,
+        )
 
     def test_cli_invokes_route_migration_only_with_the_exact_active_contract(self) -> None:
         cli_path = Path(__file__).resolve().parent.parent / "rootkitlings"

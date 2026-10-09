@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interfac
 editable = ["Kbuild", "core/main.c", "interface/proc.c", "execution/worker.c"]
 build = "."
 baseline = "scaffold"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/event-driven-kernel-thread/starter"
 parent = "bounded-control-switch"
 

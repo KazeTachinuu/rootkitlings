@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interfac
 editable = ["privilege/credentials.c"]
 build = "."
 baseline = "scaffold"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/transactional-credential-replacement/starter"
 parent = "bounded-control-switch"
 

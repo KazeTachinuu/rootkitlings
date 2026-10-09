@@ -16,7 +16,6 @@ files = ["Kbuild", "access/skb_access.c", "classifier/udp.c", "core/main.c", "in
 editable = ["mutation/udp_redirect.c"]
 build = "."
 baseline = "scaffold"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/writable-packet-mutation/starter"
 parent = "validated-packet-classification"
 

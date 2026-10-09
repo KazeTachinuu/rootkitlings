@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interfac
 editable = ["Kbuild", "core/main.c", "execution/scheduler.c"]
 build = "."
 baseline = "scaffold"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/timer-workqueue-scheduler/starter"
 parent = "bounded-control-switch"
 

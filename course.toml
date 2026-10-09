@@ -1,75 +1,47 @@
 schema_version = 2
-revision = "2026.10-catalog-v2"
-default_module_artifact = "hello.ko"
-exercise_roots = ["lings", "capstones"]
+revision = "2026.10-core-route"
+default_module_artifact = "rootkitlings.ko"
+exercise_roots = ["curriculum/required"]
+cumulative_root = "proc-publication"
 capabilities = []
 
 required_route = [
-  "module-lifecycle",
-  "module-build",
-  "multi-file-module",
-  "kernel-debugging",
-  "init-failure",
-  "module-parameter",
-  "parameter-callback",
-  "kernel-allocation",
-  "initialization-rollback",
-  "proc-entry",
-  "proc-read",
-  "proc-write",
-  "error-pointer",
-  "kernel-list",
-  "character-device",
-  "ioctl-dispatch",
-  "usermode-helper",
-  "kernel-timer",
-  "workqueue",
-  "kernel-thread",
-  "atomic-counter",
-  "completion",
-  "mutex-invariant",
-  "wait-queue",
-  "live-config-store",
-  "beacon-scheduler",
-  "dead-man-watchdog",
-  "current-task",
-  "task-credentials",
-  "credential-replacement",
-  "symbol-resolution",
-  "kernel-randomness",
-  "one-time-root-token",
-  "kprobe",
-  "kretprobe",
-  "fprobe",
-  "syscall-argument-decoding",
-  "hook-rollback",
-  "file-tripwire",
-  "module-list-hiding",
-  "sysfs-artifact",
-  "directory-filtering",
-  "read-view-filtering",
-  "log-view-filtering",
-  "socket-row-filtering",
-  "ghost-process",
-  "sealed-dead-drop",
-  "netfilter-hook",
-  "packet-classification",
-  "icmp-trigger",
-  "kernel-socket",
-  "packet-redirection",
-  "tcp-root-shell",
-  "icmp-messaging",
-  "dns-wire-encoding",
-  "connect-back-agent",
-  "kernel-file-transaction",
-  "boot-time-module-request",
-  "xor-obfuscation",
-  "authenticated-encryption",
+  "module-build-lifecycle",
+  "precise-init-failure",
+  "owned-kernel-state",
+  "proc-publication",
+  "proc-read-contract",
+  "bounded-control-switch",
+  "timer-workqueue-scheduler",
+  "event-driven-kernel-thread",
+  "controlled-resident-core",
+  "current-task-attribution",
+  "linux-credential-model",
+  "transactional-credential-replacement",
+  "one-use-authorization",
+  "managed-kprobe",
+  "return-aware-syscall-telemetry",
+  "authorized-actions-telemetry",
+  "cross-view-evidence",
+  "packed-directory-filter",
+  "bounded-rendered-filter",
+  "concealment-evidence-map",
+  "hostile-packet-lengths",
+  "safe-skb-access",
+  "netfilter-observer",
+  "validated-packet-classification",
+  "writable-packet-mutation",
+  "kernel-socket-ownership",
+  "tcp-framing-cancellation",
+  "bounded-dns-wire-name",
+  "guarded-file-transaction",
+  "remote-resident-agent",
+  "protection-property-selection",
   "sha256-verification",
-  "hmac-authentication",
-  "keyed-domain-generation",
+  "authenticated-replay-safe-message",
+  "authenticated-encryption",
   "authenticated-dns-signal",
-  "operation-glasshouse",
+  "authenticated-resident-agent",
 ]
 
 [[tradecraft_tags]]
@@ -113,9 +85,14 @@ id = "detection"
 label = "Detection"
 
 [[tools]]
-id = "ioctl-test"
-binary = "vm/tools/ioctl_test"
-source = "vm/tools/ioctl_test.c"
+id = "agent-fixture"
+binary = "vm/tools/agent_fixture"
+source = "vm/tools/agent_fixture.c"
+
+[[tools]]
+id = "credential-snapshot-test"
+binary = "vm/tools/credential_snapshot_test"
+source = "vm/tools/credential_snapshot_test.c"
 
 [[tools]]
 id = "credential-trigger-test"
@@ -123,58 +100,177 @@ binary = "vm/tools/cred_trigger_test"
 source = "vm/tools/cred_trigger_test.c"
 
 [[tools]]
-id = "icmp-send"
-binary = "vm/tools/icmp_send"
-source = "vm/tools/icmp_send.c"
+id = "event-stream-test"
+binary = "vm/tools/event_stream_test"
+source = "vm/tools/event_stream_test.c"
+
+[[tools]]
+id = "getdents64-test"
+binary = "vm/tools/getdents64_test"
+source = "vm/tools/getdents64_test.c"
+
+[[tools]]
+id = "module-load-params"
+binary = "vm/tools/module_load_params"
+source = "vm/tools/module_load_params.c"
+
+[[tools]]
+id = "module-load-test"
+binary = "vm/tools/module_load_test"
+source = "vm/tools/module_load_test.c"
+
+[[tools]]
+id = "netfilter-udp-test"
+binary = "vm/tools/netfilter_udp_test"
+source = "vm/tools/netfilter_udp_test.c"
+
+[[tools]]
+id = "packet-classifier-test"
+binary = "vm/tools/packet_classifier_test"
+source = "vm/tools/packet_classifier_test.c"
+
+[[tools]]
+id = "packet-mutation-test"
+binary = "vm/tools/packet_mutation_test"
+source = "vm/tools/packet_mutation_test.c"
+
+[[tools]]
+id = "proc-read-test"
+binary = "vm/tools/proc_read_test"
+source = "vm/tools/proc_read_test.c"
+
+[[tools]]
+id = "proc-write-test"
+binary = "vm/tools/proc_write_test"
+source = "vm/tools/proc_write_test.c"
+
+[[tools]]
+id = "read-result-test"
+binary = "vm/tools/read_result_test"
+source = "vm/tools/read_result_test.c"
+
+[[tools]]
+id = "rmdir-telemetry-test"
+binary = "vm/tools/rmdir_telemetry_test"
+source = "vm/tools/rmdir_telemetry_test.c"
 
 [[tools]]
 id = "run-as"
 binary = "vm/tools/run_as"
 source = "vm/tools/run_as.c"
 
-[[sections]]
-id = "foundation"
-label = "Foundation"
+[[tools]]
+id = "secure-agent-fixture"
+binary = "vm/tools/secure_agent_fixture"
+source = "vm/tools/secure_agent_fixture.c"
+
+[[tools]]
+id = "socket-owner-fixture"
+binary = "vm/tools/socket_owner_fixture"
+source = "vm/tools/socket_owner_fixture.c"
+
+[[tools]]
+id = "status-field-test"
+binary = "vm/tools/status_field_test"
+source = "vm/tools/status_field_test.c"
+
+[[tools]]
+id = "task-attribution-test"
+binary = "vm/tools/task_attribution_test"
+source = "vm/tools/task_attribution_test.c"
+
+[[tools]]
+id = "tcp-session-fixture"
+binary = "vm/tools/tcp_session_fixture"
+source = "vm/tools/tcp_session_fixture.c"
+
+[[assumptions]]
+concept = "c-functions-and-errors"
+competency = "Read small C functions, control flow, return values, and compiler diagnostics."
+
+[[assumptions]]
+concept = "shell-and-paths"
+competency = "Run commands, navigate paths, and edit files in a POSIX-like shell."
+
+[[assumptions]]
+concept = "host-guest-kernel-boundary"
+competency = "Distinguish the host from the disposable guest and userspace from kernel space."
+
+[[assumptions]]
+concept = "c-preprocessor"
+competency = "Read macro calls, compile-time definitions, conditional compilation, and #error."
+
+[[assumptions]]
+concept = "c-pointers-and-structs"
+competency = "Work with pointers, NULL, structures, arrays, and function declarations."
+
+[[assumptions]]
+concept = "linux-process-basics"
+competency = "Recognize processes, threads, PIDs, signals, and the current executing task."
+
+[[assumptions]]
+concept = "linux-identity-basics"
+competency = "Distinguish users, groups, real and effective IDs, and user namespaces."
+
+[[assumptions]]
+concept = "ipv4-packet-basics"
+competency = "Recognize an IPv4 header and distinguish ICMP, TCP, and UDP payloads."
+
+[[assumptions]]
+concept = "transport-endpoint-basics"
+competency = "Recognize addresses, ports, stream sockets, and datagram sockets."
+
+[[assumptions]]
+concept = "dns-name-basics"
+competency = "Recognize a DNS name as labels terminated by the root label."
+
+[[assumptions]]
+concept = "linux-file-permission-basics"
+competency = "Understand paths, ownership, permission bits, and file descriptors."
 
 [[sections]]
-id = "procfs"
-label = "Procfs"
+id = "module-core"
+label = "Module core"
 
 [[sections]]
-id = "interfaces"
-label = "Interfaces"
+id = "control-execution"
+label = "Control and execution"
 
 [[sections]]
-id = "concurrency"
-label = "Concurrency"
+id = "identity-observation"
+label = "Identity and observation"
 
 [[sections]]
-id = "introspection"
-label = "Introspection"
+id = "views-detection"
+label = "Views and detection"
 
 [[sections]]
-id = "instrumentation"
-label = "Instrumentation"
+id = "network-state"
+label = "Network state"
 
 [[sections]]
-id = "visibility"
-label = "Visibility"
+id = "authenticated-operations"
+label = "Authenticated operations"
 
-[[sections]]
-id = "networking"
-label = "Networking"
+[[concepts]]
+id = "accept-by-default-observation"
+label = "Accept-by-default observation"
 
-[[sections]]
-id = "file-io"
-label = "File I/O"
-
-[[sections]]
-id = "crypto"
-label = "Cryptography"
+[[concepts]]
+id = "action-control-switch"
+label = "Action control switch"
 
 [[concepts]]
 id = "adversarial-validation"
 label = "Adversarial validation"
+
+[[concepts]]
+id = "aead-plaintext-gating"
+label = "AEAD plaintext gating"
+
+[[concepts]]
+id = "atomic-file-exchange"
+label = "Atomic file exchange"
 
 [[concepts]]
 id = "atomic-operations"
@@ -189,72 +285,140 @@ id = "authenticated-encryption"
 label = "Authenticated encryption"
 
 [[concepts]]
-id = "beacon-scheduler"
-label = "Beacon scheduler"
+id = "authorization-vs-authentication"
+label = "Authorization versus authentication"
 
 [[concepts]]
-id = "bounded-user-copy"
-label = "Bounded userspace copying"
+id = "authorized-telemetry-integration"
+label = "Authorized telemetry integration"
+
+[[concepts]]
+id = "binary-safe-equal-width-replacement"
+label = "Binary-safe equal-width replacement"
+
+[[concepts]]
+id = "blocked-io-cancellation"
+label = "Blocked I/O cancellation"
 
 [[concepts]]
 id = "boot-load-persistence"
 label = "Boot-time module persistence"
 
 [[concepts]]
-id = "c-programming"
-label = "C programming"
+id = "bounded-event-admission"
+label = "Bounded event admission"
 
 [[concepts]]
-id = "character-devices"
-label = "Character devices"
+id = "bounded-kernel-file-io"
+label = "Bounded kernel file I/O"
 
 [[concepts]]
-id = "completions"
-label = "Completions"
+id = "bounded-read-contract"
+label = "Bounded read contract"
 
 [[concepts]]
-id = "configuration-store"
-label = "Configuration store"
+id = "bounded-rendered-filter"
+label = "Bounded rendered filter"
+
+[[concepts]]
+id = "bounded-typed-parsing"
+label = "Bounded typed parsing"
+
+[[concepts]]
+id = "bounded-user-copy"
+label = "Bounded userspace copying"
+
+[[concepts]]
+id = "build-time-failure-injection"
+label = "Build-time failure injection"
+
+[[concepts]]
+id = "c-functions-and-errors"
+label = "C functions and error handling"
+
+[[concepts]]
+id = "c-pointers-and-structs"
+label = "C pointers and structures"
+
+[[concepts]]
+id = "c-preprocessor"
+label = "C preprocessor"
+
+[[concepts]]
+id = "checksum-repair"
+label = "Checksum repair"
+
+[[concepts]]
+id = "compare-before-rollback"
+label = "Compare before rollback"
+
+[[concepts]]
+id = "component-ownership"
+label = "Component ownership"
 
 [[concepts]]
 id = "connect-back-agent"
 label = "Connect-back agent"
 
 [[concepts]]
+id = "copy-validate-commit"
+label = "Copy, validate, then commit"
+
+[[concepts]]
 id = "credential-replacement"
 label = "Credential replacement"
+
+[[concepts]]
+id = "cross-view-evidence"
+label = "Cross-view evidence"
 
 [[concepts]]
 id = "current-task"
 label = "Current task"
 
 [[concepts]]
-id = "dead-man-watchdog"
-label = "Dead-man watchdog"
+id = "deferred-work-lifecycle"
+label = "Deferred work lifecycle"
 
 [[concepts]]
-id = "directory-filtering"
-label = "Directory filtering"
+id = "directory-cookie-preservation"
+label = "Directory cookie preservation"
+
+[[concepts]]
+id = "dns-name-basics"
+label = "DNS name basics"
 
 [[concepts]]
 id = "dns-wire-encoding"
 label = "DNS wire encoding"
 
 [[concepts]]
+id = "errno-propagation"
+label = "Exact error propagation"
+
+[[concepts]]
 id = "error-pointers"
 label = "Error pointers"
 
 [[concepts]]
-id = "event-ring-buffer"
-label = "Event ring buffer"
+id = "exclusive-staging-file"
+label = "Exclusive staging file"
 
 [[concepts]]
-id = "fprobes"
-label = "Fprobes"
+id = "false-eof-avoidance"
+label = "False-EOF avoidance"
 
 [[concepts]]
-id = "ghost-process-view"
-label = "Ghost process view"
+id = "file-and-directory-fsync"
+label = "File and directory fsync"
+
+[[concepts]]
+id = "file-identity-guard"
+label = "File identity guard"
+
+[[concepts]]
+id = "fixed-command-grammar"
+label = "Fixed command grammar"
 
 [[concepts]]
 id = "hmac-authentication"
@@ -265,12 +429,8 @@ id = "hook-rollback"
 label = "Hook rollback"
 
 [[concepts]]
-id = "icmp-covert-messaging"
-label = "ICMP covert messaging"
-
-[[concepts]]
-id = "icmp-triggers"
-label = "ICMP triggers"
+id = "host-guest-kernel-boundary"
+label = "Host, guest, and kernel boundary"
 
 [[concepts]]
 id = "init-failure"
@@ -281,8 +441,20 @@ id = "initialization-rollback"
 label = "Initialization rollback"
 
 [[concepts]]
-id = "ioctl-dispatch"
-label = "ioctl dispatch"
+id = "inode-identity-selection"
+label = "Inode identity selection"
+
+[[concepts]]
+id = "ipv4-fragment-policy"
+label = "IPv4 fragment policy"
+
+[[concepts]]
+id = "ipv4-packet-basics"
+label = "IPv4 packet basics"
+
+[[concepts]]
+id = "kernel-abi-contract"
+label = "Kernel ABI contract"
 
 [[concepts]]
 id = "kernel-allocation"
@@ -293,20 +465,16 @@ id = "kernel-crypto-api"
 label = "Kernel Crypto API"
 
 [[concepts]]
-id = "kernel-debugging"
-label = "Kernel debugging"
-
-[[concepts]]
-id = "kernel-file-transactions"
-label = "Kernel file transactions"
-
-[[concepts]]
-id = "kernel-lists"
-label = "Kernel linked lists"
+id = "kernel-file-context-constraints"
+label = "Kernel file-context constraints"
 
 [[concepts]]
 id = "kernel-randomness"
 label = "Kernel randomness"
+
+[[concepts]]
+id = "kernel-socket-context-constraints"
+label = "Kernel socket-context constraints"
 
 [[concepts]]
 id = "kernel-sockets"
@@ -321,10 +489,6 @@ id = "kernel-timers"
 label = "Kernel timers"
 
 [[concepts]]
-id = "keyed-domain-generation"
-label = "Keyed domain generation"
-
-[[concepts]]
 id = "kprobes"
 label = "Kprobes"
 
@@ -333,28 +497,40 @@ id = "kretprobes"
 label = "Kretprobes"
 
 [[concepts]]
-id = "linux-processes-and-files"
-label = "Linux processes and files"
+id = "linux-file-permission-basics"
+label = "Linux file and permission basics"
 
 [[concepts]]
-id = "log-view-filtering"
-label = "Log-view filtering"
+id = "linux-identity-basics"
+label = "Linux identity basics"
+
+[[concepts]]
+id = "linux-process-basics"
+label = "Linux process basics"
+
+[[concepts]]
+id = "machine-readable-evidence-map"
+label = "Machine-readable evidence map"
+
+[[concepts]]
+id = "malformed-input-state-preservation"
+label = "State preservation on malformed input"
+
+[[concepts]]
+id = "managed-hook-lifecycle"
+label = "Managed hook lifecycle"
 
 [[concepts]]
 id = "module-build"
 label = "Module build"
 
 [[concepts]]
+id = "module-inspection"
+label = "Module inspection"
+
+[[concepts]]
 id = "module-lifecycle"
 label = "Module lifecycle"
-
-[[concepts]]
-id = "module-list-hiding"
-label = "Module-list hiding"
-
-[[concepts]]
-id = "module-parameters"
-label = "Module parameters"
 
 [[concepts]]
 id = "multi-file-modules"
@@ -369,32 +545,96 @@ id = "mutexes"
 label = "Mutexes"
 
 [[concepts]]
+id = "named-kprobe-resolution"
+label = "Named Kprobe resolution"
+
+[[concepts]]
+id = "namespace-aware-process-view-filtering"
+label = "Namespace-aware process-view filtering"
+
+[[concepts]]
+id = "namespace-id-translation"
+label = "Namespace ID translation"
+
+[[concepts]]
+id = "namespaced-capabilities"
+label = "Namespaced capabilities"
+
+[[concepts]]
+id = "netfilter-callback-constraints"
+label = "Netfilter callback constraints"
+
+[[concepts]]
 id = "netfilter-hooks"
 label = "Netfilter hooks"
 
 [[concepts]]
-id = "networking-fundamentals"
-label = "Networking fundamentals"
+id = "network-byte-order-decoding"
+label = "Network byte-order decoding"
 
 [[concepts]]
-id = "one-time-root-trigger"
-label = "One-time root trigger"
+id = "nofault-user-copy"
+label = "No-fault userspace copy"
+
+[[concepts]]
+id = "nonlinear-packet-access"
+label = "Nonlinear packet access"
+
+[[concepts]]
+id = "one-use-authorization"
+label = "One-use authorization"
+
+[[concepts]]
+id = "overlap-safe-record-compaction"
+label = "Overlap-safe record compaction"
+
+[[concepts]]
+id = "oversized-frame-draining"
+label = "Oversized frame draining"
+
+[[concepts]]
+id = "packed-record-validation"
+label = "Packed record validation"
 
 [[concepts]]
 id = "packet-classification"
 label = "Packet classification"
 
 [[concepts]]
+id = "packet-copy-on-write"
+label = "Packet copy-on-write"
+
+[[concepts]]
+id = "packet-length-validation"
+label = "Packet length validation"
+
+[[concepts]]
 id = "packet-redirection"
 label = "Packet redirection"
 
 [[concepts]]
-id = "parameter-callbacks"
-label = "Parameter callbacks"
+id = "paired-network-detection"
+label = "Paired network detection"
+
+[[concepts]]
+id = "partial-stream-io"
+label = "Partial stream I/O"
+
+[[concepts]]
+id = "pointer-invalidation"
+label = "Pointer invalidation"
+
+[[concepts]]
+id = "positive-negative-controls"
+label = "Positive and negative controls"
 
 [[concepts]]
 id = "proc-entry"
 label = "procfs entry"
+
+[[concepts]]
+id = "proc-publication-lifetime"
+label = "procfs publication lifetime"
 
 [[concepts]]
 id = "proc-read"
@@ -405,56 +645,116 @@ id = "proc-write"
 label = "procfs writes"
 
 [[concepts]]
-id = "read-view-filtering"
-label = "Read-result filtering"
+id = "protection-property-selection"
+label = "Protection property selection"
 
 [[concepts]]
-id = "sealed-dead-drop"
-label = "Sealed dead drop"
+id = "rcu-grace-period-teardown"
+label = "RCU grace-period teardown"
+
+[[concepts]]
+id = "read-once-write-once"
+label = "READ_ONCE and WRITE_ONCE"
+
+[[concepts]]
+id = "remote-agent-integration"
+label = "Remote agent integration"
+
+[[concepts]]
+id = "replay-rejection"
+label = "Replay rejection"
+
+[[concepts]]
+id = "replay-resistant-state"
+label = "Replay-resistant state"
+
+[[concepts]]
+id = "resident-client-retry"
+label = "Resident client retry"
+
+[[concepts]]
+id = "resident-core-integration"
+label = "Resident core integration"
+
+[[concepts]]
+id = "resource-ownership"
+label = "Resource ownership"
+
+[[concepts]]
+id = "return-correlation"
+label = "Return correlation"
+
+[[concepts]]
+id = "sensitive-state-zeroization"
+label = "Sensitive state zeroization"
 
 [[concepts]]
 id = "sha256-verification"
 label = "SHA-256 verification"
 
 [[concepts]]
-id = "socket-row-filtering"
-label = "Socket-row filtering"
+id = "shell-and-paths"
+label = "Shell commands and paths"
 
 [[concepts]]
-id = "spinlocks"
-label = "Spinlocks"
+id = "single-socket-ownership"
+label = "Single socket ownership"
 
 [[concepts]]
-id = "symbol-resolution"
-label = "Symbol resolution"
+id = "skb-safe-access"
+label = "Safe sk_buff access"
+
+[[concepts]]
+id = "socket-lifecycle"
+label = "Socket lifecycle"
+
+[[concepts]]
+id = "spinlocked-event-ring"
+label = "Spinlocked event ring"
+
+[[concepts]]
+id = "state-invariant-selection"
+label = "State invariant selection"
 
 [[concepts]]
 id = "syscall-argument-decoding"
 label = "System call argument decoding"
 
 [[concepts]]
-id = "sysfs-artifacts"
-label = "sysfs artifacts"
+id = "task-attribution"
+label = "Task attribution"
 
 [[concepts]]
 id = "task-credentials"
 label = "Task credentials"
 
 [[concepts]]
-id = "tcp-shell"
-label = "TCP shell"
+id = "tcp-length-framing"
+label = "TCP length framing"
 
 [[concepts]]
-id = "unix-shell"
-label = "Unix shell"
+id = "timer-to-worker-deferral"
+label = "Timer-to-worker deferral"
 
 [[concepts]]
-id = "usermode-helper"
-label = "Usermode helper"
+id = "traffic-analysis-limits"
+label = "Traffic analysis limits"
+
+[[concepts]]
+id = "transport-endpoint-basics"
+label = "Transport endpoint basics"
+
+[[concepts]]
+id = "udp-datagram-boundaries"
+label = "UDP datagram boundaries"
 
 [[concepts]]
 id = "wait-queues"
 label = "Wait queues"
+
+[[concepts]]
+id = "worker-stop-lifecycle"
+label = "Worker stop lifecycle"
 
 [[concepts]]
 id = "workqueues"
@@ -463,19 +763,3 @@ label = "Workqueues"
 [[concepts]]
 id = "xor-obfuscation"
 label = "XOR obfuscation"
-
-[[assumptions]]
-concept = "c-programming"
-competency = "Read and edit small C functions, pointers, structs, and error returns."
-
-[[assumptions]]
-concept = "unix-shell"
-competency = "Run commands, navigate paths, and edit files in a POSIX-like shell."
-
-[[assumptions]]
-concept = "linux-processes-and-files"
-competency = "Distinguish host and guest, userspace and kernel space, and understand paths, permissions, processes, and file descriptors."
-
-[[assumptions]]
-concept = "networking-fundamentals"
-competency = "Recognize IPv4, TCP, UDP, ICMP, ports, DNS names, and network byte order."

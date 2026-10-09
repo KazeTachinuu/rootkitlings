@@ -49,12 +49,14 @@ class GeneratedSerialTests(unittest.TestCase):
         self.assertEqual(list(self.catalog.required_route), [item.id for item in required])
 
     def test_selectors_accept_exact_aliases_and_unique_prefixes(self) -> None:
-        self.assertEqual("module-lifecycle", self.catalog.resolve("l00").id)
-        self.assertEqual("module-lifecycle", self.catalog.resolve("module-lif").id)
+        self.assertEqual("module-build-lifecycle", self.catalog.resolve("l00").id)
+        self.assertEqual(
+            "module-build-lifecycle",
+            self.catalog.resolve("module-build").id,
+        )
 
-    def test_ambiguous_prefix_lists_matches(self) -> None:
-        with self.assertRaisesRegex(ValueError, r"ambiguous exercise 'C0'.*C00.*C09"):
-            self.catalog.resolve("C0")
+    def test_unique_capstone_prefix_resolves_c00(self) -> None:
+        self.assertEqual("authenticated-resident-agent", self.catalog.resolve("C0").id)
 
     def test_catalog_query_and_export_resolve_default_module_artifact(self) -> None:
         query = subprocess.run(
@@ -64,7 +66,7 @@ class GeneratedSerialTests(unittest.TestCase):
             text=True,
             capture_output=True,
         )
-        self.assertEqual(query.stdout, "hello.ko\n")
+        self.assertEqual(query.stdout, "rootkitlings.ko\n")
         exported = subprocess.run(
             [str(ROOT / "scripts/catalog"), "export"],
             cwd=ROOT,
@@ -73,10 +75,10 @@ class GeneratedSerialTests(unittest.TestCase):
             capture_output=True,
         )
         data = json.loads(exported.stdout)
-        self.assertEqual(data["default_module_artifact"], "hello.ko")
+        self.assertEqual(data["default_module_artifact"], "rootkitlings.ko")
         self.assertEqual(
             data["exercises"][0]["workspace"]["module_artifact"],
-            "hello.ko",
+            "rootkitlings.ko",
         )
         self.assertIsNone(
             data["exercises"][0]["workspace"]["module_artifact_override"]
@@ -85,16 +87,16 @@ class GeneratedSerialTests(unittest.TestCase):
         self.assertEqual(
             data["exercises"][0]["verification"]["cases"],
             [{
-                "id": "default",
-                "label": "Default",
-                "build_variables": {},
+                "id": "normal-lifecycle",
+                "label": "Normal load and unload",
+                "build_variables": {"ROOTKITLINGS_FAIL_POINT": "0"},
                 "expect_build": "pass",
                 "check": data["exercises"][0]["resources"]["check"],
                 "build_output_contains": "",
                 "check_arguments": [],
             }],
         )
-        self.assertIsNone(data["cumulative_root"])
+        self.assertEqual(data["cumulative_root"], "proc-publication")
 
 
 class ElectiveTrackTests(unittest.TestCase):

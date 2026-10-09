@@ -16,7 +16,6 @@ files = ["Kbuild", "access/skb_access.c", "classifier/udp.c", "core/main.c", "in
 editable = ["classifier/udp.c"]
 build = "."
 baseline = "template"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/validated-packet-classification/starter"
 
 [resources]

@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "core/state.c", "include/dirent_filter.h", "in
 editable = ["instrumentation/dirent_filter.c"]
 build = "."
 baseline = "scaffold"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/packed-directory-filter/starter"
 parent = "cross-view-evidence"
 

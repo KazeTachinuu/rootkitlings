@@ -16,7 +16,6 @@ files = ["Kbuild", "access/skb_access.c", "include/ipv4_parser.h", "include/skb_
 editable = ["access/skb_access.c"]
 build = "."
 baseline = "scaffold"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/safe-skb-access/starter"
 parent = "hostile-packet-lengths"
 

@@ -17,7 +17,6 @@ editable = ["signal/authenticated_dns.c"]
 build = "."
 baseline = "scaffold"
 parent = "authenticated-replay-safe-message"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/authenticated-dns-signal/starter"
 
 [resources]

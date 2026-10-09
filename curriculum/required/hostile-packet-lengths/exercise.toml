@@ -16,7 +16,6 @@ files = ["Kbuild", "include/ipv4_parser.h", "main.c", "parser/ipv4.c"]
 editable = ["parser/ipv4.c"]
 build = "."
 baseline = "template"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/hostile-packet-lengths/starter"
 
 [resources]

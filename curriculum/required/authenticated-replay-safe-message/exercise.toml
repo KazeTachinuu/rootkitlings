@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "crypto/platform.c", "include/authenticated.h"
 editable = ["message/authenticated.c"]
 build = "."
 baseline = "template"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/authenticated-replay-safe-message/starter"
 
 [resources]

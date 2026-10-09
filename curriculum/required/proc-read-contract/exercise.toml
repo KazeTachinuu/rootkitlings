@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interfac
 editable = ["core/main.c", "core/state.c", "include/rootkit.h", "interface/proc.c"]
 build = "."
 baseline = "scaffold"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/proc-read-contract/starter"
 parent = "proc-publication"
 

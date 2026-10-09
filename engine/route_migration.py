@@ -195,7 +195,7 @@ DESTINATION_DIRECT_PREREQUISITES = {
     ),
     "hostile-packet-lengths": (),
     "safe-skb-access": ("hostile-packet-lengths",),
-    "netfilter-observer": ("proc-publication",),
+    "netfilter-observer": ("event-driven-kernel-thread",),
     "validated-packet-classification": (
         "netfilter-observer", "safe-skb-access",
     ),
@@ -211,7 +211,9 @@ DESTINATION_DIRECT_PREREQUISITES = {
         "guarded-file-transaction",
     ),
     "protection-property-selection": ("bounded-dns-wire-name",),
-    "sha256-verification": ("protection-property-selection",),
+    "sha256-verification": (
+        "owned-kernel-state", "protection-property-selection",
+    ),
     "authenticated-replay-safe-message": (
         "one-use-authorization", "sha256-verification",
     ),

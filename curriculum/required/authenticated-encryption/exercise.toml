@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "crypto/aead.c", "crypto/platform.c", "include
 editable = ["crypto/aead.c"]
 build = "."
 baseline = "template"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/authenticated-encryption/starter"
 
 [resources]

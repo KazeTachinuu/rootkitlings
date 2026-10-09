@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "include/interface.h", "include/platform.h", "
 editable = ["persistence/transaction.c"]
 build = "."
 baseline = "template"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/guarded-file-transaction/starter"
 
 [resources]

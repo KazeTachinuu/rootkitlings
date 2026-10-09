@@ -6,7 +6,7 @@ kind = "lesson"
 status = "required"
 tradecraft = ["cryptography", "detection"]
 difficulty = "advanced"
-prerequisites = ["protection-property-selection"]
+prerequisites = ["owned-kernel-state", "protection-property-selection"]
 teaches = ["kernel-crypto-api", "sha256-verification"]
 requires = ["kernel-allocation", "protection-property-selection"]
 
@@ -16,7 +16,6 @@ files = ["Kbuild", "core/main.c", "crypto/platform.c", "crypto/sha256.c", "inclu
 editable = ["crypto/sha256.c"]
 build = "."
 baseline = "template"
-module_artifact = "rootkitlings.ko"
 source = "curriculum/required/sha256-verification/starter"
 
 [resources]
