@@ -40,7 +40,8 @@ ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 	"$scratch/properties-test"
 
-if strings -a "$module" | grep -Fqx 'rk-runtime-plaintext-visible'; then
+strings -a "$module" > "$scratch/module.strings"
+if grep -Fq 'rk-runtime-plaintext-visible' "$scratch/module.strings"; then
 	die "runtime demonstration plaintext is embedded in the module file"
 fi
 

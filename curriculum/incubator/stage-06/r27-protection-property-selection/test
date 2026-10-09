@@ -29,6 +29,15 @@ for command in gcc make nm strings; do
 	}
 done
 
+generated=$(find "$HERE" -type f \( -name '*.o' -o -name '*.ko' -o \
+	-name '*.mod' -o -name '*.mod.c' -o -name 'Module.symvers' -o \
+	-name 'modules.order' -o -name '.*.cmd' \) -print -quit)
+[[ -z $generated ]] || {
+	printf '[x] generated build artifact is stored in the lesson: %s\n' \
+		"${generated#"$HERE/"}" >&2
+	exit 1
+}
+
 for script in test host-check success-check failure-check; do
 	bash -n "$HERE/$script"
 done
@@ -113,8 +122,9 @@ build_mutant fixed-xor-byte mutate_fixed_key
 
 mutate_live_input()
 {
-	sed -i '/transformed\[index\] = input\[index\]/a\
-\t\toutput[index] = transformed[index];' "$1"
+	sed -i \
+		's/transformed\[index\] = /transformed[index] = output[index] = /' \
+		"$1"
 }
 build_mutant overlap-corruption mutate_live_input
 

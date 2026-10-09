@@ -23,14 +23,14 @@ For a small authenticated control message, use the smallest plan that provides t
 |---|---|---|
 | Representation only | Encoding | Both sides agree on the format |
 | Detect a changed artifact | SHA-256 | The expected digest comes from a trusted source |
-| Integrity and sender authentication | HMAC-SHA-256 | Both sides own the shared key |
-| Authentication and freshness | HMAC-SHA-256 plus a sequence number | The receiver remembers accepted sequence state |
-| Confidentiality, integrity, and authentication | AEAD | The key is secret and the nonce is unique for that key |
+| Message integrity and origin | HMAC-SHA-256 | Both sides own the shared key |
+| Message authentication and freshness | HMAC-SHA-256 plus a sequence number | The receiver remembers accepted sequence state |
+| Confidentiality and message authentication | AEAD | The key is secret and the nonce is unique for that key |
 | Confidentiality and freshness | AEAD plus replay state | The nonce is unique and the receiver rejects old messages |
 
 A digest stored beside an artifact is not a trusted reference when an attacker can replace both.
 HMAC does not hide the message.
-It proves that a holder of the shared key authenticated the message; it cannot distinguish between several parties that share that key.
+It proves that a holder of the shared key authenticated the message; it does not identify which holder when several parties share that key.
 A sequence number prevents replay only when it is authenticated and the receiver remembers what it has accepted, including across any reset where old messages must remain invalid.
 AEAD authenticates its plaintext and any associated data, but a protocol still needs replay state.
 

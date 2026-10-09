@@ -147,8 +147,83 @@ static void check_xor_boundaries(void)
 	       "overlapping key must be snapshotted");
 }
 
+static void check_xor_overlap_matrix(void)
+{
+	static const size_t lengths[] = { 1, 2, 3, 31, 32, 33, 63, 64 };
+	static const size_t key_lengths[] = { 1, 2, 3, 7, 31, 32 };
+	unsigned char arena[192];
+	unsigned char before[sizeof(arena)];
+	unsigned char input_copy[64];
+	unsigned char key_copy[RK_XOR_KEY_MAX];
+	unsigned char expected[64];
+	size_t input_offset, key_offset, output_offset;
+	size_t length_index, key_length_index, index;
+
+	/*
+	 * Move the input and key across representative boundary offsets, then
+	 * exercise every destination offset from 0 through 64.  This covers
+	 * disjoint buffers, exact aliases, both overlap directions, and layouts
+	 * where the destination intersects the input and key at once.
+	 */
+	for (length_index = 0;
+	     length_index < sizeof(lengths) / sizeof(lengths[0]);
+	     length_index++) {
+		for (key_length_index = 0;
+		     key_length_index < sizeof(key_lengths) / sizeof(key_lengths[0]);
+		     key_length_index++) {
+			for (input_offset = 0; input_offset <= 64;
+			     input_offset += 8) {
+				for (key_offset = 0; key_offset <= 64;
+				     key_offset += 8) {
+					for (output_offset = 0; output_offset <= 64;
+					     output_offset++) {
+						fill(arena, sizeof(arena),
+						     (unsigned int)(length_index * 17 +
+						     key_length_index * 5 +
+						     input_offset + key_offset +
+						     output_offset));
+						memcpy(before, arena, sizeof(arena));
+						memcpy(input_copy, arena + input_offset,
+						       lengths[length_index]);
+						memcpy(key_copy, arena + key_offset,
+						       key_lengths[key_length_index]);
+						for (index = 0; index < lengths[length_index];
+						     index++)
+							expected[index] = input_copy[index] ^
+								key_copy[index %
+								key_lengths[key_length_index]];
+
+						expect(rk_xor_repeat(arena + input_offset,
+							       lengths[length_index],
+							       arena + key_offset,
+							       key_lengths[key_length_index],
+							       arena + output_offset,
+							       lengths[length_index]) ==
+						       RK_XOR_OK,
+						       "every overlap geometry must succeed");
+						expect(!memcmp(arena + output_offset, expected,
+							       lengths[length_index]),
+						       "overlap must use original input and key");
+						expect(!memcmp(arena, before, output_offset),
+						       "overlap must not write before output");
+						expect(!memcmp(arena + output_offset +
+							       lengths[length_index],
+							       before + output_offset +
+							       lengths[length_index],
+							       sizeof(arena) - output_offset -
+							       lengths[length_index]),
+						       "overlap must not write after output");
+					}
+				}
+			}
+		}
+	}
+}
+
 static void check_xor_failures(void)
 {
+	unsigned char arena[RK_XOR_DATA_MAX + RK_XOR_KEY_MAX + 8];
+	unsigned char arena_saved[sizeof(arena)];
 	unsigned char input[RK_XOR_DATA_MAX + 1];
 	unsigned char key[RK_XOR_KEY_MAX + 1];
 	unsigned char output[RK_XOR_DATA_MAX + 8];
@@ -188,7 +263,40 @@ static void check_xor_failures(void)
 	EXPECT_FAILURE(rk_xor_repeat(input, SIZE_MAX, key, 1, output,
 				     SIZE_MAX), RK_XOR_TOO_LONG,
 		       "wrapped or extreme lengths are rejected");
+	EXPECT_FAILURE(rk_xor_repeat(NULL, RK_XOR_DATA_MAX + 1, key,
+				     RK_XOR_KEY_MAX + 1, output, 0),
+		       RK_XOR_INVALID_ARGUMENT,
+		       "missing pointer takes priority over every size error");
+	EXPECT_FAILURE(rk_xor_repeat(input, RK_XOR_DATA_MAX + 1, key,
+				     RK_XOR_KEY_MAX + 1, output, 0),
+		       RK_XOR_TOO_LONG,
+		       "declared maximum takes priority over capacity");
+	EXPECT_FAILURE(rk_xor_repeat(input, 1, key, 0, output, 0),
+		       RK_XOR_INVALID_ARGUMENT,
+		       "empty key takes priority over capacity");
+	EXPECT_FAILURE(rk_xor_repeat(NULL, 0, key, 1, output, 0),
+		       RK_XOR_INVALID_ARGUMENT,
+		       "empty input still requires the input pointer");
+	EXPECT_FAILURE(rk_xor_repeat(input, 0, NULL, 1, output, 0),
+		       RK_XOR_INVALID_ARGUMENT,
+		       "empty input still requires the key pointer");
+	EXPECT_FAILURE(rk_xor_repeat(input, 0, key, 1, NULL, 0),
+		       RK_XOR_INVALID_ARGUMENT,
+		       "empty input still requires the output pointer");
 #undef EXPECT_FAILURE
+
+	memset(output, 0xa5, sizeof(output));
+	expect(rk_xor_repeat(input, 0, key, 1, output, 0) == RK_XOR_OK,
+	       "empty input with valid pointers succeeds");
+	expect(!memcmp(output, saved, sizeof(output)),
+	       "empty input leaves the destination unchanged");
+
+	fill(arena, sizeof(arena), 19);
+	memcpy(arena_saved, arena, sizeof(arena));
+	expect(rk_xor_repeat(arena, 32, arena + 16, 8, arena + 1, 31) ==
+	       RK_XOR_NO_SPACE, "overlapped short destination is rejected");
+	expect(!memcmp(arena, arena_saved, sizeof(arena)),
+	       "overlapped failure leaves all aliased bytes unchanged");
 }
 
 static void check_xor_attack(void)
@@ -238,6 +346,7 @@ int main(void)
 {
 	check_selector();
 	check_xor_boundaries();
+	check_xor_overlap_matrix();
 	check_xor_failures();
 	check_xor_attack();
 	printf("[+] %lu protection-property assertions passed\n", assertions);
