@@ -41,11 +41,13 @@ The supplied module opens one `init_net` IPv4 TCP connection to a dynamic loopba
 It does not reconnect, retry, authenticate, resolve DNS, execute commands, or persist anything.
 A zero-initialized session object may be started once at a time; a repeated start while its task is still owned returns `-EBUSY`.
 After stop has joined that task, the object may be started again.
+The caller serializes start and stop calls; status snapshots may run while the worker is active.
 
 The status counters have narrow meanings.
 `frames` counts frames whose complete echo was sent successfully.
 `oversized` counts oversized frames only after their complete declared payload was drained.
 `last_error` is the terminal worker error, and stop-induced errors are not reported as session failures.
+Calling stop again after the worker has been joined has no effect.
 
 ## Your task
 
@@ -62,7 +64,7 @@ Run:
 ```
 
 The checker accepts structurally different implementations that satisfy the behavior.
-Instrumented transports cover every positive partial boundary; zero, negative, and impossible returns in each phase; empty and binary frames; split and coalesced input; both oversized extremes followed by a valid frame; blocked connect, header, payload, send, and drain cancellation; the create/publish/stop race; and exactly one release.
+Instrumented transports cover every positive partial boundary; zero, negative, and impossible returns in each phase; empty and binary frames; split and coalesced input; both oversized extremes followed by a valid frame; blocked connect, header, payload, send, and drain cancellation; spontaneous create, connect, and EOF failures; the create/publish/stop race; idempotent stop; and exactly one release.
 The disposable Linux 7.2 guest then verifies a real loopback session, unload while blocked in receive, rollback, reload, and clean logs.
 
 ## Linux v7.2 references

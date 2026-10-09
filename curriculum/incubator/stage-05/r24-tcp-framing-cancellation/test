@@ -103,6 +103,12 @@ cp -a "$HERE/solution" "$equivalent"
 sed -i -e 's/\<offset\>/position/g' -e 's/\<remaining\>/left/g' \
 	-e 's/\<context\>/cookie/g' -e 's/\<received\>/decoded/g' \
 	-e 's/\<error\>/result/g' "$equivalent/session/tcp_session.c"
+sed -i -e '/size_t position = 0;/d' \
+	-e 's/while (position < length)/while (length)/g' \
+	-e 's/bytes + position/bytes/g' \
+	-e 's/length - position/length/g' \
+	-e 's/position += result;/bytes += result; length -= result;/g' \
+	"$equivalent/session/tcp_session.c"
 make -s -C "$KDIR" M="$equivalent" W=1 modules > "$equivalent.log" 2>&1 || {
 	cat "$equivalent.log" >&2
 	printf '[x] equivalent implementation build failed\n' >&2
@@ -135,10 +141,15 @@ build_mutant()
 }
 
 build_mutant short-send '0,/offset += result;/s//return 0;/'
+build_mutant short-receive \
+	'/static int rk_receive_exact/,/^}/s/offset += result;/return 0;/'
 build_mutant short-drain 's/remaining -= chunk;/remaining = 0;/'
 build_mutant late-publish '0,/if (session->stopping)/s//if (false)/'
 build_mutant double-release \
 	'0,/ops->release(socket, context);/s//ops->release(socket, context); ops->release(socket, context);/'
+build_mutant stop-error 's/if (!session->stopping)/if (true)/'
+build_mutant connect-leak \
+	'/^close:/,/socket = NULL;/s/ops->release(socket, context);/(void)socket;/'
 
 cp "$scratch/template/rootkitlings.ko" "$scratch/template.ko"
 if make -s -C "$KDIR" M="$scratch/solution" W=1 \
@@ -170,7 +181,7 @@ append_helpers()
 	chmod 0755 "$script"
 }
 
-modules='template.ko short-send.ko short-drain.ko late-publish.ko double-release.ko'
+modules='template.ko short-send.ko short-receive.ko short-drain.ko late-publish.ko double-release.ko stop-error.ko connect-leak.ko'
 sed "s#@MODULES@#$modules#" "$HERE/validation-check.in" \
 	> "$scratch/validation-check"
 append_loader "$scratch/validation-check"

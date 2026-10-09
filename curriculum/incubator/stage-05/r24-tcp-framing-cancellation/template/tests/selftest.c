@@ -41,6 +41,8 @@ struct rk_fake {
 	ssize_t send_fail_result;
 	int receive_fail_call;
 	ssize_t receive_fail_result;
+	int create_result;
+	int connect_result;
 	bool null_socket;
 };
 
@@ -82,6 +84,10 @@ static int rk_fake_create(struct socket **socket, void *context)
 	struct rk_fake *fake = context;
 
 	atomic_inc(&fake->create_calls);
+	if (fake->create_result) {
+		*socket = NULL;
+		return fake->create_result;
+	}
 	*socket = fake->null_socket ? NULL : (struct socket *)fake;
 	if (fake->block == RK_BLOCK_CREATE)
 		rk_fake_wait(fake, RK_BLOCK_CREATE);
@@ -100,7 +106,7 @@ static int rk_fake_connect(struct socket *socket,
 		rk_fake_wait(fake, RK_BLOCK_CONNECT);
 		return -ECANCELED;
 	}
-	return 0;
+	return fake->connect_result;
 }
 
 static ssize_t rk_fake_send(struct socket *socket,
@@ -348,6 +354,67 @@ static int rk_test_zero_negative_and_impossible(void)
 	return 0;
 }
 
+static int rk_test_argument_validation(void)
+{
+	static const struct rk_session_ops no_send = {
+		.create = rk_fake_create,
+		.connect = rk_fake_connect,
+		.receive = rk_fake_receive,
+		.shutdown = rk_fake_shutdown,
+		.release = rk_fake_release,
+		.wake = rk_fake_wake,
+	};
+	unsigned char output[2];
+	struct rk_session_status status;
+	struct rk_session session = { };
+	struct rk_frame frame;
+	struct rk_fake fake;
+
+	rk_fake_init(&fake);
+	fake.output = output;
+	fake.output_capacity = sizeof(output);
+	memset(&status, 0xa5, sizeof(status));
+	rk_session_snapshot(NULL, &status);
+	if (rk_expect(!memcmp(&status, &(struct rk_session_status) { },
+			     sizeof(status)),
+		      "snapshot clears output for an absent session") ||
+	    rk_expect(rk_send_frame_ops(NULL, &fake,
+				       (struct socket *)&fake, NULL, 0) == -EINVAL,
+		      "send rejects an absent operation table") ||
+	    rk_expect(rk_send_frame_ops(&rk_fake_ops, &fake, NULL,
+				       NULL, 0) == -EINVAL,
+		      "send rejects an absent socket") ||
+	    rk_expect(rk_send_frame_ops(&rk_fake_ops, &fake,
+				       (struct socket *)&fake, NULL, 1) == -EINVAL,
+		      "send rejects an absent non-empty payload") ||
+	    rk_expect(rk_send_frame_ops(&rk_fake_ops, &fake,
+				       (struct socket *)&fake, output,
+				       RK_FRAME_MAX + 1) == -EINVAL,
+		      "send rejects a frame above the wire limit") ||
+	    rk_expect(rk_receive_frame_ops(NULL, &fake,
+					  (struct socket *)&fake,
+					  &frame) == -EINVAL,
+		      "receive rejects an absent operation table") ||
+	    rk_expect(rk_receive_frame_ops(&rk_fake_ops, &fake, NULL,
+					  &frame) == -EINVAL,
+		      "receive rejects an absent socket") ||
+	    rk_expect(rk_receive_frame_ops(&rk_fake_ops, &fake,
+					  (struct socket *)&fake,
+					  NULL) == -EINVAL,
+		      "receive rejects an absent output frame") ||
+	    rk_expect(rk_session_start_with_ops(NULL, 47023, &rk_fake_ops,
+					       &fake) == -EINVAL,
+		      "start rejects an absent session") ||
+	    rk_expect(rk_session_start_with_ops(&session, 0, &rk_fake_ops,
+					       &fake) == -EINVAL,
+		      "start rejects port zero") ||
+	    rk_expect(rk_session_start_with_ops(&session, 47023, &no_send,
+					       &fake) == -EINVAL,
+		      "start rejects an incomplete operation table"))
+		return -EINVAL;
+	return 0;
+}
+
 static int rk_test_oversized(size_t oversized_length)
 {
 	const size_t valid_length = 3;
@@ -439,6 +506,8 @@ static int rk_test_blocked_stop(enum rk_fake_block block)
 	rk_session_snapshot(&session, &status);
 	if (rk_expect(!status.running && !status.active && status.stopping,
 		      "stop joins and clears the published socket") ||
+	    rk_expect(status.last_error == 0,
+		      "stop-induced transport errors are not session failures") ||
 	    rk_expect(atomic_read(&fake.releases) == 1,
 		      "the worker releases its socket exactly once") ||
 	    rk_expect(atomic_read(&fake.shutdowns) ==
@@ -448,7 +517,65 @@ static int rk_test_blocked_stop(enum rk_fake_block block)
 		      atomic_read(&fake.connect_calls) == 0,
 		      "stop gate prevents late publication after create"))
 		return -EINVAL;
+	rk_session_stop(&session);
+	if (rk_expect(atomic_read(&fake.releases) == 1 &&
+		      atomic_read(&fake.shutdowns) ==
+		      (block == RK_BLOCK_CREATE ? 0 : 1),
+		      "repeated stop does not reacquire socket ownership"))
+		return -EINVAL;
 	return 0;
+}
+
+static int rk_test_worker_failures(void)
+{
+	struct rk_session_status status;
+	struct rk_session session = { };
+	struct rk_fake fake;
+	long finished;
+
+	rk_fake_init(&fake);
+	fake.create_result = -ENOBUFS;
+	if (rk_expect(!rk_session_start_with_ops(&session, 47023,
+						&rk_fake_ops, &fake),
+		      "worker starts before an injected create error"))
+		return -EINVAL;
+	finished = wait_event_timeout(session.wait,
+				      !READ_ONCE(session.running), HZ);
+	if (rk_expect(finished > 0, "create-error worker terminates")) {
+		rk_session_stop(&session);
+		return -EINVAL;
+	}
+	rk_session_stop(&session);
+	memset(&status, 0, sizeof(status));
+	rk_session_snapshot(&session, &status);
+	if (rk_expect(status.last_error == -ENOBUFS &&
+		      atomic_read(&fake.create_calls) == 1 &&
+		      atomic_read(&fake.connect_calls) == 0 &&
+		      atomic_read(&fake.shutdowns) == 0 &&
+		      atomic_read(&fake.releases) == 0,
+		      "create failure records its error without owning a socket"))
+		return -EINVAL;
+
+	rk_fake_init(&fake);
+	fake.connect_result = -ECONNREFUSED;
+	if (rk_expect(!rk_session_start_with_ops(&session, 47023,
+						&rk_fake_ops, &fake),
+		      "joined session restarts before an injected connect error"))
+		return -EINVAL;
+	finished = wait_event_timeout(session.wait,
+				      !READ_ONCE(session.running), HZ);
+	if (rk_expect(finished > 0, "connect-error worker terminates")) {
+		rk_session_stop(&session);
+		return -EINVAL;
+	}
+	rk_session_stop(&session);
+	memset(&status, 0, sizeof(status));
+	rk_session_snapshot(&session, &status);
+	return rk_expect(status.last_error == -ECONNREFUSED &&
+			 atomic_read(&fake.connect_calls) == 1 &&
+			 atomic_read(&fake.shutdowns) == 0 &&
+			 atomic_read(&fake.releases) == 1,
+			 "connect failure records its error and releases once");
 }
 
 static int rk_test_null_create(void)
@@ -496,9 +623,17 @@ static int rk_test_restart_after_stop(void)
 			rk_session_stop(&session);
 			return -EINVAL;
 		}
+		if (rk_expect(rk_session_start_with_ops(&session, 47023,
+							&rk_fake_ops,
+							&fake) == -EBUSY,
+			      "finished worker remains owned until stop joins it")) {
+			rk_session_stop(&session);
+			return -EINVAL;
+		}
 		rk_session_stop(&session);
-		if (rk_expect(atomic_read(&fake.releases) == 1,
-			      "each started worker releases exactly once"))
+		if (rk_expect(atomic_read(&fake.shutdowns) == 1 &&
+			      atomic_read(&fake.releases) == 1,
+			      "natural EOF shuts down and releases exactly once"))
 			return -EINVAL;
 	}
 	return 0;
@@ -518,6 +653,9 @@ __must_check int rk_run_selftests(void)
 	int error;
 
 	assertions = 0;
+	error = rk_test_argument_validation();
+	if (error)
+		return error;
 	error = rk_test_positive_partials();
 	if (error)
 		return error;
@@ -536,6 +674,9 @@ __must_check int rk_run_selftests(void)
 			return error;
 	}
 	error = rk_test_null_create();
+	if (error)
+		return error;
+	error = rk_test_worker_failures();
 	if (error)
 		return error;
 	error = rk_test_restart_after_stop();

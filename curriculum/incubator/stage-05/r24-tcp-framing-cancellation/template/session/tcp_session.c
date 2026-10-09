@@ -54,5 +54,7 @@ void rk_session_snapshot(struct rk_session *session,
 			 struct rk_session_status *status)
 {
 	(void)session;
+	if (!status)
+		return;
 	memset(status, 0, sizeof(*status));
 }

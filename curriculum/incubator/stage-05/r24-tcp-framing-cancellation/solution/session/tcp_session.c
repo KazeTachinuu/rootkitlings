@@ -358,7 +358,10 @@ void rk_session_stop(struct rk_session *session)
 void rk_session_snapshot(struct rk_session *session,
 			 struct rk_session_status *status)
 {
-	if (!session || !status || !READ_ONCE(session->initialized))
+	if (!status)
+		return;
+	memset(status, 0, sizeof(*status));
+	if (!session || !READ_ONCE(session->initialized))
 		return;
 	mutex_lock(&session->lock);
 	status->running = session->running;
