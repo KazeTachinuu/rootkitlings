@@ -74,11 +74,13 @@ static void *reuse_descriptors(void *argument)
 }
 
 static int inspect_chunk(const char *buffer, size_t count, const char *target,
-			 bool *ordinary_marker, bool *target_seen)
+			 bool *ordinary_marker, bool *proc_marker,
+			 bool *target_seen)
 {
 	size_t offset = 0;
 
 	*ordinary_marker = false;
+	*proc_marker = false;
 	*target_seen = false;
 	while (offset < count) {
 		const struct linux_dirent64 *entry =
@@ -97,6 +99,9 @@ static int inspect_chunk(const char *buffer, size_t count, const char *target,
 			return -1;
 		if (strcmp(entry->d_name, "ordinary_marker") == 0)
 			*ordinary_marker = true;
+		if (strcmp(entry->d_name, "self") == 0 ||
+		    strcmp(entry->d_name, "thread-self") == 0)
+			*proc_marker = true;
 		if (strcmp(entry->d_name, target) == 0)
 			*target_seen = true;
 		offset += entry->d_reclen;
@@ -113,6 +118,7 @@ static int fd_reuse_stress(const char *proc_path, const char *ordinary_path,
 	void *thread_result;
 	unsigned long iteration;
 	unsigned long race_ordinary_chunks = 0;
+	unsigned long race_proc_chunks = 0;
 	unsigned long cycles;
 	int startup;
 	int result = 0;
@@ -147,11 +153,13 @@ static int fd_reuse_stress(const char *proc_path, const char *ordinary_path,
 		long count = syscall(SYS_getdents64, context.target, buffer,
 				     sizeof(buffer));
 		bool ordinary_marker;
+		bool proc_marker;
 		bool target_seen;
 
 		if (count <= 0 ||
 		    inspect_chunk(buffer, (size_t)count, target,
-				  &ordinary_marker, &target_seen) < 0)
+				  &ordinary_marker, &proc_marker,
+				  &target_seen) < 0)
 			result = 3;
 		else if (!ordinary_marker || !target_seen)
 			result = 4;
@@ -161,6 +169,7 @@ static int fd_reuse_stress(const char *proc_path, const char *ordinary_path,
 	     iteration++) {
 		long count;
 		bool ordinary_marker;
+		bool proc_marker;
 		bool target_seen;
 
 		(void)lseek(context.target, 0, SEEK_SET);
@@ -169,7 +178,8 @@ static int fd_reuse_stress(const char *proc_path, const char *ordinary_path,
 		if (count <= 0)
 			continue;
 		if (inspect_chunk(buffer, (size_t)count, target,
-				  &ordinary_marker, &target_seen) < 0) {
+				  &ordinary_marker, &proc_marker,
+				  &target_seen) < 0) {
 			result = 3;
 			break;
 		}
@@ -177,8 +187,14 @@ static int fd_reuse_stress(const char *proc_path, const char *ordinary_path,
 			result = 4;
 			break;
 		}
+		if (proc_marker && target_seen) {
+			result = 4;
+			break;
+		}
 		if (ordinary_marker)
 			race_ordinary_chunks++;
+		if (proc_marker)
+			race_proc_chunks++;
 		sched_yield();
 	}
 	atomic_store_explicit(&context.stop, true, memory_order_relaxed);
@@ -190,11 +206,13 @@ static int fd_reuse_stress(const char *proc_path, const char *ordinary_path,
 		result = 6;
 	if (result == 0 && race_ordinary_chunks == 0)
 		result = 7;
+	if (result == 0 && race_proc_chunks == 0)
+		result = 8;
 	close(context.target);
 	if (result == 0)
 		printf("fd_reuse_iterations=%lu race_ordinary_chunks=%lu "
-		       "replacement_cycles=%lu\n",
-		       iterations, race_ordinary_chunks, cycles);
+		       "race_proc_chunks=%lu replacement_cycles=%lu\n",
+		       iterations, race_ordinary_chunks, race_proc_chunks, cycles);
 	return result;
 }
 
