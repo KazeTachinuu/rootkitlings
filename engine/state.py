@@ -5,7 +5,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 import fcntl
-import hashlib
 import os
 from pathlib import Path
 import re
@@ -263,72 +262,6 @@ def parse_state(content: str) -> LearnerState:
     return state
 
 
-def migrate_v2_state(
-    content: str,
-    valid_ids: set[str],
-    route: tuple[str, ...],
-    revision: str,
-    prerequisites: Mapping[str, frozenset[str]],
-    baseline_providers: Mapping[str, str | None],
-) -> LearnerState:
-    """Explicitly upgrade current-v2 state using authoritative catalog lineage."""
-    try:
-        data = tomllib.loads(content)
-    except tomllib.TOMLDecodeError as exc:
-        raise StateError(f"cannot parse learner state: {exc}") from exc
-    if data.get("schema_version") != 2 or isinstance(data.get("schema_version"), bool):
-        raise StateError("state is not schema_version 2")
-    if set(data) != {
-        "schema_version", "curriculum_revision", "route", "completed", "exercises"
-    }:
-        raise StateError("v2 state has missing or unknown top-level fields")
-    if not isinstance(data["curriculum_revision"], str):
-        raise StateError("v2 curriculum_revision must be a string")
-    saved_route = _string_array(data["route"], "route")
-    if not saved_route:
-        raise StateError("v2 saved route must be non-empty")
-    completed = set(_string_array(data["completed"], "completed"))
-    raw_exercises = data["exercises"]
-    if not isinstance(raw_exercises, dict):
-        raise StateError("exercises must be a table")
-    fields = {
-        "baseline_hash", "workspace_hash", "passed_snapshot", "attempts",
-        "solution_revealed",
-    }
-    exercises: dict[str, ExerciseState] = {}
-    for stable_id, raw in raw_exercises.items():
-        if not isinstance(raw, dict) or set(raw) != fields:
-            raise StateError(f"v2 exercise state fields mismatch for {stable_id}")
-        if any(not isinstance(raw[key], str) for key in (
-            "baseline_hash", "workspace_hash", "passed_snapshot"
-        )):
-            raise StateError(f"v2 exercise hashes must be strings for {stable_id}")
-        if isinstance(raw["attempts"], bool) or not isinstance(raw["attempts"], int):
-            raise StateError(f"v2 attempts must be an integer for {stable_id}")
-        if not isinstance(raw["solution_revealed"], bool):
-            raise StateError(f"v2 solution_revealed must be boolean for {stable_id}")
-        record = ExerciseState(
-            baseline_hash=raw["baseline_hash"],
-            workspace_hash=raw["workspace_hash"],
-            passed_snapshot=raw["passed_snapshot"],
-            attempts=raw["attempts"],
-            solution_revealed=raw["solution_revealed"],
-        )
-        if record.baseline_hash:
-            record.baseline_provider = baseline_providers.get(stable_id) or ""
-        exercises[stable_id] = record
-    if not set(saved_route) <= valid_ids:
-        raise StateError("v2 saved route contains unknown stable IDs")
-    state = LearnerState(
-        data["curriculum_revision"], route, completed, exercises
-    )
-    _validate_structural_state(state)
-    state.validate(
-        valid_ids, route, revision, prerequisites, baseline_providers
-    )
-    return state
-
-
 def _validate_structural_state(state: LearnerState) -> None:
     if not state.curriculum_revision or any(
         value in state.curriculum_revision for value in ("\n", "\r")
@@ -459,69 +392,6 @@ class StateStore:
             self.prerequisites,
             self.baseline_providers,
         )
-
-    def migrate_v2(self, archive_root: Path) -> bool:
-        """Atomically archive and upgrade an existing schema-v2 state file."""
-        if self.path.is_symlink():
-            raise StateError(f"learner state must not be a symlink: {self.path}")
-        if not self.path.exists():
-            return False
-        if not self.path.is_file():
-            raise StateError(f"learner state must be a regular file: {self.path}")
-        if self.path.parent.is_symlink():
-            raise StateError(
-                f"learner state parent must not be a symlink: {self.path.parent}"
-            )
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        archive_root = Path(archive_root)
-        if archive_root.is_symlink():
-            raise StateError(
-                f"state migration archive must not be a symlink: {archive_root}"
-            )
-        if archive_root.exists() and not archive_root.is_dir():
-            raise StateError(
-                f"state migration archive must be a directory: {archive_root}"
-            )
-        lock_path = self.path.with_name(self.path.name + ".lock")
-        with lock_path.open("a+b") as lock:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-            try:
-                original = _read_regular_bytes(self.path)
-                try:
-                    data = tomllib.loads(original.decode("utf-8"))
-                except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
-                    raise StateError(f"cannot read learner state: {exc}") from exc
-                if data.get("schema_version") == SCHEMA_VERSION:
-                    return False
-                state = migrate_v2_state(
-                    original.decode("utf-8"),
-                    self.valid_ids,
-                    self.route,
-                    self.revision,
-                    self.prerequisites,
-                    self.baseline_providers,
-                )
-                archive_root.mkdir(parents=True, exist_ok=True)
-                if archive_root.is_symlink() or not archive_root.is_dir():
-                    raise StateError(
-                        "state migration archive must be an existing real directory: "
-                        f"{archive_root}"
-                    )
-                digest = hashlib.sha256(original).hexdigest()
-                archive = archive_root / f"state-schema-v2-{digest}.toml"
-                if archive.is_symlink():
-                    raise StateError(
-                        f"state migration archive must not be a symlink: {archive}"
-                    )
-                if archive.exists():
-                    if not archive.is_file() or archive.read_bytes() != original:
-                        raise StateError(f"state migration archive mismatch: {archive}")
-                else:
-                    _atomic_write_bytes(archive, original)
-                _atomic_write(self.path, dump_state(state))
-                return True
-            finally:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
     @contextmanager
     def locked(self) -> Iterator[LearnerState]:

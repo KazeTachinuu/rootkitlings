@@ -754,7 +754,7 @@ class DerivedBaselineTests(unittest.TestCase):
         with self.assertRaisesRegex(CatalogError, "module artifact conflicts"):
             catalog.validate_workspace_lineage(consumer)
 
-    def test_only_explicit_completion_keeps_full_solution_migration_boundary(self) -> None:
+    def test_only_explicit_completion_keeps_full_solution_tree(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in ("provider", "completion", "derived"):

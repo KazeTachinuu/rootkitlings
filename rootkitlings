@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rootkitlings v2 learner CLI."""
+"""Rootkitlings learner CLI."""
 
 from __future__ import annotations
 
@@ -11,13 +11,7 @@ from pathlib import Path
 
 from engine.catalog import Catalog, CatalogError
 from engine.build_env import module_build_environment
-from engine.migration import MigrationError
 from engine.process import ProcessError, ProcessTimeout, run_process
-from engine.route_migration import (
-    DESTINATION_REVISION as ROUTE_MIGRATION_REVISION,
-    active_destination_contract,
-    migrate_core_route,
-)
 from engine.state import StateStore, StateError
 from engine.verification import VerificationError, build_verification_cases
 from engine.workspace import (
@@ -103,20 +97,6 @@ def initialize_runtime():
         path.mkdir(parents=True, exist_ok=True)
         if path.is_symlink():
             die(f'Runtime directory must not be a symlink: {path.relative_to(ROOT)}')
-    if CAT.revision == ROUTE_MIGRATION_REVISION:
-        migrate_core_route(
-            STATE,
-            WORK,
-            ARCHIVE,
-            active_destination_contract(
-                CAT.revision,
-                set(CAT.by_id),
-                ROUTE,
-                COMPLETION_DEPENDENCIES,
-                BASELINE_PROVIDERS,
-            ),
-        )
-    STORE.migrate_v2(ARCHIVE)
 
 
 def course_kernel_ready():
@@ -966,7 +946,6 @@ if __name__ == '__main__':
         raise SystemExit(main(sys.argv[1:]))
     except (
         CLIError,
-        MigrationError,
         StateError,
         VerificationError,
         WorkspaceError,

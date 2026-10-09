@@ -1,4 +1,4 @@
-"""Dependency-free loader and validator for the rootkitlings catalog v2."""
+"""Dependency-free loader and validator for the Rootkitlings catalog."""
 
 from __future__ import annotations
 
@@ -917,10 +917,8 @@ class Catalog:
                 item.workspace.files,
             )
         elif provider is None or item.workspace.baseline == "completion":
-            # Migration boundary: v2's six explicit-parent completions still
-            # store full trees. Delete this branch with those assets during the
-            # atomic 65-to-target route migration. New derived baselines never
-            # use it.
+            # Explicit completion bundles own full solutions; other inherited
+            # bundles store sparse overlays against their provider.
             result = full_solution_tree(solution, item.workspace.files)
         else:
             provider_tree = self.solution_tree(provider, cache)

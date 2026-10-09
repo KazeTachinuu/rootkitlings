@@ -13,7 +13,6 @@ from engine.state import (
     StateStore,
     dump_state,
     load_state,
-    migrate_v2_state,
     new_state,
 )
 from engine.workspace import (
@@ -32,7 +31,7 @@ from engine.workspace import (
 
 IDS = {"module-core", "proc-status", "optional-probe"}
 ROUTE = ("module-core", "proc-status")
-REVISION = "v2-test"
+REVISION = "state-test"
 PREREQUISITES = {
     "module-core": frozenset(),
     "proc-status": frozenset({"module-core"}),
@@ -180,152 +179,6 @@ class StateTests(unittest.TestCase):
             state.validate(
                 IDS, ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS
             )
-
-    def test_explicit_v2_migration_records_provider_and_survives_route_insertion(self) -> None:
-        state = new_state(ROUTE, IDS, REVISION, PREREQUISITES, BASELINE_PROVIDERS)
-        state.completed.update({"module-core", "proc-status"})
-        state.exercise("module-core").baseline_hash = "a" * 64
-        inherited = state.exercise("proc-status")
-        inherited.baseline_hash = "b" * 64
-        inherited.baseline_provider = "module-core"
-        v2 = dump_state(state).replace("schema_version = 3", "schema_version = 2")
-        v2 = "\n".join(
-            line for line in v2.splitlines() if not line.startswith("baseline_provider = ")
-        ) + "\n"
-        inserted_route = ("module-core", "optional-probe", "proc-status")
-        migrated = migrate_v2_state(
-            v2,
-            IDS,
-            inserted_route,
-            REVISION,
-            PREREQUISITES,
-            BASELINE_PROVIDERS,
-        )
-        self.assertEqual(migrated.exercises["module-core"].baseline_provider, "")
-        self.assertEqual(
-            migrated.exercises["proc-status"].baseline_provider,
-            "module-core",
-        )
-        self.assertEqual(migrated.current, "optional-probe")
-
-    def test_store_archives_and_atomically_migrates_v2(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            path = root / "state.toml"
-            archive = root / "archive"
-            state = new_state(
-                ROUTE, IDS, REVISION, PREREQUISITES, BASELINE_PROVIDERS
-            )
-            state.completed.add("module-core")
-            state.exercise("module-core").baseline_hash = "a" * 64
-            v2 = dump_state(state).replace("schema_version = 3", "schema_version = 2")
-            v2 = "\n".join(
-                line for line in v2.splitlines()
-                if not line.startswith("baseline_provider = ")
-            ) + "\n"
-            path.write_text(v2)
-            original = path.read_bytes()
-            store = StateStore(
-                path, IDS, ROUTE, REVISION, PREREQUISITES,
-                BASELINE_PROVIDERS,
-            )
-            self.assertTrue(store.migrate_v2(archive))
-            self.assertFalse(store.migrate_v2(archive))
-            self.assertEqual(len(tuple(archive.iterdir())), 1)
-            self.assertEqual(next(archive.iterdir()).read_bytes(), original)
-            loaded = load_state(
-                path, IDS, ROUTE, REVISION, PREREQUISITES,
-                BASELINE_PROVIDERS,
-            )
-            self.assertEqual(loaded.exercises["module-core"].baseline_provider, "")
-
-    def test_v2_migration_rejects_malformed_types_without_writing(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            path = root / "state.toml"
-            archive = root / "archive"
-            state = new_state(
-                ROUTE, IDS, REVISION, PREREQUISITES, BASELINE_PROVIDERS
-            )
-            state.exercise("module-core").attempts = 1
-            v2 = dump_state(state).replace("schema_version = 3", "schema_version = 2")
-            v2 = v2.replace("baseline_provider = \"\"\n", "")
-            v2 = v2.replace("attempts = 1", 'attempts = "one"')
-            path.write_text(v2)
-            original = path.read_bytes()
-            store = StateStore(
-                path, IDS, ROUTE, REVISION, PREREQUISITES,
-                BASELINE_PROVIDERS,
-            )
-            with self.assertRaisesRegex(StateError, "attempts must be an integer"):
-                store.migrate_v2(archive)
-            self.assertEqual(path.read_bytes(), original)
-            self.assertFalse(archive.exists())
-
-    def test_v2_migration_rejects_invalid_revision_and_empty_route(self) -> None:
-        state = new_state(
-            ROUTE, IDS, REVISION, PREREQUISITES, BASELINE_PROVIDERS
-        )
-        v2 = dump_state(state).replace("schema_version = 3", "schema_version = 2")
-        v2 = v2.replace('baseline_provider = ""\n', "")
-        invalid = (
-            (
-                v2.replace(
-                    f'curriculum_revision = "{REVISION}"',
-                    "curriculum_revision = 7",
-                ),
-                "curriculum_revision must be a string",
-            ),
-            (
-                v2.replace(
-                    'route = ["module-core", "proc-status"]',
-                    "route = []",
-                ),
-                "saved route must be non-empty",
-            ),
-        )
-        for content, message in invalid:
-            with self.subTest(message=message):
-                with self.assertRaisesRegex(StateError, message):
-                    migrate_v2_state(
-                        content,
-                        IDS,
-                        ROUTE,
-                        REVISION,
-                        PREREQUISITES,
-                        BASELINE_PROVIDERS,
-                    )
-
-    def test_v2_migration_rejects_state_and_archive_symlinks(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            actual = root / "actual-state.toml"
-            state = new_state(
-                ROUTE, IDS, REVISION, PREREQUISITES, BASELINE_PROVIDERS
-            )
-            v2 = dump_state(state).replace("schema_version = 3", "schema_version = 2")
-            v2 = v2.replace("baseline_provider = \"\"\n", "")
-            actual.write_text(v2)
-            linked = root / "state.toml"
-            linked.symlink_to(actual)
-            store = StateStore(
-                linked, IDS, ROUTE, REVISION, PREREQUISITES,
-                BASELINE_PROVIDERS,
-            )
-            with self.assertRaisesRegex(StateError, "must not be a symlink"):
-                store.migrate_v2(root / "archive")
-            self.assertEqual(actual.read_text(), v2)
-
-            linked.unlink()
-            linked.write_text(v2)
-            actual_archive = root / "actual-archive"
-            actual_archive.mkdir()
-            archive_link = root / "archive"
-            archive_link.symlink_to(actual_archive, target_is_directory=True)
-            with self.assertRaisesRegex(StateError, "archive must not be a symlink"):
-                store.migrate_v2(archive_link)
-            self.assertEqual(linked.read_text(), v2)
-            self.assertEqual(tuple(actual_archive.iterdir()), ())
 
     def test_read_locked_does_not_create_or_rewrite_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

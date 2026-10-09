@@ -1,9 +1,7 @@
 """Validate, compose, and safely materialize reference solution trees.
 
 Template solutions are complete trees. Derived solutions are sparse replacement
-overlays applied recursively to their catalog-derived provider solution. Catalog
-v2's explicit-parent completion trees are a documented migration boundary in
-``Catalog.solution_tree`` and are intentionally not handled here.
+overlays applied recursively to their catalog-derived provider solution.
 """
 
 from __future__ import annotations
