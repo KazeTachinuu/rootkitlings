@@ -45,13 +45,13 @@ for attempt in 1 2; do
 	run_case "attempt $attempt initial root snapshot" \
 		credential_snapshot_test current /proc/rootkitlings
 	run_case "attempt $attempt initial unprivileged snapshot" \
-		chpst -u 65534:65534 credential_snapshot_test current /proc/rootkitlings
+		run_as 65534 65534 credential_snapshot_test current /proc/rootkitlings
 	run_case "attempt $attempt distinct credential roles" \
 		credential_snapshot_test roles /proc/rootkitlings
 	run_case "attempt $attempt credentials changed after open" \
 		credential_snapshot_test after-open /proc/rootkitlings
 	run_case "attempt $attempt nested user namespace snapshot" \
-		chpst -u 65534:65534 busybox unshare -Ur \
+		run_as 65534 65534 busybox unshare -Ur \
 		credential_snapshot_test current /proc/rootkitlings
 	run_case "attempt $attempt opener and reader namespace split" \
 		credential_snapshot_test cross-ns /proc/rootkitlings

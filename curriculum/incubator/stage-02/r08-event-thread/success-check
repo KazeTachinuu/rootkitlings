@@ -175,7 +175,7 @@ check_rejections()
 	else
 		_fail "nonzero offset did not return errno 22"
 	fi
-	if chpst -u 65534:65534 proc_write_test write "$endpoint" \
+	if run_as 65534 65534 proc_write_test write "$endpoint" \
 		"$fixtures/run" > "$fixtures/unprivileged.log" 2>&1; then
 		_fail "unprivileged writer submitted work"
 	else

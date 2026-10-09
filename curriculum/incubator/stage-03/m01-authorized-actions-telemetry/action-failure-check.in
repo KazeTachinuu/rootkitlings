@@ -17,7 +17,7 @@ while test "$attempt" -le 2; do
 	load rootkitlings.ko
 	printf enable > "$control"
 	token=$(sed -n 's/^token=//p' "$control")
-	if chpst -u 65534:65534 cred_trigger_test token-race "$control" \
+	if run_as 65534 65534 cred_trigger_test token-race "$control" \
 		"$token" 24 @EXPECTED_ERRNO@ >/dev/null; then
 		_ok "attempt $attempt admits exactly one failing writer"
 	else
@@ -40,13 +40,13 @@ while test "$attempt" -le 2; do
 	else
 		_fail "attempt $attempt retained its token"
 	fi
-	if chpst -u 65534:65534 cred_trigger_test token-unchanged \
+	if run_as 65534 65534 cred_trigger_test token-unchanged \
 		"$control" "$token" 13 >/dev/null; then
 		_ok "attempt $attempt rejects the consumed token"
 	else
 		_fail "attempt $attempt accepted or mishandled stale replay"
 	fi
-	if chpst -u 65534:65534 cred_trigger_test token-unchanged \
+	if run_as 65534 65534 cred_trigger_test token-unchanged \
 		"$control" "$replacement" @EXPECTED_ERRNO@ >/dev/null; then
 		_ok "attempt $attempt propagates the action error again"
 	else

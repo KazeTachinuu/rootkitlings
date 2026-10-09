@@ -210,7 +210,7 @@ check_rejections()
 		_fail "nonzero offset did not return errno 22"
 	fi
 	assert_status disabled-00 "nonzero offset"
-	if chpst -u 65534:65534 proc_write_test write "$endpoint" \
+	if run_as 65534 65534 proc_write_test write "$endpoint" \
 		"$fixtures/enable" > "$fixtures/unprivileged.log" 2>&1; then
 		_fail "unprivileged writer changed the root control"
 	else

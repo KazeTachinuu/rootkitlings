@@ -210,7 +210,8 @@ run_guest()
 {
 	local check=$1 module=$2 output
 	shift 2
-	if ! output=$("$ROOT/vm/boot" --check "$check" "$@" "$module" 2>&1); then
+	if ! output=$("$ROOT/vm/boot" --check "$check" --tool tools/run_as \
+		"$@" "$module" 2>&1); then
 		printf '%s\n' "$output" >&2; exit 1
 	fi
 	printf '%s\n' "$output"

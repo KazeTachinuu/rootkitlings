@@ -71,7 +71,7 @@ expect_parser_errno()
 	fixture=$1
 	errno=$2
 	label=$3
-	if chpst -u 65534:65534 proc_write_test errno "$endpoint" \
+	if run_as 65534 65534 proc_write_test errno "$endpoint" \
 		"$fixtures/$fixture" "$errno" > /dev/null; then
 		_ok "$label returns errno $errno"
 	else
@@ -82,13 +82,13 @@ expect_parser_errno()
 
 check_rejections()
 {
-	if chpst -u 65534:65534 \
+	if run_as 65534 65534 \
 		cred_trigger_test unchanged "$endpoint" root 13 > /dev/null; then
 		_ok "disabled root returns EACCES without changing its writer"
 	else
 		_fail "disabled root changed its writer or returned the wrong error"
 	fi
-	if chpst -u 65534:65534 \
+	if run_as 65534 65534 \
 		cred_trigger_test unchanged "$endpoint" rooted 22 > /dev/null; then
 		_ok "rooted returns EINVAL without changing its writer"
 	else
@@ -103,14 +103,14 @@ check_rejections()
 	expect_parser_errno double-lf 22 "second trailing newline"
 	expect_parser_errno oversized 7 "nine-byte command"
 
-	if chpst -u 65534:65534 proc_write_test fault "$endpoint" \
+	if run_as 65534 65534 proc_write_test fault "$endpoint" \
 		"$fixtures/enable" 14 > /dev/null; then
 		_ok "partial user copy returns EFAULT"
 	else
 		_fail "partial user copy did not return EFAULT"
 	fi
 	assert_actions disabled "partial user copy"
-	if chpst -u 65534:65534 proc_write_test offset "$endpoint" \
+	if run_as 65534 65534 proc_write_test offset "$endpoint" \
 		"$fixtures/enable" 1 22 > /dev/null; then
 		_ok "nonzero offset returns EINVAL"
 	else
@@ -121,7 +121,7 @@ check_rejections()
 
 enable_unprivileged()
 {
-	if chpst -u 65534:65534 proc_write_test write "$endpoint" \
+	if run_as 65534 65534 proc_write_test write "$endpoint" \
 		"$fixtures/enable-lf" > /dev/null; then
 		_ok "an unprivileged writer can enable the operational switch"
 	else
@@ -135,33 +135,33 @@ check_successes()
 	root_lf='root
 '
 	enable_unprivileged
-	identity=$(chpst -u 65534:65534 \
+	identity=$(run_as 65534 65534 \
 		cred_trigger_test "$endpoint" "$root_lf")
 	if [ "$identity" = "uid=0 euid=0" ]; then
 		_ok "root with a final newline replaces only its writing process"
 	else
 		_fail "root with a final newline returned: ${identity:-nothing}"
 	fi
-	if chpst -u 65534:65534 cred_trigger_test replace "$endpoint" \
+	if run_as 65534 65534 cred_trigger_test replace "$endpoint" \
 		"$fixtures/root" > /dev/null; then
 		_ok "root installs the complete init credential only on its writing process"
 	else
 		_fail "root did not install the complete init credential"
 	fi
-	if chpst -u 65534:65534 cred_trigger_test thread-scope "$endpoint" \
+	if run_as 65534 65534 cred_trigger_test thread-scope "$endpoint" \
 		> /dev/null; then
 		_ok "root changes the writing thread but not an existing sibling"
 	else
 		_fail "credential replacement escaped the writing thread"
 	fi
-	if chpst -u 65534:65534 proc_write_test write "$endpoint" \
+	if run_as 65534 65534 proc_write_test write "$endpoint" \
 		"$fixtures/disable-lf" > /dev/null; then
 		_ok "an unprivileged writer can disable with a final newline"
 	else
 		_fail "unprivileged disable failed"
 	fi
 	assert_actions disabled "disable"
-	if chpst -u 65534:65534 \
+	if run_as 65534 65534 \
 		cred_trigger_test unchanged "$endpoint" root 13 > /dev/null; then
 		_ok "disable blocks the next writing task without changing it"
 	else
@@ -186,7 +186,7 @@ check_concurrency()
 	pids=
 	i=0
 	while [ "$i" -lt 24 ]; do
-		chpst -u 65534:65534 cred_trigger_test outcome "$endpoint" \
+		run_as 65534 65534 cred_trigger_test outcome "$endpoint" \
 			> "$fixtures/outcome-$i" 2>&1 &
 		pids="$pids $!"
 		i=$((i + 1))

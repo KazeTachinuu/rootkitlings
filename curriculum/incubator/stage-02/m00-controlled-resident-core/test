@@ -68,7 +68,8 @@ run_guest()
 {
 	local check_script=$1 module=$2 output
 	shift 2
-	if ! output=$("$HERE/../../../../vm/boot" --check "$check_script" "$@" "$module" 2>&1); then
+	if ! output=$("$HERE/../../../../vm/boot" --check "$check_script" \
+		--tool tools/run_as "$@" "$module" 2>&1); then
 		printf '%s\n' "$output" >&2
 		printf '[x] disposable guest did not complete\n' >&2
 		exit 1

@@ -100,7 +100,7 @@ expect_rejected_write()
 	token_before=$(read_token)
 	events_before=$(sed -n 's/^retained=//p' "$events"):$(
 		sed -n 's/^overwritten=//p' "$events")
-	if chpst -u 65534:65534 proc_write_test errno "$control" \
+	if run_as 65534 65534 proc_write_test errno "$control" \
 		"$fixtures/$fixture" "$errno" >/dev/null; then
 		_ok "$label returns errno $errno"
 	else
@@ -191,7 +191,7 @@ else
 fi
 assert_empty_ring "initial load"
 assert_status_shape "initial load"
-if chpst -u 65534:65534 cat "$control" >/dev/null 2>&1; then
+if run_as 65534 65534 cat "$control" >/dev/null 2>&1; then
 	_fail "an unprivileged task read the bearer token"
 else
 	_ok "an unprivileged task cannot read the bearer token"
@@ -244,13 +244,13 @@ else
 	_fail "nonzero write offset returned the wrong error"
 fi
 assert_control_unchanged "$disabled_token" 0:0 "nonzero write offset"
-if chpst -u 65534:65534 proc_write_test write "$control" \
+if run_as 65534 65534 proc_write_test write "$control" \
 	"$fixtures/enable-lf" >/dev/null; then
 	_ok "unprivileged newline-terminated enable succeeds"
 else
 	_fail "unprivileged newline-terminated enable failed"
 fi
-if chpst -u 65534:65534 proc_write_test write "$control" \
+if run_as 65534 65534 proc_write_test write "$control" \
 	"$fixtures/disable-lf" >/dev/null; then
 	_ok "unprivileged newline-terminated disable succeeds"
 else
@@ -297,7 +297,7 @@ wrong=00000000000000000000000000000000
 if test "$wrong" = "$token"; then
 	wrong=11111111111111111111111111111111
 fi
-if chpst -u 65534:65534 cred_trigger_test token-unchanged "$control" \
+if run_as 65534 65534 cred_trigger_test token-unchanged "$control" \
 	"$wrong" 13 >/dev/null; then
 	_ok "a well-formed wrong token returns EACCES"
 else
@@ -316,7 +316,7 @@ if test "$replacement" != "$token"; then
 else
 	_fail "the successful action retained its token"
 fi
-if chpst -u 65534:65534 cred_trigger_test token-unchanged "$control" \
+if run_as 65534 65534 cred_trigger_test token-unchanged "$control" \
 	"$token" 13 >/dev/null; then
 	_ok "the consumed token is rejected as stale"
 else
@@ -342,7 +342,7 @@ done
 assert_ring 16 17 18 33 "more than twice capacity"
 
 token=$(read_token)
-if chpst -u 65534:65534 cred_trigger_test token-thread-scope "$control" \
+if run_as 65534 65534 cred_trigger_test token-thread-scope "$control" \
 	"$token" >/dev/null; then
 	_ok "an authorized action changes its writer but not an existing sibling"
 else
@@ -350,7 +350,7 @@ else
 fi
 assert_ring 16 18 19 34 "thread-scoped authorized action"
 token=$(read_token)
-if chpst -u 65534:65534 cred_trigger_test token-replace "$control" \
+if run_as 65534 65534 cred_trigger_test token-replace "$control" \
 	"$token" "$fixtures/root" >/dev/null; then
 	_ok "a final newline authorizes one same-caller credential change"
 else

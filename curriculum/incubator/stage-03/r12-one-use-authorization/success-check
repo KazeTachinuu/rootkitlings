@@ -99,7 +99,7 @@ expect_malformed()
 	fixture=$1
 	label=$2
 	before=$status_token
-	if chpst -u 65534:65534 proc_write_test errno "$endpoint" \
+	if run_as 65534 65534 proc_write_test errno "$endpoint" \
 		"$fixtures/$fixture" 22 > /dev/null; then
 		_ok "$label returns EINVAL"
 	else
@@ -121,7 +121,7 @@ check_loaded()
 	else
 		_fail "$endpoint metadata: expected 622:0:0, got $metadata"
 	fi
-	if chpst -u 65534:65534 cat "$endpoint" > /dev/null 2>&1; then
+	if run_as 65534 65534 cat "$endpoint" > /dev/null 2>&1; then
 		_fail "an unprivileged task read the bearer token"
 	else
 		_ok "an unprivileged task cannot read the bearer token"
@@ -137,7 +137,7 @@ check_loaded()
 check_parser()
 {
 	initial=$status_token
-	if chpst -u 65534:65534 cred_trigger_test token-unchanged "$endpoint" \
+	if run_as 65534 65534 cred_trigger_test token-unchanged "$endpoint" \
 		"$initial" 13 > /dev/null; then
 		_ok "disabled rejects the current token without changing its writer"
 	else
@@ -152,14 +152,14 @@ check_parser()
 	done
 
 	printf 'root %s' "$initial" > "$fixtures/current"
-	if chpst -u 65534:65534 proc_write_test fault "$endpoint" \
+	if run_as 65534 65534 proc_write_test fault "$endpoint" \
 		"$fixtures/current" 14 > /dev/null; then
 		_ok "partial user copy returns EFAULT"
 	else
 		_fail "partial user copy did not return EFAULT"
 	fi
 	assert_token_unchanged "$initial" "partial user copy"
-	if chpst -u 65534:65534 proc_write_test offset "$endpoint" \
+	if run_as 65534 65534 proc_write_test offset "$endpoint" \
 		"$fixtures/current" 1 22 > /dev/null; then
 		_ok "nonzero write offset returns EINVAL"
 	else
@@ -170,7 +170,7 @@ check_parser()
 
 enable_actions()
 {
-	if chpst -u 65534:65534 proc_write_test write "$endpoint" \
+	if run_as 65534 65534 proc_write_test write "$endpoint" \
 		"$fixtures/enable-lf" > /dev/null; then
 		_ok "an unprivileged writer can enable the operational switch"
 	else
@@ -184,7 +184,7 @@ check_authorization()
 	assert_status enabled 0 "enable"
 	current=$status_token
 	wrong=00000000000000000000000000000000
-	if chpst -u 65534:65534 cred_trigger_test token-unchanged "$endpoint" \
+	if run_as 65534 65534 cred_trigger_test token-unchanged "$endpoint" \
 		"$wrong" 13 > /dev/null; then
 		_ok "a well-formed wrong token returns EACCES"
 	else
@@ -192,7 +192,7 @@ check_authorization()
 	fi
 	assert_token_unchanged "$current" "wrong token"
 
-	if chpst -u 65534:65534 cred_trigger_test token-replace "$endpoint" \
+	if run_as 65534 65534 cred_trigger_test token-replace "$endpoint" \
 		"$current" "$fixtures/root" > /dev/null; then
 		_ok "the token plus final newline authorizes one complete same-caller credential change"
 	else
@@ -205,7 +205,7 @@ check_authorization()
 	else
 		_fail "the successful action reused its token"
 	fi
-	if chpst -u 65534:65534 cred_trigger_test token-unchanged "$endpoint" \
+	if run_as 65534 65534 cred_trigger_test token-unchanged "$endpoint" \
 		"$current" 13 > /dev/null; then
 		_ok "the consumed token is rejected as stale"
 	else
@@ -213,7 +213,7 @@ check_authorization()
 	fi
 	assert_token_unchanged "$next" "stale replay"
 
-	if chpst -u 65534:65534 cred_trigger_test token-thread-scope "$endpoint" \
+	if run_as 65534 65534 cred_trigger_test token-thread-scope "$endpoint" \
 		"$next" > /dev/null; then
 		_ok "the fresh token changes the writer but not its existing sibling"
 	else
@@ -222,7 +222,7 @@ check_authorization()
 	assert_status enabled 2 "second authorized action"
 
 	raced=$status_token
-	if chpst -u 65534:65534 cred_trigger_test token-race "$endpoint" \
+	if run_as 65534 65534 cred_trigger_test token-race "$endpoint" \
 		"$raced" 24 0 > /dev/null; then
 		_ok "one of 24 simultaneous writers consumes the token"
 	else
@@ -236,14 +236,14 @@ check_authorization()
 	fi
 
 	current=$status_token
-	if chpst -u 65534:65534 proc_write_test write "$endpoint" \
+	if run_as 65534 65534 proc_write_test write "$endpoint" \
 		"$fixtures/disable" > /dev/null; then
 		_ok "an unprivileged writer can disable with a final newline"
 	else
 		_fail "unprivileged disable failed"
 	fi
 	assert_status disabled 3 "disable"
-	if chpst -u 65534:65534 cred_trigger_test token-unchanged "$endpoint" \
+	if run_as 65534 65534 cred_trigger_test token-unchanged "$endpoint" \
 		"$current" 13 > /dev/null; then
 		_ok "disabled preserves the current token for a later enable"
 	else

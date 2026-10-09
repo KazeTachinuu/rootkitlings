@@ -133,7 +133,7 @@ check_rejections()
 	fi
 	read_status disabled "nonzero offset" > /dev/null || true
 
-	if chpst -u 65534:65534 proc_write_test write "$endpoint" \
+	if run_as 65534 65534 proc_write_test write "$endpoint" \
 		"$fixtures/enable" > "$fixtures/unprivileged.log" 2>&1; then
 		_fail "unprivileged writer changed the root control"
 	else
