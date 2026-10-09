@@ -453,13 +453,22 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
 
 #### R21 - Classify one bounded IPv4 UDP datagram
 
-- Teaches: layered protocol predicates, exact UDP length and port decoding, and
-  malformed-input state preservation.
-- Produces: one bounded UDP classification that combines R18 parsing, R19 packet
-  access, and R20 observation without claiming checksum validation.
+- Teaches: layered protocol predicates, explicit result precedence, exact
+  big-endian UDP port and length decoding, UDP datagram boundaries, and
+  transactional output on nonmatches and malformed input.
+- Produces: one pure bounded UDP classifier plus supplied composition of R18
+  parsing, R19 network-relative access, and R20 observation.
 - Requires: R19 and R20.
-- Defensive evidence: matching, nonmatching, truncated, fragmented, malformed-length,
-  option-bearing, and unrelated traffic.
+- Length policy: accept `8 <= UDP Length <= IPv4 payload length`; report any
+  remaining IPv4 payload as uninterpreted trailing bytes, matching Linux v7.2's
+  receive-side upper bound and trimming behavior.
+- Scope: checksum state is deliberately not inspected at `LOCAL_OUT`, where
+  offload completion may still be pending; a structural match is not a claim of
+  checksum validity, delivery, one userspace send, or one final wire packet.
+- Defensive evidence: sanitizer-backed matching, nonmatching, truncation,
+  unaligned access, every port and length field, IPv4 options, fragments,
+  malformed lengths, surplus bytes, bad checksums, GSO, output preservation,
+  real loopback delivery, concurrency, rollback, unload, and reload.
 - Current sources: L41 and only the relevant transport predicate from L42.
 
 #### R22 - Mutate a writable packet and repair its checksum state
