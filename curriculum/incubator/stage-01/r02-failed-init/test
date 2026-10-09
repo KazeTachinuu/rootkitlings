@@ -2,6 +2,8 @@
 set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../../scripts/lesson-env"
 baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r02-baseline.XXXXXX")
 work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r02-work.XXXXXX")
 trap 'rm -rf -- "$baseline" "$work"' EXIT

@@ -1,19 +1,18 @@
 #!/usr/bin/bash
 set -Eeuo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$here/../../../../scripts/lesson-env"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r30-test.XXXXXX")
 trap 'rm -rf -- "$tmp"' EXIT
-kdir=${KDIR:-/lib/modules/$(uname -r)/build}
-[[ -d $kdir ]] || { printf '[x] kernel build directory not found\n' >&2; exit 1; }
-[[ $(uname -r) == 7.2.* || $(uname -r) == 7.2-* ]] || { printf '[x] Linux 7.2.x required\n' >&2; exit 1; }
-grep -Eq '^CONFIG_CRYPTO_GCM=[ym]$' "$kdir/.config" || { printf '[x] CONFIG_CRYPTO_GCM required\n' >&2; exit 1; }
-grep -Eq '^CONFIG_CRYPTO_AES=[ym]$' "$kdir/.config" || { printf '[x] CONFIG_CRYPTO_AES required\n' >&2; exit 1; }
+grep -Eq '^CONFIG_CRYPTO_GCM=[ym]$' "$KDIR/.config" || { printf '[x] CONFIG_CRYPTO_GCM required\n' >&2; exit 1; }
+grep -Eq '^CONFIG_CRYPTO_AES=[ym]$' "$KDIR/.config" || { printf '[x] CONFIG_CRYPTO_AES required\n' >&2; exit 1; }
 generated=$(find "$here" -type f \( -name '*.o' -o -name '*.ko' -o -name '*.mod' -o -name '*.mod.c' -o -name Module.symvers -o -name modules.order -o -name '.*.cmd' \) -print -quit)
 [[ -z $generated ]] || { printf '[x] generated artifact in lesson: %s\n' "$generated" >&2; exit 1; }
 mapfile -t changed < <(diff -qr "$here/template" "$here/solution" | sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p')
 [[ ${#changed[@]} == 1 && ${changed[0]} == crypto/aead.c ]] || { printf '[x] learner edit boundary is not one file\n' >&2; exit 1; }
 
-build(){ local src=$1 dst=$2 point=${3:-0}; cp -a "$src" "$dst"; make -s -C "$kdir" M="$dst" W=1 ROOTKITLINGS_FAIL_POINT="$point" modules >"$dst.log" 2>&1 || { cat "$dst.log"; exit 1; }; ! grep -q 'warning:' "$dst.log" || { cat "$dst.log"; exit 1; }; }
+build(){ local src=$1 dst=$2 point=${3:-0}; cp -a "$src" "$dst"; make -s -C "$KDIR" M="$dst" W=1 ROOTKITLINGS_FAIL_POINT="$point" modules >"$dst.log" 2>&1 || { cat "$dst.log"; exit 1; }; ! grep -q 'warning:' "$dst.log" || { cat "$dst.log"; exit 1; }; }
 build "$here/solution" "$tmp/solution"
 build "$here/template" "$tmp/template"
 for point in 1 2 3; do build "$here/solution" "$tmp/fail-$point" "$point"; done

@@ -2,7 +2,9 @@
 set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-ROOT=$(cd "$HERE/../../../.." && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../../scripts/lesson-env"
+ROOT=$ROOTKITLINGS_ROOT
 baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r14-baseline.XXXXXX")
 work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r14-work.XXXXXX")
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r14-test.XXXXXX")
@@ -24,19 +26,10 @@ while IFS= read -r -d '' source; do
 	cp -p "$source" "$work/$relative"
 done < <(find "$HERE/solution" -type f -print0)
 
-KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
-[[ -d $KDIR ]] || {
-	printf '[x] kernel build directory not found: %s\n' "$KDIR" >&2
-	exit 1
-}
 [[ $(uname -m) == x86_64 ]] || {
 	printf '[x] this lesson requires x86_64\n' >&2
 	exit 1
 }
-case $(uname -r) in
-	7.2.*|7.2-*) ;;
-	*) printf '[x] this lesson requires Linux 7.2.x\n' >&2; exit 1 ;;
-esac
 for option in X86_64 IKCONFIG_PROC KPROBES KRETPROBES \
 	KRETPROBE_ON_RETHOOK KPROBES_ON_FTRACE KALLSYMS KALLSYMS_ALL \
 	DEBUG_FS ARCH_HAS_SYSCALL_WRAPPER MODULES MODULE_UNLOAD; do

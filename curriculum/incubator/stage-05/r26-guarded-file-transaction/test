@@ -2,12 +2,11 @@
 set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../../scripts/lesson-env"
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r26-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
-KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
 
-[[ -d $KDIR ]] || { printf '[x] kernel build directory missing\n' >&2; exit 1; }
-case $(uname -r) in 7.2.*|7.2-*) ;; *) printf '[x] Linux 7.2.x required\n' >&2; exit 1 ;; esac
 [[ $(uname -m) == x86_64 ]] || { printf '[x] x86_64 required\n' >&2; exit 1; }
 grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || exit 1
 

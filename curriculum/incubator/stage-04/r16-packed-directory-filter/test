@@ -2,12 +2,12 @@
 set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../../scripts/lesson-env"
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r16-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
-KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
 
 [[ $(uname -m) == x86_64 ]] || { printf '[x] x86_64 is required\n' >&2; exit 1; }
-case $(uname -r) in 7.2.*|7.2-*) ;; *) printf '[x] Linux 7.2.x is required\n' >&2; exit 1 ;; esac
 for option in X86_64 PROC_FS KPROBES KPROBES_ON_FTRACE OPTPROBES KALLSYMS \
 	KALLSYMS_ALL DEBUG_FS; do
 	grep -qx "CONFIG_$option=y" "$KDIR/.config" || {

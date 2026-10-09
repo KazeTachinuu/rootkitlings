@@ -2,16 +2,12 @@
 set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../../scripts/lesson-env"
 
 die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 
-ROOT=$HERE
-while [[ ! -f $ROOT/course.toml ]]; do
-	parent=$(dirname "$ROOT")
-	[[ $parent != "$ROOT" ]] || die "cannot find repository root from: $HERE"
-	ROOT=$parent
-done
+ROOT=$ROOTKITLINGS_ROOT
 
 (( $# == 2 )) || die "usage: ${0##*/} WORKSPACE STARTING_SNAPSHOT"
 workspace=$(realpath -e -- "$1") || die "workspace not found: $1"
@@ -23,8 +19,6 @@ for pair in "workspace:$workspace" "starting snapshot:$baseline"; do
 		[[ -f $directory/$path && ! -L $directory/$path ]] || die "$label is missing regular file: $path"
 	done
 done
-[[ -d $KDIR ]] || die "kernel build directory not found: $KDIR"
-
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r02-check.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 

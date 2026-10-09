@@ -2,9 +2,10 @@
 set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../../scripts/lesson-env"
 work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r01-test.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
-KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
 
 build_and_check()
 {

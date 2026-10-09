@@ -2,6 +2,8 @@
 set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../../scripts/lesson-env"
 baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r12-baseline.XXXXXX")
 work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r12-work.XXXXXX")
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r12-test.XXXXXX")
@@ -27,11 +29,6 @@ for source in "$HERE/template" "$HERE/solution"; do
 	done < <(find "$source" -type f -print0)
 done
 
-KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
-[[ -d $KDIR ]] || {
-	printf '[x] kernel build directory not found: %s\n' "$KDIR" >&2
-	exit 1
-}
 for option in CONFIG_MULTIUSER=y CONFIG_USER_NS=y CONFIG_CRYPTO_LIB_UTILS=y; do
 	grep -qx "$option" "$KDIR/.config" || {
 		printf '[x] this lesson requires %s\n' "$option" >&2
