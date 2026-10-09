@@ -66,7 +66,7 @@ An unused general competency is omitted rather than attached to L00 as a course-
 | L14 | `cross-view-evidence` — Omit one live probe from a proc view | S4 | `managed-kprobe` | `cross-view-evidence`, `positive-negative-controls` | `proc-read`, `kprobes` | detection, concealment | implicit in L34–L39 | new |
 | L15 | `packed-directory-filter` — Filter packed directory records safely | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `packed-record-validation`, `overlap-safe-record-compaction`, `directory-cookie-preservation`, `false-eof-avoidance` | `kretprobes`, `nofault-user-copy`, `kernel-allocation`, `kernel-abi-contract`, `managed-hook-lifecycle`, `cross-view-evidence` | concealment, detection | L36 | adapt |
 | L16 | `bounded-rendered-filter` — Replace bytes in one bounded read result | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `bounded-rendered-filter`, `binary-safe-equal-width-replacement`, `inode-identity-selection` | `kretprobes`, `nofault-user-copy`, `kernel-abi-contract`, `managed-hook-lifecycle`, `cross-view-evidence` | concealment, detection | L37 | adapt |
-| L17 | `hostile-packet-lengths` — Parse hostile packet lengths before touching payload | S5 | — | `packet-length-validation`, `network-byte-order-policy` | `ipv4-packet-basics` | networking, detection | fragments in L41/L42/L44/L46 | new |
+| L17 | `hostile-packet-lengths` — Parse packet lengths before touching payload | S5 | — | `packet-length-validation`, `network-byte-order-decoding`, `ipv4-fragment-policy` | `ipv4-packet-basics` | networking, detection | fragments in L41/L42/L44/L46 | new |
 | L18 | `safe-skb-access` — Read an sk_buff without assuming linear storage | S5 | `hostile-packet-lengths` | `skb-safe-access`, `nonlinear-packet-access` | `packet-length-validation` | networking | hidden in current scaffolds | new |
 | L19 | `netfilter-observer` — Register a non-disruptive Netfilter observer | S5 | `safe-skb-access`, `proc-publication` | `netfilter-hooks`, `accept-by-default-observation`, `netfilter-callback-constraints` | `resource-ownership`, `skb-safe-access` | networking, instrumentation, detection | L40 | adapt |
 | L20 | `validated-packet-classification` — Classify only fully validated packets | S5 | `netfilter-observer` | `packet-classification`, `malformed-input-state-preservation` | `netfilter-hooks`, `skb-safe-access` | networking, detection | L41, predicate portion of L42 | adapt |
@@ -173,7 +173,8 @@ Add these genuinely new concepts:
 - `binary-safe-equal-width-replacement`
 - `inode-identity-selection`
 - `packet-length-validation`
-- `network-byte-order-policy`
+- `network-byte-order-decoding`
+- `ipv4-fragment-policy`
 - `skb-safe-access`
 - `nonlinear-packet-access`
 - `accept-by-default-observation`
@@ -241,10 +242,10 @@ The removed `module-view-suppression` checkpoint receives no replacement alias.
 
 No complete target asset set currently exists for the redesigned route.
 
-- Independently validated incubation assets exist for L00 through L16 and for M00 and M01.
+- Independently validated incubation assets exist for L00 through L17 and for M00 and M01.
 - These assets are not yet the public route or final metadata.
 
-- L17 through L30 still require target assets satisfying their contracts.
+- L18 through L30 still require target assets satisfying their contracts.
 - M02, M03, and the final capstone still require cumulative checks, hints, and
   sparse solution overlays on the declared project lineage.
 - The authenticated DNS signal source lacks the required replay-safe state machine.

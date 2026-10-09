@@ -403,14 +403,14 @@ The milestone produces a machine-readable evidence card stating which view chang
 
 ### Stage 5: Networking and durable state
 
-#### R18 - Parse hostile packet lengths before touching payload
+#### R18 - Parse packet lengths before touching payload
 
-- Teaches: network byte order, IPv4 IHL and total length, fragment policy, transport
-  boundaries, overflow-safe arithmetic, and truncation.
-- Produces: host-tested protocol parsers and fixtures.
+- Teaches: network-byte-order decoding, IPv4 IHL and Total Length validation, payload boundaries, explicit result precedence, and a Linux-aligned fragment policy.
+- Produces: one allocation-free IPv4 boundary parser that compiles in the pinned kernel and is tested independently in userspace.
 - Requires: basic IPv4 packet knowledge declared as entry knowledge.
-- Defensive evidence: malformed and truncated fixture corpus.
-- Current sources: concepts are spread across L41, L42, L44, and L46 scaffolds.
+- Memory contract: the input exposes the fixed 20-byte prefix; `available` describes what the backing object can provide, so the parser never reads options or payload directly.
+- Defensive evidence: exhaustive first-octet, Total Length, fragment-field, and protocol sweeps under address and undefined-behavior sanitizers; null, unaligned, truncation, maximum-IHL fixed-prefix, capture-padding, unchanged-output, result-precedence, and deliberately incorrect implementation cases; pinned-kernel build and guest lifecycle checks.
+- Accepted asset: `curriculum/incubator/stage-05/r18-hostile-packet-lengths/`, independently validated.
 
 #### R19 - Read an `sk_buff` without assuming linear storage
 
