@@ -78,16 +78,23 @@ if grep -Eq 'seq_(printf|puts)[[:space:]]*\([^;]*%s' <<< "$source_text"; then
 fi
 
 mapfile -t task_vars < <(
-	sed -nE 's/.*struct[[:space:]]+task_struct[[:space:]]*\*[[:space:]]*([[:alpha:]_][[:alnum:]_]*)[[:space:]]*=[[:space:]]*current[[:space:]]*;.*/\1/p' "$source"
+	grep -oE 'struct[[:space:]]+task_struct[[:space:]]*\*[[:space:]]*[[:alpha:]_][[:alnum:]_]*' \
+		<<< "$source_text" |
+		sed -E 's/.*\*[[:space:]]*//'
 )
 (( ${#task_vars[@]} == 1 )) ||
-	die "copy current into exactly one local task pointer"
+	die "declare exactly one local task pointer"
 task_var=${task_vars[0]}
-grep -Eq "task_pid_nr[[:space:]]*\([[:space:]]*${task_var}[[:space:]]*\)" "$source" ||
+grep -Eq "(^|[^[:alnum:]_])${task_var}[[:space:]]*=[[:space:]]*current[[:space:]]*;" \
+	<<< "$source_text" || die "copy current into the local task pointer"
+grep -Eq "task_pid_nr[[:space:]]*\([[:space:]]*${task_var}[[:space:]]*\)" \
+	<<< "$source_text" ||
 	die "snapshot the local task pointer with task_pid_nr()"
-grep -Eq "get_task_comm[[:space:]]*\([^,]+,[[:space:]]*${task_var}[[:space:]]*\)" "$source" ||
+grep -Eq "get_task_comm[[:space:]]*\([^,]+,[[:space:]]*${task_var}[[:space:]]*\)" \
+	<<< "$source_text" ||
 	die "snapshot the same local task pointer with get_task_comm()"
-grep -Eq 'char[[:space:]]+[[:alpha:]_][[:alnum:]_]*[[:space:]]*\[[[:space:]]*TASK_COMM_LEN[[:space:]]*\]' "$source" ||
+grep -Eq 'char[[:space:]]+[[:alpha:]_][[:alnum:]_]*[[:space:]]*\[[[:space:]]*TASK_COMM_LEN[[:space:]]*\]' \
+	<<< "$source_text" ||
 	die "copy the command name into a local TASK_COMM_LEN array"
 
 for token in seq_escape_mem ESCAPE_NAP ESCAPE_APPEND ESCAPE_HEX; do
