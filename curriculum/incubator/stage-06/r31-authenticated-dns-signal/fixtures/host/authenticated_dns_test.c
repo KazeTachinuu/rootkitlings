@@ -11,7 +11,10 @@ static unsigned long assertions;
 
 void rk_test_fail_at(int point);
 unsigned int rk_test_live_contexts(void);
-bool rk_test_digest_was_cleared(void);
+void rk_test_clear_probe_reset(void);
+unsigned int rk_test_clear_calls(size_t length);
+unsigned int rk_test_clear_nonzero_before(size_t length);
+unsigned int rk_test_clear_zero_after(size_t length);
 
 #define CHECK(condition) do { \
 	assertions++; \
@@ -74,10 +77,19 @@ static void test_build_contract(void)
 
 	fill_keys(key, wrong);
 	memset(packet, 0xa5, sizeof(packet));
+	rk_test_clear_probe_reset();
 	CHECK(rk_dns_signal_build(key, sizeof(key), 0x0102030405060708ULL,
 				  1, 3, 0x1234, packet,
 				  RK_DNS_SIGNAL_PACKET_LENGTH, &used) == 0);
-	CHECK(rk_test_digest_was_cleared());
+	CHECK(rk_test_clear_calls(RK_DNS_SIGNAL_PACKET_LENGTH) == 1);
+	CHECK(rk_test_clear_calls(RK_AUTH_MESSAGE_LENGTH) == 1);
+	CHECK(rk_test_clear_calls(RK_AUTH_DIGEST_LENGTH) == 1);
+	CHECK(rk_test_clear_nonzero_before(RK_DNS_SIGNAL_PACKET_LENGTH) == 1);
+	CHECK(rk_test_clear_nonzero_before(RK_AUTH_MESSAGE_LENGTH) == 1);
+	CHECK(rk_test_clear_nonzero_before(RK_AUTH_DIGEST_LENGTH) == 1);
+	CHECK(rk_test_clear_zero_after(RK_DNS_SIGNAL_PACKET_LENGTH) == 1);
+	CHECK(rk_test_clear_zero_after(RK_AUTH_MESSAGE_LENGTH) == 1);
+	CHECK(rk_test_clear_zero_after(RK_AUTH_DIGEST_LENGTH) == 1);
 	CHECK(used == RK_DNS_SIGNAL_PACKET_LENGTH);
 	CHECK(packet[used] == 0xa5);
 	CHECK(rk_dns_query_decode(packet, used, message, &id) == 0);
@@ -154,8 +166,11 @@ static void test_receive_and_replay(void)
 	CHECK(rk_dns_signal_receive(NULL, first, used) == -EINVAL);
 	CHECK(rk_dns_signal_receive(&receiver, NULL, used) == -EINVAL);
 	CHECK(!memcmp(&before, &receiver, sizeof(before)));
+	rk_test_clear_probe_reset();
 	CHECK(rk_dns_signal_receive(&receiver, first, used) == 0);
-	CHECK(rk_test_digest_was_cleared());
+	CHECK(rk_test_clear_calls(RK_AUTH_MESSAGE_LENGTH) == 1);
+	CHECK(rk_test_clear_nonzero_before(RK_AUTH_MESSAGE_LENGTH) == 1);
+	CHECK(rk_test_clear_zero_after(RK_AUTH_MESSAGE_LENGTH) == 1);
 	CHECK(receiver.accepted == 1 && receiver.next_sequence == 2 &&
 	      receiver.output_level == 3);
 	expect_receive_unchanged(&receiver, first, used);
