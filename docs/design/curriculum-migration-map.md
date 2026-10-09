@@ -711,10 +711,10 @@ They must be added, made explicit, or consciously excluded.
 - Credential namespaces and capabilities.
 - Crypto key, nonce, replay, and secret-lifetime limits.
 - Module signing, lockdown, taint, and defensive module inventory.
-- RCU before any future lockless shared lookup or hook-table design.
+- RCU grace-period teardown at the first hook-table lifetime that requires it.
 
-RCU is not forced into the core merely to claim completeness.
-It becomes required only if the final implementation actually relies on a read-mostly shared object whose lifetime cannot be expressed safely with the core locking model.
+RCU is not attached to earlier lessons merely to claim completeness.
+It first belongs in `netfilter-observer`, where hook unregistration must wait for readers that may already hold the removed callback.
 
 ## Metadata model
 
