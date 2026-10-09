@@ -84,103 +84,144 @@ def function_text(name):
     return compact(submitted[span[0]:span[2]])
 
 
+def parameter_names(name):
+    _start, opening, _end = function_span(submitted, name)
+    header = submitted[:opening]
+    left = header.rfind("(")
+    right = header.rfind(")")
+    if left < 0 or right < left:
+        fail(f"could not parse the parameters of {name}")
+    parameters = header[left + 1:right].split(",")
+    result = []
+    for parameter in parameters:
+        match = re.search(r"([A-Za-z_]\w*)\s*$", parameter)
+        if not match:
+            fail(f"could not parse a parameter of {name}")
+        result.append(match.group(1))
+    return result
+
+
+def require_once(text, pattern, message):
+    if len(re.findall(pattern, text)) != 1:
+        fail(message)
+
+
 callback = function_text("rk_observe_local_ipv4")
-required_callback = (
-    "structrk_netfilter_observer*observer=private;",
-    "(void)skb;",
-    "(void)state;",
-    "atomic64_inc(&observer->callbacks);",
-    "returnNF_ACCEPT;",
+private_name, skb_name, state_name = parameter_names("rk_observe_local_ipv4")
+callback_body = callback[callback.index("{") + 1:callback.rfind("}")]
+for unused_name in (skb_name, state_name):
+    callback_body = callback_body.replace(f"(void){unused_name};", "")
+    if re.search(rf"\b{re.escape(unused_name)}\b", callback_body):
+        fail("callback must not inspect or pass packet and hook-state arguments")
+if re.search(r"\b(?:if|for|while|switch|goto)\(", callback) or "?" in callback:
+    fail("callback must not branch")
+atomic_increment = (
+    r"atomic64_(?:inc|inc_return)\(&[^;]*callbacks\);|"
+    r"atomic64_(?:add|add_return|fetch_add)\((?:1|1U|1UL|1ULL),"
+    r"&[^;]*callbacks\);"
 )
-for statement in required_callback:
-    if callback.count(statement) != 1:
-        fail(f"callback must contain exactly one {statement}")
-if any(token in callback for token in ("if(", "for(", "while(", "?", "skb->", "state->")):
-    fail("callback must not branch or inspect packet and hook-state fields")
-if callback.count("return") != 1:
-    fail("callback must have one constant return")
+require_once(callback, atomic_increment,
+             "callback must atomically increment callbacks exactly once")
+if len(re.findall(r"atomic64_\w+\(", callback)) != 1:
+    fail("callback must contain exactly one atomic operation")
+require_once(callback, r"returnNF_ACCEPT;",
+             "callback must return NF_ACCEPT exactly once")
+if callback.count("return") != 1 or private_name not in callback_body:
+    fail("callback must recover its owner and have one constant return")
 
 start = function_text("rk_netfilter_start")
-required_start = (
-    "atomic64_set(&observer->callbacks,0);",
-    "observer->net=&init_net;",
-    ".hook=rk_observe_local_ipv4",
-    ".priv=observer",
-    ".pf=NFPROTO_IPV4",
-    ".hooknum=NF_INET_LOCAL_OUT",
-    ".priority=NF_IP_PRI_FIRST",
-    "error=nf_register_net_hook(observer->net,&observer->ops);",
-    "observer->net=NULL;",
-    "returnerror;",
-    "WRITE_ONCE(observer->registered,true);",
-    "return0;",
-)
-for operation in required_start:
-    if start.count(operation) != 1:
-        fail(f"start must contain exactly one {operation}")
-if len(re.findall(r"if\(!observer\)\{?return-EINVAL;\}?", start)) != 1:
+start_owner = parameter_names("rk_netfilter_start")[0]
+owner = re.escape(start_owner)
+register_token = "nf_register_net_hook("
+require_once(start, re.escape(register_token),
+             "start must register exactly one hook")
+register_position = start.index(register_token)
+if not re.search(rf"if\((?:!{owner}|{owner}==NULL)\)\{{?return-EINVAL;\}}?", start):
     fail("start must reject a null observer with EINVAL")
-if len(re.findall(
-        r"if\(READ_ONCE\(observer->registered\)\)\{?return-EBUSY;\}?",
-        start)) != 1:
+registered_read = rf"(?:READ_ONCE\({owner}->registered\)|{owner}->registered)"
+if not re.search(
+        rf"if\((?:{registered_read}|{registered_read}!="
+        rf"(?:false|0))\)\{{?return-EBUSY;\}}?", start):
     fail("start must reject an already registered observer with EBUSY")
-compound_initializer = "observer->ops=(structnf_hook_ops)"
-zero_initializer = "memset(&observer->ops,0,sizeof(observer->ops));"
-if start.count(compound_initializer) == 1:
-    initializer_position = start.index(compound_initializer)
-elif start.count(compound_initializer) == 0 and zero_initializer in start:
-    initializer_position = start.index(zero_initializer)
-else:
-    fail("start must completely initialize the hook descriptor")
-ordered_start = (
-    "atomic64_set(&observer->callbacks,0);",
-    "observer->net=&init_net;",
-    "error=nf_register_net_hook(observer->net,&observer->ops);",
-    "WRITE_ONCE(observer->registered,true);",
+required_configuration = (
+    "atomic64_set(", "callbacks", "&init_net", "rk_observe_local_ipv4",
+    "NFPROTO_IPV4", "NF_INET_LOCAL_OUT", "NF_IP_PRI_FIRST",
 )
-ordered_positions = [start.index(item) for item in ordered_start]
-ordered_positions.insert(2, initializer_position)
-if ordered_positions != sorted(ordered_positions):
-    fail("start must initialize, register, and only then publish registered state")
-register_position = start.index("error=nf_register_net_hook(observer->net,&observer->ops);")
-error_position = start.index("if(error)", register_position)
-cleanup_position = start.index("observer->net=NULL;", error_position)
-return_error_position = start.index("returnerror;", cleanup_position)
-publish_position = start.index("WRITE_ONCE(observer->registered,true);")
-if not register_position < error_position < cleanup_position < return_error_position < publish_position:
-    fail("registration error cleanup and state publication are out of order")
+for token in required_configuration:
+    if token not in start[:register_position]:
+        fail(f"start must configure {token} before registration")
+if not re.search(rf"\.priv={owner}(?:[,}}])", start[:register_position]):
+    fail("start must give the hook its owning observer as private data")
+initializer_patterns = (
+    r"=\(structnf_hook_ops\)\{",
+    r"structnf_hook_ops\w*=\{",
+    rf"memset\(&{owner}->ops,0,sizeof\({owner}->ops\)\);",
+)
+initializer_positions = [
+    match.start()
+    for pattern in initializer_patterns
+    for match in re.finditer(pattern, start[:register_position])
+]
+if len(initializer_positions) != 1:
+    fail("start must completely initialize the hook descriptor")
+publication = list(re.finditer(
+    rf"(?:WRITE_ONCE\({owner}->registered,true\)|"
+    rf"{owner}->registered=true)", start))
+if len(publication) != 1 or publication[0].start() < register_position:
+    fail("start must publish registered state once, after successful registration")
+cleanup = list(re.finditer(rf"{owner}->net=NULL;", start[register_position:]))
+if len(cleanup) != 1 or "return" not in start[
+        register_position + cleanup[0].end():publication[0].start()]:
+    fail("start must clear its namespace and return the registration error")
+if "return0;" not in start[publication[0].end():]:
+    fail("start must return success after publishing registered state")
 
 stop = function_text("rk_netfilter_stop")
-required_stop = (
-    "nf_unregister_net_hook(observer->net,&observer->ops);",
-    "synchronize_rcu();",
-    "WRITE_ONCE(observer->registered,false);",
-    "observer->net=NULL;",
-)
-for operation in required_stop:
-    if stop.count(operation) != 1:
-        fail(f"stop must contain exactly one {operation}")
-if len(re.findall(
-        r"if\(!observer\|\|!READ_ONCE\(observer->registered\)\)\{?return;\}?",
-        stop)) != 1:
+stop_owner = parameter_names("rk_netfilter_stop")[0]
+owner = re.escape(stop_owner)
+registered_read = rf"(?:READ_ONCE\({owner}->registered\)|{owner}->registered)"
+if not re.search(
+        rf"if\((?:!{owner}|{owner}==NULL)\|\|"
+        rf"(?:!{registered_read}|{registered_read}==(?:false|0))\)"
+        rf"\{{?return;\}}?", stop):
     fail("stop must be idempotent for null and unregistered observers")
-positions = [stop.index(operation) for operation in required_stop]
-if positions != sorted(positions):
+require_once(stop, r"nf_unregister_net_hook\(",
+             "stop must unregister exactly one hook")
+require_once(stop, r"synchronize_rcu\(\);",
+             "stop must drain RCU readers exactly once")
+unregister_position = stop.index("nf_unregister_net_hook(")
+sync_position = stop.index("synchronize_rcu();")
+clear_patterns = (
+    rf"(?:WRITE_ONCE\({owner}->registered,false\)|"
+    rf"{owner}->registered=false)",
+    rf"{owner}->net=NULL;",
+)
+clear_positions = []
+for pattern in clear_patterns:
+    matches = list(re.finditer(pattern, stop))
+    if len(matches) != 1:
+        fail("stop must clear each published field exactly once")
+    clear_positions.append(matches[0].start())
+if not unregister_position < sync_position < min(clear_positions):
     fail("stop must unregister, drain RCU readers, then clear published state")
 
 snapshot = function_text("rk_netfilter_snapshot")
 required_snapshot = (
-    "status->registered=READ_ONCE(observer->registered);",
-    "status->family=READ_ONCE(observer->ops.pf);",
-    "status->hook=READ_ONCE(observer->ops.hooknum);",
-    "status->priority=READ_ONCE(observer->ops.priority);",
-    "status->init_namespace=READ_ONCE(observer->net)==&init_net;",
-    "status->callbacks=atomic64_read(&observer->callbacks);",
+    (r"->registered=READ_ONCE\([^;]*->registered\);", "registered"),
+    (r"->family=READ_ONCE\([^;]*->ops\.pf\);", "family"),
+    (r"->hook=READ_ONCE\([^;]*->ops\.hooknum\);", "hook"),
+    (r"->priority=READ_ONCE\([^;]*->ops\.priority\);", "priority"),
+    (r"->init_namespace=READ_ONCE\([^;]*->net\)==&init_net;",
+     "namespace"),
+    (r"->callbacks=atomic64_read\(&[^;]*->callbacks\);", "callbacks"),
 )
-for assignment in required_snapshot:
-    if snapshot.count(assignment) != 1:
-        fail(f"snapshot must read the owned field with {assignment}")
-if snapshot.count("status->") != len(required_snapshot):
+for pattern, field in required_snapshot:
+    require_once(snapshot, pattern,
+                 f"snapshot must read the owned {field} field once")
+destinations = re.findall(
+    r"->(?:registered|family|hook|priority|init_namespace|callbacks)=",
+    snapshot)
+if len(destinations) != len(required_snapshot):
     fail("snapshot must write exactly the six declared status fields")
 
 for forbidden in (
@@ -221,9 +262,9 @@ nm "$module" | grep -Eq '[[:space:]]t[[:space:]]rk_observe_local_ipv4$' ||
 
 assembly=$(objdump -dr "$object" |
 	sed -n '/<rk_observe_local_ipv4>/,/^$/p')
-grep -Eq '[[:space:]]lock[[:space:]]+incq[[:space:]]' <<< "$assembly" ||
+grep -Eq '[[:space:]]lock[[:space:]]+(incq|addq|xaddq)[[:space:]]' <<< "$assembly" ||
 	die "callback does not contain one atomic 64-bit increment"
-[[ $(grep -Ec '[[:space:]]lock[[:space:]]+incq[[:space:]]' <<< "$assembly") -eq 1 ]] ||
+[[ $(grep -Ec '[[:space:]]lock[[:space:]]+(incq|addq|xaddq)[[:space:]]' <<< "$assembly") -eq 1 ]] ||
 	die "callback must contain exactly one atomic 64-bit increment"
 grep -Eq "mov[[:space:]]+\\\$0x1,%eax" <<< "$assembly" ||
 	die "callback does not return NF_ACCEPT"

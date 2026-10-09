@@ -131,9 +131,21 @@ fi
 ping -4 -q -c 200 -i 0.01 -W 1 127.0.0.1 > /dev/null 2>&1 &
 traffic=$!
 sleep 1
+if kill -0 "$traffic" 2> /dev/null; then
+	_ok "IPv4 traffic is active before observer teardown"
+else
+	_fail "IPv4 traffic ended before observer teardown"
+fi
+exec 3< "$endpoint"
 unload rootkitlings
 wait "$traffic" || _fail "IPv4 traffic failed across observer unload"
 assert_not_loaded
+if cat <&3 > /dev/null 2>&1; then
+	_fail "a held proc descriptor remained readable after removal"
+else
+	_ok "proc removal retired a held status descriptor"
+fi
+exec 3<&-
 
 load rootkitlings.ko
 assert_loaded rootkitlings

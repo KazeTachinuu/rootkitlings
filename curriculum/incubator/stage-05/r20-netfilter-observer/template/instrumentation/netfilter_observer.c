@@ -38,7 +38,7 @@ void rk_netfilter_stop(struct rk_netfilter_observer *observer)
 void rk_netfilter_snapshot(const struct rk_netfilter_observer *observer,
 			   struct rk_netfilter_status *status)
 {
-	/* Read one coherent field-by-field status snapshot. */
+	/* Read each configured field once and read the atomic counter. */
 	(void)observer;
 	memset(status, 0, sizeof(*status));
 }

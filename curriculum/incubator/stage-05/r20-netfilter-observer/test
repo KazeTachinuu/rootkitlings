@@ -98,6 +98,42 @@ build_tree "$HERE/solution" "$scratch/proc-failure" 2
 "$HERE/host-check" "$scratch/solution" \
 	"$scratch/solution/rootkitlings.ko"
 
+equivalent=$scratch/equivalent
+cp -a "$HERE/solution" "$equivalent"
+python3 - "$equivalent/instrumentation/netfilter_observer.c" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+text = re.sub(r"\bprivate\b", "context", text)
+text = re.sub(r"\bobserver\b", "owner", text)
+text = re.sub(r"\berror\b", "result", text)
+text = re.sub(r"\bstatus\b", "snapshot", text)
+text = text.replace("if (!owner)\n", "if (owner == NULL)\n")
+text = text.replace("if (READ_ONCE(owner->registered))\n",
+                    "if (owner->registered != false)\n")
+text = text.replace(
+    "if (!owner || !READ_ONCE(owner->registered))\n",
+    "if (owner == NULL || owner->registered == false)\n")
+text = text.replace("atomic64_inc(&owner->callbacks);",
+                    "atomic64_add(1, &owner->callbacks);")
+path.write_text(text, encoding="utf-8")
+PY
+make -s -C "$KDIR" M="$equivalent" W=1 modules \
+	> "$equivalent.log" 2>&1 || {
+	cat "$equivalent.log" >&2
+	printf '[x] equivalent implementation build failed\n' >&2
+	exit 1
+}
+if grep -q 'warning:' "$equivalent.log"; then
+	cat "$equivalent.log" >&2
+	printf '[x] equivalent implementation build has warnings\n' >&2
+	exit 1
+fi
+"$HERE/host-check" "$equivalent" "$equivalent/rootkitlings.ko"
+
 if "$HERE/host-check" "$scratch/template" \
 	"$scratch/template/rootkitlings.ko" > "$scratch/template-host.log" 2>&1; then
 	printf '[x] host checker accepted the unfinished callback\n' >&2

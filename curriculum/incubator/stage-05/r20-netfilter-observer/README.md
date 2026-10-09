@@ -1,7 +1,7 @@
 # Observe local IPv4 traffic without changing it
 
 Netfilter calls registered hooks at defined points in the network stack.
-This exercise uses the IPv4 `LOCAL_OUT` point, which locally generated IPv4 traffic crosses before routing finishes.
+This exercise uses the IPv4 `LOCAL_OUT` point, which locally generated IPv4 traffic crosses before it proceeds to output.
 The observer belongs only to `init_net`, so traffic created in another network namespace does not cross this registration.
 
 The hook priority is `NF_IP_PRI_FIRST`.
@@ -32,6 +32,9 @@ Registration makes the callback reachable from other CPUs.
 Unregistration prevents later traversals from selecting this callback, while `synchronize_rcu()` waits for readers that may already hold the old hook entry.
 The observer must remain valid until that wait completes.
 
+The callback runs inside a Netfilter RCU read-side critical section.
+It must not sleep.
+
 ## The callback
 
 Recover the owning observer from `private`, increment its atomic counter once, and return `NF_ACCEPT`.
@@ -43,7 +46,7 @@ The next exercise joins this hook to the packet-access boundary.
 
 The counter measures callback invocations.
 One invocation is one traversal of this registered hook, not necessarily one userspace send call, one datagram delivered to an application, or one packet observed on a wire.
-The checker expects an exact delta only during a dedicated idle UDP epoch whose traffic it controls.
+The checker expects an exact increase only while it sends a known number of UDP datagrams and no other IPv4 traffic.
 
 ## Status is not execution evidence
 
@@ -61,7 +64,7 @@ callbacks=N
 
 The family, hook, priority, namespace, and state lines describe the configured object.
 They do not prove that the callback ran.
-Only a bracketed counter delta provides execution evidence.
+To prove that it ran, read the counter before and after traffic you control.
 
 ## Your task
 
@@ -77,7 +80,8 @@ Run:
 ./rootkitlings check
 ```
 
-The checker builds with `W=1` for the pinned Linux 7.2 kernel.
+The checker accepts equivalent implementations of the required operations; names and harmless formatting are not part of the answer.
+It builds with `W=1` for the pinned Linux 7.2 kernel.
 It verifies exact status output, byte-for-byte IPv4 UDP delivery, controlled counter deltas, IPv6 and child-network-namespace controls, both rollback paths, concurrent reads and traffic, unload during traffic, reload, and a clean kernel log.
 
 ## Official Linux v7.2 references
