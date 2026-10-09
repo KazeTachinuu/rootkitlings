@@ -15,7 +15,8 @@ mode = "cumulative"
 files = ["Kbuild", "core/main.c"]
 editable = ["Kbuild", "core/main.c"]
 build = "."
-baseline = "previous-required"
+baseline = "parent"
+parent = "module-build-lifecycle"
 
 [resources]
 readme = "curriculum/L01-precise-init-failure/README.md"

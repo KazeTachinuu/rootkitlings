@@ -1,6 +1,6 @@
 # Abort a bad start cleanly
 
-An implant must refuse to load when a required condition is missing.
+A module must refuse to load when a required condition is missing.
 Add a controlled preflight failure, report its exact cause, and prove that no
 module remains behind.
 Success means a rejected start is clean and diagnosable, not a partial install.

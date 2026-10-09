@@ -109,7 +109,7 @@ class CompileDatabaseTests(unittest.TestCase):
         root = Path(__file__).resolve().parent.parent
         catalog = Catalog(root)
         source = root / "curriculum/C00-complete-rootkit/solution/security/control.c"
-        expected = root / "curriculum/M03-remote-resident-agent/starter/include"
+        expected = root / "curriculum/M07-remote-resident-agent/starter/include"
 
         includes = source_include_directories(source, root, catalog)
 

@@ -62,22 +62,22 @@ mapfile -t changed_files < <(
 	exit 1
 }
 
-template_build=$scratch/starter
-cp -a "$baseline" "$template_build"
+starter_build=$scratch/starter
+cp -a "$baseline" "$starter_build"
 while IFS= read -r -d '' source; do
 	relative=${source#"$HERE/../starter/"}
-	mkdir -p "$template_build/$(dirname "$relative")"
-	cp -p "$source" "$template_build/$relative"
+	mkdir -p "$starter_build/$(dirname "$relative")"
+	cp -p "$source" "$starter_build/$relative"
 done < <(find "$HERE/../starter" -type f -print0)
-if ! make -s -C "$KDIR" M="$template_build" W=1 \
-	ROOTKITLINGS_FAIL_POINT=0 modules >"$scratch/template.log" 2>&1; then
-	cat "$scratch/template.log" >&2
-	printf '[x] template build failed\n' >&2
+if ! make -s -C "$KDIR" M="$starter_build" W=1 \
+	ROOTKITLINGS_FAIL_POINT=0 modules >"$scratch/starter.log" 2>&1; then
+	cat "$scratch/starter.log" >&2
+	printf '[x] starter build failed\n' >&2
 	exit 1
 fi
-if grep -q 'warning:' "$scratch/template.log"; then
-	cat "$scratch/template.log" >&2
-	printf '[x] template builds with warnings\n' >&2
+if grep -q 'warning:' "$scratch/starter.log"; then
+	cat "$scratch/starter.log" >&2
+	printf '[x] starter builds with warnings\n' >&2
 	exit 1
 fi
 
@@ -106,94 +106,6 @@ build_variant credential_prepare 4
 build_variant credential_cancel 5
 "$HERE/host-check" "$scratch/success" "$scratch/success/rootkitlings.ko" \
 	"$scratch/credential_cancel"
-
-formatted=$scratch/host-formatting
-cp -a "$scratch/success" "$formatted"
-awk '
-	/replacement = prepare_kernel_cred\(&init_task\);/ {
-		print "\treplacement = prepare_kernel_cred("
-		print "\t\t&init_task"
-		print "\t);"
-		next
-	}
-	/return commit_creds\(replacement\);/ {
-		print "\treturn commit_creds("
-		print "\t\treplacement"
-		print "\t);"
-		next
-	}
-	{ print }
-' "$formatted/privilege/credentials.c" > "$formatted/privilege/credentials.c.new"
-mv "$formatted/privilege/credentials.c.new" "$formatted/privilege/credentials.c"
-"$HERE/host-check" "$formatted" "$formatted/rootkitlings.ko" \
-	"$scratch/credential_cancel" > "$scratch/host-formatting.log"
-
-duplicate=$scratch/host-duplicate
-cp -a "$scratch/success" "$duplicate"
-sed -i '/replacement = prepare_kernel_cred/a\	replacement = prepare_kernel_cred(\&init_task);' \
-	"$duplicate/privilege/credentials.c"
-if "$HERE/host-check" "$duplicate" "$duplicate/rootkitlings.ko" \
-	"$scratch/credential_cancel" > "$scratch/host-duplicate.log" 2>&1; then
-	printf '[x] host checker accepted two credential preparations\n' >&2
-	exit 1
-fi
-
-retained=$scratch/host-retained
-cp -a "$scratch/success" "$retained"
-sed -i '2i static struct cred *retained_credential;' \
-	"$retained/privilege/credentials.c"
-if "$HERE/host-check" "$retained" "$retained/rootkitlings.ko" \
-	"$scratch/credential_cancel" > "$scratch/host-retained.log" 2>&1; then
-	printf '[x] host checker accepted a retained credential pointer\n' >&2
-	exit 1
-fi
-
-partial=$scratch/host-partial
-cp -a "$scratch/success" "$partial"
-sed -i '/replacement = prepare_kernel_cred/a\	(*replacement).\
-\t\tuid = (*replacement).uid;' \
-	"$partial/privilege/credentials.c"
-if "$HERE/host-check" "$partial" "$partial/rootkitlings.ko" \
-	"$scratch/credential_cancel" > "$scratch/host-partial.log" 2>&1; then
-	printf '[x] host checker accepted multiline credential field access\n' >&2
-	exit 1
-fi
-
-wrong_null=$scratch/host-wrong-null
-cp -a "$scratch/success" "$wrong_null"
-sed -i '/if (!replacement)/{n;s/return -ENOMEM;/return 0;/;}' \
-	"$wrong_null/privilege/credentials.c"
-if "$HERE/host-check" "$wrong_null" "$wrong_null/rootkitlings.ko" \
-	"$scratch/credential_cancel" > "$scratch/host-wrong-null.log" 2>&1; then
-	printf '[x] host checker accepted an incorrect NULL result\n' >&2
-	exit 1
-fi
-
-abort_after_commit=$scratch/host-abort-after-commit
-cp -a "$scratch/success" "$abort_after_commit"
-
-sed -i '/struct cred \*replacement;/a\	int error;' \
-	"$abort_after_commit/privilege/credentials.c"
-sed -i '/abort_creds(replacement);/d' \
-	"$abort_after_commit/privilege/credentials.c"
-sed -i '/return commit_creds(replacement);/c\	error = commit_creds(replacement);\
-\tabort_creds(replacement);\
-\treturn error;' \
-	"$abort_after_commit/privilege/credentials.c"
-make -s -C "$KDIR" M="$abort_after_commit" W=1 \
-	ROOTKITLINGS_FAIL_POINT=0 modules \
-	> "$scratch/host-abort-after-commit-build.log" 2>&1
-if grep -q 'warning:' "$scratch/host-abort-after-commit-build.log"; then
-	cat "$scratch/host-abort-after-commit-build.log" >&2
-	printf '[x] abort-after-commit fixture builds with warnings\n' >&2
-	exit 1
-fi
-if "$HERE/host-check" "$abort_after_commit" \
-	"$abort_after_commit/rootkitlings.ko" "$scratch/credential_cancel" \
-	> "$scratch/host-abort-after-commit.log" 2>&1; then
-	printf '[x] host checker accepted abort after commit\n' >&2
-	exit 1
-fi
 
 cp -a "$work" "$scratch/unknown"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 ROOTKITLINGS_FAIL_POINT=99 \

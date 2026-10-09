@@ -44,22 +44,22 @@ for compiler in gcc clang; do
 		"$HERE/../../../vm/tools/credential_snapshot_test.c"
 done
 
-template_build=$scratch/starter
-cp -a "$baseline" "$template_build"
+starter_build=$scratch/starter
+cp -a "$baseline" "$starter_build"
 while IFS= read -r -d '' source; do
 	relative=${source#"$HERE/../starter/"}
-	mkdir -p "$template_build/$(dirname "$relative")"
-	cp -p "$source" "$template_build/$relative"
+	mkdir -p "$starter_build/$(dirname "$relative")"
+	cp -p "$source" "$starter_build/$relative"
 done < <(find "$HERE/../starter" -type f -print0)
-if ! make -s -C "$KDIR" M="$template_build" W=1 \
-	ROOTKITLINGS_FAIL_POINT=0 modules >"$scratch/template.log" 2>&1; then
-	cat "$scratch/template.log" >&2
-	printf '[x] template build failed\n' >&2
+if ! make -s -C "$KDIR" M="$starter_build" W=1 \
+	ROOTKITLINGS_FAIL_POINT=0 modules >"$scratch/starter.log" 2>&1; then
+	cat "$scratch/starter.log" >&2
+	printf '[x] starter build failed\n' >&2
 	exit 1
 fi
-if grep -q 'warning:' "$scratch/template.log"; then
-	cat "$scratch/template.log" >&2
-	printf '[x] template builds with warnings\n' >&2
+if grep -q 'warning:' "$scratch/starter.log"; then
+	cat "$scratch/starter.log" >&2
+	printf '[x] starter builds with warnings\n' >&2
 	exit 1
 fi
 

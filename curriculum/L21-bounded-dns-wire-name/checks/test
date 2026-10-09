@@ -1,0 +1,194 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../scripts/lesson-env"
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-bounded-dns-wire-name-test.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+[[ $(uname -m) == x86_64 ]] || {
+	printf '[x] this lesson requires x86_64\n' >&2
+	exit 1
+}
+grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
+	printf '[x] pinned kernel build is not configured for GCC\n' >&2
+	exit 1
+}
+for command in gcc make nm; do
+	command -v "$command" >/dev/null || {
+		printf '[x] %s is required\n' "$command" >&2
+		exit 1
+	}
+done
+
+for script in test host-check success-check failure-check; do
+	bash -n "$HERE/$script"
+done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
+	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check"
+fi
+
+mapfile -t changed_files < <(
+	diff -qr "$HERE/../starter" "$HERE/../solution" |
+		sed -nE 's#^Files .*/starter/(.*) and .*/solution/.* differ$#\1#p'
+)
+(( ${#changed_files[@]} == 1 )) || {
+	printf '[x] expected one learner-edited file, found %d\n' \
+		"${#changed_files[@]}" >&2
+	exit 1
+}
+[[ ${changed_files[0]} == codec/dns_name.c ]] || {
+	printf '[x] learner edit surface is %s, expected codec/dns_name.c\n' \
+		"${changed_files[0]}" >&2
+	exit 1
+}
+
+build_tree()
+{
+	local source=$1 destination=$2
+	local log=$destination.log
+	cp -a "$source" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 modules > "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] %s build failed\n' "${source##*/}" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] %s build has warnings\n' "${source##*/}" >&2
+		exit 1
+	fi
+}
+
+build_tree "$HERE/../starter" "$scratch/starter"
+build_tree "$HERE/../solution" "$scratch/solution"
+"$HERE/host-check" "$scratch/solution" \
+	"$scratch/solution/rootkitlings.ko"
+
+if "$HERE/host-check" "$scratch/starter" \
+	"$scratch/starter/rootkitlings.ko" > "$scratch/starter-host.log" 2>&1; then
+	printf '[x] host checker accepted the unfinished codec\n' >&2
+	exit 1
+fi
+
+expect_host_rejection()
+{
+	local directory=$1 label=$2
+	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+		> "$scratch/$label-host.log" 2>&1; then
+		printf '[x] host checker accepted mutant: %s\n' "$label" >&2
+		exit 1
+	fi
+}
+
+build_mutant()
+{
+	local name=$1 verification=$2
+	shift 2
+	cp -a "$HERE/../solution" "$scratch/$name"
+	"$@" "$scratch/$name/codec/dns_name.c"
+	local log=$scratch/$name.log
+	if ! make -s -C "$KDIR" M="$scratch/$name" W=1 modules > "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] mutant did not compile: %s\n' "$name" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] mutant build has warnings: %s\n' "$name" >&2
+		exit 1
+	fi
+	if [[ $verification == host ]]; then
+		expect_host_rejection "$scratch/$name" "$name"
+	else
+		"$HERE/host-check" "$scratch/$name" \
+			"$scratch/$name/rootkitlings.ko"
+	fi
+}
+
+mutate_compression()
+{
+	sed -i 's/return RK_DNS_NAME_UNSUPPORTED_COMPRESSION;/return RK_DNS_NAME_MALFORMED;/' "$1"
+}
+build_mutant compression-as-malformed host mutate_compression
+
+mutate_root_room()
+{
+	sed -i 's/(size_t)length + 2 >/(size_t)length + 1 >/' "$1"
+}
+build_mutant no-root-room host mutate_root_room
+
+mutate_binary_zero()
+{
+	sed -i '/if (!label->length || label->length > RK_DNS_LABEL_MAX)/i\
+\t\tif (!label->data[0])\
+\t\t\treturn RK_DNS_NAME_MALFORMED;' "$1"
+}
+build_mutant rejects-binary-zero host mutate_binary_zero
+
+mutate_early_destination()
+{
+	sed -i 's/candidate\[length++\]/wire[length++]/g; s/candidate + length/wire + length/g' "$1"
+}
+build_mutant writes-before-commit host mutate_early_destination
+
+mutate_kernel_branch()
+{
+	sed -i '/#include "dns_name.h"/a\
+#ifdef __KERNEL__\
+#define RK_DNS_NAME_OK RK_DNS_NAME_INVALID_ARGUMENT\
+#endif' "$1"
+}
+build_mutant kernel-only-behavior guest mutate_kernel_branch
+
+mutate_early_view()
+{
+	sed -i '/struct rk_dns_name_view parsed = { 0 };/a\
+\tview->consumed = 0;' "$1"
+}
+build_mutant writes-view-before-success host mutate_early_view
+
+mutate_capacity()
+{
+	sed -i 's/if (capacity < length)/if (capacity + 1 < length)/' "$1"
+}
+build_mutant accepts-short-destination host mutate_capacity
+
+mutate_root()
+{
+	sed -i 's/if (!length) {/if (!length \&\& offset) {/' "$1"
+}
+build_mutant rejects-root-name host mutate_root
+
+cp -a "$HERE/../solution" "$scratch/alternate"
+cp "$HERE/../fixtures/alternate/dns_name.c" \
+	"$scratch/alternate/codec/dns_name.c"
+build_tree "$scratch/alternate" "$scratch/alternate-build"
+"$HERE/host-check" "$scratch/alternate-build" \
+	"$scratch/alternate-build/rootkitlings.ko"
+
+run_guest()
+{
+	local check=$1 module=$2 label=$3 output
+	shift 3
+	if ! output=$("$HERE/../../../vm/boot" --check \
+		"$check" "$module" "$@" 2>&1); then
+		printf '%s\n' "$output" >&2
+		printf '[x] disposable guest rejected %s\n' "$label" >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+}
+
+run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" solution
+run_guest "$HERE/success-check" \
+	"$scratch/alternate-build/rootkitlings.ko" alternate
+run_guest "$HERE/failure-check" \
+	"$scratch/kernel-only-behavior/rootkitlings.ko" kernel-only-behavior \
+	--tool vm/tools/module_load_test
+run_guest "$HERE/failure-check" "$scratch/starter/rootkitlings.ko" starter \
+	--tool vm/tools/module_load_test
+
+printf '[+] bounded-dns-wire-name passed\n'

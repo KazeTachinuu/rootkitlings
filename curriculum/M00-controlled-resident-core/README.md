@@ -1,8 +1,8 @@
-# Establish the foothold
+# Combine the timer, controls, and worker
 
 The earlier lessons built state, a control file, a timer, and a kernel thread in
 isolation.
-Now turn them into one small resident implant.
+Now run them together as one resident module.
 
 The operator can enable or disable actions and request work through
 `/proc/rootkitlings`.
@@ -10,7 +10,7 @@ A timer can request the same work automatically.
 Only one worker performs it, so the two request paths cannot race through the
 action.
 
-This is the first complete foothold:
+The two request paths meet at one worker:
 
 ```text
 timer expiry ----\
@@ -20,7 +20,7 @@ procfs `run` -----/                                     |
 ```
 
 The action is deliberately harmless: increment a counter.
-The mission is to make control, background execution, and unload behave as one
+The goal is to make control, background execution, and unload behave as one
 system.
 
 ## Operator controls

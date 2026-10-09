@@ -1,0 +1,58 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 4 )) ||
+	die "usage: ${0##*/} SUCCESS_DIR SUCCESS_ARTIFACT PREPARE_DIR CANCEL_DIR"
+success_dir=$(realpath -e -- "$1" 2>/dev/null) ||
+	die "success directory not found: $1"
+artifact=$(realpath -e -- "$2" 2>/dev/null) ||
+	die "artifact not found: $2"
+prepare_dir=$(realpath -e -- "$3" 2>/dev/null) ||
+	die "prepare directory not found: $3"
+cancel_dir=$(realpath -e -- "$4" 2>/dev/null) ||
+	die "cancel directory not found: $4"
+object=$success_dir/control/authorization.o
+
+[[ -f $artifact && ! -L $artifact ]] ||
+	die "artifact must be a regular file"
+for directory in "$success_dir" "$prepare_dir" "$cancel_dir"; do
+	for relative in control/authorization.o privilege/credentials.o; do
+		[[ -f $directory/$relative && ! -L $directory/$relative ]] ||
+			die "build is missing $relative"
+	done
+done
+
+undefined=$(nm -u "$object" | awk '{ print $NF }')
+for symbol in __crypto_memneq bin2hex get_random_bytes hex2bin mutex_lock \
+		mutex_unlock rk_credentials_replace_current \
+		rk_state_actions_enabled wait_for_random_bytes; do
+	grep -Fxq "$symbol" <<< "$undefined" ||
+		die "authorization object has no $symbol dependency"
+done
+for forbidden in memcmp strcmp strncmp strncasecmp; do
+	if grep -Fxq "$forbidden" <<< "$undefined"; then
+		die "authorization object uses content-dependent $forbidden"
+	fi
+done
+
+for symbol in rk_authorization_start rk_authorization_stop \
+		rk_authorization_snapshot rk_authorization_execute; do
+	nm -g --defined-only "$object" | awk '{ print $3 }' |
+		grep -Fxq "$symbol" ||
+		die "authorization object does not export $symbol"
+done
+
+proc_undefined=$(nm -u "$success_dir/interface/proc.o" | awk '{ print $NF }')
+for symbol in rk_authorization_execute rk_authorization_snapshot; do
+	grep -Fxq "$symbol" <<< "$proc_undefined" ||
+		die "control endpoint has no $symbol dependency"
+done
+main_undefined=$(nm -u "$success_dir/core/main.o" | awk '{ print $NF }')
+for symbol in rk_authorization_start rk_authorization_stop; do
+	grep -Fxq "$symbol" <<< "$main_undefined" ||
+		die "module lifecycle has no $symbol dependency"
+done
+
+printf '[+] compiled authorization, control, and lifecycle operations verified\n'

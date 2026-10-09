@@ -7,7 +7,7 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 build=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found"
 module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-remote_agent=$here/../../M03-remote-resident-agent
+remote_agent=$here/../../M07-remote-resident-agent
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-complete-rootkit-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
@@ -72,6 +72,11 @@ for symbol in rk_agent_enable_commands rk_agent_start; do
 		awk -v symbol="$symbol" '$2 == symbol { found = 1 } END { exit !found }' ||
 		die "module initialization does not call $symbol"
 done
+for symbol in rk_netfilter_start rk_netfilter_stop; do
+	nm -u "$build/core/main.o" |
+		awk -v symbol="$symbol" '$2 == symbol { found = 1 } END { exit !found }' ||
+		die "module lifecycle does not call $symbol"
+done
 for object in crypto/aead.o crypto/aead_platform.o crypto/auth_platform.o \
 		message/authenticated.o signal/authenticated_dns.o signal/status.o \
 		transport/udp.o wire/dns_query.o; do
@@ -81,8 +86,12 @@ for object in core/main.o core/state.o interface/proc.o execution/worker.o \
 		execution/scheduler.o control/authorization.o privilege/credentials.o \
 		instrumentation/return_probe.o instrumentation/events.o \
 		instrumentation/dirent_filter.o instrumentation/getdents_probe.o \
+		instrumentation/netfilter_observer.o access/skb_access.o \
+		classifier/udp.o mutation/udp_redirect.o mutation/writable.o \
+		parser/ipv4.o \
 		interface/evidence.o network/framing.o network/protocol.o \
-		network/agent.o persistence/platform.o persistence/transaction.o \
+		network/agent.o persistence/platform.o \
+		persistence/transaction.o \
 		interface/agent_status.o security/control.o; do
 	[[ -f $build/$object && ! -L $build/$object ]] ||
 		die "complete rootkit component is missing: $object"

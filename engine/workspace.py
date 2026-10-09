@@ -9,7 +9,7 @@ import re
 import shutil
 import tempfile
 import tomllib
-from typing import Iterable
+from typing import Iterable, Mapping
 
 
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
@@ -131,18 +131,57 @@ def materialize(starter: Path, work_root: Path, stable_id: str, declared_files: 
     return destination
 
 
+def materialize_imported(
+    starter: Path,
+    work_root: Path,
+    stable_id: str,
+    starter_files: Iterable[str],
+    consumer_files: Iterable[str],
+    imported_files: Mapping[str, tuple[bytes, int]],
+) -> Path:
+    """Create a workspace from local starter files and reference imports."""
+    stable_id = _stable_id(stable_id)
+    starter = _real_directory(Path(starter), "starter")
+    work_root = _real_directory(Path(work_root), "workspace root")
+    local = _declared(starter_files)
+    declared = _declared(consumer_files)
+    imported = _validated_imports(
+        imported_files,
+        declared,
+        {path.as_posix() for path in local},
+    )
+    if {path.as_posix() for path in local} | set(imported) != {
+        path.as_posix() for path in declared
+    }:
+        raise WorkspaceError(
+            "starter files and imports do not cover the declared workspace"
+        )
+    destination = work_root / stable_id
+    if destination.exists() or destination.is_symlink():
+        raise WorkspaceError(f"workspace already exists: {destination}")
+    temporary = Path(tempfile.mkdtemp(prefix=f".{stable_id}.", dir=work_root))
+    try:
+        _copy_declared(starter, temporary, local, learner_writable=True)
+        _write_imports(temporary, imported)
+        os.replace(temporary, destination)
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+    return destination
+
+
 def materialize_inherited(
     snapshot: Path,
-    additions: Path,
+    additions: Path | None,
     work_root: Path,
     stable_id: str,
     provider_files: Iterable[str],
     consumer_files: Iterable[str],
+    imported_files: Mapping[str, tuple[bytes, int]] | None = None,
 ) -> Path:
-    """Atomically combine a verified snapshot with an exact additions tree."""
+    """Combine a learner snapshot with local additions and reference imports."""
     stable_id = _stable_id(stable_id)
     snapshot = _real_directory(Path(snapshot), "provider snapshot")
-    additions = _real_directory(Path(additions), "additions")
     work_root = _real_directory(Path(work_root), "workspace root")
     verify_snapshot(snapshot)
     inherited = _declared(provider_files)
@@ -154,25 +193,71 @@ def materialize_inherited(
         raise WorkspaceError(
             "provider snapshot does not exactly match provider declared files"
         )
+    imports = _validated_imports(
+        imported_files or {},
+        declared,
+        {path.as_posix() for path in inherited},
+    )
     if not inherited_set < declared_set:
         raise WorkspaceError(
             "inherited materialization requires a strict additive file set"
         )
-    new_paths = tuple(sorted(declared_set - inherited_set, key=lambda item: item.as_posix()))
+    new_paths = tuple(sorted(
+        declared_set - inherited_set - {PurePosixPath(path) for path in imports},
+        key=lambda item: item.as_posix(),
+    ))
     expected_additions = {path.as_posix() for path in new_paths}
-    _validate_additions_tree(additions, expected_additions)
+    if additions is None:
+        if expected_additions:
+            raise WorkspaceError("local additions do not cover the declared workspace")
+    else:
+        additions = _real_directory(Path(additions), "additions")
+        _validate_additions_tree(additions, expected_additions)
     destination = work_root / stable_id
     if destination.exists() or destination.is_symlink():
         raise WorkspaceError(f"workspace already exists: {destination}")
     temporary = Path(tempfile.mkdtemp(prefix=f".{stable_id}.", dir=work_root))
     try:
         _copy_declared(snapshot, temporary, inherited, learner_writable=True)
-        _copy_declared(additions, temporary, new_paths, learner_writable=True)
+        if additions is not None:
+            _copy_declared(additions, temporary, new_paths, learner_writable=True)
+        _write_imports(temporary, imports)
         os.replace(temporary, destination)
     finally:
         if temporary.exists():
             shutil.rmtree(temporary)
     return destination
+
+
+def _validated_imports(
+    imported_files: Mapping[str, tuple[bytes, int]],
+    declared: tuple[PurePosixPath, ...],
+    occupied: set[str],
+) -> dict[str, tuple[bytes, int]]:
+    declared_set = {path.as_posix() for path in declared}
+    result: dict[str, tuple[bytes, int]] = {}
+    for value, imported in imported_files.items():
+        relative = _relative(value).as_posix()
+        if relative not in declared_set:
+            raise WorkspaceError(f"import destination is not declared: {relative}")
+        if relative in occupied or relative in result:
+            raise WorkspaceError(f"import destination collides: {relative}")
+        data, mode = imported
+        if not isinstance(data, bytes) or mode not in {0o644, 0o755}:
+            raise WorkspaceError(f"invalid imported file: {relative}")
+        result[relative] = (data, mode)
+    return result
+
+
+def _write_imports(
+    destination: Path,
+    imported_files: Mapping[str, tuple[bytes, int]],
+) -> None:
+    for value, (data, mode) in sorted(imported_files.items()):
+        target = destination.joinpath(*PurePosixPath(value).parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        target.chmod(mode)
 
 
 def _scan_regular_tree(root: Path) -> tuple[str, ...]:

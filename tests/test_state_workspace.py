@@ -23,6 +23,7 @@ from engine.workspace import (
     clean_paths,
     create_snapshot,
     materialize,
+    materialize_imported,
     materialize_inherited,
     restore_workspace,
     verify_snapshot,
@@ -307,6 +308,48 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(
             stat.S_IMODE((workspace / "status/status.c").stat().st_mode),
             0o755,
+        )
+
+    def test_inherited_imports_preserve_the_learners_passed_files(self) -> None:
+        provider = materialize(self.starter, self.work, "module-core", self.files)
+        (provider / "src/main.c").write_text("learner solution\n")
+        _, snapshot = create_snapshot(provider, self.passed, self.files)
+        additions = self.root / "additions"
+        additions.mkdir()
+        (additions / "local.c").write_text("local starter\n")
+
+        workspace = materialize_inherited(
+            snapshot,
+            additions,
+            self.work,
+            "proc-status",
+            self.files,
+            (*self.files, "local.c", "network/imported.c"),
+            {"network/imported.c": (b"reference component\n", 0o644)},
+        )
+
+        self.assertEqual(
+            (workspace / "src/main.c").read_text(),
+            "learner solution\n",
+        )
+        self.assertEqual(
+            (workspace / "network/imported.c").read_text(),
+            "reference component\n",
+        )
+        self.assertEqual((workspace / "local.c").read_text(), "local starter\n")
+
+    def test_starter_imports_cover_only_explicit_destinations(self) -> None:
+        workspace = materialize_imported(
+            self.starter,
+            self.work,
+            "module-core",
+            self.files,
+            (*self.files, "include/imported.h"),
+            {"include/imported.h": (b"#define IMPORTED 1\n", 0o644)},
+        )
+        self.assertEqual(
+            (workspace / "include/imported.h").read_text(),
+            "#define IMPORTED 1\n",
         )
 
     def test_inherited_materialization_rejects_missing_or_extra_additions(self) -> None:

@@ -69,6 +69,20 @@ class ConsoleTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"COLUMNS": "not-a-number"}, clear=False):
             self.assertGreater(self.console.terminal_width(), 0)
 
+    def test_bullets_wrap_to_the_terminal_width(self) -> None:
+        stdout = Stream(False)
+        with (
+            mock.patch.object(sys, "stdout", stdout),
+            mock.patch.dict(os.environ, {"COLUMNS": "24"}, clear=False),
+        ):
+            self.console.bullet(
+                "A practical prerequisite with a short explanation"
+            )
+        lines = stdout.getvalue().splitlines()
+        self.assertTrue(lines[0].startswith("- "))
+        self.assertTrue(all(line.startswith("  ") for line in lines[1:]))
+        self.assertTrue(all(len(line) <= 24 for line in lines))
+
     def test_color_capability_tracks_the_active_output_stream(self) -> None:
         with mock.patch.dict(os.environ, {"TERM": "xterm"}, clear=False):
             os.environ.pop("NO_COLOR", None)

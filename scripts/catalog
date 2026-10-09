@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 
 from engine.catalog import Catalog, CatalogError, QUERY_FIELDS  # noqa: E402
 from engine.console import Console  # noqa: E402
+from engine.workspace import WorkspaceError  # noqa: E402
 
 CATALOG_QUERY_FIELDS = QUERY_FIELDS | {"module_artifact"}
 UI = Console("rootkitlings.catalog")
@@ -40,6 +41,11 @@ def parser() -> argparse.ArgumentParser:
     listing = commands.add_parser("list")
     listing.add_argument("--difficulty")
     listing.add_argument("--concept")
+    materialize = commands.add_parser("materialize")
+    materialize.add_argument("tree", choices=("starter", "solution"))
+    materialize.add_argument("selector", help="stable ID or serial alias")
+    materialize.add_argument("destination", type=Path)
+    materialize.add_argument("--name")
     commands.add_parser("export")
     return result
 
@@ -98,6 +104,15 @@ def main() -> int:
                 if args.concept and args.concept not in item.teaches and args.concept not in item.requires:
                     continue
                 print(f"{item.serial or item.id}\t{item.path}\t{item.title}")
+        elif args.command == "materialize":
+            item = catalog.resolve(args.selector)
+            destination = args.destination.resolve()
+            name = args.name or item.id
+            if args.tree == "starter":
+                path = catalog.materialize_starter(item, destination, name)
+            else:
+                path = catalog.materialize_solution(item, destination, name)
+            print(path)
         elif args.command == "export":
             records = []
             for item in catalog.display_order():
@@ -153,7 +168,6 @@ def main() -> int:
             print(json.dumps({
                 "revision": catalog.revision,
                 "default_module_artifact": catalog.default_module_artifact,
-                "cumulative_root": catalog.cumulative_root or None,
                 "elective_tracks": [
                     {
                         "id": track.id,
@@ -166,7 +180,7 @@ def main() -> int:
                 ],
                 "exercises": records,
             }, indent=2))
-    except CatalogError as exc:
+    except (CatalogError, WorkspaceError) as exc:
         UI.error(str(exc))
         return 1
     return 0

@@ -1,0 +1,3 @@
+obj-m += rootkitlings.o
+rootkitlings-y := core/main.o tests/selftest.o codec/dns_name.o
+ccflags-y += -I$(src)/include

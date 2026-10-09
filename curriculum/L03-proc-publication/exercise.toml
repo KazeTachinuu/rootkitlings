@@ -1,6 +1,6 @@
 schema_version = 2
 id = "proc-publication"
-title = "Open a procfs dead drop"
+title = "Publish a procfs status file"
 stage = "module-core"
 kind = "lesson"
 status = "required"
@@ -15,7 +15,8 @@ mode = "cumulative"
 files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interface/proc.c"]
 editable = ["Kbuild", "core/main.c", "include/rootkit.h", "interface/proc.c"]
 build = "."
-baseline = "previous-required"
+baseline = "parent"
+parent = "owned-kernel-state"
 additions = "curriculum/L03-proc-publication/starter"
 
 [resources]

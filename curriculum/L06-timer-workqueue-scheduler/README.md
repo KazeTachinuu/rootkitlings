@@ -1,6 +1,6 @@
 # Build a kernel heartbeat
 
-The implant needs a periodic heartbeat, but a timer callback cannot do work that
+The module needs a periodic heartbeat, but a timer callback cannot do work that
 may sleep.
 Make the timer signal a normal kernel worker and keep the timer itself short.
 Success proves that scheduled activity reaches the right execution context and

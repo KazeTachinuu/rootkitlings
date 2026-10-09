@@ -290,7 +290,9 @@ class Validator:
                         f"{item.id}: composed solution contains executable source"
                     )
 
-                if item.workspace.baseline == "starter":
+                if item.workspace.imports:
+                    starter = catalog.starter_tree(item, solution_cache)
+                elif item.workspace.baseline == "starter":
                     starter = full_solution_tree(
                         self.root / item.workspace.source,
                         item.workspace.files,
@@ -475,9 +477,13 @@ class Validator:
 
             for item in catalog.exercises:
                 if item.workspace.baseline == "starter":
-                    starter = full_solution_tree(
-                        catalog.root / item.workspace.source,
-                        item.workspace.files,
+                    starter = (
+                        catalog.starter_tree(item)
+                        if item.workspace.imports
+                        else full_solution_tree(
+                            catalog.root / item.workspace.source,
+                            item.workspace.files,
+                        )
                     )
                     materialize_solution_tree(starter, starter_root, item.id)
                 catalog.materialize_solution(item, solution_root, item.id)

@@ -1,0 +1,72 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR MODULE"
+build_dir=$(realpath -e -- "$1" 2>/dev/null) ||
+	die "build directory not found"
+module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found"
+command -v openssl >/dev/null ||
+	die "openssl is required for the independent HMAC oracle"
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-authenticated-replay-safe-message-host.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+[[ -f $module && ! -L $module ]] || die "module must be a regular file"
+
+# This oracle is deliberately outside both the learner code and the frozen host
+# adapter.  It checks the exact exercise body and key with OpenSSL before that
+# adapter is allowed to judge learner behavior.
+oracle=$(printf '%b' '\x01\x01\x01\x02\x03\x04\x05\x06\x07\x08\x00\x00\x00\x00\x00\x00\x00\x01\x03\x00' |
+	openssl dgst -sha256 -mac HMAC \
+		-macopt hexkey:000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f)
+oracle=${oracle##*= }
+[[ $oracle == c73d5cc190dee29b65db6008af471d12d70989358f99c9e6fb49a466146d16f1 ]] ||
+	die "OpenSSL disagrees with the protocol known-answer tag"
+for relative in Kbuild core/main.c crypto/auth_platform.c \
+	include/authenticated.h include/auth_platform.h include/selftest.h \
+	message/authenticated.c tests/selftest.c; do
+	[[ -f $build_dir/$relative && ! -L $build_dir/$relative ]] ||
+		die "build is missing regular file: $relative"
+done
+gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
+	-fsanitize=address,undefined -fno-omit-frame-pointer -pthread \
+	-I"$build_dir/include" \
+	"$here/../fixtures/host/authenticated_test.c" \
+	"$here/../fixtures/host/platform.c" \
+	"$build_dir/message/authenticated.c" \
+	-o "$scratch/authenticated-test"
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+	"$scratch/authenticated-test"
+
+undefined=$(nm -u "$build_dir/message/authenticated.o" | awk '{ print $NF }')
+while read -r symbol; do
+	[[ -n $symbol ]] || continue
+	case $symbol in
+		__SCT__WARN_trap|__fentry__|__fortify_panic|\
+		__ref_stack_chk_guard|__stack_chk_fail|__x86_return_thunk|\
+		rk_platform_auth_create|rk_platform_auth_destroy|\
+		rk_platform_clear|rk_platform_hmac|rk_platform_lock|\
+		rk_platform_tags_equal|rk_platform_unlock) ;;
+		*) die "learner object has unexpected dependency: $symbol" ;;
+	esac
+done <<< "$undefined"
+if nm "$build_dir/message/authenticated.o" |
+	grep -Eq '[[:space:]][bBdD][[:space:]]'; then
+	die "learner file must not own mutable or persistent object state"
+fi
+for symbol in rk_receiver_start rk_receiver_submit rk_receiver_stop; do
+	nm "$build_dir/message/authenticated.o" |
+		grep -Eq "[[:space:]]T[[:space:]]${symbol}$" ||
+		die "learner object does not define $symbol"
+done
+platform_undefined=$(nm -u "$build_dir/crypto/auth_platform.o" | awk '{ print $NF }')
+for symbol in crypto_alloc_shash crypto_shash_setkey crypto_shash_digest \
+	__crypto_memneq mutex_lock mutex_unlock; do
+	grep -qx "$symbol" <<< "$platform_undefined" ||
+		die "platform is missing required kernel dependency: $symbol"
+done
+
+printf '[+] authenticated replay-safe transition is valid\n'

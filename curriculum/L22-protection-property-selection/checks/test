@@ -1,0 +1,183 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../scripts/lesson-env"
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-protection-property-selection-test.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+[[ $(uname -m) == x86_64 ]] || {
+	printf '[x] this lesson requires x86_64\n' >&2
+	exit 1
+}
+grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
+	printf '[x] pinned kernel build is not configured for GCC\n' >&2
+	exit 1
+}
+for command in gcc make nm strings; do
+	command -v "$command" >/dev/null || {
+		printf '[x] %s is required\n' "$command" >&2
+		exit 1
+	}
+done
+
+generated=$(find "$HERE" -type f \( -name '*.o' -o -name '*.ko' -o \
+	-name '*.mod' -o -name '*.mod.c' -o -name 'Module.symvers' -o \
+	-name 'modules.order' -o -name '.*.cmd' \) -print -quit)
+[[ -z $generated ]] || {
+	printf '[x] generated build artifact is stored in the lesson: %s\n' \
+		"${generated#"$HERE/"}" >&2
+	exit 1
+}
+
+for script in test host-check success-check failure-check; do
+	bash -n "$HERE/$script"
+done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
+	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check"
+fi
+
+mapfile -t changed_files < <(
+	diff -qr "$HERE/../starter" "$HERE/../solution" |
+		sed -nE 's#^Files .*/starter/(.*) and .*/solution/.* differ$#\1#p'
+)
+(( ${#changed_files[@]} == 1 )) || {
+	printf '[x] expected one learner-edited file, found %d\n' \
+		"${#changed_files[@]}" >&2
+	exit 1
+}
+[[ ${changed_files[0]} == protection/properties.c ]] || {
+	printf '[x] learner edit surface is %s, expected protection/properties.c\n' \
+		"${changed_files[0]}" >&2
+	exit 1
+}
+
+build_tree()
+{
+	local source=$1 destination=$2
+	local log=$destination.log
+	cp -a "$source" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 modules > "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] %s build failed\n' "${source##*/}" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] %s build has warnings\n' "${source##*/}" >&2
+		exit 1
+	fi
+}
+
+build_tree "$HERE/../starter" "$scratch/starter"
+build_tree "$HERE/../solution" "$scratch/solution"
+"$HERE/host-check" "$scratch/solution" \
+	"$scratch/solution/rootkitlings.ko"
+
+if "$HERE/host-check" "$scratch/starter" \
+	"$scratch/starter/rootkitlings.ko" > "$scratch/starter-host.log" 2>&1; then
+	printf '[x] host checker accepted the unfinished implementation\n' >&2
+	exit 1
+fi
+
+expect_host_rejection()
+{
+	local directory=$1 label=$2
+	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+		> "$scratch/$label-host.log" 2>&1; then
+		printf '[x] host checker accepted mutant: %s\n' "$label" >&2
+		exit 1
+	fi
+}
+
+build_mutant()
+{
+	local name=$1
+	cp -a "$HERE/../solution" "$scratch/$name"
+	shift
+	"$@" "$scratch/$name/protection/properties.c"
+	local log=$scratch/$name.log
+	if ! make -s -C "$KDIR" M="$scratch/$name" W=1 modules > "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] mutant did not compile: %s\n' "$name" >&2
+		exit 1
+	fi
+	expect_host_rejection "$scratch/$name" "$name"
+}
+
+mutate_fixed_key()
+{
+	sed -i 's/key\[index % key_length\]/key[0]/' "$1"
+}
+build_mutant fixed-xor-byte mutate_fixed_key
+
+mutate_live_input()
+{
+	sed -i \
+		's/transformed\[index\] = /transformed[index] = output[index] = /' \
+		"$1"
+}
+build_mutant overlap-corruption mutate_live_input
+
+mutate_confidentiality()
+{
+	sed -i '0,/return RK_PROTECTION_AEAD;/s//return RK_PROTECTION_HMAC_SHA256;/' "$1"
+}
+build_mutant hmac-confidentiality mutate_confidentiality
+
+mutate_freshness()
+{
+	sed -i 's/!(conditions \& RK_HAVE_REPLAY_STATE)/!(conditions \& RK_HAVE_SHARED_KEY)/g' "$1"
+}
+build_mutant missing-replay-state mutate_freshness
+
+mutate_untrusted_digest()
+{
+	sed -i '/if (needs \& RK_NEED_INTEGRITY) {/a\
+\t\treturn RK_PROTECTION_SHA256_TRUSTED_DIGEST;' "$1"
+}
+build_mutant untrusted-digest mutate_untrusted_digest
+
+mutate_kernel_branch()
+{
+	sed -i '/#include "protection.h"/a\
+#ifdef __KERNEL__\
+#define RK_PROTECTION_AEAD RK_PROTECTION_UNAVAILABLE\
+#endif' "$1"
+}
+cp -a "$HERE/../solution" "$scratch/kernel-only-answer"
+mutate_kernel_branch "$scratch/kernel-only-answer/protection/properties.c"
+build_tree "$scratch/kernel-only-answer" "$scratch/kernel-only-answer-build"
+
+cp -a "$HERE/../solution" "$scratch/alternate"
+cp "$HERE/../fixtures/alternate/properties.c" \
+	"$scratch/alternate/protection/properties.c"
+build_tree "$scratch/alternate" "$scratch/alternate-build"
+"$HERE/host-check" "$scratch/alternate-build" \
+	"$scratch/alternate-build/rootkitlings.ko"
+
+run_guest()
+{
+	local check=$1 module=$2 label=$3 output
+	shift 3
+	if ! output=$("$HERE/../../../vm/boot" --check \
+		"$check" "$module" "$@" 2>&1); then
+		printf '%s\n' "$output" >&2
+		printf '[x] disposable guest rejected %s\n' "$label" >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+}
+
+run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" solution
+run_guest "$HERE/success-check" \
+	"$scratch/alternate-build/rootkitlings.ko" alternate
+run_guest "$HERE/failure-check" "$scratch/starter/rootkitlings.ko" starter \
+	--tool vm/tools/module_load_test
+run_guest "$HERE/failure-check" \
+	"$scratch/kernel-only-answer-build/rootkitlings.ko" kernel-only-answer \
+	--tool vm/tools/module_load_test
+
+printf '[+] protection-property-selection passed\n'

@@ -1,8 +1,7 @@
 schema_version = 2
-revision = "2026.10-final-project"
+revision = "2026.10-project-route"
 default_module_artifact = "rootkitlings.ko"
 exercise_roots = ["curriculum"]
-cumulative_root = "proc-publication"
 capabilities = []
 
 required_route = [
@@ -249,6 +248,10 @@ id = "network-state"
 label = "Network state"
 
 [[sections]]
+id = "persistence"
+label = "Persistence and remote control"
+
+[[sections]]
 id = "authenticated-operations"
 label = "Authenticated operations"
 
@@ -443,10 +446,6 @@ label = "Initialization failure"
 [[concepts]]
 id = "initialization-rollback"
 label = "Initialization rollback"
-
-[[concepts]]
-id = "inode-identity-selection"
-label = "Inode identity selection"
 
 [[concepts]]
 id = "ipv4-fragment-policy"
@@ -691,6 +690,10 @@ label = "Return correlation"
 [[concepts]]
 id = "sensitive-state-zeroization"
 label = "Sensitive state zeroization"
+
+[[concepts]]
+id = "seq-file-item-suppression"
+label = "seq_file item suppression"
 
 [[concepts]]
 id = "sha256-verification"

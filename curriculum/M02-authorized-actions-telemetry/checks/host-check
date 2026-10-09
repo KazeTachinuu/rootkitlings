@@ -1,0 +1,58 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} WORKSPACE MODULE"
+workspace=$(realpath -e -- "$1") || die "workspace not found"
+module=$(realpath -e -- "$2") || die "module not found"
+
+[[ -f $module && ! -L $module ]] || die "module must be a regular file"
+for object in core/main.o interface/proc.o control/authorization.o \
+		instrumentation/return_probe.o instrumentation/events.o; do
+	[[ -f $workspace/$object && ! -L $workspace/$object ]] ||
+		die "build is missing $object"
+done
+
+events=$workspace/instrumentation/events.o
+for symbol in rk_events_reset rk_events_record_credential_change \
+		rk_events_record_rmdir rk_events_publish rk_events_unpublish; do
+	nm -g --defined-only "$events" | awk '{ print $3 }' |
+		grep -Fxq "$symbol" || die "event component does not export $symbol"
+done
+events_undefined=$(nm -u "$events" | awk '{ print $NF }')
+for symbol in _raw_spin_lock _raw_spin_unlock const_current_task; do
+	grep -Fxq "$symbol" <<< "$events_undefined" ||
+		die "event component has no $symbol dependency"
+done
+for forbidden in _copy_from_user copy_from_user kmalloc kzalloc kfree \
+		mutex_lock schedule msleep usleep_range; do
+	if grep -Fxq "$forbidden" <<< "$events_undefined"; then
+		die "event component depends on forbidden $forbidden"
+	fi
+done
+
+authorization_undefined=$(
+	nm -u "$workspace/control/authorization.o" | awk '{ print $NF }'
+)
+grep -Fxq rk_events_record_credential_change <<< "$authorization_undefined" ||
+	die "authorization does not publish credential events"
+
+probe_undefined=$(
+	nm -u "$workspace/instrumentation/return_probe.o" | awk '{ print $NF }'
+)
+for symbol in copy_from_user_nofault register_kretprobe \
+		rk_events_record_rmdir unregister_kretprobe; do
+	grep -Fxq "$symbol" <<< "$probe_undefined" ||
+		die "return probe has no $symbol dependency"
+done
+
+main_undefined=$(nm -u "$workspace/core/main.o" | awk '{ print $NF }')
+for symbol in rk_authorization_start rk_authorization_stop \
+		rk_events_publish rk_events_reset rk_events_unpublish \
+		rk_return_probe_start rk_return_probe_stop; do
+	grep -Fxq "$symbol" <<< "$main_undefined" ||
+		die "module lifecycle has no $symbol dependency"
+done
+
+printf '[+] compiled event ring producers and lifecycle verified\n'

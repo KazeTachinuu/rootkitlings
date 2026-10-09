@@ -2,29 +2,31 @@
 
 Rootkitlings teaches Linux kernel development by building a rootkit one
 observable mechanism at a time.
-The required route contains 31 lessons, four integration labs, and one final
-project.
+The required route contains 26 lessons, nine milestones, and one final project.
 
 ## Dependency spine
 
 ```text
-module lifecycle
-`-- owned state and procfs publication
-    |-- bounded control and resident execution
-    |   `-- M00 controlled resident core
-    |       `-- identity, credentials, and syscall telemetry
-    |           `-- M01 authorized actions and telemetry
-    |               `-- bounded view filters and independent evidence
-    |                   `-- M02 concealment evidence map
-    `-- packet boundaries, sockets, framing, and guarded file updates
-        `-- M03 remote resident agent
-            `-- authenticated messages, encryption, and DNS-shaped signals
-                `-- C00 complete rootkit
+L00-L07 -> M00 resident core
+              |
+              +-> L08-L10 -> M01 one-use operator key
+              |                 `-> L11-L12 -> M02 activity recorder
+              |                                   `-> L13-L15 -> M03 blind spot
+              |
+              `-> L16-L19 -> M04 packet switchboard
+
+L07 + L20 -> M05 stoppable call-home session
+L03 -> M06 reversible file swap
+M03 + M05 + M06 -> M07 call-home station
+L22 -> L23 -> L24 authenticated message
+         `-> L25 authenticated encryption
+L13 + L20 + L21 + L24 -> M08 authenticated status flare
+M04 + M07 + L25 + M08 -> C00 complete rootkit
 ```
 
-Each lesson teaches one reusable mechanism through success, rejection, and
-cleanup evidence.
-Integration labs combine only mechanisms already practiced.
+Each lesson isolates a reusable mechanism.
+Each milestone turns nearby mechanisms into a visible result.
+Both prove success, rejection, and cleanup behavior.
 
 The exact graph is metadata, not prose:
 

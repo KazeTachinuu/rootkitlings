@@ -1,6 +1,6 @@
 schema_version = 2
 id = "module-build-lifecycle"
-title = "Load your first kernel implant"
+title = "Build and load a kernel module"
 stage = "module-core"
 kind = "lesson"
 status = "required"
@@ -15,7 +15,7 @@ mode = "cumulative"
 files = ["Kbuild", "core/main.c"]
 editable = ["Kbuild", "core/main.c"]
 build = "."
-baseline = "template"
+baseline = "starter"
 source = "curriculum/L00-module-build-lifecycle/starter"
 
 [resources]

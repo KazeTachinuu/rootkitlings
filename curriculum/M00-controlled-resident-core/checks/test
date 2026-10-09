@@ -10,7 +10,7 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-controlled-resident-core-test.
 trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
 
 # M00 starts from the Stage 1 publication workspace. It does not merge the
-# completed Stage 2 lesson snapshots.
+# completed exercise snapshots.
 cp -a "$HERE/../../L02-owned-kernel-state/solution/." "$baseline/"
 cp -a "$HERE/../../L03-proc-publication/solution/." "$baseline/"
 cp -a "$baseline/." "$work/"

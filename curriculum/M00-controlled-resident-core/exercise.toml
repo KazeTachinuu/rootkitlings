@@ -1,6 +1,6 @@
 schema_version = 2
 id = "controlled-resident-core"
-title = "Establish the foothold"
+title = "Combine the timer, controls, and worker"
 stage = "control-execution"
 kind = "milestone"
 status = "required"
@@ -15,8 +15,12 @@ mode = "cumulative"
 files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interface/proc.c", "execution/worker.c", "execution/scheduler.c"]
 editable = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interface/proc.c", "execution/worker.c", "execution/scheduler.c"]
 build = "."
-baseline = "cumulative-root"
-additions = "curriculum/M00-controlled-resident-core/starter"
+baseline = "parent"
+parent = "proc-publication"
+imports = [
+  { exercise = "timer-workqueue-scheduler", files = ["execution/scheduler.c"] },
+  { exercise = "event-driven-kernel-thread", files = ["execution/worker.c"] },
+]
 
 [resources]
 readme = "curriculum/M00-controlled-resident-core/README.md"

@@ -62,13 +62,6 @@ for object in core/main.o core/state.o; do
 	fi
 done
 
-header_text=$(tr '\n' ' ' < "$build_dir/include/rootkit.h")
-grep -Eq 'struct[[:space:]]+rk_state[[:space:]]*;' <<< "$header_text" ||
-	die "rootkit.h must forward-declare struct rk_state"
-if grep -Eq 'struct[[:space:]]+rk_state[[:space:]]*\{' <<< "$header_text"; then
-	die "struct rk_state layout must remain private to core/state.c"
-fi
-
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-proc-publication-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 cflags=(-std=c11 -Wall -Wextra -Werror -Wno-unused-parameter

@@ -3,6 +3,8 @@ only after AES-GCM succeeds.
 Open before parsing, seal before framing, start the channel after the file
 transaction, send the status only after every endpoint exists, and unwind every
 acquired resource in reverse order.
+Register the packet switchboard before the scheduler and ready signal.
+Stop it before resident state is destroyed.
 Pass the resident state to the agent, but keep its command gate closed until the
 scheduler and status signal are ready.
 Map `STATUS`, `ENABLE`, `DISABLE`, and `RUN` directly to the existing state and

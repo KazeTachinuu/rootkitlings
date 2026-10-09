@@ -1,6 +1,6 @@
 schema_version = 2
 id = "owned-kernel-state"
-title = "Give the implant private state"
+title = "Give the module private state"
 stage = "module-core"
 kind = "lesson"
 status = "required"
@@ -15,7 +15,8 @@ mode = "cumulative"
 files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h"]
 editable = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h"]
 build = "."
-baseline = "previous-required"
+baseline = "parent"
+parent = "precise-init-failure"
 additions = "curriculum/L02-owned-kernel-state/starter"
 
 [resources]

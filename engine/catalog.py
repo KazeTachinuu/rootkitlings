@@ -11,6 +11,7 @@ import tomllib
 from .solutions import (
     SolutionTree,
     full_solution_tree,
+    import_solution_files,
     materialize_solution_tree,
     overlay_solution_tree,
 )
@@ -24,7 +25,7 @@ TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 MODULE_ARTIFACT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.ko\Z")
 MAKE_VARIABLE_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 DIFFICULTIES = {"intro", "standard", "advanced", "challenge"}
-KINDS = {"lesson", "milestone", "capstone"}
+KINDS = {"lesson", "milestone", "final-project"}
 STATUSES = {"required", "elective", "retired"}
 WORKSPACE_MODES = {"cumulative", "single-file", "project"}
 BASELINES = {
@@ -95,6 +96,12 @@ class ElectiveTrack:
 
 
 @dataclass(frozen=True)
+class WorkspaceImport:
+    exercise: str
+    files: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
 class Workspace:
     mode: str
     source: str
@@ -105,6 +112,7 @@ class Workspace:
     parent: str
     additions: str = ""
     module_artifact: str = ""
+    imports: tuple[WorkspaceImport, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -274,7 +282,7 @@ class Catalog:
                 capabilities, tools, assumptions, sections, concepts)
 
     def _generate_aliases(self) -> dict[str, str]:
-        prefixes = {"lesson": "L", "milestone": "M", "capstone": "C"}
+        prefixes = {"lesson": "L", "milestone": "M", "final-project": "C"}
         counters = {kind: 0 for kind in prefixes}
         aliases = {}
         for exercise_id in self.required_route:
@@ -353,6 +361,8 @@ class Catalog:
         common = {"mode", "files", "editable", "build", "baseline"}
         if "module_artifact" in value:
             common.add("module_artifact")
+        if "imports" in value:
+            common.add("imports")
         if baseline == "starter":
             expected = common | {"source"}
         elif baseline == "scaffold":
@@ -388,6 +398,10 @@ class Catalog:
             module_artifact=(
                 _module_artifact(module_artifact, path / "workspace")
                 if module_artifact else ""
+            ),
+            imports=(
+                _workspace_imports(value["imports"], path)
+                if "imports" in value else ()
             ),
         )
 
@@ -550,8 +564,10 @@ class Catalog:
                 raise CatalogError(f"{item.path}: invalid stage, kind, or status")
             if item.serial.startswith("L") and item.kind != "lesson":
                 raise CatalogError(f"{item.path}: L alias requires kind='lesson'")
-            if item.serial.startswith("C") and item.kind != "capstone":
-                raise CatalogError(f"{item.path}: C alias requires kind='capstone'")
+            if item.serial.startswith("C") and item.kind != "final-project":
+                raise CatalogError(
+                    f"{item.path}: C alias requires kind='final-project'"
+                )
             if item.serial.startswith("M") and item.kind != "milestone":
                 raise CatalogError(f"{item.path}: M alias requires kind='milestone'")
             if set(item.tradecraft) - tradecraft_ids or item.difficulty not in DIFFICULTIES:
@@ -582,6 +598,8 @@ class Catalog:
             self._validate_paths(item)
         self._validate_dag()
         self._validate_direct_prerequisites()
+        for item in self.exercises:
+            self.validate_workspace_imports(item)
         solution_cache: dict[str, SolutionTree] = {}
         for item in self.exercises:
             try:
@@ -589,12 +607,12 @@ class Catalog:
             except WorkspaceError as exc:
                 raise CatalogError(f"{item.path}: invalid solution: {exc}") from exc
         for item in self.exercises:
-            if item.workspace.baseline != "scaffold":
+            if not item.workspace.imports:
                 continue
             try:
                 self.starter_tree(item, solution_cache)
             except WorkspaceError as exc:
-                raise CatalogError(f"{item.path}: invalid scaffold: {exc}") from exc
+                raise CatalogError(f"{item.path}: invalid starter: {exc}") from exc
         for item in self.exercises:
             available = baseline | self.prerequisite_concepts(item)
             missing = set(item.requires) - available
@@ -678,14 +696,17 @@ class Catalog:
             exercise_id: position
             for position, exercise_id in enumerate(self.required_route)
         }
-        capstones = [item for item in self.exercises if item.kind == "capstone"]
-        if len(capstones) > 1:
-            raise CatalogError("course.toml: capstone must be unique")
-        if capstones and (
-            not self.required_route or capstones[0].id != self.required_route[-1]
+        final_projects = [
+            item for item in self.exercises if item.kind == "final-project"
+        ]
+        if len(final_projects) > 1:
+            raise CatalogError("course.toml: final project must be unique")
+        if final_projects and (
+            not self.required_route
+            or final_projects[0].id != self.required_route[-1]
         ):
             raise CatalogError(
-                "course.toml: capstone must be the final required-route exercise"
+                "course.toml: final project must end the required route"
             )
 
         for item in self.exercises:
@@ -740,7 +761,7 @@ class Catalog:
             raise CatalogError(f"{item.path}: workspace source must be an existing directory")
         if item.workspace.source and item.workspace.baseline != "scaffold":
             source = self.root / item.workspace.source
-            for relative in item.workspace.files:
+            for relative in self.local_workspace_files(item):
                 if not (source / relative).is_file():
                     raise CatalogError(f"{item.path}: workspace file missing from source: {relative}")
             build = source if item.workspace.build == "." else source / item.workspace.build
@@ -856,6 +877,16 @@ class Catalog:
         if item.id in cache:
             return dict(cache[item.id])
         solution = self.root / item.resources.solution
+        if item.workspace.imports:
+            starter = self.starter_tree(item, cache)
+            result = overlay_solution_tree(
+                starter,
+                solution,
+                item.workspace.files,
+                item.workspace.files,
+            )
+            cache[item.id] = result
+            return dict(result)
         provider = self.solution_provider(item)
         if item.workspace.baseline == "scaffold":
             assert provider is not None
@@ -899,16 +930,60 @@ class Catalog:
         item: Exercise,
         solution_cache: dict[str, SolutionTree] | None = None,
     ) -> SolutionTree:
-        """Compose one immutable sparse starter over an earlier reference."""
-        provider = self.scaffold_provider(item)
-        if provider is None:
-            raise CatalogError(f"{item.path}: exercise does not use a scaffold")
-        return overlay_solution_tree(
-            self.solution_tree(provider, solution_cache),
-            self.root / item.workspace.source,
-            provider.workspace.files,
+        """Compose the immutable reference starter, including explicit imports."""
+        cache = {} if solution_cache is None else solution_cache
+        provider = self.solution_provider(item)
+        local_files = self.local_workspace_files(item)
+        if item.workspace.baseline == "starter":
+            base = full_solution_tree(
+                self.root / item.workspace.source,
+                local_files,
+            )
+        else:
+            assert provider is not None
+            base = self.solution_tree(provider, cache)
+            overlay = (
+                item.workspace.source
+                if item.workspace.baseline == "scaffold"
+                else item.workspace.additions
+            )
+            if overlay:
+                base = overlay_solution_tree(
+                    base,
+                    self.root / overlay,
+                    provider.workspace.files,
+                    local_files,
+                )
+            elif set(provider.workspace.files) != set(local_files):
+                raise WorkspaceError(
+                    "local starter files do not cover the declared workspace"
+                )
+
+        imported = (
+            (
+                workspace_import.exercise,
+                self.solution_tree(
+                    self.by_id[workspace_import.exercise],
+                    cache,
+                ),
+                workspace_import.files,
+            )
+            for workspace_import in item.workspace.imports
+        )
+        return import_solution_files(
+            base,
+            imported,
             item.workspace.files,
         )
+
+    def local_workspace_files(self, item: Exercise) -> tuple[str, ...]:
+        """Return declared paths supplied by the baseline rather than imports."""
+        imported = {
+            destination
+            for workspace_import in item.workspace.imports
+            for _, destination in workspace_import.files
+        }
+        return tuple(path for path in item.workspace.files if path not in imported)
 
     def materialize_starter(
         self,
@@ -1014,7 +1089,10 @@ class Catalog:
                 f"{item.path}: inherited workspace cannot remove or rename provider "
                 f"files: {removed}"
             )
-        new_files = consumer_files - provider_files
+        imported_files = set(item.workspace.files) - set(
+            self.local_workspace_files(item)
+        )
+        new_files = consumer_files - provider_files - imported_files
         additions = item.workspace.additions
         if (
             item.workspace.module_artifact
@@ -1075,6 +1153,44 @@ class Catalog:
                 f"{item.path}: scaffold module artifact conflicts with parent "
                 f"{provider.id!r}"
             )
+
+    def validate_workspace_imports(self, item: Exercise) -> None:
+        """Validate import providers and their source/destination contracts."""
+        if not item.workspace.imports:
+            return
+        prerequisite_ids = self.prerequisite_ids(item)
+        destinations: set[str] = set()
+        declared = set(item.workspace.files)
+        for workspace_import in item.workspace.imports:
+            provider = self.by_id.get(workspace_import.exercise)
+            if provider is None:
+                raise CatalogError(
+                    f"{item.path}: unknown workspace import exercise "
+                    f"{workspace_import.exercise!r}"
+                )
+            if provider.id not in prerequisite_ids:
+                raise CatalogError(
+                    f"{item.path}: workspace import {provider.id!r} must be a "
+                    "direct or transitive prerequisite"
+                )
+            provider_files = set(provider.workspace.files)
+            for source, destination in workspace_import.files:
+                if source not in provider_files:
+                    raise CatalogError(
+                        f"{item.path}: workspace import source is not declared by "
+                        f"{provider.id!r}: {source}"
+                    )
+                if destination not in declared:
+                    raise CatalogError(
+                        f"{item.path}: workspace import destination is not declared: "
+                        f"{destination}"
+                    )
+                if destination in destinations:
+                    raise CatalogError(
+                        f"{item.path}: workspace import destination collides: "
+                        f"{destination}"
+                    )
+                destinations.add(destination)
 
     def prerequisite_exercises(self, item: Exercise) -> tuple[Exercise, ...]:
         ids = self.prerequisite_ids(item)
@@ -1266,13 +1382,67 @@ def _relative_list(data, key, path):
     for value in values:
         if not isinstance(value, str):
             raise CatalogError(f"{path}: {key} must contain strings")
-        candidate = PurePosixPath(value)
-        if candidate.is_absolute() or not candidate.parts or any(part in {"", ".", ".."} for part in candidate.parts):
-            raise CatalogError(f"{path}: unsafe workspace-relative path {value!r}")
-        result.append(candidate.as_posix())
+        result.append(_relative_path(value, path))
     if len(result) != len(set(result)):
         raise CatalogError(f"{path}: duplicate paths in {key}")
     return result
+
+
+def _relative_path(value, path):
+    if not isinstance(value, str):
+        raise CatalogError(f"{path}: workspace-relative path must be a string")
+    candidate = PurePosixPath(value)
+    if (
+        candidate.is_absolute()
+        or not candidate.parts
+        or any(part in {"", ".", ".."} for part in candidate.parts)
+    ):
+        raise CatalogError(f"{path}: unsafe workspace-relative path {value!r}")
+    return candidate.as_posix()
+
+
+def _workspace_imports(value, path) -> tuple[WorkspaceImport, ...]:
+    import_path = path / "workspace" / "imports"
+    if not isinstance(value, list):
+        raise CatalogError(f"{import_path}: imports must be an array of tables")
+    if not value:
+        raise CatalogError(f"{import_path}: imports must not be empty")
+    result = []
+    providers = set()
+    for index, row in enumerate(value):
+        row_path = import_path / str(index)
+        if not isinstance(row, dict):
+            raise CatalogError(f"{row_path}: import must be a table")
+        expected = {"exercise", "files"}
+        if "rename" in row:
+            expected.add("rename")
+        _exact_fields(row, expected, row_path)
+        exercise = _identifier(row["exercise"], row_path)
+        if exercise in providers:
+            raise CatalogError(
+                f"{import_path}: duplicate import exercise {exercise!r}"
+            )
+        providers.add(exercise)
+        files = tuple(_relative_list(row, "files", row_path))
+        raw_rename = row.get("rename", {})
+        if not isinstance(raw_rename, dict):
+            raise CatalogError(f"{row_path}: rename must be a table")
+        rename = {
+            _relative_path(source, row_path): _relative_path(destination, row_path)
+            for source, destination in raw_rename.items()
+        }
+        unknown = set(rename) - set(files)
+        if unknown:
+            raise CatalogError(
+                f"{row_path}: rename contains unselected source paths: "
+                f"{sorted(unknown)}"
+            )
+        mappings = tuple((source, rename.get(source, source)) for source in files)
+        destinations = [destination for _, destination in mappings]
+        if len(destinations) != len(set(destinations)):
+            raise CatalogError(f"{row_path}: duplicate import destinations")
+        result.append(WorkspaceImport(exercise, mappings))
+    return tuple(result)
 
 
 def _workspace_build(value, path):

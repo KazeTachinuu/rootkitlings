@@ -5,6 +5,7 @@ import unittest
 
 from engine.solutions import (
     full_solution_tree,
+    import_solution_files,
     materialize_solution_tree,
     overlay_solution_tree,
 )
@@ -126,6 +127,65 @@ class SolutionCompositionTests(unittest.TestCase):
             tree = full_solution_tree(base, ("main.c",))
             with self.assertRaisesRegex(WorkspaceError, "already exists"):
                 materialize_solution_tree(tree, output, "exercise")
+
+    def test_imports_select_and_rename_composed_provider_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            base_root = root / "base"
+            provider_root = root / "provider"
+            base_root.mkdir()
+            provider_root.mkdir()
+            self.write(base_root, "main.c", "main\n")
+            self.write(provider_root, "include/api.h", "api\n")
+            self.write(provider_root, "shared.c", "shared\n")
+            base = full_solution_tree(base_root, ("main.c",))
+            provider = full_solution_tree(
+                provider_root,
+                ("include/api.h", "shared.c"),
+            )
+
+            result = import_solution_files(
+                base,
+                ((
+                    "provider",
+                    provider,
+                    (
+                        ("include/api.h", "vendor/api.h"),
+                        ("shared.c", "shared.c"),
+                    ),
+                ),),
+                ("main.c", "vendor/api.h", "shared.c"),
+            )
+
+            self.assertEqual(result["vendor/api.h"].data, b"api\n")
+            self.assertEqual(result["shared.c"].data, b"shared\n")
+
+    def test_imports_reject_missing_sources_collisions_and_incomplete_trees(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            base_root = root / "base"
+            provider_root = root / "provider"
+            base_root.mkdir()
+            provider_root.mkdir()
+            self.write(base_root, "main.c", "main\n")
+            self.write(provider_root, "shared.c", "shared\n")
+            base = full_solution_tree(base_root, ("main.c",))
+            provider = full_solution_tree(provider_root, ("shared.c",))
+
+            with self.assertRaisesRegex(WorkspaceError, "no source file"):
+                import_solution_files(
+                    base,
+                    (("provider", provider, (("missing.c", "copy.c"),)),),
+                    ("main.c", "copy.c"),
+                )
+            with self.assertRaisesRegex(WorkspaceError, "collides"):
+                import_solution_files(
+                    base,
+                    (("provider", provider, (("shared.c", "main.c"),)),),
+                    ("main.c",),
+                )
+            with self.assertRaisesRegex(WorkspaceError, "do not cover"):
+                import_solution_files(base, (), ("main.c", "copy.c"))
 
     def test_modes_are_normalized_from_executable_bit_only(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

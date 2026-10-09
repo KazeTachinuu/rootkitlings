@@ -1,10 +1,9 @@
-# Load your first kernel implant
+# Build and load a kernel module
 
-Start with one small kernel implant: a module that can enter and leave the test
-kernel cleanly.
+Start with a module that can enter and leave the test kernel cleanly.
 Build it, load it, confirm that it is resident, then unload it.
 Success proves that you control the complete module lifecycle before adding any
-rootkit behavior.
+new behavior.
 
 Most programs run in **userspace**, isolated from the operating system.
 A kernel module runs inside the kernel with full kernel privileges.

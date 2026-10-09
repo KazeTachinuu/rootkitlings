@@ -1,0 +1,40 @@
+schema_version = 2
+id = "bounded-dns-wire-name"
+title = "Prepare a bounded DNS wire name"
+stage = "network-state"
+kind = "lesson"
+status = "required"
+tradecraft = ["networking"]
+difficulty = "advanced"
+prerequisites = []
+teaches = ["dns-wire-encoding"]
+requires = ["dns-name-basics"]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "codec/dns_name.c", "core/main.c", "include/dns_name.h", "include/selftest.h", "tests/selftest.c"]
+editable = ["codec/dns_name.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L21-bounded-dns-wire-name/starter"
+
+[resources]
+readme = "curriculum/L21-bounded-dns-wire-name/README.md"
+check = "curriculum/L21-bounded-dns-wire-name/checks/success-check"
+host_check = "curriculum/L21-bounded-dns-wire-name/checks/host-check"
+hint = "curriculum/L21-bounded-dns-wire-name/hint"
+solution = "curriculum/L21-bounded-dns-wire-name/solution"
+
+[verification]
+timeout_seconds = 240
+capabilities = []
+tools = []
+cleanup_required = true
+
+[[verification.cases]]
+id = "bounded-dns-codec"
+label = "Bounded DNS wire-name codec"
+expect_build = "pass"
+check = "curriculum/L21-bounded-dns-wire-name/checks/success-check"
+build_output_contains = ""
+[verification.cases.build_variables]

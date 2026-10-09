@@ -1,0 +1,180 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../scripts/lesson-env"
+ROOT=$ROOTKITLINGS_ROOT
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-return-aware-syscall-telemetry-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-return-aware-syscall-telemetry-work.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-return-aware-syscall-telemetry-test.XXXXXX")
+trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
+
+cp -a "$HERE/../../L02-owned-kernel-state/solution/." "$baseline/"
+cp -a "$HERE/../../L03-proc-publication/solution/." "$baseline/"
+cp -a "$HERE/../../L04-proc-read-contract/solution/." "$baseline/"
+cp -a "$HERE/../../L05-bounded-control-switch/solution/." "$baseline/"
+cp -a "$baseline/." "$work/"
+while IFS= read -r -d '' source; do
+	relative=${source#"$HERE/../starter/"}
+	mkdir -p "$work/$(dirname "$relative")"
+	cp -p "$source" "$work/$relative"
+done < <(find "$HERE/../starter" -type f -print0)
+while IFS= read -r -d '' source; do
+	relative=${source#"$HERE/../solution/"}
+	mkdir -p "$work/$(dirname "$relative")"
+	cp -p "$source" "$work/$relative"
+done < <(find "$HERE/../solution" -type f -print0)
+
+[[ $(uname -m) == x86_64 ]] || {
+	printf '[x] this lesson requires x86_64\n' >&2
+	exit 1
+}
+for option in X86_64 IKCONFIG_PROC KPROBES KRETPROBES \
+	KRETPROBE_ON_RETHOOK KPROBES_ON_FTRACE KALLSYMS KALLSYMS_ALL \
+	DEBUG_FS ARCH_HAS_SYSCALL_WRAPPER MODULES MODULE_UNLOAD; do
+	grep -qx "CONFIG_$option=y" "$KDIR/.config" || {
+		printf '[x] this lesson requires CONFIG_%s=y\n' "$option" >&2
+		exit 1
+	}
+done
+
+symvers=$KDIR/Module.symvers
+system_map=$KDIR/System.map
+[[ -f $symvers && -f $system_map ]] || {
+	printf '[x] pinned kernel symbol manifests are unavailable\n' >&2
+	exit 1
+}
+if awk '$2 == "__x64_sys_rmdir" { found = 1 } END { exit !found }' \
+	"$symvers"; then
+	printf '[x] __x64_sys_rmdir unexpectedly appears in Module.symvers\n' >&2
+	exit 1
+fi
+awk '$3 == "__x64_sys_rmdir" && $2 ~ /^[Tt]$/ { found = 1 }
+	END { exit !found }' "$system_map" || {
+	printf '[x] pinned kernel lacks __x64_sys_rmdir\n' >&2
+	exit 1
+}
+for symbol in register_kretprobe unregister_kretprobe copy_from_user_nofault; do
+	awk -v symbol="$symbol" '$2 == symbol && $4 == "EXPORT_SYMBOL_GPL" {
+		found = 1
+	} END { exit !found }' "$symvers" || {
+		printf '[x] pinned kernel must GPL-export %s\n' "$symbol" >&2
+		exit 1
+	}
+done
+if awk '$2 == "strncpy_from_user_nofault" { found = 1 }
+	END { exit !found }' "$symvers"; then
+	printf '[x] unexported strncpy_from_user_nofault appeared in Module.symvers\n' >&2
+	exit 1
+fi
+awk '$3 == "strncpy_from_user_nofault" { found = 1 }
+	END { exit !found }' "$system_map" || {
+	printf '[x] pinned kernel lacks the internal string helper used by the lesson explanation\n' >&2
+	exit 1
+}
+awk '$3 == "__x64_sys_rmdir" { found = 1 } END { exit !found }' \
+	/proc/kallsyms || {
+	printf '[x] running kernel lacks __x64_sys_rmdir\n' >&2
+	exit 1
+}
+
+mapfile -t changed_files < <(
+	diff -qr "$HERE/../starter" "$HERE/../solution" |
+		sed -nE 's#^Files .*/starter/(.*) and .*/solution/.* differ$#\1#p'
+)
+(( ${#changed_files[@]} == 1 )) || {
+	printf '[x] expected one learner-edited file, found %d\n' \
+		"${#changed_files[@]}" >&2
+	exit 1
+}
+[[ ${changed_files[0]} == instrumentation/return_probe.c ]] || {
+	printf '[x] learner edit surface is %s, expected instrumentation/return_probe.c\n' \
+		"${changed_files[0]}" >&2
+	exit 1
+}
+
+build_variant()
+{
+	local name=$1 point=$2 destination=$scratch/$1 log=$scratch/$1.log
+	cp -a "$work" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] %s build failed\n' "$name" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] %s builds with warnings\n' "$name" >&2
+		exit 1
+	fi
+}
+
+starter_build=$scratch/starter
+cp -a "$baseline" "$starter_build"
+cp -a "$HERE/../starter/." "$starter_build/"
+if ! make -s -C "$KDIR" M="$starter_build" W=1 \
+	ROOTKITLINGS_FAIL_POINT=0 modules >"$scratch/starter.log" 2>&1; then
+	cat "$scratch/starter.log" >&2
+	printf '[x] starter build failed\n' >&2
+	exit 1
+fi
+if grep -q 'warning:' "$scratch/starter.log"; then
+	cat "$scratch/starter.log" >&2
+	printf '[x] starter builds with warnings\n' >&2
+	exit 1
+fi
+
+build_variant success 0
+build_variant preflight 1
+build_variant allocation 2
+build_variant publication 3
+build_variant missing 4
+"$HERE/host-check" "$scratch/success" \
+	"$scratch/success/rootkitlings.ko" "$scratch/missing"
+
+cp -a "$work" "$scratch/unknown"
+if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
+	ROOTKITLINGS_FAIL_POINT=99 modules >"$scratch/unknown.log" 2>&1; then
+	printf '[x] unknown failure-point value compiled successfully\n' >&2
+	exit 1
+fi
+
+bash -n "$HERE/test" "$HERE/host-check"
+sh -n "$HERE/success-check" "$HERE/probe-failure-check.in"
+make -s -C "$ROOT" vm/tools/rmdir_telemetry_test
+
+sed -e 's/@EXPECTED_ERRNO@/12/g' \
+	-e 's/@LABEL@/Probe cleanup after procfs publication failure/g' \
+	"$HERE/probe-failure-check.in" > "$scratch/publication-check"
+sed -e 's/@EXPECTED_ERRNO@/2/g' \
+	-e 's/@LABEL@/Missing Kretprobe target cleanup/g' \
+	"$HERE/probe-failure-check.in" > "$scratch/missing-check"
+chmod 0755 "$scratch/publication-check" "$scratch/missing-check"
+
+run_guest()
+{
+	local check_script=$1 module=$2 output
+	shift 2
+	if ! output=$("$ROOT/vm/boot" --check "$check_script" "$@" \
+		"$module" 2>&1); then
+		printf '%s\n' "$output" >&2
+		printf '[x] disposable guest did not complete\n' >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+}
+
+run_guest "$HERE/../../L03-proc-publication/checks/failure-ecanceled-check" \
+	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
+run_guest "$HERE/../../L03-proc-publication/checks/failure-enomem-check" \
+	"$scratch/allocation/rootkitlings.ko" --tool vm/tools/module_load_test
+run_guest "$scratch/publication-check" \
+	"$scratch/publication/rootkitlings.ko" --tool vm/tools/module_load_test
+run_guest "$scratch/missing-check" \
+	"$scratch/missing/rootkitlings.ko" --tool vm/tools/module_load_test
+run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
+	--tool vm/tools/rmdir_telemetry_test
+
+printf '[+] return-aware-syscall-telemetry passed\n'

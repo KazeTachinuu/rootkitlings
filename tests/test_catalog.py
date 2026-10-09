@@ -7,7 +7,7 @@ import unittest
 
 from engine.catalog import (
     Catalog, CatalogError, ElectiveTrack, Exercise, Resources, Verification,
-    VerificationCase, Workspace, _elective_track_rows,
+    VerificationCase, Workspace, WorkspaceImport, _elective_track_rows,
 )
 from engine.workspace import WorkspaceError
 
@@ -27,7 +27,7 @@ class GeneratedSerialTests(unittest.TestCase):
         self.assertEqual(self.catalog.capabilities, ())
 
     def test_serials_follow_route_and_kind(self) -> None:
-        prefixes = {"lesson": "L", "milestone": "M", "capstone": "C"}
+        prefixes = {"lesson": "L", "milestone": "M", "final-project": "C"}
         counters = {kind: 0 for kind in prefixes}
         for stable_id in self.catalog.required_route:
             exercise = self.catalog.by_id[stable_id]
@@ -77,7 +77,7 @@ class GeneratedSerialTests(unittest.TestCase):
             self.catalog.resolve("module-build").id,
         )
 
-    def test_unique_capstone_prefix_resolves_c00(self) -> None:
+    def test_unique_final_project_prefix_resolves_c00(self) -> None:
         self.assertEqual("complete-rootkit", self.catalog.resolve("C0").id)
 
     def test_catalog_query_and_export_resolve_default_module_artifact(self) -> None:
@@ -441,6 +441,59 @@ class WorkspaceInheritanceTests(unittest.TestCase):
                         {**workspace, "baseline": baseline}, Path("exercise.toml")
                     )
 
+    def test_workspace_import_schema_selects_and_optionally_renames_files(self) -> None:
+        catalog = Catalog.__new__(Catalog)
+        catalog.root = ROOT
+        workspace = catalog._workspace({
+            "mode": "project",
+            "files": ["main.c", "vendor/api.h", "shared.c"],
+            "editable": ["main.c"],
+            "build": ".",
+            "baseline": "starter",
+            "source": "starter",
+            "imports": [{
+                "exercise": "provider",
+                "files": ["include/api.h", "shared.c"],
+                "rename": {"include/api.h": "vendor/api.h"},
+            }],
+        }, Path("exercise.toml"))
+
+        self.assertEqual(workspace.imports, (
+            WorkspaceImport("provider", (
+                ("include/api.h", "vendor/api.h"),
+                ("shared.c", "shared.c"),
+            )),
+        ))
+
+    def test_workspace_import_schema_rejects_ambiguous_rows(self) -> None:
+        catalog = Catalog.__new__(Catalog)
+        catalog.root = ROOT
+        common = {
+            "mode": "project",
+            "files": ["main.c"],
+            "editable": ["main.c"],
+            "build": ".",
+            "baseline": "starter",
+            "source": "starter",
+        }
+        with self.assertRaisesRegex(CatalogError, "unselected source"):
+            catalog._workspace({
+                **common,
+                "imports": [{
+                    "exercise": "provider",
+                    "files": ["main.c"],
+                    "rename": {"other.c": "copy.c"},
+                }],
+            }, Path("exercise.toml"))
+        with self.assertRaisesRegex(CatalogError, "duplicate import exercise"):
+            catalog._workspace({
+                **common,
+                "imports": [
+                    {"exercise": "provider", "files": ["a.c"]},
+                    {"exercise": "provider", "files": ["b.c"]},
+                ],
+            }, Path("exercise.toml"))
+
     def test_parent_baseline_resolves_its_explicit_parent(self) -> None:
         first = _exercise("first", "starter")
         intervening = _exercise("intervening", "starter")
@@ -478,7 +531,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
         with self.assertRaisesRegex(CatalogError, "cannot depend on non-required"):
             catalog._validate_required_route()
 
-    def test_capstone_is_optional_unique_and_final(self) -> None:
+    def test_final_project_is_optional_unique_and_final(self) -> None:
         lessons = tuple(
             _exercise(f"lesson-{index}", "starter") for index in range(3)
         )
@@ -488,16 +541,24 @@ class WorkspaceInheritanceTests(unittest.TestCase):
         )
         self.catalog((*lessons, *milestones))._validate_required_route()
 
-        capstone = _exercise("capstone", "starter", kind="capstone")
-        self.catalog((*lessons, *milestones, capstone))._validate_required_route()
+        final_project = _exercise(
+            "final-project", "starter", kind="final-project"
+        )
+        self.catalog(
+            (*lessons, *milestones, final_project)
+        )._validate_required_route()
 
         trailing = _exercise("trailing", "starter")
-        with self.assertRaisesRegex(CatalogError, "final required-route"):
-            self.catalog((*lessons, capstone, trailing))._validate_required_route()
+        with self.assertRaisesRegex(CatalogError, "end the required route"):
+            self.catalog(
+                (*lessons, final_project, trailing)
+            )._validate_required_route()
 
-        other = _exercise("other-capstone", "starter", kind="capstone")
-        with self.assertRaisesRegex(CatalogError, "capstone must be unique"):
-            self.catalog((*lessons, capstone, other))._validate_required_route()
+        other = _exercise("other-project", "starter", kind="final-project")
+        with self.assertRaisesRegex(CatalogError, "final project must be unique"):
+            self.catalog(
+                (*lessons, final_project, other)
+            )._validate_required_route()
 
     def test_scaffold_reuses_reference_without_a_completion_edge(self) -> None:
         provider = _exercise("provider", "starter")
@@ -795,6 +856,126 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             catalog.root = root
             with self.assertRaisesRegex(WorkspaceError, "byte-identical"):
                 catalog.solution_tree(consumer)
+
+    def test_imports_compose_for_every_workspace_baseline(self) -> None:
+        for baseline in ("starter", "parent", "scaffold"):
+            with self.subTest(baseline=baseline), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                donor = _exercise(
+                    "donor",
+                    "starter",
+                    files=("shared.c",),
+                )
+                donor = Exercise(**{
+                    **donor.__dict__,
+                    "resources": Resources("", "", "", "", "donor-solution"),
+                })
+                base = _exercise(
+                    "base",
+                    "starter",
+                    files=("base.c",),
+                )
+                base = Exercise(**{
+                    **base.__dict__,
+                    "resources": Resources("", "", "", "", "base-solution"),
+                })
+                local_name = "main.c" if baseline == "starter" else "base.c"
+                consumer = _exercise(
+                    "consumer",
+                    baseline,
+                    files=(local_name, "imported/shared.c"),
+                    parent="" if baseline == "starter" else "base",
+                )
+                consumer = Exercise(**{
+                    **consumer.__dict__,
+                    "prerequisites": ("donor",),
+                    "workspace": Workspace(**{
+                        **consumer.workspace.__dict__,
+                        "source": (
+                            "consumer-starter"
+                            if baseline in {"starter", "scaffold"}
+                            else ""
+                        ),
+                        "imports": (
+                            WorkspaceImport(
+                                "donor",
+                                (("shared.c", "imported/shared.c"),),
+                            ),
+                        ),
+                    }),
+                    "resources": Resources(
+                        "", "", "", "", "consumer-solution"
+                    ),
+                })
+                for name in (
+                    "donor-solution",
+                    "base-solution",
+                    "consumer-starter",
+                    "consumer-solution",
+                ):
+                    (root / name).mkdir()
+                (root / "donor-solution/shared.c").write_text("shared\n")
+                (root / "base-solution/base.c").write_text("base\n")
+                if baseline == "starter":
+                    (root / "consumer-starter/main.c").write_text("todo\n")
+                    (root / "consumer-solution/main.c").write_text("done\n")
+                elif baseline == "scaffold":
+                    (root / "consumer-starter/base.c").write_text("todo\n")
+                    (root / "consumer-solution/base.c").write_text("done\n")
+                else:
+                    (root / "consumer-solution/base.c").write_text("done\n")
+
+                catalog = self.catalog((donor, base, consumer))
+                catalog.root = root
+                catalog.validate_workspace_imports(consumer)
+                starter = catalog.starter_tree(consumer)
+                solution = catalog.solution_tree(consumer)
+                self.assertEqual(
+                    starter["imported/shared.c"].data,
+                    b"shared\n",
+                )
+                self.assertEqual(
+                    solution["imported/shared.c"].data,
+                    b"shared\n",
+                )
+                self.assertEqual(solution[local_name].data, b"done\n")
+
+    def test_import_provider_must_be_a_prerequisite_with_declared_sources(self) -> None:
+        provider = _exercise(
+            "provider",
+            "starter",
+            files=("shared.c",),
+        )
+        consumer = _exercise(
+            "consumer",
+            "starter",
+            files=("main.c", "copy.c"),
+        )
+        imported = WorkspaceImport("provider", (("shared.c", "copy.c"),))
+        consumer = Exercise(**{
+            **consumer.__dict__,
+            "workspace": Workspace(**{
+                **consumer.workspace.__dict__,
+                "imports": (imported,),
+            }),
+        })
+        catalog = self.catalog((provider, consumer))
+        with self.assertRaisesRegex(CatalogError, "direct or transitive prerequisite"):
+            catalog.validate_workspace_imports(consumer)
+
+        consumer = Exercise(**{
+            **consumer.__dict__,
+            "prerequisites": ("provider",),
+            "workspace": Workspace(**{
+                **consumer.workspace.__dict__,
+                "imports": (
+                    WorkspaceImport("provider", (("missing.c", "copy.c"),)),
+                ),
+            }),
+        })
+        catalog = self.catalog((provider, consumer))
+        with self.assertRaisesRegex(CatalogError, "source is not declared"):
+            catalog.validate_workspace_imports(consumer)
 
 
 class ModuleArtifactValidationTests(unittest.TestCase):

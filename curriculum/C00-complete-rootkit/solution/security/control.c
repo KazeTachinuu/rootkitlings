@@ -5,7 +5,7 @@
 #include <string.h>
 #endif
 
-#include "platform.h"
+#include "auth_platform.h"
 #include "secure_control.h"
 
 static void rk_write_be64(u8 *bytes, u64 value)

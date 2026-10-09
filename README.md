@@ -2,7 +2,7 @@
 
 Build a Linux kernel rootkit one mechanism at a time.
 
-The course has 31 lessons, four integration labs, and one final project.
+The course has 26 lessons, nine milestones, and one final project.
 Each exercise adds one bounded mechanism or integrates mechanisms already
 practiced.
 Modules run only in a disposable QEMU guest, never in the host kernel.
@@ -63,13 +63,17 @@ Run `./rootkitlings help` for the complete command list.
 
 - **L00–L03:** module lifecycle, owned state, and procfs rollback.
 - **L04–L07, M00:** bounded control and resident execution.
-- **L08–L13, M01:** task identity, credentials, and syscall telemetry.
-- **L14–L16, M02:** bounded view filters and independent evidence.
-- **L17–L25, M03:** packets, sockets, framing, and guarded persistence.
-- **L26–L30:** authentication, replay defense, encryption, and signaling.
+- **L08–L10, M01:** task identity, credentials, and a one-use operator key.
+- **L11–L12, M02:** syscall probes and an activity recorder.
+- **L13–L15, M03:** bounded view filters and independent evidence.
+- **L16–L19, M04:** packet parsing, observation, and redirection.
+- **L20, M05, L21:** sockets, framed sessions, and DNS names.
+- **M06–M07:** a reversible file swap and call-home control.
+- **L22–L25, M08:** authentication, replay defense, encryption, and signaling.
 - **C00:** integrate the course subsystems into one complete rootkit.
 
-Integration labs combine only mechanisms taught by preceding lessons.
+Lessons isolate mechanisms.
+Milestones turn them into a small tool or a visible system behavior.
 Use `list` for the route and `prereq` for direct dependencies.
 
 ## Recovery

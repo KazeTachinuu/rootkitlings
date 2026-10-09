@@ -1,7 +1,7 @@
 """Validate, compose, and safely materialize reference solution trees.
 
-Starter solutions are complete trees. Derived solutions are sparse replacement
-overlays applied recursively to their catalog-derived provider solution.
+Solutions combine local starter files, sparse overlays, and explicit files from
+prerequisite solutions. Composition always produces one complete declared tree.
 """
 
 from __future__ import annotations
@@ -23,6 +23,11 @@ class SolutionFile:
 
 
 SolutionTree = dict[str, SolutionFile]
+SolutionImport = tuple[
+    str,
+    Mapping[str, SolutionFile],
+    Iterable[tuple[str, str]],
+]
 
 
 def _declared(paths: Iterable[str]) -> set[str]:
@@ -100,6 +105,48 @@ def overlay_solution_tree(
     result.update(replacements)
     if set(result) != declared:
         raise WorkspaceError("composed solution does not match declared files")
+    return result
+
+
+def import_solution_files(
+    base: Mapping[str, SolutionFile],
+    imports: Iterable[SolutionImport],
+    declared_files: Iterable[str],
+) -> SolutionTree:
+    """Add explicitly selected files from composed provider solutions."""
+    declared = _declared(declared_files)
+    result = dict(base)
+    if not set(result) <= declared:
+        raise WorkspaceError("import base contains undeclared files")
+
+    for provider_id, provider, paths in imports:
+        seen_sources: set[str] = set()
+        for source_value, destination_value in paths:
+            source = _relative(source_value).as_posix()
+            destination = _relative(destination_value).as_posix()
+            if source in seen_sources:
+                raise WorkspaceError(
+                    f"import from {provider_id!r} repeats source file: {source}"
+                )
+            seen_sources.add(source)
+            if source not in provider:
+                raise WorkspaceError(
+                    f"import from {provider_id!r} has no source file: {source}"
+                )
+            if destination not in declared:
+                raise WorkspaceError(
+                    f"import destination is not declared by the consumer: {destination}"
+                )
+            if destination in result:
+                raise WorkspaceError(
+                    f"import destination collides with another file: {destination}"
+                )
+            result[destination] = provider[source]
+
+    if set(result) != declared:
+        raise WorkspaceError(
+            "base and imports do not cover every declared consumer file"
+        )
     return result
 
 

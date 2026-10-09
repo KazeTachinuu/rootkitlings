@@ -1,0 +1,44 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR MODULE"
+build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
+module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found: $2"
+for relative in Kbuild core/main.c include/rootkit.h interface/proc.c \
+		include/framing.h network/framing.c network/framing.o \
+		session/tcp_session.c session/tcp_session.o tests/selftest.c; do
+	[[ -f $build_dir/$relative && ! -L $build_dir/$relative ]] ||
+		die "build is missing regular file: $relative"
+done
+[[ -f $module && ! -L $module ]] || die "module must be a regular file"
+
+object=$build_dir/session/tcp_session.o
+for symbol in sock_create_kern kernel_connect kernel_sendmsg kernel_recvmsg \
+		kernel_sock_shutdown sock_release kthread_create_on_node \
+		wake_up_process kthread_stop; do
+	if ! nm -u "$object" | awk -v symbol="$symbol" \
+			'$2 == symbol { found = 1 } END { exit !found }'; then
+		die "compiled session is missing required operation: $symbol"
+	fi
+done
+
+for symbol in rk_send_frame rk_receive_frame; do
+	nm "$build_dir/network/framing.o" | awk -v symbol="$symbol" \
+		'$2 == "T" && $3 == symbol { found = 1 } END { exit !found }' ||
+		die "compiled framing is missing operation: $symbol"
+	nm -u "$object" | awk -v symbol="$symbol" \
+		'$2 == symbol { found = 1 } END { exit !found }' ||
+		die "compiled session does not use framing operation: $symbol"
+done
+
+for forbidden in call_usermodehelper filp_open kernel_bind kernel_listen \
+		kernel_accept request_module register_kprobe nf_register_net_hook; do
+	if nm -u "$object" | awk -v symbol="$forbidden" \
+			'$2 == symbol { found = 1 } END { exit !found }'; then
+		die "compiled session references out-of-scope operation: $forbidden"
+	fi
+done
+
+printf '[+] framed session compiled operations and supplied adapter verified\n'

@@ -1,0 +1,51 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR MODULE"
+build=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found"
+module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found"
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-authenticated-dns-signal-host.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+[[ -f $module && ! -L $module ]] || die "module must be a regular file"
+for relative in Kbuild core/main.c crypto/auth_platform.c \
+	include/authenticated.h include/authenticated_dns.h include/dns_query.h \
+	include/auth_platform.h include/selftest.h include/transport.h \
+	message/authenticated.c signal/authenticated_dns.c tests/selftest.c transport/udp.c \
+	wire/dns_query.c; do
+	[[ -f $build/$relative && ! -L $build/$relative ]] ||
+		die "build is missing regular file: $relative"
+done
+
+oracle=$(printf '%b' '\x01\x01\x01\x02\x03\x04\x05\x06\x07\x08\x00\x00\x00\x00\x00\x00\x00\x01\x03\x00' |
+	openssl dgst -sha256 -mac HMAC \
+		-macopt hexkey:000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f)
+oracle=${oracle##*= }
+[[ $oracle == c73d5cc190dee29b65db6008af471d12d70989358f99c9e6fb49a466146d16f1 ]] ||
+	die "OpenSSL disagrees with the protocol known-answer tag"
+
+gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
+	-fsanitize=address,undefined -fno-omit-frame-pointer -pthread \
+	-I"$build/include" \
+	"$here/../fixtures/host/authenticated_dns_test.c" \
+	"$here/../fixtures/host/platform_probe.c" \
+	"$build/message/authenticated.c" "$build/wire/dns_query.c" \
+	"$build/signal/authenticated_dns.c" -o "$scratch/authenticated-dns-test"
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+	"$scratch/authenticated-dns-test"
+
+for symbol in rk_dns_signal_build rk_dns_signal_receive; do
+	nm "$build/signal/authenticated_dns.o" |
+		grep -Eq "[[:space:]]T[[:space:]]${symbol}$" ||
+		die "learner object does not define $symbol"
+done
+if nm "$build/signal/authenticated_dns.o" |
+	grep -Eq '[[:space:]][bBdD][[:space:]]'; then
+	die "learner file must not own mutable or persistent object state"
+fi
+
+printf '[+] authenticated DNS signal host behavior passed\n'

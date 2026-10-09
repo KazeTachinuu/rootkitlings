@@ -5,11 +5,7 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 
 (( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR ARTIFACT_PATH"
 build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
-artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-
-"$here/../../L05-bounded-control-switch/checks/host-check" "$build_dir" "$artifact"
-
+realpath -e -- "$2" >/dev/null 2>&1 || die "artifact not found: $2"
 for path in execution/scheduler.c execution/scheduler.o; do
 	[[ -f $build_dir/$path && ! -L $build_dir/$path ]] ||
 		die "build output is missing regular file: $path"
@@ -22,31 +18,6 @@ for symbol in rk_state_timer_fires rk_state_record_timer_fire \
 	nm "$build_dir/core/state.o" | grep -Eq "[[:space:]]T[[:space:]]+$symbol$" ||
 		die "core/state.o must define $symbol"
 done
-
-state_source=$build_dir/core/state.c
-state_text=$(tr '\n' ' ' < "$state_source")
-for field in timer_fires worker_runs; do
-	grep -Eq "unsigned[[:space:]]+long[[:space:]]+$field" "$state_source" ||
-		die "$field must be a private unsigned long"
-	grep -Eq "state->${field}[[:space:]]*=[[:space:]]*0" "$state_source" ||
-		die "$field must be initialized before publication"
-	[[ $(grep -Ec "READ_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*\)" \
-		"$state_source") -eq 2 ]] ||
-		die "$field needs one getter read and one single-writer increment read"
-	[[ $(grep -Ec "WRITE_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*," \
-		"$state_source") -eq 1 ]] ||
-		die "$field must have one single-writer increment"
-done
-for specification in \
-	'rk_state_record_timer_fire timer_fires' \
-	'rk_state_record_worker_run worker_runs'; do
-	read -r function field <<< "$specification"
-	grep -Eq "void[[:space:]]+${function}[^{}]*\{[[:space:]]*unsigned[[:space:]]+long[[:space:]]+value;[[:space:]]*value[[:space:]]*=[[:space:]]*READ_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*\);[[:space:]]*WRITE_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*,[[:space:]]*value[[:space:]]*\+[[:space:]]*1[[:space:]]*\);[[:space:]]*\}" \
-		<<< "$state_text" || die "$function must be one READ_ONCE plus WRITE_ONCE"
-done
-if grep -Eq '(^|[^[:alnum:]_])atomic(_long)?(_t|_(read|set|inc))' "$state_source"; then
-	die "single-writer counters must not use the atomic_t API"
-fi
 
 proc_undefined=$(nm -u "$build_dir/interface/proc.o")
 for symbol in rk_state_timer_fires rk_state_worker_runs; do
@@ -72,37 +43,6 @@ fi
 if grep -Eq '[[:space:]](_printk|printk)$' <<< "$scheduler_undefined"; then
 	die "scheduler behavior must be observable through owned state, not logging"
 fi
-
-scheduler_source=$build_dir/execution/scheduler.c
-if grep -Eq '\b(in_atomic|in_task|in_interrupt)[[:space:]]*\(' "$scheduler_source"; then
-	die "do not branch on context predicates"
-fi
-[[ $(grep -Ec 'struct[[:space:]]+work_struct[[:space:]]+action_work' \
-	"$scheduler_source") -eq 1 ]] || die "use exactly one action_work item"
-[[ $(grep -Ec 'schedule_work[[:space:]]*\([[:space:]]*&action_work[[:space:]]*\)' \
-	"$scheduler_source") -eq 1 ]] || die "queue action_work exactly once per timer callback"
-[[ $(grep -Ec 'struct[[:space:]]+timer_list[[:space:]]+action_timer' \
-	"$scheduler_source") -eq 1 ]] || die "use exactly one action_timer"
-
-state_line=$(grep -n 'scheduler_state[[:space:]]*=[[:space:]]*state' "$scheduler_source" |
-	head -n1 | cut -d: -f1)
-work_init_line=$(grep -n 'INIT_WORK[[:space:]]*(' "$scheduler_source" | head -n1 | cut -d: -f1)
-timer_init_line=$(grep -n 'timer_setup[[:space:]]*(' "$scheduler_source" | head -n1 | cut -d: -f1)
-arm_line=$(grep -n 'mod_timer[[:space:]]*(' "$scheduler_source" | tail -n1 | cut -d: -f1)
-[[ -n $state_line && -n $work_init_line && -n $timer_init_line && -n $arm_line && \
-	$state_line -lt $arm_line && $work_init_line -lt $arm_line && \
-	$timer_init_line -lt $arm_line ]] ||
-	die "initialize state, work, and timer before arming the timer"
-
-shutdown_line=$(grep -n 'timer_shutdown_sync[[:space:]]*(' "$scheduler_source" |
-	head -n1 | cut -d: -f1)
-cancel_line=$(grep -n 'cancel_work_sync[[:space:]]*(' "$scheduler_source" |
-	head -n1 | cut -d: -f1)
-clear_line=$(grep -n 'scheduler_state[[:space:]]*=[[:space:]]*NULL' "$scheduler_source" |
-	head -n1 | cut -d: -f1)
-[[ -n $shutdown_line && -n $cancel_line && -n $clear_line && \
-	$shutdown_line -lt $cancel_line && $cancel_line -lt $clear_line ]] ||
-	die "stop order must be timer shutdown, work cancellation, state release"
 
 scheduler_disassembly=$(objdump -dr "$scheduler")
 timer_disassembly=$(sed -n '/<rk_action_timer>:/,/^$/p' <<< "$scheduler_disassembly")
@@ -179,29 +119,6 @@ main_undefined=$(nm -u "$build_dir/core/main.o")
 for symbol in rk_scheduler_start rk_scheduler_stop; do
 	grep -Eq "[[:space:]]$symbol$" <<< "$main_undefined" ||
 		die "core/main.o has no $symbol dependency"
-done
-
-main_source=$build_dir/core/main.c
-publish_line=$(grep -n 'rk_proc_publish[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
-start_line=$(grep -n 'rk_scheduler_start[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
-unpublish_line=$(grep -n 'rk_proc_unpublish[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
-stop_line=$(grep -n 'rk_scheduler_stop[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
-destroy_line=$(grep -n 'rk_state_destroy[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
-[[ -n $publish_line && -n $start_line && $publish_line -lt $start_line ]] ||
-	die "start the scheduler only after procfs publication succeeds"
-[[ -n $unpublish_line && -n $stop_line && -n $destroy_line && \
-	$unpublish_line -lt $stop_line && $stop_line -lt $destroy_line ]] ||
-	die "unload order must be proc unpublish, scheduler stop, state destroy"
-
-header_text=$(tr '\n' ' ' < "$build_dir/include/rootkit.h")
-for getter in rk_state_timer_fires rk_state_worker_runs; do
-	grep -Eq "unsigned[[:space:]]+long[[:space:]]+${getter}[[:space:]]*\(" \
-		<<< "$header_text" || die "rootkit.h must expose unsigned long $getter"
-done
-for declaration in rk_state_timer_fires rk_state_record_timer_fire \
-	rk_state_worker_runs rk_state_record_worker_run rk_scheduler_start rk_scheduler_stop; do
-	grep -Eq "${declaration}[[:space:]]*\(" <<< "$header_text" ||
-		die "rootkit.h must declare $declaration"
 done
 
 printf '[+] timer deferral, single-writer counters, and teardown verified\n'

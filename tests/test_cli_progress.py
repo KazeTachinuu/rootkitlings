@@ -212,7 +212,7 @@ class LearnerCLITests(unittest.TestCase):
         self.assertIn("reset --all --yes", help_text)
         self.assertNotIn("progress-reset", help_text)
         self.assertIn("current exercise is used", help_text)
-        self.assertIn("Commands also accept unambiguous prefixes", help_text)
+        self.assertIn("or a unique prefix", help_text)
 
     def test_standard_help_flags_show_help(self) -> None:
         for flag in ("-h", "--help"):
@@ -886,7 +886,7 @@ class LearnerCLITests(unittest.TestCase):
         with redirect_stdout(output):
             self.globals["cmd_read"]([])
         read_text = output.getvalue()
-        self.assertIn("# Load your first kernel implant", read_text)
+        self.assertIn("# Build and load a kernel module", read_text)
         self.assertIn("./rootkitlings start L00", read_text)
 
         output = io.StringIO()
@@ -894,7 +894,7 @@ class LearnerCLITests(unittest.TestCase):
             self.globals["cmd_hint"]([])
         hint_text = output.getvalue()
         self.assertIn("Hint for L00", hint_text)
-        self.assertIn("./rootkitlings check L00", hint_text)
+        self.assertIn("./rootkitlings start L00", hint_text)
         self.assertIn("./rootkitlings solution L00", hint_text)
         state_after = state_path.read_bytes() if state_path.exists() else None
         self.assertEqual(state_after, state_before)
@@ -959,7 +959,7 @@ class LearnerCLITests(unittest.TestCase):
         self.assertIn("$ /usr/bin/bat", rendered)
         self.assertRegex(rendered, r"Exit\s+2")
         self.assertIn(
-            "# Load your first kernel implant",
+            "# Build and load a kernel module",
             rendered,
         )
 

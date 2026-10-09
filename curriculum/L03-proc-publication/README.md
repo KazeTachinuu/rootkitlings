@@ -1,4 +1,4 @@
-# Open a procfs dead drop
+# Publish a procfs status file
 
 Private state is invisible to an operator in userspace.
 Open `/proc/rootkitlings` as a local exchange point only after the module is
@@ -9,8 +9,8 @@ behind.
 `procfs` is Linux's virtual `/proc` filesystem.
 Kernel code can publish small runtime records there without creating a normal
 disk file.
-This dead drop is a memorable control point, not a hidden one: system tools can
-see the proc entry.
+This status file is a visible control point: system tools can see the proc
+entry.
 
 The order matters:
 

@@ -1,0 +1,248 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../scripts/lesson-env"
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-netfilter-observer-test.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+[[ $(uname -m) == x86_64 ]] || {
+	printf '[x] this lesson requires x86_64\n' >&2
+	exit 1
+}
+for option in NET NET_NS INET IPV6 NETFILTER PROC_FS; do
+	grep -qx "CONFIG_$option=y" "$KDIR/.config" || {
+		printf '[x] this lesson requires CONFIG_%s=y\n' "$option" >&2
+		exit 1
+	}
+done
+grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
+	printf '[x] pinned kernel build is not configured for GCC\n' >&2
+	exit 1
+}
+for command in gcc nm objdump python3; do
+	command -v "$command" >/dev/null || {
+		printf '[x] %s is required\n' "$command" >&2
+		exit 1
+	}
+done
+
+symvers=$KDIR/Module.symvers
+for specification in \
+	'nf_register_net_hook EXPORT_SYMBOL' \
+	'nf_unregister_net_hook EXPORT_SYMBOL' \
+	'synchronize_rcu EXPORT_SYMBOL_GPL'; do
+	read -r symbol export <<< "$specification"
+	awk -v symbol="$symbol" -v export="$export" \
+		'$2 == symbol && $4 == export { found = 1 } END { exit !found }' \
+		"$symvers" || {
+		printf '[x] pinned kernel must provide %s as %s\n' \
+			"$symbol" "$export" >&2
+		exit 1
+	}
+done
+
+for script in test host-check success-check failure-check.in; do
+	bash -n "$HERE/$script"
+done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
+	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check.in"
+fi
+
+mapfile -t changed_files < <(
+	diff -qr "$HERE/../starter" "$HERE/../solution" |
+		sed -nE 's#^Files .*/starter/(.*) and .*/solution/.* differ$#\1#p'
+)
+(( ${#changed_files[@]} == 1 )) || {
+	printf '[x] expected one learner-edited file, found %d\n' \
+		"${#changed_files[@]}" >&2
+	exit 1
+}
+[[ ${changed_files[0]} == instrumentation/netfilter_observer.c ]] || {
+	printf '[x] learner edit surface is %s, expected instrumentation/netfilter_observer.c\n' \
+		"${changed_files[0]}" >&2
+	exit 1
+}
+
+build_tree()
+{
+	local source=$1 destination=$2 point=${3:-0}
+	local log=$destination.log
+	cp -a "$source" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] %s build failed\n' "${source##*/}" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] %s build has warnings\n' "${source##*/}" >&2
+		exit 1
+	fi
+}
+
+build_tree "$HERE/../starter" "$scratch/starter"
+build_tree "$HERE/../solution" "$scratch/solution"
+build_tree "$HERE/../solution" "$scratch/register-failure" 1
+build_tree "$HERE/../solution" "$scratch/proc-failure" 2
+"$HERE/host-check" "$scratch/solution" \
+	"$scratch/solution/rootkitlings.ko"
+
+equivalent=$scratch/equivalent
+cp -a "$HERE/../solution" "$equivalent"
+python3 - "$equivalent/instrumentation/netfilter_observer.c" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+text = re.sub(r"\bprivate\b", "context", text)
+text = re.sub(r"\bobserver\b", "owner", text)
+text = re.sub(r"\berror\b", "result", text)
+text = re.sub(r"\bstatus\b", "snapshot", text)
+text = text.replace("if (!owner)\n", "if (owner == NULL)\n")
+text = text.replace("if (READ_ONCE(owner->registered))\n",
+                    "if (owner->registered != false)\n")
+text = text.replace(
+    "if (!owner || !READ_ONCE(owner->registered))\n",
+    "if (owner == NULL || owner->registered == false)\n")
+text = text.replace("atomic64_inc(&owner->callbacks);",
+                    "atomic64_add(1, &owner->callbacks);")
+path.write_text(text, encoding="utf-8")
+PY
+make -s -C "$KDIR" M="$equivalent" W=1 modules \
+	> "$equivalent.log" 2>&1 || {
+	cat "$equivalent.log" >&2
+	printf '[x] equivalent implementation build failed\n' >&2
+	exit 1
+}
+if grep -q 'warning:' "$equivalent.log"; then
+	cat "$equivalent.log" >&2
+	printf '[x] equivalent implementation build has warnings\n' >&2
+	exit 1
+fi
+"$HERE/host-check" "$equivalent" "$equivalent/rootkitlings.ko"
+
+if "$HERE/host-check" "$scratch/starter" \
+	"$scratch/starter/rootkitlings.ko" > "$scratch/starter-host.log" 2>&1; then
+	printf '[x] host checker accepted the unfinished callback\n' >&2
+	exit 1
+fi
+
+expect_rejection()
+{
+	local directory=$1 label=$2
+	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+		> "$scratch/host-$label.log" 2>&1; then
+		printf '[x] host checker accepted %s\n' "$label" >&2
+		exit 1
+	fi
+}
+
+drop=$scratch/drop
+cp -a "$scratch/solution" "$drop"
+sed -i 's/return NF_ACCEPT;/return NF_DROP;/' \
+	"$drop/instrumentation/netfilter_observer.c"
+expect_rejection "$drop" a-drop-verdict
+
+packet_read=$scratch/packet-read
+cp -a "$scratch/solution" "$packet_read"
+sed -i '/atomic64_inc(\&observer->callbacks);/i\
+\tif (skb->len == 0)\
+\t\treturn NF_DROP;' "$packet_read/instrumentation/netfilter_observer.c"
+expect_rejection "$packet_read" packet-access
+
+conditional=$scratch/conditional
+cp -a "$scratch/solution" "$conditional"
+sed -i 's/atomic64_inc(\&observer->callbacks);/if (state->net == \&init_net)\n\t\tatomic64_inc(\&observer->callbacks);/' \
+	"$conditional/instrumentation/netfilter_observer.c"
+expect_rejection "$conditional" conditional-counting
+
+wrong_hook=$scratch/wrong-hook
+cp -a "$scratch/solution" "$wrong_hook"
+sed -i 's/NF_INET_LOCAL_OUT/NF_INET_PRE_ROUTING/' \
+	"$wrong_hook/instrumentation/netfilter_observer.c"
+expect_rejection "$wrong_hook" a-different-hook
+
+early_clear=$scratch/early-clear
+cp -a "$scratch/solution" "$early_clear"
+sed -i '/nf_unregister_net_hook(observer->net, \&observer->ops);/a\
+\tobserver->net = NULL;' \
+	"$early_clear/instrumentation/netfilter_observer.c"
+expect_rejection "$early_clear" early-callback-release
+
+no_sync=$scratch/no-sync
+cp -a "$scratch/solution" "$no_sync"
+sed -i '/synchronize_rcu();/d' \
+	"$no_sync/instrumentation/netfilter_observer.c"
+expect_rejection "$no_sync" missing-rcu-drain
+
+wrong_repeat_error=$scratch/wrong-repeat-error
+cp -a "$scratch/solution" "$wrong_repeat_error"
+sed -i 's/return -EBUSY;/return -EINVAL;/' \
+	"$wrong_repeat_error/instrumentation/netfilter_observer.c"
+expect_rejection "$wrong_repeat_error" wrong-repeat-error
+
+collapsed_register_error=$scratch/collapsed-register-error
+cp -a "$scratch/solution" "$collapsed_register_error"
+sed -i '0,/return error;/s//return -EIO;/' \
+	"$collapsed_register_error/instrumentation/netfilter_observer.c"
+expect_rejection "$collapsed_register_error" collapsed-registration-error
+
+early_publish=$scratch/early-publish
+cp -a "$scratch/solution" "$early_publish"
+sed -i '/error = nf_register_net_hook(observer->net, \&observer->ops);/i\
+\tWRITE_ONCE(observer->registered, true);' \
+	"$early_publish/instrumentation/netfilter_observer.c"
+expect_rejection "$early_publish" registration-state-published-early
+
+wrong_namespace=$scratch/wrong-namespace
+cp -a "$scratch/solution" "$wrong_namespace"
+sed -i 's/observer->net = \&init_net;/observer->net = current->nsproxy->net_ns;/' \
+	"$wrong_namespace/instrumentation/netfilter_observer.c"
+expect_rejection "$wrong_namespace" caller-network-namespace
+
+hardcoded_snapshot=$scratch/hardcoded-snapshot
+cp -a "$scratch/solution" "$hardcoded_snapshot"
+sed -i 's/status->hook = READ_ONCE(observer->ops.hooknum);/status->hook = NF_INET_LOCAL_OUT;/' \
+	"$hardcoded_snapshot/instrumentation/netfilter_observer.c"
+expect_rejection "$hardcoded_snapshot" hardcoded-snapshot
+
+cp -a "$HERE/../solution" "$scratch/unknown"
+if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
+	ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
+	printf '[x] unknown failure-point value compiled successfully\n' >&2
+	exit 1
+fi
+
+sed -e 's/@EXPECTED_ERRNO@/97/g' \
+	-e 's/@LABEL@/Netfilter registration failure rollback/g' \
+	"$HERE/failure-check.in" > "$scratch/register-failure-check"
+sed -e 's/@EXPECTED_ERRNO@/12/g' \
+	-e 's/@LABEL@/Proc publication failure rollback/g' \
+	"$HERE/failure-check.in" > "$scratch/proc-failure-check"
+chmod 0755 "$scratch/register-failure-check" "$scratch/proc-failure-check"
+
+run_guest()
+{
+	local check_script=$1 module=$2 output
+	if ! output=$("$HERE/../../../vm/boot" --check "$check_script" \
+		--tool vm/tools/module_load_test --tool vm/tools/proc_read_test \
+		--tool vm/tools/netfilter_udp_test \
+		"$module" 2>&1); then
+		printf '%s\n' "$output" >&2
+		printf '[x] disposable guest did not complete\n' >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+}
+
+run_guest "$scratch/register-failure-check" \
+	"$scratch/register-failure/rootkitlings.ko"
+run_guest "$scratch/proc-failure-check" \
+	"$scratch/proc-failure/rootkitlings.ko"
+run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko"

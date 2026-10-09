@@ -1,0 +1,70 @@
+schema_version = 2
+id = "netfilter-observer"
+title = "Place a passive watch on outbound IPv4"
+stage = "network-state"
+kind = "lesson"
+status = "required"
+tradecraft = ["networking", "instrumentation", "detection"]
+difficulty = "advanced"
+prerequisites = ["event-driven-kernel-thread"]
+teaches = ["netfilter-hooks", "accept-by-default-observation", "netfilter-callback-constraints", "rcu-grace-period-teardown"]
+requires = ["resource-ownership", "proc-publication-lifetime", "atomic-operations"]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "core/main.c", "include/rootkit.h", "instrumentation/netfilter_observer.c", "interface/proc.c"]
+editable = ["instrumentation/netfilter_observer.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L18-netfilter-observer/starter"
+
+[resources]
+readme = "curriculum/L18-netfilter-observer/README.md"
+check = "curriculum/L18-netfilter-observer/checks/success-check"
+host_check = "curriculum/L18-netfilter-observer/checks/host-check"
+hint = "curriculum/L18-netfilter-observer/hint"
+solution = "curriculum/L18-netfilter-observer/solution"
+
+[verification]
+timeout_seconds = 300
+capabilities = []
+tools = ["module-load-test", "proc-read-test", "netfilter-udp-test"]
+cleanup_required = true
+
+[[verification.cases]]
+id = "accept-by-default-observation"
+label = "Local IPv4 Netfilter observer"
+expect_build = "pass"
+check = "curriculum/L18-netfilter-observer/checks/success-check"
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "registration-rollback"
+label = "Netfilter registration failure rollback"
+expect_build = "pass"
+check = "curriculum/L18-netfilter-observer/checks/failure-check.in"
+build_output_contains = ""
+check_arguments = ["97", "Netfilter registration failure rollback"]
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "1"
+
+[[verification.cases]]
+id = "publication-rollback"
+label = "Proc publication failure rollback"
+expect_build = "pass"
+check = "curriculum/L18-netfilter-observer/checks/failure-check.in"
+build_output_contains = ""
+check_arguments = ["12", "Proc publication failure rollback"]
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "2"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+check = ""
+build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "99"

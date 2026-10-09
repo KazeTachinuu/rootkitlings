@@ -1,6 +1,6 @@
-# Give the implant private state
+# Give the module private state
 
-The implant now needs memory for information that must survive between calls.
+The module now needs memory for information that must survive between calls.
 Give that memory one clear owner and release it on every exit path.
 Success proves that private state lives exactly as long as the module, including
 when startup fails.

@@ -1,0 +1,65 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 3 )) ||
+	die "usage: ${0##*/} SUCCESS_DIR SUCCESS_ARTIFACT MISSING_DIR"
+success_dir=$(realpath -e -- "$1" 2>/dev/null) ||
+	die "success directory not found: $1"
+artifact=$(realpath -e -- "$2" 2>/dev/null) ||
+	die "artifact not found: $2"
+missing_dir=$(realpath -e -- "$3" 2>/dev/null) ||
+	die "missing-target directory not found: $3"
+success_object=$success_dir/instrumentation/probes.o
+missing_object=$missing_dir/instrumentation/probes.o
+
+[[ -f $artifact && ! -L $artifact ]] ||
+	die "artifact must be a regular file"
+for object in "$success_object" "$missing_object"; do
+	[[ -f $object && ! -L $object ]] ||
+		die "build is missing ${object#*/}"
+done
+
+check_object()
+{
+	local object=$1 label=$2 undefined symbol
+	undefined=$(nm -u "$object" | awk '{ print $NF }')
+	for symbol in register_kprobes unregister_kprobes \
+			rk_state_actions_enabled rk_state_mark_vfs_mkdir_seen \
+			rk_state_mark_filename_rmdir_seen; do
+		grep -Fxq "$symbol" <<< "$undefined" ||
+			die "$label object has no $symbol dependency"
+	done
+	for symbol in $(printf '%s\n' "$undefined"); do
+		case $symbol in
+			__fentry__|__x86_return_thunk|register_kprobes|\
+			unregister_kprobes|rk_state_actions_enabled|\
+			rk_state_mark_vfs_mkdir_seen|\
+			rk_state_mark_filename_rmdir_seen) ;;
+			*) die "$label object has an unexpected dependency: $symbol" ;;
+		esac
+	done
+}
+
+check_object "$success_object" success
+check_object "$missing_object" missing-target
+
+for target in vfs_mkdir filename_rmdir; do
+	strings "$success_object" | grep -Fxq "$target" ||
+		die "success object does not name $target"
+done
+missing_target=__rootkitlings_missing_kprobe_target_7_2__
+if strings "$success_object" | grep -Fxq "$missing_target"; then
+	die "success object contains the injected missing target"
+fi
+strings "$missing_object" | grep -Fxq "$missing_target" ||
+	die "failure object does not contain the injected missing target"
+
+main_undefined=$(nm -u "$success_dir/core/main.o" | awk '{ print $NF }')
+for symbol in rk_probes_start rk_probes_stop; do
+	grep -Fxq "$symbol" <<< "$main_undefined" ||
+		die "module lifecycle has no $symbol dependency"
+done
+
+printf '[+] compiled named-probe operations and failure target verified\n'

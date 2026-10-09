@@ -12,14 +12,17 @@ core=/proc/rootkitlings
 work=/tmp/rootkitlings-complete-rootkit
 helper=secure_agent_fixture
 capture=$work/dns-query
+redirect_capture=$work/redirected-datagram
 fixture_pid=
 listener=
+redirect_listener=
 
 cleanup()
 {
 	if test -d /sys/module/rootkitlings; then rmmod rootkitlings 2>/dev/null || true; fi
 	if test -n "$fixture_pid"; then kill "$fixture_pid" 2>/dev/null || true; wait "$fixture_pid" 2>/dev/null || true; fi
 	if test -n "$listener"; then kill "$listener" 2>/dev/null || true; wait "$listener" 2>/dev/null || true; fi
+	if test -n "$redirect_listener"; then kill "$redirect_listener" 2>/dev/null || true; wait "$redirect_listener" 2>/dev/null || true; fi
 	umount "$root" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
@@ -66,6 +69,8 @@ port=$(cat "$work/port")
 
 nc -u -l -p 5300 -s 127.0.0.1 > "$capture" 2>/dev/null &
 listener=$!
+nc -u -l -p 5401 -s 127.0.0.1 > "$redirect_capture" 2>/dev/null &
+redirect_listener=$!
 sleep 0.1
 load rootkitlings.ko "peer_port=$port" retry_base_ms=20 retry_max_ms=80 \
 	session_id=72623859790382856 signal_id=4660
@@ -109,6 +114,19 @@ then
 	_ok "authenticated ENABLE, RUN, and DISABLE operated the resident core"
 else
 	_fail "remote resident-core state is wrong"
+fi
+
+printf enable > "$core"
+printf switchboard | nc -u -w 1 127.0.0.1 5400
+wait_file "$redirect_capture" || _fail "redirected UDP datagram did not arrive"
+printf disable > "$core"
+kill "$redirect_listener" 2>/dev/null || true
+wait "$redirect_listener" 2>/dev/null || true
+redirect_listener=
+if test "$(cat "$redirect_capture")" = switchboard; then
+	_ok "enabled packet switchboard redirected one UDP datagram"
+else
+	_fail "packet switchboard changed the datagram"
 fi
 if wait_file "$work/server/quit_complete"; then
 	_ok "authenticated QUIT closed one session"

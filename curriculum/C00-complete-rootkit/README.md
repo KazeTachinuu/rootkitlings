@@ -1,8 +1,8 @@
-# Build the complete rootkit
+# Assemble and verify the complete rootkit
 
-The individual mechanisms now work alone.
-This project joins them into one loadable module with one startup, one rollback
-path, and one authenticated control channel:
+The main course branches now work alone.
+This project joins their tested components into one loadable module with one
+startup, one rollback path, and one authenticated control channel:
 
 ```text
 local control ----> authorization ----> credential action
@@ -12,11 +12,13 @@ syscall probes ------> telemetry ------> evidence
 process filter ------> resident core <----> guarded boot request
                          |
 TCP peer <--------> AEAD framed agent ----> authenticated ready signal
+                         |
+UDP signal --------> packet switchboard --> replacement port
 ```
 
 The result has local control, a bounded privilege action, syscall telemetry,
 process-view filtering, a guarded boot request, authenticated remote control,
-and an authenticated status signal.
+UDP redirection, and an authenticated status signal.
 Every startup step needs rollback, and unload must release everything.
 
 The remote agent retains `PING`, `INFO`, `MARK label`, and `QUIT`.
@@ -39,7 +41,6 @@ Edit:
 - `core/main.c`
 - `include/agent.h`
 - `include/framing.h`
-- `include/platform.h`
 - `include/protocol.h`
 - `network/agent.c`
 - `network/protocol.c`
@@ -51,7 +52,10 @@ Authenticate requests before parsing and replies before framing.
 Send ready only after all resources exist, and reverse every acquisition on
 failure or unload.
 Keep remote command processing blocked until initialization is complete.
-Compile, but do not reimplement, the supplied AES-GCM and signal components.
+Import, but do not reimplement, the tested packet, AES-GCM, and signal
+components.
+Start the supplied packet switchboard before announcing ready and stop it before
+destroying resident state.
 
 Run:
 
@@ -106,6 +110,13 @@ It is not ordinary DNS: name, timing, length, session, sequence, and status are
 visible.
 The checker independently verifies the capture and HMAC.
 
+## Packet switchboard
+
+While actions are enabled, one outbound loopback UDP destination is rewritten
+from `redirect_from_port` to `redirect_to_port`.
+The defaults are 5400 and 5401.
+Other traffic is accepted unchanged.
+
 ## Evidence
 
 The checker:
@@ -113,9 +124,10 @@ The checker:
 - uses OpenSSL as an independent AES-GCM oracle;
 - verifies tamper, key, length, replay, exhaustion, failure, and cleanup rules;
 - exercises the loopback agent, reconnect, cancellation, boot rollback, ready
-  signal, remote core control, and inherited local features on Linux 7.2.9;
+  signal, packet redirection, remote core control, and inherited local features
+  on Linux 7.2.9;
 - verifies failed initialization produces no remote command reply;
-- forces startup failures 1 through 14 and verifies rollback;
+- forces startup failures 1 through 15 and verifies rollback;
 - rejects an unknown failure point at build time.
 
 ## References

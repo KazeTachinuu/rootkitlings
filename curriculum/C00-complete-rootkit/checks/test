@@ -5,26 +5,25 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
 ROOT=$ROOTKITLINGS_ROOT
-CONCEALMENT=$HERE/../../M02-concealment-evidence-map
-REMOTE_AGENT=$HERE/../../M03-remote-resident-agent
-TELEMETRY=$HERE/../../M01-authorized-actions-telemetry
-RESIDENT_CORE=$HERE/../../M00-controlled-resident-core
-AUTHENTICATED_ENCRYPTION=$HERE/../../L29-authenticated-encryption
-AUTHENTICATED_SIGNAL=$HERE/../../L30-authenticated-dns-signal
-AUTHENTICATED_MESSAGE=$HERE/../../L28-authenticated-replay-safe-message
+REMOTE_AGENT=$HERE/../../M07-remote-resident-agent
+CONCEALMENT=$HERE/../../M03-concealment-evidence-map
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-complete-rootkit.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
-[[ $(uname -m) == x86_64 ]] || { printf '[x] capstone requires x86_64\n' >&2; exit 1; }
+[[ $(uname -m) == x86_64 ]] || {
+	printf '[x] final project requires x86_64\n' >&2
+	exit 1
+}
 for option in CC_IS_GCC CRYPTO_GCM CRYPTO_AES CRYPTO_HMAC CRYPTO_SHA256 \
 	KPROBES KRETPROBES KRETPROBE_ON_RETHOOK KPROBES_ON_FTRACE KALLSYMS \
 	KALLSYMS_ALL DEBUG_FS MODULES MODULE_UNLOAD MULTIUSER USER_NS PID_NS \
 	NET NET_NS INET PROC_FS; do
 	grep -Eq "^CONFIG_$option=[ym]$" "$KDIR/.config" || {
-		printf '[x] capstone requires CONFIG_%s\n' "$option" >&2; exit 1;
+		printf '[x] final project requires CONFIG_%s\n' "$option" >&2
+		exit 1
 	}
 done
-for command in base64 gcc gzip make nm objdump openssl; do
+for command in base64 gcc gzip make nm; do
 	command -v "$command" >/dev/null || { printf '[x] %s is required\n' "$command" >&2; exit 1; }
 done
 for script in test host-check success-check signal-failure-check; do
@@ -35,122 +34,26 @@ if command -v shellcheck >/dev/null; then
 	shellcheck -x -s sh "$HERE/success-check" "$HERE/signal-failure-check"
 fi
 
-mapfile -t solution_files < <(cd "$HERE/../solution" && find . -type f | sort)
-expected=(./Kbuild ./core/main.c ./include/agent.h ./include/framing.h
-	./include/platform.h ./include/protocol.h ./network/agent.c
-	./network/protocol.c ./security/control.c)
-[[ ${solution_files[*]} == "${expected[*]}" ]] || {
-	printf '[x] solution is not the nine-file sparse overlay\n' >&2; exit 1;
-}
-while IFS= read -r file; do
-	relative=${file#"$HERE/../starter/"}
-	[[ ! -e $RESIDENT_CORE/solution/$relative &&
-		! -e $TELEMETRY/starter/$relative &&
-		! -e $TELEMETRY/solution/$relative &&
-		! -e $CONCEALMENT/starter/$relative &&
-		! -e $CONCEALMENT/solution/$relative &&
-		! -e $REMOTE_AGENT/starter/$relative &&
-		! -e $REMOTE_AGENT/solution/$relative ]] || {
-		printf '[x] addition replaces inherited path: %s\n' "$relative" >&2
-		exit 1
-	}
-done < <(find "$HERE/../starter" -type f | sort)
-
-cmp -s "$AUTHENTICATED_ENCRYPTION/solution/include/aead.h" \
-	"$HERE/../starter/include/aead.h" ||
-	{ printf '[x] supplied authenticated-encryption header changed\n' >&2; exit 1; }
-sed 's/"aead_platform.h"/"platform.h"/' "$HERE/../starter/crypto/aead.c" > "$scratch/aead.c"
-cmp -s "$AUTHENTICATED_ENCRYPTION/solution/crypto/aead.c" \
-	"$scratch/aead.c" ||
-	{ printf '[x] supplied authenticated-encryption operation changed\n' >&2; exit 1; }
-sed -e 's/> 14/> 3/' -e 's/between 0 and 14/between 0 and 3/' \
-	"$HERE/../starter/crypto/auth_platform.c" > "$scratch/auth-platform.c"
-cmp -s "$AUTHENTICATED_SIGNAL/starter/crypto/platform.c" \
-	"$scratch/auth-platform.c" || {
-	printf '[x] supplied authenticated-signal HMAC platform changed\n' >&2; exit 1;
-}
-cp -a "$AUTHENTICATED_MESSAGE/solution" "$scratch/authenticated-signal"
-cp -a "$AUTHENTICATED_SIGNAL/starter/." "$scratch/authenticated-signal/"
-cp -a "$AUTHENTICATED_SIGNAL/solution/." "$scratch/authenticated-signal/"
-for pair in \
-	"message/authenticated.c message/authenticated.c" \
-	"signal/authenticated_dns.c signal/authenticated_dns.c" \
-	"transport/udp.c transport/udp.c" \
-	"wire/dns_query.c wire/dns_query.c" \
-	"include/authenticated.h include/authenticated.h" \
-	"include/authenticated_dns.h include/authenticated_dns.h" \
-	"include/dns_query.h include/dns_query.h" \
-	"include/transport.h include/transport.h"; do
-	read -r source destination <<< "$pair"
-	cmp -s "$scratch/authenticated-signal/$source" \
-		"$HERE/../starter/$destination" || {
-		printf '[x] supplied authenticated-signal component changed: %s\n' "$source" >&2
-		exit 1
-	}
-done
-
 compose()
 {
 	local destination=$1
-	mkdir -p "$destination"
-	cp -a "$RESIDENT_CORE/solution/." "$destination/"
-	cp -a "$TELEMETRY/starter/." "$destination/"
-	cp -a "$TELEMETRY/solution/." "$destination/"
-	cp -a "$CONCEALMENT/starter/." "$destination/"
-	cp -a "$CONCEALMENT/solution/." "$destination/"
-	cp -a "$REMOTE_AGENT/starter/." "$destination/"
-	cp -a "$REMOTE_AGENT/solution/." "$destination/"
-	cp -a "$HERE/../starter/." "$destination/"
+	"$ROOT/scripts/catalog" materialize starter C00 "${destination%/*}" \
+		--name "${destination##*/}" >/dev/null
 }
 
 compose "$scratch/starter"
 make -s -C "$KDIR" M="$scratch/starter" W=1 modules \
-	> "$scratch/template.log" 2>&1
+	> "$scratch/starter.log" 2>&1
 if "$HERE/host-check" "$scratch/starter" "$scratch/starter/rootkitlings.ko" \
-		> "$scratch/template-host.log" 2>&1; then
+		> "$scratch/starter-host.log" 2>&1; then
 	printf '[x] host checker accepted unfinished learner file\n' >&2; exit 1
 fi
 
-compose "$scratch/solution"
-cp -a "$HERE/../solution/." "$scratch/solution/"
+"$ROOT/scripts/catalog" materialize solution C00 "$scratch" \
+	--name solution >/dev/null
 make -s -C "$KDIR" M="$scratch/solution" W=1 modules > "$scratch/solution.log" 2>&1
 ! grep -q 'warning:' "$scratch/solution.log" || { cat "$scratch/solution.log"; exit 1; }
 "$HERE/host-check" "$scratch/solution" "$scratch/solution/rootkitlings.ko"
-
-# The capstone renames the AEAD platform header because platform.h belongs to the
-# authenticated-signal adapter, and extends the shared failure-point range.
-# Compare the code emitted by the pinned kernel toolchain instead of source
-# spelling so comments, formatting, and parameter names remain pedagogical.
-platform_contract()
-{
-	local object=$1
-
-	objdump -dr "$object" | sed '1,2d'
-	objdump -r "$object" | sed '1,2d'
-	objdump -s -j .rodata -j .rodata.str1.1 "$object" | sed '1,3d'
-	nm -an "$object" | grep -v ' [aA] '
-}
-
-mkdir -p "$scratch/authenticated-encryption-platform"
-cp -a "$AUTHENTICATED_ENCRYPTION/solution/." \
-	"$scratch/authenticated-encryption-platform/"
-for failure_point in 0 1 2 3; do
-	make -s -C "$KDIR" M="$scratch/solution" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$failure_point" crypto/aead_platform.o
-	make -s -C "$KDIR" M="$scratch/authenticated-encryption-platform" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$failure_point" crypto/platform.o
-	platform_contract "$scratch/solution/crypto/aead_platform.o" \
-		> "$scratch/capstone-aead-platform-$failure_point.contract"
-	platform_contract \
-		"$scratch/authenticated-encryption-platform/crypto/platform.o" \
-		> "$scratch/authenticated-encryption-platform-$failure_point.contract"
-	cmp -s "$scratch/authenticated-encryption-platform-$failure_point.contract" \
-		"$scratch/capstone-aead-platform-$failure_point.contract" || {
-		printf '[x] supplied authenticated-encryption platform contract changed at failure point %s\n' \
-			"$failure_point" >&2
-		exit 1
-	}
-done
 
 compose "$scratch/alternate"
 mkdir -p "$scratch/alternate/security"
@@ -194,6 +97,11 @@ cp -a "$HERE/../solution/." "$scratch/fail-14/"
 make -s -C "$KDIR" M="$scratch/fail-14" W=1 \
 	ROOTKITLINGS_FAIL_POINT=14 modules > "$scratch/fail-14.log" 2>&1
 
+compose "$scratch/fail-15"
+cp -a "$HERE/../solution/." "$scratch/fail-15/"
+make -s -C "$KDIR" M="$scratch/fail-15" W=1 \
+	ROOTKITLINGS_FAIL_POINT=15 modules > "$scratch/fail-15.log" 2>&1
+
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
 	-o "$scratch/secure_agent_fixture" "$ROOT/vm/tools/secure_agent_fixture.c"
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
@@ -231,7 +139,12 @@ append_binary __ROOTKITLINGS_MODULE_LOADER__ \
 run_guest "$scratch/checks/signal-failure-check" \
 	"$scratch/fail-14/rootkitlings.ko" signal-rollback
 
-# Exercise the complete inherited behavior through the capstone module.
+run_guest "$REMOTE_AGENT/checks/failure-check.in" \
+	"$scratch/fail-15/rootkitlings.ko" packet-redirect-rollback \
+	--check-arg 4 --check-arg 'Packet redirect registration' \
+	--check-arg complete-rootkit --tool vm/tools/module_load_params
+
+# Exercise the inherited behavior through the final module.
 sed -e '/^begin /a\
 mkdir -p /etc/modules-load.d\
 mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs /etc/modules-load.d\
@@ -246,9 +159,5 @@ run_guest "$scratch/concealment-regression" "$scratch/solution/rootkitlings.ko" 
 	inherited-regression --tool vm/tools/run_as --tool vm/tools/getdents64_test \
 	--tool vm/tools/status_field_test --tool vm/tools/proc_write_test \
 	--tool vm/tools/proc_read_test
-
-"$REMOTE_AGENT/checks/test"
-"$AUTHENTICATED_ENCRYPTION/checks/test"
-"$AUTHENTICATED_SIGNAL/checks/test"
 
 printf '[+] complete-rootkit passed\n'

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "authenticated_dns.h"
-#include "platform.h"
+#include "auth_platform.h"
 #include "status_signal.h"
 #include "transport.h"
 

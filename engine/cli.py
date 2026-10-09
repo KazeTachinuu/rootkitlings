@@ -21,6 +21,7 @@ from engine.workspace import (
     canonical_tree_hash,
     create_snapshot,
     materialize,
+    materialize_imported,
     materialize_inherited,
     restore_workspace,
     verify_snapshot,
@@ -150,7 +151,7 @@ def kind_label(item):
     return {
         'lesson': 'Lesson',
         'milestone': 'Milestone',
-        'capstone': 'Capstone',
+        'final-project': 'Final project',
     }.get(item.kind, 'Exercise')
 
 
@@ -256,14 +257,33 @@ def materialize_workspace(x, state):
         return CAT.materialize_starter(x, WORK, x.id)
     source = baseline(x, state)
     provider = CAT.baseline_provider(x)
-    if provider is not None and x.workspace.additions:
+    imported = {}
+    for workspace_import in getattr(x.workspace, 'imports', ()):
+        tree = CAT.solution_tree(CAT.by_id[workspace_import.exercise])
+        for source_path, destination_path in workspace_import.files:
+            solution_file = tree[source_path]
+            imported[destination_path] = (
+                solution_file.data,
+                solution_file.mode,
+            )
+    if provider is not None and (x.workspace.additions or imported):
         return materialize_inherited(
             source,
-            ROOT / x.workspace.additions,
+            ROOT / x.workspace.additions if x.workspace.additions else None,
             WORK,
             x.id,
             provider.workspace.files,
             x.workspace.files,
+            imported,
+        )
+    if imported:
+        return materialize_imported(
+            source,
+            WORK,
+            x.id,
+            CAT.local_workspace_files(x),
+            x.workspace.files,
+            imported,
         )
     return materialize(source, WORK, x.id, x.workspace.files)
 
@@ -383,8 +403,11 @@ def cmd_hint(a):
         x = resolve(one(a, 'hint'), s)
     UI.heading(f'Hint for {label(x)}: {x.title}')
     UI.raw((ROOT / x.resources.hint).read_text())
-    UI.section('Try again')
-    UI.command(f'./rootkitlings check {label(x)}')
+    workspace = wp(x)
+    workspace_ready = workspace.is_dir() and not workspace.is_symlink()
+    UI.section('Try again' if workspace_ready else 'Next')
+    command = 'check' if workspace_ready else 'start'
+    UI.command(f'./rootkitlings {command} {label(x)}')
     UI.section('Still stuck')
     UI.command(f'./rootkitlings solution {label(x)}')
 
@@ -396,10 +419,15 @@ def cmd_solution(a):
         completed = set(s.completed)
     output = solution_output(x, completed)
     UI.raw(output)
-    UI.section('Try again')
-    UI.command(f'./rootkitlings check {label(x)}')
-    UI.section('Restore starting files')
-    UI.command(f'./rootkitlings restore {label(x)}')
+    workspace = wp(x)
+    if workspace.is_dir() and not workspace.is_symlink():
+        UI.section('Try again')
+        UI.command(f'./rootkitlings check {label(x)}')
+        UI.section('Restore starting files')
+        UI.command(f'./rootkitlings restore {label(x)}')
+    else:
+        UI.section('Next')
+        UI.command(f'./rootkitlings start {label(x)}')
 
 
 def solution_text(data, relative):
@@ -906,8 +934,8 @@ def cmd_prereq(a):
         UI.bullet('None')
     for p in x.prerequisites:
         y = CAT.by_id[p]
-        state = 'complete' if p in completed else 'required'
-        UI.bullet(f'{label(y)}  {y.title} ({state})')
+        state = ' (complete)' if p in completed else ''
+        UI.bullet(f'{label(y)}  {y.title}{state}')
     if x.requires:
         UI.section('Concepts')
         for c in x.requires:
@@ -935,8 +963,10 @@ def cmd_restore(a):
         r.workspace_hash = canonical_tree_hash(restored, x.workspace.files)
     UI.success(f'Edits archived: {shown(arch)}')
     UI.success(f'Starting files restored for {label(x)}; progress unchanged')
+    UI.section('Edit')
+    for path in x.workspace.editable:
+        UI.bullet(path)
     UI.section('Next')
-    UI.line('Edit: ' + ', '.join(x.workspace.editable))
     UI.command(f'./rootkitlings check {label(x)}')
 
 
@@ -1038,9 +1068,8 @@ def usage():
         for command, description in commands:
             UI.row(command, description, left_style='command')
     UI.section('Exercise selectors')
-    UI.line('Use a serial such as L00, a stable ID, or an unambiguous prefix.')
+    UI.line('Use a serial such as L00, a stable ID, or a unique prefix.')
     UI.line('If EXERCISE is omitted, the current exercise is used.')
-    UI.line('Commands also accept unambiguous prefixes.')
 
 
 CMDS = {

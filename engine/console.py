@@ -7,6 +7,7 @@ import os
 import shlex
 import shutil
 import sys
+import textwrap
 from typing import TextIO
 
 
@@ -163,7 +164,16 @@ class Console:
         print(f"  {column}{right}", file=stream, flush=True)
 
     def bullet(self, text: str) -> None:
-        self.line(f"- {text}")
+        width = max(20, self.terminal_width())
+        for line in textwrap.wrap(
+            text,
+            width=width,
+            initial_indent="- ",
+            subsequent_indent="  ",
+            break_long_words=False,
+            break_on_hyphens=False,
+        ) or ["-"]:
+            self.line(line)
 
     def command(self, value: str, *, error: bool = False) -> None:
         self.line(f"  {value}", style="command", error=error)
