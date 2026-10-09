@@ -22,6 +22,8 @@
 #define RECORD_CAPACITY 2048
 #define STATUS_CAPACITY 8192
 #define TEST_NAME "cred-trigger"
+#define TOKEN_HEX_LENGTH 32
+#define TOKEN_COMMAND_CAPACITY (sizeof("root ") + TOKEN_HEX_LENGTH + 1)
 
 enum capability_field {
 	CAP_INHERITABLE,
@@ -50,6 +52,13 @@ struct observer_context {
 	int result;
 };
 
+enum token_race_result {
+	TOKEN_RACE_SUCCESS,
+	TOKEN_RACE_EXPECTED_FAILURE,
+	TOKEN_RACE_DENIED,
+	TOKEN_RACE_INVALID,
+};
+
 static const char *const capability_names[CAP_FIELD_COUNT] = {
 	[CAP_INHERITABLE] = "CapInh:",
 	[CAP_PERMITTED] = "CapPrm:",
@@ -66,8 +75,13 @@ static void usage(const char *program)
 		"  %s unchanged PATH COMMAND ERRNO\n"
 		"  %s replace PATH CHROOT_DIR\n"
 		"  %s thread-scope PATH\n"
-		"  %s outcome PATH\n",
-		program, program, program, program, program);
+		"  %s outcome PATH\n"
+		"  %s token-unchanged PATH TOKEN ERRNO\n"
+		"  %s token-replace PATH TOKEN CHROOT_DIR\n"
+		"  %s token-thread-scope PATH TOKEN\n"
+		"  %s token-race PATH TOKEN WORKERS ACCEPT_ERRNO\n",
+		program, program, program, program, program, program, program,
+		program, program);
 }
 
 static ssize_t read_retry(int descriptor, void *buffer, size_t length)
@@ -429,8 +443,9 @@ static int verify_unchanged(const char *path, const char *command,
 	return 0;
 }
 
-static int verify_writer(const char *path, const char *root_directory,
-			 bool test_chroot)
+static int verify_writer(const char *path, const char *command,
+			 const char *root_directory, bool test_chroot,
+			 bool verify_module_record)
 {
 	struct credential_view before;
 	struct credential_view after;
@@ -446,16 +461,16 @@ static int verify_writer(const char *path, const char *root_directory,
 			return -1;
 		}
 	}
-	if (write_command(path, "root", &write_errno) < 0)
+	if (write_command(path, command, &write_errno) < 0)
 		return -1;
 	if (write_errno != 0) {
-		fprintf(stderr, "cred_trigger_test: root returned errno %d\n",
+		fprintf(stderr, "cred_trigger_test: credential command returned errno %d\n",
 			write_errno);
 		return -1;
 	}
 	if (observe_current(&after) < 0 ||
 	    require_initial_credential(&after) < 0 ||
-	    verify_record(path, &after) < 0)
+	    (verify_module_record && verify_record(path, &after) < 0))
 		return -1;
 	if (test_chroot && chroot(root_directory) < 0) {
 		fprintf(stderr, "cred_trigger_test: privileged chroot: %s\n",
@@ -465,7 +480,9 @@ static int verify_writer(const char *path, const char *root_directory,
 	return 0;
 }
 
-static int verify_replacement(const char *path, const char *root_directory)
+static int verify_replacement_command(const char *path, const char *command,
+				      const char *root_directory,
+				      bool verify_module_record)
 {
 	struct credential_view before;
 	struct credential_view after;
@@ -480,7 +497,8 @@ static int verify_replacement(const char *path, const char *root_directory)
 		return -1;
 	}
 	if (child == 0)
-		_exit(verify_writer(path, root_directory, true) == 0 ? 0 : 1);
+		_exit(verify_writer(path, command, root_directory, true,
+				    verify_module_record) == 0 ? 0 : 1);
 	if (waitpid(child, &status, 0) != child) {
 		fprintf(stderr, "cred_trigger_test: waitpid: %s\n", strerror(errno));
 		return -1;
@@ -495,6 +513,11 @@ static int verify_replacement(const char *path, const char *root_directory)
 		return -1;
 	}
 	return 0;
+}
+
+static int verify_replacement(const char *path, const char *root_directory)
+{
+	return verify_replacement_command(path, "root", root_directory, true);
 }
 
 static void *observe_sibling(void *argument)
@@ -517,7 +540,8 @@ static void *observe_sibling(void *argument)
 	return NULL;
 }
 
-static int verify_thread_scope(const char *path)
+static int verify_thread_scope_command(const char *path, const char *command,
+				       bool verify_module_record)
 {
 	struct observer_context context;
 	pthread_t observer;
@@ -535,7 +559,8 @@ static int verify_thread_scope(const char *path)
 	}
 	pthread_barrier_wait(&context.ready);
 	if (context.result == 0)
-		result = verify_writer(path, NULL, false);
+		result = verify_writer(path, command, NULL, false,
+				       verify_module_record);
 	pthread_barrier_wait(&context.finished);
 	if (pthread_join(observer, NULL) != 0) {
 		fprintf(stderr, "cred_trigger_test: join observer thread\n");
@@ -548,6 +573,11 @@ destroy_barriers:
 	pthread_barrier_destroy(&context.finished);
 	pthread_barrier_destroy(&context.ready);
 	return result;
+}
+
+static int verify_thread_scope(const char *path)
+{
+	return verify_thread_scope_command(path, "root", true);
 }
 
 static int verify_outcome(const char *path)
@@ -572,18 +602,237 @@ static int verify_outcome(const char *path)
 	return 0;
 }
 
-static int parse_errno(const char *text, int *value)
+static int build_token_command(const char *token,
+			       char command[TOKEN_COMMAND_CAPACITY],
+			       bool trailing_newline)
+{
+	size_t index;
+
+	if (strlen(token) != TOKEN_HEX_LENGTH)
+		return -1;
+	for (index = 0; index < TOKEN_HEX_LENGTH; index++) {
+		if (!((token[index] >= '0' && token[index] <= '9') ||
+		      (token[index] >= 'a' && token[index] <= 'f')))
+			return -1;
+	}
+	memcpy(command, "root ", sizeof("root ") - 1);
+	memcpy(command + sizeof("root ") - 1, token, TOKEN_HEX_LENGTH);
+	command[sizeof("root ") - 1 + TOKEN_HEX_LENGTH] =
+		trailing_newline ? '\n' : '\0';
+	command[sizeof("root ") + TOKEN_HEX_LENGTH] = '\0';
+	return 0;
+}
+
+static int verify_token_unchanged(const char *path, const char *token,
+				  int expected_errno)
+{
+	char command[TOKEN_COMMAND_CAPACITY];
+
+	if (build_token_command(token, command, false) < 0)
+		return -1;
+	return verify_unchanged(path, command, expected_errno);
+}
+
+static int verify_token_replacement(const char *path, const char *token,
+				    const char *root_directory)
+{
+	char command[TOKEN_COMMAND_CAPACITY];
+
+	if (build_token_command(token, command, true) < 0)
+		return -1;
+	return verify_replacement_command(path, command, root_directory, false);
+}
+
+static int verify_token_thread_scope(const char *path, const char *token)
+{
+	char command[TOKEN_COMMAND_CAPACITY];
+
+	if (build_token_command(token, command, false) < 0)
+		return -1;
+	return verify_thread_scope_command(path, command, false);
+}
+
+static enum token_race_result token_race_attempt(const char *path,
+						 const char *command,
+						 int expected_errno)
+{
+	struct credential_view before;
+	struct credential_view after;
+	int write_errno;
+
+	if (observe_current(&before) < 0 || require_nobody(&before) < 0 ||
+	    write_command(path, command, &write_errno) < 0 ||
+	    observe_current(&after) < 0)
+		return TOKEN_RACE_INVALID;
+	if (write_errno == 0)
+		return require_initial_credential(&after) == 0 ?
+		       TOKEN_RACE_SUCCESS : TOKEN_RACE_INVALID;
+	if (!same_view(&before, &after))
+		return TOKEN_RACE_INVALID;
+	if (expected_errno != 0 && write_errno == expected_errno)
+		return TOKEN_RACE_EXPECTED_FAILURE;
+	return write_errno == EACCES ? TOKEN_RACE_DENIED : TOKEN_RACE_INVALID;
+}
+
+static int write_all(int descriptor, const void *buffer, size_t length)
+{
+	const char *cursor = buffer;
+
+	while (length != 0) {
+		ssize_t count = write(descriptor, cursor, length);
+
+		if (count < 0 && errno == EINTR)
+			continue;
+		if (count <= 0)
+			return -1;
+		cursor += count;
+		length -= (size_t)count;
+	}
+	return 0;
+}
+
+static int read_all(int descriptor, void *buffer, size_t length)
+{
+	char *cursor = buffer;
+
+	while (length != 0) {
+		ssize_t count = read(descriptor, cursor, length);
+
+		if (count < 0 && errno == EINTR)
+			continue;
+		if (count <= 0)
+			return -1;
+		cursor += count;
+		length -= (size_t)count;
+	}
+	return 0;
+}
+
+static int verify_token_race(const char *path, const char *token, int workers,
+			     int expected_errno)
+{
+	char command[TOKEN_COMMAND_CAPACITY];
+	int start_pipe[2] = { -1, -1 };
+	int result_pipe[2] = { -1, -1 };
+	int counts[TOKEN_RACE_INVALID + 1] = { 0 };
+	pid_t children[128] = { 0 };
+	int spawned = 0;
+	int result = -1;
+	int index;
+
+	if (workers < 2 || workers > 128 ||
+	    build_token_command(token, command, false) < 0 ||
+	    pipe(start_pipe) < 0 ||
+	    pipe(result_pipe) < 0)
+		goto close_pipes;
+
+	for (index = 0; index < workers; index++) {
+		children[index] = fork();
+		if (children[index] < 0)
+			goto release_children;
+		if (children[index] == 0) {
+			char start;
+			enum token_race_result outcome;
+
+			close(start_pipe[1]);
+			close(result_pipe[0]);
+			if (read_all(start_pipe[0], &start, 1) < 0)
+				_exit(2);
+			outcome = token_race_attempt(path, command, expected_errno);
+			if (write_all(result_pipe[1], &outcome,
+				      sizeof(outcome)) < 0)
+				_exit(2);
+			_exit(0);
+		}
+		spawned++;
+	}
+
+	close(start_pipe[0]);
+	start_pipe[0] = -1;
+	close(result_pipe[1]);
+	result_pipe[1] = -1;
+	for (index = 0; index < workers; index++) {
+		const char start = 'x';
+
+		if (write_all(start_pipe[1], &start, 1) < 0)
+			goto release_children;
+	}
+	close(start_pipe[1]);
+	start_pipe[1] = -1;
+	for (index = 0; index < workers; index++) {
+		enum token_race_result outcome;
+
+		if (read_all(result_pipe[0], &outcome, sizeof(outcome)) < 0 ||
+		    outcome < TOKEN_RACE_SUCCESS ||
+		    outcome > TOKEN_RACE_INVALID)
+			goto release_children;
+		counts[outcome]++;
+	}
+	result = 0;
+
+release_children:
+	if (start_pipe[0] >= 0) {
+		close(start_pipe[0]);
+		start_pipe[0] = -1;
+	}
+	if (start_pipe[1] >= 0) {
+		close(start_pipe[1]);
+		start_pipe[1] = -1;
+	}
+	if (result_pipe[1] >= 0) {
+		close(result_pipe[1]);
+		result_pipe[1] = -1;
+	}
+	for (index = 0; index < spawned; index++) {
+		int status;
+
+		if (waitpid(children[index], &status, 0) != children[index] ||
+		    !WIFEXITED(status) || WEXITSTATUS(status) != 0)
+			result = -1;
+	}
+	if (result == 0) {
+		if (expected_errno == 0)
+			result = counts[TOKEN_RACE_SUCCESS] == 1 &&
+				 counts[TOKEN_RACE_EXPECTED_FAILURE] == 0 &&
+				 counts[TOKEN_RACE_DENIED] == workers - 1 &&
+				 counts[TOKEN_RACE_INVALID] == 0 ? 0 : -1;
+		else
+			result = counts[TOKEN_RACE_SUCCESS] == 0 &&
+				 counts[TOKEN_RACE_EXPECTED_FAILURE] == 1 &&
+				 counts[TOKEN_RACE_DENIED] == workers - 1 &&
+				 counts[TOKEN_RACE_INVALID] == 0 ? 0 : -1;
+	}
+
+close_pipes:
+	if (start_pipe[0] >= 0)
+		close(start_pipe[0]);
+	if (start_pipe[1] >= 0)
+		close(start_pipe[1]);
+	if (result_pipe[0] >= 0)
+		close(result_pipe[0]);
+	if (result_pipe[1] >= 0)
+		close(result_pipe[1]);
+	return result;
+}
+
+static int parse_bounded_integer(const char *text, int minimum, int maximum,
+				 int *value)
 {
 	char *end;
 	long parsed;
 
 	errno = 0;
 	parsed = strtol(text, &end, 10);
-	if (errno != 0 || end == text || *end != '\0' || parsed <= 0 ||
-	    parsed > 4095)
+	if (errno != 0 || end == text || *end != '\0' || parsed < minimum ||
+	    parsed > maximum)
 		return -1;
 	*value = (int)parsed;
 	return 0;
+}
+
+static int parse_errno(const char *text, int *value)
+{
+	return parse_bounded_integer(text, 1, 4095, value);
 }
 
 static int run_legacy_trigger(const char *path, const char *command)
@@ -606,6 +855,7 @@ static int run_legacy_trigger(const char *path, const char *command)
 int main(int argc, char **argv)
 {
 	int expected_errno;
+	int workers;
 	int result;
 
 	if (argc < 3) {
@@ -641,6 +891,35 @@ int main(int argc, char **argv)
 			return 2;
 		}
 		result = verify_outcome(argv[2]);
+	} else if (strcmp(argv[1], "token-unchanged") == 0) {
+		if (argc != 5 || parse_errno(argv[4], &expected_errno) < 0) {
+			usage(argv[0]);
+			return 2;
+		}
+		result = verify_token_unchanged(argv[2], argv[3],
+						expected_errno);
+	} else if (strcmp(argv[1], "token-replace") == 0) {
+		if (argc != 5) {
+			usage(argv[0]);
+			return 2;
+		}
+		result = verify_token_replacement(argv[2], argv[3], argv[4]);
+	} else if (strcmp(argv[1], "token-thread-scope") == 0) {
+		if (argc != 4) {
+			usage(argv[0]);
+			return 2;
+		}
+		result = verify_token_thread_scope(argv[2], argv[3]);
+	} else if (strcmp(argv[1], "token-race") == 0) {
+		if (argc != 6 ||
+		    parse_bounded_integer(argv[4], 2, 128, &workers) < 0 ||
+		    parse_bounded_integer(argv[5], 0, 4095,
+					  &expected_errno) < 0) {
+			usage(argv[0]);
+			return 2;
+		}
+		result = verify_token_race(argv[2], argv[3], workers,
+					   expected_errno);
 	} else if (argc == 3) {
 		return run_legacy_trigger(argv[1], argv[2]) < 0 ? 1 : 0;
 	} else {

@@ -1,0 +1,285 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "One-use authorization"
+
+endpoint=/proc/rootkitlings
+fixtures=/tmp/rootkitlings-authorization
+mkdir -p "$fixtures/root"
+chmod 0755 "$fixtures" "$fixtures/root"
+: > "$fixtures/empty"
+printf 'enable' > "$fixtures/enable"
+printf 'enable\n' > "$fixtures/enable-lf"
+printf 'disable\n' > "$fixtures/disable"
+printf 'root' > "$fixtures/root-only"
+printf 'root ' > "$fixtures/root-space"
+printf '00000000000000000000000000000000' > "$fixtures/token-only"
+printf 'root 0000000000000000000000000000000' > "$fixtures/short"
+printf 'root 000000000000000000000000000000000' > "$fixtures/long"
+printf 'root AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' > "$fixtures/uppercase"
+printf 'root 0000000000000000000000000000000g' > "$fixtures/nonhex"
+printf ' root 00000000000000000000000000000000' > "$fixtures/leading-space"
+printf 'root  00000000000000000000000000000000' > "$fixtures/double-space"
+printf 'root 0x000000000000000000000000000000' > "$fixtures/prefix"
+printf 'root 00000000000000000000000000000000 ' > "$fixtures/trailing-space"
+printf 'root 00000000000000000000000000000000\r\n' > "$fixtures/crlf"
+printf 'root 00000000000000000000000000000000\n\n' > "$fixtures/double-lf"
+printf 'root 000000000000000\0000000000000000' > "$fixtures/nul"
+printf 'root 0000000000000000000000000000000000' > "$fixtures/oversized"
+chmod 0644 "$fixtures"/* 2>/dev/null || true
+chmod 0755 "$fixtures/root"
+
+assert_not_loaded()
+{
+	assert_absent /sys/module/rootkitlings
+	assert_absent "$endpoint"
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_fail "rootkitlings appears in /proc/modules"
+	else
+		_ok "rootkitlings is absent from /proc/modules"
+	fi
+}
+
+read_status()
+{
+	status=$(cat "$endpoint") || return 1
+	status_token=$(printf '%s\n' "$status" | sed -n 's/^token=//p')
+	status_completed=$(printf '%s\n' "$status" |
+		sed -n 's/^completed_actions=//p')
+	known_tokens="$known_tokens $status_token"
+}
+
+assert_status()
+{
+	expected_actions=$1
+	expected_completed=$2
+	label=$3
+	if ! read_status; then
+		_fail "$label could not read the status record"
+		return
+	fi
+	if printf '%s\n' "$status" | awk '
+		NR == 1 { ok = ($0 == "active=1") }
+		NR == 2 { ok = ok && ($0 == "actions='"$expected_actions"'") }
+		NR == 3 { ok = ok && ($0 ~ /^reader_tid=[1-9][0-9]*$/) }
+		NR == 4 { ok = ok && ($0 ~ /^reader_comm="([^"\\]|\\x[0-9a-f][0-9a-f])*"$/) }
+		NR == 5 { ok = ok && ($0 ~ /^uids=[0-9]+ [0-9]+ [0-9]+ [0-9]+$/) }
+		NR == 6 { ok = ok && ($0 ~ /^gids=[0-9]+ [0-9]+ [0-9]+ [0-9]+$/) }
+		NR == 7 { ok = ok && ($0 ~ /^cap_userns=(initial|nested)$/) }
+		NR == 8 { ok = ok && ($0 ~ /^cap_permitted=[0-9a-f]+$/) && length($0) == 30 }
+		NR == 9 { ok = ok && ($0 ~ /^cap_effective=[0-9a-f]+$/) && length($0) == 30 }
+		NR == 10 { ok = ok && ($0 == "completed_actions='"$expected_completed"'") }
+		NR == 11 { ok = ok && ($0 ~ /^token=[0-9a-f]+$/) && length($0) == 38 }
+		END { exit !(ok && NR == 11) }
+	'; then
+		_ok "$label reports one exact eleven-line record"
+	else
+		_fail "$label returned an invalid status record"
+	fi
+}
+
+assert_token_unchanged()
+{
+	expected=$1
+	label=$2
+	read_status || {
+		_fail "$label could not read status"
+		return
+	}
+	if [ "$status_token" = "$expected" ]; then
+		_ok "$label leaves the token unchanged"
+	else
+		_fail "$label changed the token"
+	fi
+}
+
+expect_malformed()
+{
+	fixture=$1
+	label=$2
+	before=$status_token
+	if chpst -u 65534:65534 proc_write_test errno "$endpoint" \
+		"$fixtures/$fixture" 22 > /dev/null; then
+		_ok "$label returns EINVAL"
+	else
+		_fail "$label did not return EINVAL"
+	fi
+	assert_token_unchanged "$before" "$label"
+	if [ "$status_completed" != 0 ]; then
+		_fail "$label changed completed_actions"
+	fi
+}
+
+check_loaded()
+{
+	assert_loaded rootkitlings
+	assert_exists "$endpoint"
+	metadata=$(stat -c '%a:%u:%g' "$endpoint")
+	if [ "$metadata" = 622:0:0 ]; then
+		_ok "$endpoint is mode 0622 and owned by 0:0"
+	else
+		_fail "$endpoint metadata: expected 622:0:0, got $metadata"
+	fi
+	if chpst -u 65534:65534 cat "$endpoint" > /dev/null 2>&1; then
+		_fail "an unprivileged task read the bearer token"
+	else
+		_ok "an unprivileged task cannot read the bearer token"
+	fi
+	assert_status disabled 0 "module load"
+	case "$status_token" in
+		00000000000000000000000000000000)
+			_fail "module load published the zero token" ;;
+		*) _ok "module load published a nonzero 128-bit token" ;;
+	esac
+}
+
+check_parser()
+{
+	initial=$status_token
+	if chpst -u 65534:65534 cred_trigger_test token-unchanged "$endpoint" \
+		"$initial" 13 > /dev/null; then
+		_ok "disabled rejects the current token without changing its writer"
+	else
+		_fail "disabled current-token handling is incorrect"
+	fi
+	assert_token_unchanged "$initial" "disabled action"
+
+	for case_name in empty root-only root-space token-only short long uppercase \
+		nonhex leading-space double-space prefix trailing-space crlf double-lf \
+		nul oversized; do
+		expect_malformed "$case_name" "$case_name command"
+	done
+
+	printf 'root %s' "$initial" > "$fixtures/current"
+	if chpst -u 65534:65534 proc_write_test fault "$endpoint" \
+		"$fixtures/current" 14 > /dev/null; then
+		_ok "partial user copy returns EFAULT"
+	else
+		_fail "partial user copy did not return EFAULT"
+	fi
+	assert_token_unchanged "$initial" "partial user copy"
+	if chpst -u 65534:65534 proc_write_test offset "$endpoint" \
+		"$fixtures/current" 1 22 > /dev/null; then
+		_ok "nonzero write offset returns EINVAL"
+	else
+		_fail "nonzero write offset did not return EINVAL"
+	fi
+	assert_token_unchanged "$initial" "nonzero write offset"
+}
+
+enable_actions()
+{
+	if chpst -u 65534:65534 proc_write_test write "$endpoint" \
+		"$fixtures/enable-lf" > /dev/null; then
+		_ok "an unprivileged writer can enable the operational switch"
+	else
+		_fail "unprivileged enable failed"
+	fi
+}
+
+check_authorization()
+{
+	enable_actions
+	assert_status enabled 0 "enable"
+	current=$status_token
+	wrong=00000000000000000000000000000000
+	if chpst -u 65534:65534 cred_trigger_test token-unchanged "$endpoint" \
+		"$wrong" 13 > /dev/null; then
+		_ok "a well-formed wrong token returns EACCES"
+	else
+		_fail "wrong-token handling is incorrect"
+	fi
+	assert_token_unchanged "$current" "wrong token"
+
+	if chpst -u 65534:65534 cred_trigger_test token-replace "$endpoint" \
+		"$current" "$fixtures/root" > /dev/null; then
+		_ok "the token plus final newline authorizes one complete same-caller credential change"
+	else
+		_fail "the current token did not authorize the credential change"
+	fi
+	assert_status enabled 1 "first authorized action"
+	next=$status_token
+	if [ "$next" != "$current" ]; then
+		_ok "the successful action publishes a different token"
+	else
+		_fail "the successful action reused its token"
+	fi
+	if chpst -u 65534:65534 cred_trigger_test token-unchanged "$endpoint" \
+		"$current" 13 > /dev/null; then
+		_ok "the consumed token is rejected as stale"
+	else
+		_fail "stale-token replay handling is incorrect"
+	fi
+	assert_token_unchanged "$next" "stale replay"
+
+	if chpst -u 65534:65534 cred_trigger_test token-thread-scope "$endpoint" \
+		"$next" > /dev/null; then
+		_ok "the fresh token changes the writer but not its existing sibling"
+	else
+		_fail "fresh-token thread scoping failed"
+	fi
+	assert_status enabled 2 "second authorized action"
+
+	raced=$status_token
+	if chpst -u 65534:65534 cred_trigger_test token-race "$endpoint" \
+		"$raced" 24 0 > /dev/null; then
+		_ok "one of 24 simultaneous writers consumes the token"
+	else
+		_fail "same-token concurrency violated the one-use invariant"
+	fi
+	assert_status enabled 3 "concurrent authorization"
+	if [ "$status_token" != "$raced" ]; then
+		_ok "the concurrent transition rotates exactly once"
+	else
+		_fail "the concurrent transition did not rotate"
+	fi
+
+	current=$status_token
+	if chpst -u 65534:65534 proc_write_test write "$endpoint" \
+		"$fixtures/disable" > /dev/null; then
+		_ok "an unprivileged writer can disable with a final newline"
+	else
+		_fail "unprivileged disable failed"
+	fi
+	assert_status disabled 3 "disable"
+	if chpst -u 65534:65534 cred_trigger_test token-unchanged "$endpoint" \
+		"$current" 13 > /dev/null; then
+		_ok "disabled preserves the current token for a later enable"
+	else
+		_fail "disabled current-token handling changed the writer"
+	fi
+	assert_token_unchanged "$current" "disabled current token"
+}
+
+assert_not_loaded
+known_tokens=
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	load rootkitlings.ko
+	check_loaded
+	check_parser
+	check_authorization
+	leaked=
+	for observed in $known_tokens; do
+		if dmesg | grep -Fq "$observed"; then
+			leaked=$observed
+			break
+		fi
+	done
+	if [ -n "$leaked" ]; then
+		_fail "an observed token appeared in the kernel log"
+	else
+		_ok "observed tokens are absent from the kernel log"
+	fi
+	if proc_write_test unload "$endpoint" "$fixtures/enable" rootkitlings \
+		> /dev/null; then
+		_ok "attempt $attempt drains a held descriptor during unload"
+	else
+		_fail "attempt $attempt failed held-descriptor unload"
+	fi
+	assert_not_loaded
+	attempt=$((attempt + 1))
+done
+
+summary
