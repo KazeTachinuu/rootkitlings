@@ -1,4 +1,4 @@
-# Own private kernel state
+# Allocate and own private kernel state
 
 A module often needs memory that lives for exactly as long as the module is active.
 That memory needs one owner: one component creates it, and the same component destroys it.

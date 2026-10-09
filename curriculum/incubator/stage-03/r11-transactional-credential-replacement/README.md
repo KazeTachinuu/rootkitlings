@@ -1,4 +1,4 @@
-# Replace the writing task's credentials
+# Replace the writing task's credentials as one transaction
 
 The proc endpoint now accepts three exact commands:
 

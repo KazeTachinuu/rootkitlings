@@ -1,4 +1,4 @@
-# Run work in a kernel thread
+# Run and stop an event-driven kernel thread
 
 Add a `run` command to `/proc/rootkitlings`.
 The command submits one unit of work to one kernel thread.

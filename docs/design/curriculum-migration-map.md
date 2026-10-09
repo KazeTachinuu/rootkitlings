@@ -127,7 +127,7 @@ Knowledge already reached through one of those dependencies is not repeated.
 
 ### Stage 1: Module core
 
-#### R01 - Build, load, inspect, and unload a module
+#### R01 - Build, load, inspect, and unload a kernel module
 
 - Teaches: external Kbuild, module metadata, init/exit, `insmod`, and `rmmod`.
 - Produces: a loadable module with a complete outer lifecycle.
@@ -150,7 +150,7 @@ Knowledge already reached through one of those dependencies is not repeated.
   the kernel contract rather than claimed from a log.
 - Current source: L04.
 
-#### R03 - Build and own private heap state
+#### R03 - Allocate and own private kernel state
 
 - Teaches: composite Kbuild, a shared header with an incomplete private type,
   allocation lifetime, `NULL`, `ERR_PTR`, `IS_ERR`, `PTR_ERR`, and invalidation
@@ -259,7 +259,7 @@ R06-R08 are separate practice workspaces, so the learner applies their mechanism
 
 ### Stage 3: Identity, authorization and observation
 
-#### R09 - Attribute an operation to the current task
+#### R09 - Attribute a proc read to the executing task
 
 - Teaches: `current`, stable snapshots of PID and command name, and why the process
   executing a callback is the caller.
@@ -268,7 +268,7 @@ R06-R08 are separate practice workspaces, so the learner applies their mechanism
 - Defensive evidence: independent comparison with the actual reader or writer.
 - Current source: L24.
 
-#### R10 - Interpret Linux credentials correctly
+#### R10 - Interpret the current task's credentials
 
 - Teaches: real, effective, saved, and filesystem IDs; capabilities; namespace-aware
   ID translation; the namespace that scopes a capability set; and read-only
@@ -281,7 +281,7 @@ R06-R08 are separate practice workspaces, so the learner applies their mechanism
   credential from the opener namespace supplying the numeric ID view.
 - Current source: L25.
 
-#### R11 - Replace credentials transactionally
+#### R11 - Replace the writing task's credentials as one transaction
 
 - Teaches: constructing a complete private credential from `init_task`, handling
   preparation failure, consuming it exactly once through commit or abort, and
@@ -314,7 +314,7 @@ R06-R08 are separate practice workspaces, so the learner applies their mechanism
   replaced even when credential preparation or the post-prepare action fails.
 - Current sources: L28 and the state machine in C03.
 
-#### R13 - Manage named entry probes under a pinned ABI
+#### R13 - Manage two named Kprobes
 
 - Teaches: exported versus internal symbols, configuration gates, kernel-version
   and architecture coupling, named Kprobe resolution, bounded handlers, managed
