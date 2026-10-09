@@ -4,6 +4,37 @@
 
 begin "Worker creation failure"
 
+trace=/sys/kernel/tracing
+kmalloc_enable=$trace/events/kmem/kmalloc/enable
+kfree_enable=$trace/events/kmem/kfree/enable
+old_tracing=$(cat "$trace/tracing_on")
+old_kmalloc=$(cat "$kmalloc_enable")
+old_kfree=$(cat "$kfree_enable")
+
+cleanup()
+{
+	printf 0 > "$trace/tracing_on"
+	printf 0 > "$kmalloc_enable"
+	printf 0 > "$kfree_enable"
+	if test -d /sys/module/rootkitlings; then
+		rmmod rootkitlings 2>/dev/null || true
+	fi
+	: > "$trace/trace"
+	printf '%s' "$old_kmalloc" > "$kmalloc_enable"
+	printf '%s' "$old_kfree" > "$kfree_enable"
+	printf '%s' "$old_tracing" > "$trace/tracing_on"
+	rm -f /tmp/rk-worker-trace /tmp/rk-worker-allocs /tmp/rk-worker-frees
+}
+trap cleanup EXIT INT TERM
+
+for format in "$trace/events/kmem/kmalloc/format" "$trace/events/kmem/kfree/format"; do
+	if grep -q 'call_site' "$format" && grep -q 'ptr' "$format"; then
+		_ok "$(basename "$(dirname "$format")") trace fields are available"
+	else
+		_fail "$format lacks call_site or ptr"
+	fi
+done
+
 worker_count()
 {
 	count=0
@@ -15,17 +46,94 @@ worker_count()
 }
 
 for attempt in 1 2; do
+	printf 0 > "$trace/tracing_on"
+	printf 0 > "$kmalloc_enable"
+	printf 0 > "$kfree_enable"
+	: > "$trace/trace"
+	printf 1 > "$kmalloc_enable"
+	printf 1 > "$kfree_enable"
+	printf 1 > "$trace/tracing_on"
+
 	if module_load_test /rootkitlings/rootkitlings.ko 4; then
 		_ok "attempt $attempt returned numeric EINTR"
 	else
 		_fail "attempt $attempt did not return EINTR"
 	fi
+
+	printf 0 > "$trace/tracing_on"
+	cat "$trace/trace" > /tmp/rk-worker-trace
+
 	assert_absent /sys/module/rootkitlings
 	assert_absent /proc/rootkitlings
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_fail "rootkitlings appears in /proc/modules"
+	else
+		_ok "rootkitlings is absent from /proc/modules"
+	fi
 	if [ "$(worker_count)" -eq 0 ]; then
 		_ok "attempt $attempt leaves no worker task"
 	else
 		_fail "attempt $attempt left rkling_event running"
+	fi
+
+	: > /tmp/rk-worker-allocs
+	: > /tmp/rk-worker-frees
+	while IFS= read -r line; do
+		case "$line" in
+			*module_load_tes-*' kmalloc: '*) kind=alloc ;;
+			*module_load_tes-*' kfree: '*) kind=free ;;
+			*) continue ;;
+		esac
+		call_site=
+		ptr=
+		for field in $line; do
+			case "$field" in
+				call_site=*)
+					value=${field#call_site=}
+					case "$value" in
+						0x*) call_site=$value ;;
+						''|*[!0-9a-fA-F]*) ;;
+						*) call_site=0x$value ;;
+					esac
+					;;
+				ptr=*)
+					value=${field#ptr=}
+					case "$value" in
+						0x*) ptr=${value#0x} ;;
+						''|*[!0-9a-fA-F]*) ;;
+						*) ptr=$value ;;
+					esac
+					;;
+			esac
+		done
+		[ -n "$call_site" ] && [ -n "$ptr" ] || continue
+		case "$kind" in
+			alloc) printf '%s %s\n' "$ptr" "$call_site" >> /tmp/rk-worker-allocs ;;
+			free) printf '%s %s\n' "$ptr" "$call_site" >> /tmp/rk-worker-frees ;;
+		esac
+	done < /tmp/rk-worker-trace
+
+	matched=
+	alloc_count=$(wc -l < /tmp/rk-worker-allocs)
+	free_count=$(wc -l < /tmp/rk-worker-frees)
+	if [ "$alloc_count" -eq 1 ] && [ "$free_count" -eq 1 ]; then
+		read -r alloc_ptr _ < /tmp/rk-worker-allocs
+		read -r free_ptr _ < /tmp/rk-worker-frees
+		if [ "$alloc_ptr" = "$free_ptr" ] && [ "$alloc_ptr" != 0000000000000000 ]; then
+			matched=$alloc_ptr
+		fi
+	fi
+
+	if [ -n "$matched" ]; then
+		_ok "attempt $attempt freed its one state allocation"
+	else
+		_fail "attempt $attempt lacks one matching state allocation and free"
+		printf '    parsed allocations:\n'
+		head -n 12 /tmp/rk-worker-allocs
+		printf '    parsed frees:\n'
+		head -n 12 /tmp/rk-worker-frees
+		printf '    raw trace:\n'
+		head -n 30 /tmp/rk-worker-trace
 	fi
 done
 

@@ -9,6 +9,8 @@
 
 #include "rootkit.h"
 
+#define RK_WORKER_NAME "rkling_event"
+
 static struct rk_state *worker_state;
 static struct task_struct *worker_task;
 static wait_queue_head_t worker_wait;

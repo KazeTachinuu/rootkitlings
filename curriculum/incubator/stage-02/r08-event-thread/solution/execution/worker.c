@@ -9,6 +9,8 @@
 
 #include "rootkit.h"
 
+#define RK_WORKER_NAME "rkling_event"
+
 static struct rk_state *worker_state;
 static struct task_struct *worker_task;
 static wait_queue_head_t worker_wait;
@@ -48,7 +50,7 @@ __must_check int rk_worker_start(struct rk_state *state)
 	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_WORKER_CREATE)
 		worker_task = ERR_PTR(-EINTR);
 	else
-		worker_task = kthread_run(rk_worker_main, NULL, "rkling_event");
+		worker_task = kthread_run(rk_worker_main, NULL, RK_WORKER_NAME);
 	if (!IS_ERR(worker_task))
 		return 0;
 

@@ -266,6 +266,89 @@ check_exact_requests()
 	expect_disabled_errno run 13 "run after disable"
 }
 
+race_runner()
+{
+	local output=$1 index=0
+
+	: > "$output"
+	while [ "$index" -lt 128 ]; do
+		proc_write_test outcome "$endpoint" "$fixtures/run" >> "$output" ||
+			return 1
+		index=$((index + 1))
+	done
+}
+
+race_toggler()
+{
+	local index=0
+
+	while [ "$index" -lt 256 ]; do
+		proc_write_test write "$endpoint" "$fixtures/disable" > /dev/null ||
+			return 1
+		proc_write_test write "$endpoint" "$fixtures/enable" > /dev/null ||
+			return 1
+		index=$((index + 1))
+	done
+	proc_write_test write "$endpoint" "$fixtures/disable" > /dev/null
+}
+
+check_switch_race()
+{
+	if proc_write_test write "$endpoint" "$fixtures/enable" > /dev/null; then
+		_ok "actions are enabled before the run and switch race"
+	else
+		_fail "could not enable actions before the race"
+	fi
+	before=$(status_field_test read "$endpoint" worker_runs)
+
+	runner_pids=
+	runner=1
+	while [ "$runner" -le 4 ]; do
+		race_runner "$fixtures/race-$runner" &
+		runner_pids="$runner_pids $!"
+		runner=$((runner + 1))
+	done
+	race_toggler &
+	toggler_pid=$!
+
+	race_ok=1
+	for pid in $runner_pids; do
+		wait "$pid" || race_ok=0
+	done
+	wait "$toggler_pid" || race_ok=0
+	if [ "$race_ok" -eq 1 ]; then
+		_ok "run writers and the action switch complete concurrently"
+	else
+		_fail "a concurrent run or switch writer failed"
+	fi
+
+	if awk '$0 != "ok" && $0 != "13" { bad = 1 }
+		END { exit bad }' "$fixtures"/race-[1-4]; then
+		_ok "every raced run is accepted or returns EACCES"
+	else
+		_fail "a raced run returned an unexpected outcome"
+	fi
+	successes=$(awk '$0 == "ok" { count++ } END { print count + 0 }' \
+		"$fixtures"/race-[1-4])
+	denied=$(awk '$0 == "13" { count++ } END { print count + 0 }' \
+		"$fixtures"/race-[1-4])
+	total=$((successes + denied))
+	if [ "$total" -eq 512 ] && [ "$successes" -gt 0 ] && [ "$denied" -gt 0 ]; then
+		_ok "the race records $successes accepted and $denied denied runs"
+	else
+		_fail "race outcomes: expected 512 mixed results, got $successes accepted and $denied denied"
+	fi
+
+	proc_write_test write "$endpoint" "$fixtures/enable" > /dev/null ||
+		_fail "could not restore enabled actions after the race"
+	target=$((before + successes))
+	if status_field_test equal "$endpoint" worker_runs "$target" 5000 > /dev/null; then
+		_ok "only the $successes accepted raced requests complete"
+	else
+		_fail "raced requests were lost, duplicated, or accepted after EACCES"
+	fi
+}
+
 assert_not_loaded
 attempt=1
 while [ "$attempt" -le 2 ]; do
@@ -273,6 +356,7 @@ while [ "$attempt" -le 2 ]; do
 	check_loaded
 	check_rejections
 	check_exact_requests
+	check_switch_race
 	proc_write_test write "$endpoint" "$fixtures/enable" > /dev/null ||
 		_fail "could not enable before unload"
 	if proc_write_test unload "$endpoint" "$fixtures/run" rootkitlings > /dev/null; then

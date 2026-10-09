@@ -3,6 +3,7 @@
 Add a `run` command to `/proc/rootkitlings`.
 The command submits one unit of work to one kernel thread.
 The thread sleeps when there is no work and records one completed run for each accepted command.
+A dedicated thread is a long-lived owner for work that may block; the proc callback only validates and submits bounded requests.
 
 The complete write grammar is:
 
@@ -33,14 +34,22 @@ Store that count in an `atomic_t` and use the wait queue only to block until eit
 - the pending count is greater than zero
 - the thread has been asked to stop
 
+Use `wait_event_interruptible()` with the exact condition `pending > 0 || kthread_should_stop()`.
+Match it with `wake_up_interruptible()` after request publication.
+An idle worker then sleeps in the interruptible state instead of adding an uninterruptible task to the system load average.
+
 Use `atomic_add_unless(..., INT_MAX)` when a command is accepted.
-This adds one without wrapping the counter.
+It returns true after adding one, and false without changing the counter when the value is already `INT_MAX`.
+On false, return `-EOVERFLOW` without waking the thread.
 Wake the thread only after the pending unit has been published.
 
 After waking, check `kthread_should_stop()` before consuming work.
 Consume one unit with `atomic_dec_if_positive()` and record one `worker_runs` increment.
+This operation returns the new nonnegative value when it decrements, or a negative value without changing a counter that was already zero.
 Then evaluate the wait condition again.
 Do not poll or add a delay.
+
+The only processing made observable in this lesson is one `worker_runs` increment for each consumed unit.
 
 The pending count needs atomic read-modify-write operations because several proc write callbacks may add requests while the thread consumes them.
 The action switch does not: it is one value replaced as a whole, so its getter and setter use `READ_ONCE()` and `WRITE_ONCE()`.
@@ -73,6 +82,7 @@ Unload in this order:
 2. call `kthread_stop()` to wake, stop, and join the thread
 3. destroy the state used by the thread
 
+Here, join means that `kthread_stop()` waits until the thread function has exited.
 Pending units may be discarded once unload asks the thread to stop.
 Units that completed before that point remain counted.
 
@@ -80,12 +90,13 @@ Units that completed before that point remain counted.
 
 Edit these four files:
 
-- `Kbuild`
-- `core/main.c`
-- `interface/proc.c`
-- `execution/worker.c`
+- `Kbuild`: link `execution/worker.o`
+- `core/main.c`: start, roll back, and stop the thread
+- `interface/proc.c`: gate `run` and submit one request
+- `execution/worker.c`: implement the request, wait, and lifecycle operations
 
 The state counter and its narrow operations are already supplied so this exercise stays focused on the thread lifecycle and request path.
+`RK_WORKER_NAME` is also supplied; use it when creating the task so the task name is not a hidden checker requirement.
 
 Run:
 

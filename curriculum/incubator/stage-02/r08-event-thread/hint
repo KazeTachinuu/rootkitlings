@@ -1,10 +1,15 @@
 Keep one task pointer, one wait queue, one atomic pending count, and one borrowed
 rk_state pointer in execution/worker.c.
+Use the supplied RK_WORKER_NAME when creating the task.
 
 The proc callback checks actions_enabled before calling rk_worker_request(). The
-request operation adds one unless pending is already INT_MAX, then wakes the
-wait queue. The thread waits for pending > 0 or kthread_should_stop(), checks the
-stop condition first, and consumes one unit with atomic_dec_if_positive().
+request operation uses atomic_add_unless() to add one unless pending is already
+INT_MAX. A false return means -EOVERFLOW with no wake; a true return means wake
+the wait queue with wake_up_interruptible(). The thread uses
+wait_event_interruptible() with pending > 0 || kthread_should_stop(), checks the
+stop condition first, and records a run only when atomic_dec_if_positive()
+returns a nonnegative value.
 
 Start the worker before publishing procfs. On publication failure and unload,
-kthread_stop() must return before state is destroyed.
+kthread_stop() must wake the thread and wait for its exit before state is
+destroyed.
