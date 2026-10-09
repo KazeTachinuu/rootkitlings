@@ -6,6 +6,7 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 (( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR ARTIFACT_PATH"
 build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
 artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 [[ -d $build_dir && ! -L $build_dir ]] || die "build directory must be a real directory"
 [[ -f $artifact && ! -L $artifact ]] || die "artifact must be a regular file"
@@ -19,6 +20,8 @@ done
 
 command -v modinfo >/dev/null || die "modinfo is required"
 command -v nm >/dev/null || die "nm is required"
+command -v gcc >/dev/null || die "gcc is required"
+command -v clang >/dev/null || die "clang is required"
 [[ $(modinfo -F license "$artifact") == GPL ]] || die "module license must be GPL"
 [[ $(modinfo -F description "$artifact") == 'Rootkitlings kernel module' ]] ||
 	die "module description must be: Rootkitlings kernel module"
@@ -59,4 +62,17 @@ if grep -Eq 'struct[[:space:]]+rk_state[[:space:]]*\{' <<< "$header_text"; then
 	die "struct rk_state layout must remain private to core/state.c"
 fi
 
-printf '[+] opaque state and seq_file dependencies verified\n'
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r05-host.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+for compiler in gcc clang; do
+	"$compiler" -std=c11 -Wall -Wextra -Werror -Wno-unused-parameter \
+		-fsanitize=address,undefined -fno-omit-frame-pointer \
+		-DROOTKITLINGS_FAIL_POINT=0 \
+		-I "$here/fixtures/host/include" -I "$build_dir/include" \
+		-I "$build_dir" "$here/fixtures/host/state_view_test.c" \
+		-o "$scratch/state-view-$compiler"
+	ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 \
+		"$scratch/state-view-$compiler"
+done
+
+printf '[+] opaque state and state-dependent proc rendering verified\n'

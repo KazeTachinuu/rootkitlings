@@ -47,6 +47,33 @@ build_variant allocation 2
 build_variant publication 3
 "$HERE/host-check" "$scratch/success" "$scratch/success/rootkitlings.ko"
 
+reject_host_mutant()
+{
+	local directory=$1 label=$2
+
+	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+		> "$scratch/$label-host.log" 2>&1; then
+		printf '[x] host checker accepted %s\n' "$label" >&2
+		exit 1
+	fi
+}
+
+constant_accessor=$scratch/constant-accessor
+cp -a "$scratch/success" "$constant_accessor"
+sed -i '/^bool rk_state_is_active/,/^}/c\
+bool rk_state_is_active(const struct rk_state *state)\
+{\
+\t(void)state;\
+\treturn true;\
+}' "$constant_accessor/core/state.c"
+reject_host_mutant "$constant_accessor" constant-state-accessor
+
+constant_renderer=$scratch/constant-renderer
+cp -a "$scratch/success" "$constant_renderer"
+sed -i 's/seq_printf(output, "active=%u\\n", active ? 1U : 0U);/(void)active; seq_printf(output, "active=1\\n");/' \
+	"$constant_renderer/interface/proc.c"
+reject_host_mutant "$constant_renderer" constant-proc-renderer
+
 cp -a "$work" "$scratch/unknown"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 ROOTKITLINGS_FAIL_POINT=99 \
 	modules >"$scratch/unknown.log" 2>&1; then
