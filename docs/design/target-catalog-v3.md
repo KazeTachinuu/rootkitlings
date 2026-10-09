@@ -14,13 +14,12 @@ Asset status: `adapt` means current material is useful but does not satisfy the 
 The scored route contains 31 required mechanism lessons, four cumulative milestones, and one final capstone.
 Aliases run from L00 through L30, M00 through M03, and C00.
 
-## Mandatory setup gate
+## Setup
 
-Authorization and disposable-lab containment are mandatory setup conditions, not scored exercises.
-Before any workspace can be built or booted, the setup gate records the learner's explicit authorization assertion and verifies the default module-free guest has no host filesystem, host disk, or network interface beyond loopback.
-This gate is outside lesson aliases, prerequisites, completion counts, and the concept graph.
-It does not claim to prove legal authorization; the learner remains responsible for using only systems they are permitted to test.
-Later networking checks may enable only the capability declared by their exercise metadata; that exception does not weaken the default guest boundary.
+`./rootkitlings setup` prepares the pinned course kernel and checks the default module-free guest.
+The guest has no persistent disk, host mount, or network interface beyond loopback.
+Setup is tooling, not an exercise: it has no alias, prerequisite edge, completion credit, or concept.
+Later networking checks enable only the capability declared by their exercise metadata.
 
 ## Entry knowledge
 
@@ -89,7 +88,7 @@ An unused general competency is omitted rather than attached to L00 as a course-
 | M01 | `authorized-actions-telemetry` — Record authorized actions and rmdir results | S3 | `controlled-resident-core`, `one-use-authorization`, `return-aware-syscall-telemetry` | `spinlocked-event-ring`, `authorized-telemetry-integration` | `resident-core-integration`, `one-use-authorization`, `return-correlation` | privilege, instrumentation, detection | C03, C04 | new |
 | M02 | `concealment-evidence-map` — Omit the resident worker and map the affected view | S4 | `authorized-actions-telemetry`, `packed-directory-filter` | `namespace-aware-process-view-filtering`, `machine-readable-evidence-map` | `authorized-telemetry-integration`, `packed-record-validation`, `directory-cookie-preservation`, `cross-view-evidence`, `namespace-id-translation`, `resource-ownership`, `proc-publication-lifetime` | concealment, detection | C05 | new |
 | M03 | `remote-resident-agent` — Remote resident agent | S5 | `concealment-evidence-map`, `tcp-framing-cancellation`, `guarded-file-transaction` | `resident-client-retry`, `connect-back-agent`, `remote-agent-integration`, `boot-load-persistence` | `machine-readable-evidence-map`, `tcp-length-framing`, `blocked-io-cancellation`, `compare-before-rollback` | control, networking, persistence, lifecycle | C07, C08 | new |
-| C00 | `operation-glasshouse` — Operation Glasshouse: validate a rootkit through independent views | S6 | `remote-resident-agent`, `authenticated-dns-signal` | `adversarial-validation` | `remote-agent-integration`, `authenticated-dns-signals`, `machine-readable-evidence-map` | lifecycle, control, privilege, instrumentation, concealment, networking, persistence, cryptography, detection | C10 plus C03/C05/C08/C09 behavior | new |
+| C00 | `authenticated-resident-agent` — Authenticate and independently verify the resident agent | S6 | `remote-resident-agent`, `authenticated-dns-signal` | `adversarial-validation` | `remote-agent-integration`, `authenticated-dns-signals`, `machine-readable-evidence-map` | lifecycle, control, privilege, instrumentation, concealment, networking, persistence, cryptography, detection | C10 plus C03/C05/C08/C09 behavior | new |
 
 `proc-publication` is the cumulative project root.
 Milestone workspace parents are `proc-publication → M00 → M01 → M02 → M03 → C00`.
