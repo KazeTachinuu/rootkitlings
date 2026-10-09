@@ -1,0 +1,1 @@
+Build the header and nonce in local buffers; publish bytes and advance state only after AES-GCM succeeds. Then place open before the fixed command parser, seal before framing, start the channel after the file transaction, send the status only after every endpoint exists, and unwind in reverse order.

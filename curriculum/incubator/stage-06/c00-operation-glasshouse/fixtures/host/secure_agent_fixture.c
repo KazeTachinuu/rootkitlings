@@ -1,0 +1,260 @@
+#define _GNU_SOURCE
+#include <arpa/inet.h>
+#include <errno.h>
+#include <netinet/in.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+struct vector {
+	const unsigned char *bytes;
+	size_t length;
+};
+
+static const unsigned char request_1[] = {
+	0x01,0x01,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0,0,0,0,0,0,0,1,
+	0xd2,0xb0,0xfe,0x11,0xd6,0x62,0xc2,0xe0,0xb2,0xf9,0x1c,0xeb,0xb7,0x56,0x42,0xbb,0x74,0x15,0x07,0x92 };
+static const unsigned char reply_1[] = {
+	0x01,0x02,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0,0,0,0,0,0,0,1,
+	0x4a,0x1e,0xcf,0x31,0x35,0x6f,0x09,0xa8,0x03,0x93,0xf7,0xdd,0x55,0x40,0xdc,0x4a,0x1d,0x8a,0x06,0x84 };
+static const unsigned char request_2[] = {
+	0x01,0x01,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0,0,0,0,0,0,0,2,
+	0x9a,0x5c,0xc9,0x70,0xb6,0x48,0xeb,0xdf,0x06,0x91,0x1d,0x6d,0x3f,0x8e,0xed,0x43,0x38,0x27,0xc3,0x26 };
+static const unsigned char reply_2[] = {
+	0x01,0x02,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0,0,0,0,0,0,0,2,
+	0x75,0x78,0xeb,0xc0,0x59,0x7e,0x28,0xa9,0xbe,0xfc,0x5c,0x72,0xa3,0xe2,0x6e,0x6c,0x7d,0x23,0x1f,0x53,0x88,0xcb,0x20,0x0b,0x39,0xa9,0x95,0x91,0x40,0xa2,0x5b,0x29,0x54 };
+static const unsigned char request_3[] = {
+	0x01,0x01,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0,0,0,0,0,0,0,3,
+	0xbd,0x48,0x10,0x48,0xfe,0x64,0xf8,0x8e,0x42,0x58,0x8d,0xa5,0x01,0xfd,0x48,0xe5,0x14,0x32,0xc4,0x9e,0x55,0xa3,0xb9,0xac,0x5c,0xf5,0x60,0xf8 };
+static const unsigned char reply_3[] = {
+	0x01,0x02,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0,0,0,0,0,0,0,3,
+	0xcb,0x20,0xd1,0x66,0xf4,0x45,0x03,0x27,0x48,0xbd,0xbb,0xf1,0x10,0x78,0xcb,0xd0,0x6b,0x68,0xd8,0xd8,0x9b,0x2c,0x6a,0x32,0xbc,0x79,0x66,0x02,0x2a,0x20 };
+static const unsigned char request_4[] = {
+	0x01,0x01,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0,0,0,0,0,0,0,4,
+	0x92,0xd9,0x9f,0x5d,0x38,0x9f,0x8a,0x65,0x40,0x52,0x7f,0x24,0x42,0x6b,0x6f,0x8b,0x22,0xb7,0x26,0x77,0x83,0x12,0x4b };
+static const unsigned char reply_4[] = {
+	0x01,0x02,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0,0,0,0,0,0,0,4,
+	0x14,0xa8,0xa3,0x98,0x3a,0xfd,0xe3,0x1c,0xa5,0x10,0x1a,0x7b,0x46,0xce,0x13,0x14,0x81,0x93,0x2e };
+static const unsigned char request_5[] = {
+	0x01,0x01,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0,0,0,0,0,0,0,5,
+	0x9d,0x6e,0xcd,0xf9,0x82,0x7f,0xc5,0xa2,0x27,0xc4,0x58,0xd4,0xed,0xc5,0x05,0x96,0x01,0xad,0xf5,0x4d };
+static const unsigned char reply_5[] = {
+	0x01,0x02,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0,0,0,0,0,0,0,5,
+	0xf9,0xe6,0xdb,0x7f,0x66,0x34,0xcb,0x2a,0xec,0x82,0x84,0x02,0xe9,0xc7,0xe4,0xcb,0xd8,0xb7,0x19,0x0d };
+static const unsigned char request_6[] = {
+	0x01,0x01,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0,0,0,0,0,0,0,6,
+	0x48,0x85,0x7a,0xb8,0x51,0x18,0x0b,0x90,0xe3,0xa7,0xb4,0xac,0xde,0x3f,0x56,0x88,0xec,0x95,0x98,0x9c };
+static const unsigned char request_7[] = {
+	0x01,0x01,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0,0,0,0,0,0,0,7,
+	0xa0,0x51,0x5b,0x9a,0xe6,0xbf,0xf3,0xe0,0xc1,0xa6,0x5c,0x68,0x03,0xdc,0xe0,0xf3,0x71,0x7f,0xa8,0x15 };
+static const unsigned char reply_6[] = {
+	0x01,0x02,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0,0,0,0,0,0,0,6,
+	0xfc,0x56,0x3c,0x8d,0xc9,0x2c,0xdd,0xd8,0xda,0xc6,0x1a,0xf4,0x21,0x8e,0x4c,0x19,0x96,0xa8,0x85,0xf3 };
+
+static void fail(const char *operation)
+{
+	perror(operation);
+	exit(EXIT_FAILURE);
+}
+
+static void write_all(int fd, const void *buffer, size_t length)
+{
+	const unsigned char *bytes = buffer;
+	size_t offset = 0;
+
+	while (offset < length) {
+		ssize_t count = write(fd, bytes + offset, length - offset);
+		if (count < 0 && errno == EINTR)
+			continue;
+		if (count <= 0)
+			fail("write");
+		offset += (size_t)count;
+	}
+}
+
+static void read_all(int fd, void *buffer, size_t length)
+{
+	unsigned char *bytes = buffer;
+	size_t offset = 0;
+
+	while (offset < length) {
+		ssize_t count = read(fd, bytes + offset, length - offset);
+		if (count < 0 && errno == EINTR)
+			continue;
+		if (count <= 0)
+			fail("read");
+		offset += (size_t)count;
+	}
+}
+
+static void send_vector(int fd, struct vector vector)
+{
+	unsigned char header[2] = { vector.length >> 8, vector.length };
+
+	write_all(fd, header, 1);
+	write_all(fd, header + 1, 1);
+	for (size_t index = 0; index < vector.length; index++)
+		write_all(fd, vector.bytes + index, 1);
+}
+
+static void expect_vector(int fd, struct vector expected)
+{
+	unsigned char bytes[64];
+	unsigned char header[2];
+	size_t length;
+
+	read_all(fd, header, sizeof(header));
+	length = ((size_t)header[0] << 8) | header[1];
+	if (length != expected.length || length > sizeof(bytes)) {
+		errno = EPROTO;
+		fail("reply length");
+	}
+	read_all(fd, bytes, length);
+	if (memcmp(bytes, expected.bytes, length)) {
+		errno = EPROTO;
+		fail("reply bytes");
+	}
+}
+
+static void expect_eof(int fd)
+{
+	unsigned char byte;
+	ssize_t count;
+
+	do {
+		count = read(fd, &byte, 1);
+	} while (count < 0 && errno == EINTR);
+	if (count != 0) {
+		if (count > 0)
+			errno = EPROTO;
+		fail("expected EOF");
+	}
+}
+
+static void marker(const char *directory, const char *name)
+{
+	char path[512];
+	FILE *stream;
+
+	if (snprintf(path, sizeof(path), "%s/%s", directory, name) >=
+	    (int)sizeof(path)) {
+		errno = ENAMETOOLONG;
+		fail("marker path");
+	}
+	stream = fopen(path, "w");
+	if (!stream || fputs("1\n", stream) == EOF || fclose(stream))
+		fail("marker");
+}
+
+static int listener(unsigned short requested, unsigned short *actual,
+		    int listen_now)
+{
+	struct sockaddr_in address = {
+		.sin_family = AF_INET,
+		.sin_addr.s_addr = htonl(INADDR_LOOPBACK),
+		.sin_port = htons(requested),
+	};
+	socklen_t length = sizeof(address);
+	int reuse = 1;
+	int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, IPPROTO_TCP);
+
+	if (fd < 0 || setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse,
+				 sizeof(reuse)) < 0 ||
+	    bind(fd, (struct sockaddr *)&address, sizeof(address)) < 0 ||
+	    getsockname(fd, (struct sockaddr *)&address, &length) < 0 ||
+	    (listen_now && listen(fd, 4) < 0))
+		fail("listener");
+	*actual = ntohs(address.sin_port);
+	return fd;
+}
+
+static int reserve(const char *path)
+{
+	unsigned short port;
+	FILE *stream;
+	int fd = listener(0, &port, 0);
+
+	close(fd);
+	stream = fopen(path, "w");
+	if (!stream || fprintf(stream, "%u\n", port) < 0 || fclose(stream))
+		fail("reserve");
+	return 0;
+}
+
+static int accept_peer(int server)
+{
+	struct timeval timeout = { .tv_sec = 10 };
+	int peer = accept4(server, NULL, NULL, SOCK_CLOEXEC);
+
+	if (peer < 0 || setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+				   sizeof(timeout)) < 0)
+		fail("accept");
+	return peer;
+}
+
+#define V(bytes) ((struct vector){ (bytes), sizeof(bytes) })
+
+static int serve(const char *directory, const char *port_text)
+{
+	unsigned char tampered[sizeof(request_6)];
+	unsigned long parsed = strtoul(port_text, NULL, 10);
+	unsigned short port;
+	int server;
+	int peer;
+
+	if (!parsed || parsed > 65535) {
+		errno = EINVAL;
+		fail("port");
+	}
+	server = listener((unsigned short)parsed, &port, 1);
+	if (port != parsed) {
+		errno = EPROTO;
+		fail("bound port");
+	}
+	marker(directory, "ready");
+
+	peer = accept_peer(server);
+	send_vector(peer, V(request_1)); expect_vector(peer, V(reply_1));
+	send_vector(peer, V(request_2)); expect_vector(peer, V(reply_2));
+	send_vector(peer, V(request_3)); expect_vector(peer, V(reply_3));
+	send_vector(peer, V(request_4)); expect_vector(peer, V(reply_4));
+	send_vector(peer, V(request_4)); expect_eof(peer);
+	close(peer);
+	marker(directory, "replay_rejected");
+
+	peer = accept_peer(server);
+	send_vector(peer, V(request_5)); expect_vector(peer, V(reply_5));
+	memcpy(tampered, request_6, sizeof(tampered));
+	tampered[sizeof(tampered) - 1] ^= 1;
+	send_vector(peer, V(tampered)); expect_eof(peer);
+	close(peer);
+	marker(directory, "tamper_rejected");
+
+	peer = accept_peer(server);
+	send_vector(peer, V(request_6)); expect_eof(peer);
+	close(peer);
+	marker(directory, "quit_complete");
+
+	peer = accept_peer(server);
+	send_vector(peer, V(request_7)); expect_vector(peer, V(reply_6));
+	marker(directory, "blocked_receive");
+	expect_eof(peer);
+	close(peer);
+	close(server);
+	marker(directory, "eof");
+	return 0;
+}
+
+int main(int argc, char **argv)
+{
+	if (argc == 3 && !strcmp(argv[1], "reserve"))
+		return reserve(argv[2]);
+	if (argc == 4 && !strcmp(argv[1], "serve"))
+		return serve(argv[2], argv[3]);
+	fprintf(stderr, "usage: %s reserve FILE | serve DIRECTORY PORT\n",
+		argv[0]);
+	return 2;
+}

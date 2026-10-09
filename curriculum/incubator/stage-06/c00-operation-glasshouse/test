@@ -1,0 +1,212 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../../scripts/lesson-env"
+ROOT=$ROOTKITLINGS_ROOT
+M02=$HERE/../../stage-04/m02-concealment-evidence-map
+M03=$HERE/../../stage-05/m03-remote-resident-agent
+M01=$HERE/../../stage-03/m01-authorized-actions-telemetry
+R30=$HERE/../r30-authenticated-encryption
+R31=$HERE/../r31-authenticated-dns-signal
+R29=$HERE/../r29-authenticated-replay-safe-message
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-c00.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+[[ $(uname -m) == x86_64 ]] || { printf '[x] capstone requires x86_64\n' >&2; exit 1; }
+for option in CC_IS_GCC CRYPTO_GCM CRYPTO_AES CRYPTO_HMAC CRYPTO_SHA256 \
+	KPROBES KRETPROBES KRETPROBE_ON_RETHOOK KPROBES_ON_FTRACE KALLSYMS \
+	KALLSYMS_ALL DEBUG_FS MODULES MODULE_UNLOAD MULTIUSER USER_NS PID_NS \
+	NET NET_NS INET PROC_FS; do
+	grep -Eq "^CONFIG_$option=[ym]$" "$KDIR/.config" || {
+		printf '[x] capstone requires CONFIG_%s\n' "$option" >&2; exit 1;
+	}
+done
+for command in base64 gcc gzip make nm openssl; do
+	command -v "$command" >/dev/null || { printf '[x] %s is required\n' "$command" >&2; exit 1; }
+done
+for script in test host-check success-check signal-failure-check; do
+	bash -n "$HERE/$script"
+done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
+	shellcheck -x -s sh "$HERE/success-check" "$HERE/signal-failure-check"
+fi
+
+mapfile -t solution_files < <(cd "$HERE/solution" && find . -type f | sort)
+expected=(./Kbuild ./core/main.c ./include/agent.h ./include/framing.h
+	./include/platform.h ./network/agent.c ./security/control.c)
+[[ ${solution_files[*]} == "${expected[*]}" ]] || {
+	printf '[x] solution is not the seven-file sparse overlay\n' >&2; exit 1;
+}
+while IFS= read -r file; do
+	relative=${file#"$HERE/additions/"}
+	[[ ! -e $M01/solution/$relative &&
+		! -e $M02/additions/$relative &&
+		! -e $M02/solution-overlay/$relative &&
+		! -e $M03/additions/$relative &&
+		! -e $M03/solution/$relative ]] || {
+		printf '[x] addition replaces inherited path: %s\n' "$relative" >&2
+		exit 1
+	}
+done < <(find "$HERE/additions" -type f | sort)
+
+cmp -s "$R30/solution/include/aead.h" "$HERE/additions/include/aead.h" ||
+	{ printf '[x] supplied authenticated-encryption header changed\n' >&2; exit 1; }
+sed 's/"aead_platform.h"/"platform.h"/' "$HERE/additions/crypto/aead.c" > "$scratch/aead.c"
+cmp -s "$R30/solution/crypto/aead.c" "$scratch/aead.c" ||
+	{ printf '[x] supplied authenticated-encryption operation changed\n' >&2; exit 1; }
+sed -e 's/"aead_platform.h"/"platform.h"/' -e 's/> 14/> 3/' \
+	"$HERE/additions/crypto/aead_platform.c" > "$scratch/aead-platform.c"
+cmp -s "$R30/solution/crypto/platform.c" "$scratch/aead-platform.c" ||
+	{ printf '[x] supplied authenticated-encryption platform changed\n' >&2; exit 1; }
+sed -e 's/> 14/> 3/' -e 's/between 0 and 14/between 0 and 3/' \
+	"$HERE/additions/crypto/auth_platform.c" > "$scratch/auth-platform.c"
+cmp -s "$R31/starter-overlay/crypto/platform.c" "$scratch/auth-platform.c" || {
+	printf '[x] supplied authenticated-signal HMAC platform changed\n' >&2; exit 1;
+}
+cp -a "$R29/solution" "$scratch/r31-accepted"
+cp -a "$R31/starter-overlay/." "$scratch/r31-accepted/"
+cp -a "$R31/solution-overlay/." "$scratch/r31-accepted/"
+for pair in \
+	"message/authenticated.c message/authenticated.c" \
+	"signal/authenticated_dns.c signal/authenticated_dns.c" \
+	"transport/udp.c transport/udp.c" \
+	"wire/dns_query.c wire/dns_query.c" \
+	"include/authenticated.h include/authenticated.h" \
+	"include/authenticated_dns.h include/authenticated_dns.h" \
+	"include/dns_query.h include/dns_query.h" \
+	"include/transport.h include/transport.h"; do
+	read -r source destination <<< "$pair"
+	cmp -s "$scratch/r31-accepted/$source" "$HERE/additions/$destination" || {
+		printf '[x] supplied authenticated-signal component changed: %s\n' "$source" >&2
+		exit 1
+	}
+done
+
+compose()
+{
+	local destination=$1
+	mkdir -p "$destination"
+	cp -a "$M01/solution/." "$destination/"
+	cp -a "$M02/additions/." "$destination/"
+	cp -a "$M02/solution-overlay/." "$destination/"
+	cp -a "$M03/additions/." "$destination/"
+	cp -a "$M03/solution/." "$destination/"
+	cp -a "$HERE/additions/." "$destination/"
+}
+
+compose "$scratch/template"
+make -s -C "$KDIR" M="$scratch/template" W=1 modules \
+	> "$scratch/template.log" 2>&1
+if "$HERE/host-check" "$scratch/template" "$scratch/template/rootkitlings.ko" \
+		> "$scratch/template-host.log" 2>&1; then
+	printf '[x] host checker accepted unfinished learner file\n' >&2; exit 1
+fi
+
+compose "$scratch/solution"
+cp -a "$HERE/solution/." "$scratch/solution/"
+make -s -C "$KDIR" M="$scratch/solution" W=1 modules > "$scratch/solution.log" 2>&1
+! grep -q 'warning:' "$scratch/solution.log" || { cat "$scratch/solution.log"; exit 1; }
+"$HERE/host-check" "$scratch/solution" "$scratch/solution/rootkitlings.ko"
+
+compose "$scratch/alternate"
+mkdir -p "$scratch/alternate/security"
+cp -a "$HERE/solution/." "$scratch/alternate/"
+cp "$HERE/fixtures/alternate/control.c" "$scratch/alternate/security/control.c"
+make -s -C "$KDIR" M="$scratch/alternate" W=1 modules > "$scratch/alternate.log" 2>&1
+! grep -q 'warning:' "$scratch/alternate.log" || { cat "$scratch/alternate.log"; exit 1; }
+"$HERE/host-check" "$scratch/alternate" "$scratch/alternate/rootkitlings.ko"
+
+mutant()
+{
+	local name=$1 edit=$2 directory=$scratch/mutant-$1
+	compose "$directory"
+	cp -a "$HERE/solution/." "$directory/"
+	perl -0pi -e "$edit" "$directory/security/control.c"
+	! cmp -s "$HERE/solution/security/control.c" "$directory/security/control.c" || {
+		printf '[x] mutant edit did not apply: %s\n' "$name" >&2; exit 1;
+	}
+	make -s -C "$KDIR" M="$directory" W=1 modules > "$directory.log" 2>&1 || {
+		cat "$directory.log" >&2; exit 1;
+	}
+	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+			> "$scratch/$name-host.log" 2>&1; then
+		printf '[x] host checker accepted mutant: %s\n' "$name" >&2; exit 1
+	fi
+}
+
+mutant no-aad 's/RK_SECURE_HEADER_LENGTH,\n\t\t\t     envelope \+ RK_SECURE_HEADER_LENGTH/0,\n\t\t\t     envelope + RK_SECURE_HEADER_LENGTH/'
+mutant same-direction-nonce 's/ \| \(kind == RK_SECURE_REPLY\)//'
+mutant fixed-nonce-sequence 's/sequence << 1/1 << 1/'
+mutant no-request-advance 's/channel->next_request = sequence \+ 1;/channel->next_request = sequence;/'
+mutant accepts-gap 's/if \(sequence > channel->next_request\)/if (false)/'
+mutant leaves-open-buffer 's/rk_platform_clear\(candidate, sizeof\(candidate\)\);/rk_platform_clear(candidate, 0);/'
+mutant leaves-channel-key 's/rk_platform_clear\(channel, sizeof\(\*channel\)\);/rk_platform_clear(channel, 0);/'
+# $1 below is a Perl capture, not a shell parameter.
+# shellcheck disable=SC2016
+mutant publishes-failed-open 's/(error = rk_aead_open[\s\S]*?\);\n)\tif \(error\)\n\t\tgoto out;/$1\tif (false \&\& error)\n\t\tgoto out;/'
+
+compose "$scratch/fail-14"
+cp -a "$HERE/solution/." "$scratch/fail-14/"
+make -s -C "$KDIR" M="$scratch/fail-14" W=1 \
+	ROOTKITLINGS_FAIL_POINT=14 modules > "$scratch/fail-14.log" 2>&1
+
+gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
+	-o "$scratch/secure_agent_fixture" "$HERE/fixtures/host/secure_agent_fixture.c"
+gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
+	-o "$scratch/module_load_params" \
+	"$ROOT/tools/module_load_params.c"
+
+run_guest()
+{
+	local check=$1 module=$2 label=$3 output
+	shift 3
+	if ! output=$("$ROOT/vm/boot" --check "$check" "$@" "$module" 2>&1); then
+		printf '%s\n[x] guest rejected %s\n' "$output" "$label" >&2; exit 1
+	fi
+	printf '%s\n' "$output"
+	grep -Fq '[+] PASSED' <<< "$output"
+}
+
+append_binary()
+{
+	local marker=$1 binary=$2 script=$3
+	printf '\n%s\n' "$marker" >> "$script"
+	gzip -c "$binary" | base64 -w 76 >> "$script"
+	chmod 0755 "$script"
+}
+
+cp "$HERE/success-check" "$scratch/success-check"
+append_binary __ROOTKITLINGS_SECURE_FIXTURE__ \
+	"$scratch/secure_agent_fixture" "$scratch/success-check"
+run_guest "$scratch/success-check" "$scratch/solution/rootkitlings.ko" solution
+
+cp "$HERE/signal-failure-check" "$scratch/signal-failure-check"
+append_binary __ROOTKITLINGS_MODULE_LOADER__ \
+	"$scratch/module_load_params" "$scratch/signal-failure-check"
+run_guest "$scratch/signal-failure-check" \
+	"$scratch/fail-14/rootkitlings.ko" signal-rollback
+
+# Exercise the complete inherited behavior through the capstone module.
+sed -e '/^begin /a\
+mkdir -p /etc/modules-load.d\
+mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs /etc/modules-load.d\
+chmod 0700 /etc/modules-load.d\
+printf "operator-original\\n" > /etc/modules-load.d/rootkitlings.conf\
+chmod 0600 /etc/modules-load.d/rootkitlings.conf\
+ifconfig lo 127.0.0.1 up' \
+	-e 's/load rootkitlings\.ko/load rootkitlings.ko peer_port=47023 retry_base_ms=5000 retry_max_ms=5000 session_id=1234605616436508552 signal_id=4660/g' \
+	"$M02/success-check" > "$scratch/m02-regression"
+chmod 0755 "$scratch/m02-regression"
+run_guest "$scratch/m02-regression" "$scratch/solution/rootkitlings.ko" \
+	inherited-regression --tool tools/run_as --tool tools/getdents64_test \
+	--tool tools/status_field_test --tool tools/proc_write_test \
+	--tool tools/proc_read_test
+
+"$M03/test"
+"$R30/test"
+"$R31/test"
+
+printf '[+] authenticated resident agent capstone passed\n'

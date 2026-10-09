@@ -1,0 +1,202 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Authenticated resident agent"
+
+root=/etc/modules-load.d
+target=$root/rootkitlings.conf
+sibling=$root/.rootkitlings.conf.rootkitlings
+status=/proc/rootkitlings_agent
+work=/tmp/rootkitlings-c00
+helper=secure_agent_fixture
+capture=$work/dns-query
+fixture_pid=
+listener=
+
+cleanup()
+{
+	if test -d /sys/module/rootkitlings; then rmmod rootkitlings 2>/dev/null || true; fi
+	if test -n "$fixture_pid"; then kill "$fixture_pid" 2>/dev/null || true; wait "$fixture_pid" 2>/dev/null || true; fi
+	if test -n "$listener"; then kill "$listener" 2>/dev/null || true; wait "$listener" 2>/dev/null || true; fi
+	umount "$root" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+wait_file()
+{
+	path=$1
+	index=0
+	while test ! -s "$path" && test "$index" -lt 1000; do
+		sleep 0.01
+		index=$((index + 1))
+	done
+	test -s "$path"
+}
+
+wait_field()
+{
+	field=$1 minimum=$2 index=0
+	while test "$index" -lt 1000; do
+		value=$(sed -n "s/^$field=//p" "$status" 2>/dev/null)
+		if test -n "$value" && test "$value" -ge "$minimum" 2>/dev/null; then return 0; fi
+		sleep 0.01
+		index=$((index + 1))
+	done
+	return 1
+}
+
+mkdir -p "$root" "$work"
+mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
+chmod 0700 "$root"
+printf 'operator-original\n' > "$target"
+chmod 0600 "$target"
+cp "$target" "$work/original"
+ifconfig lo 127.0.0.1 up
+
+if ! command -v "$helper" >/dev/null 2>&1; then
+	helper=$work/secure_agent_fixture
+	sed -n '/^__ROOTKITLINGS_SECURE_FIXTURE__$/,$p' /check |
+		sed '1d' | busybox base64 -d | busybox gzip -d > "$helper"
+	chmod 0755 "$helper"
+fi
+"$helper" reserve "$work/port"
+port=$(cat "$work/port")
+
+nc -u -l -p 5300 -s 127.0.0.1 > "$capture" 2>/dev/null &
+listener=$!
+sleep 0.1
+load rootkitlings.ko "peer_port=$port" retry_base_ms=20 retry_max_ms=80 \
+	session_id=72623859790382856 signal_id=4660
+assert_loaded rootkitlings
+assert_exists "$status"
+if wait_field retries 2 && wait_field transport_errors 2; then
+	_ok "refused loopback connections enter bounded retry"
+else
+	_fail "retry evidence did not advance"
+fi
+
+mkdir -p "$work/server"
+"$helper" serve "$work/server" "$port" > "$work/server.log" 2>&1 &
+fixture_pid=$!
+wait_file "$work/server/ready" || _fail "secure listener did not start"
+if wait_file "$work/server/replay_rejected"; then
+	_ok "duplicate authenticated request closed its session"
+else
+	_fail "duplicate request was not rejected"
+fi
+if wait_file "$work/server/tamper_rejected"; then
+	_ok "tag mutation closed its session without a reply"
+else
+	_fail "mutated request was not rejected"
+fi
+if wait_file "$work/server/quit_complete"; then
+	_ok "authenticated QUIT closed one session"
+else
+	_fail "QUIT did not close its session"
+fi
+wait_file "$work/server/blocked_receive" || _fail "final session did not reach blocked receive"
+
+if wait_field connections 4 && wait_field commands 7 &&
+		wait_field protocol_errors 3; then
+	_ok "fixed commands and rejected envelopes updated independent counters"
+else
+	_fail "agent counters do not match exercised behavior"
+fi
+if test "$(sed -n 's/^marker=//p' "$status")" = alpha_7; then
+	_ok "authenticated MARK stored the bounded label"
+else
+	_fail "MARK state is wrong"
+fi
+if test "$(cat "$target")" = rootkitlings &&
+		test "$(wc -c < "$target")" -eq 13 &&
+		cmp -s "$work/original" "$sibling"; then
+	_ok "guarded boot request contains the exact bytes"
+else
+	_fail "boot-request transaction differs"
+fi
+
+wait_file "$capture" || _fail "DNS-shaped status signal was not captured"
+kill "$listener" 2>/dev/null || true
+wait "$listener" 2>/dev/null || true
+listener=
+if test "$(wc -c < "$capture")" -eq 116; then
+	_ok "captured one exact 116-byte status datagram"
+else
+	_fail "status datagram length is wrong"
+fi
+header=$(dd if="$capture" bs=1 count=12 2>/dev/null | xxd -p)
+body=$(dd if="$capture" bs=1 skip=17 count=40 2>/dev/null)
+tag=$(dd if="$capture" bs=1 skip=58 count=32 2>/dev/null)
+tail=$(dd if="$capture" bs=1 skip=90 count=26 2>/dev/null | xxd -p)
+if test "$header" = 123401000001000000000000; then
+	_ok "independent decoder found one TXT query"
+else
+	_fail "DNS header differs"
+fi
+if test "$body" = 0101010203040506070800000000000000010200; then
+	_ok "visible session, sequence, and ready status decoded"
+else
+	_fail "authenticated status body differs"
+fi
+if test "$tail" = 0c726f6f746b69746c696e6773076578616d706c650000100001; then
+	_ok "reserved suffix and TXT/IN question decoded"
+else
+	_fail "DNS question differs"
+fi
+
+key_hex=a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf
+inner_pad=''
+outer_pad=''
+index=0
+while test "$index" -lt 64; do
+	position=$((index * 2))
+	if test "$position" -lt "${#key_hex}"; then
+		start=$((position + 1)); end=$((position + 2))
+		byte=$(printf %s "$key_hex" | cut -c "$start-$end")
+	else byte=00; fi
+	inner_pad="$inner_pad$(printf '%02x' $((0x$byte ^ 0x36)))"
+	outer_pad="$outer_pad$(printf '%02x' $((0x$byte ^ 0x5c)))"
+	index=$((index + 1))
+done
+inner=$({ printf %s "$inner_pad" | xxd -r -p; printf %s "$body" | xxd -r -p; } | sha256sum | cut -d ' ' -f 1)
+expected=$({ printf %s "$outer_pad" | xxd -r -p; printf %s "$inner" | xxd -r -p; } | sha256sum | cut -c 1-32)
+if test "$tag" = "$expected"; then
+	_ok "independent HMAC verified the status"
+else
+	_fail "status tag failed verification"
+fi
+
+unload rootkitlings
+if wait_file "$work/server/eof"; then
+	_ok "unload cancelled blocked receive and released the socket"
+else
+	_fail "blocked receive remained owned"
+fi
+wait "$fixture_pid" || _fail "secure peer fixture failed"
+fixture_pid=
+assert_absent "$status"
+assert_absent /proc/rootkitlings
+assert_absent /proc/rootkitlings_events
+assert_absent /proc/rootkitlings_evidence
+if cmp -s "$work/original" "$target" && test ! -e "$sibling"; then
+	_ok "unload restored the boot request and removed its sibling"
+else
+	_fail "unload left a boot-request edit"
+fi
+workers=0
+for comm in /proc/[0-9]*/comm; do
+	test -r "$comm" || continue
+	case $(cat "$comm") in rkling_core|rkling_agent) workers=$((workers + 1)) ;; esac
+done
+if test "$workers" -eq 0; then
+	_ok "unload left no resident worker"
+else
+	_fail "unload left a resident worker"
+fi
+if dmesg | grep -Eqi '(BUG:|WARNING:|Oops:|KASAN:|UBSAN:|hung task)'; then
+	_fail "kernel log contains a fault report"
+else
+	_ok "kernel log is clean"
+fi
+summary

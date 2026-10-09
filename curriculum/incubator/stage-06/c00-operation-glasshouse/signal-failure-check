@@ -1,0 +1,52 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Status-signal rollback"
+root=/etc/modules-load.d
+target=$root/rootkitlings.conf
+sibling=$root/.rootkitlings.conf.rootkitlings
+loader=module_load_params
+
+cleanup()
+{
+	if test -d /sys/module/rootkitlings; then rmmod rootkitlings 2>/dev/null || true; fi
+	umount "$root" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+if ! command -v "$loader" >/dev/null 2>&1; then
+	loader=/tmp/rootkitlings-module-loader
+	sed -n '/^__ROOTKITLINGS_MODULE_LOADER__$/,$p' /check |
+		sed '1d' | busybox base64 -d | busybox gzip -d > "$loader"
+	chmod 0755 "$loader"
+fi
+mkdir -p "$root"
+mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
+chmod 0700 "$root"
+printf 'operator-original\n' > "$target"
+chmod 0600 "$target"
+cp "$target" /tmp/c00-original
+ifconfig lo 127.0.0.1 up
+
+attempt=1
+while test "$attempt" -le 2; do
+	if "$loader" /rootkitlings/rootkitlings.ko 5 \
+			"peer_port=47023 retry_base_ms=20 retry_max_ms=80 session_id=72623859790382856 signal_id=4660"; then
+		_ok "attempt $attempt returns EIO"
+	else
+		_fail "attempt $attempt returned the wrong error"
+	fi
+	assert_absent /sys/module/rootkitlings
+	assert_absent /proc/rootkitlings
+	assert_absent /proc/rootkitlings_events
+	assert_absent /proc/rootkitlings_evidence
+	assert_absent /proc/rootkitlings_agent
+	if cmp -s /tmp/c00-original "$target" && test ! -e "$sibling"; then
+		_ok "attempt $attempt restored the boot request"
+	else
+		_fail "attempt $attempt left a boot-request edit"
+	fi
+	attempt=$((attempt + 1))
+done
+summary

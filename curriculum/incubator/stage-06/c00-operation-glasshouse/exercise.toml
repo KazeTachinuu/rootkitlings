@@ -1,0 +1,140 @@
+schema_version = 2
+id = "authenticated-resident-agent"
+title = "Authenticate and independently verify the resident agent"
+stage = "authenticated-operations"
+kind = "capstone"
+status = "required"
+tradecraft = [
+  "lifecycle",
+  "control",
+  "execution",
+  "privilege",
+  "instrumentation",
+  "concealment",
+  "networking",
+  "persistence",
+  "cryptography",
+  "detection",
+]
+difficulty = "challenge"
+prerequisites = [
+  "remote-resident-agent",
+  "authenticated-encryption",
+  "authenticated-dns-signal",
+]
+teaches = ["adversarial-validation"]
+requires = [
+  "remote-agent-integration",
+  "tcp-length-framing",
+  "blocked-io-cancellation",
+  "fixed-command-grammar",
+  "compare-before-rollback",
+  "authenticated-encryption",
+  "aead-plaintext-gating",
+  "replay-resistant-state",
+  "sensitive-state-zeroization",
+  "authenticated-dns-signals",
+  "machine-readable-evidence-map",
+]
+
+[workspace]
+mode = "cumulative"
+files = [
+  "Kbuild",
+  "control/authorization.c",
+  "core/main.c",
+  "core/state.c",
+  "crypto/aead.c",
+  "crypto/aead_platform.c",
+  "crypto/auth_platform.c",
+  "execution/scheduler.c",
+  "execution/worker.c",
+  "include/aead.h",
+  "include/aead_platform.h",
+  "include/agent.h",
+  "include/agent_status.h",
+  "include/authenticated.h",
+  "include/authenticated_dns.h",
+  "include/dirent_filter.h",
+  "include/dns_query.h",
+  "include/framing.h",
+  "include/platform.h",
+  "include/protocol.h",
+  "include/rootkit.h",
+  "include/secure_control.h",
+  "include/status_signal.h",
+  "include/transaction.h",
+  "include/transport.h",
+  "instrumentation/dirent_filter.c",
+  "instrumentation/events.c",
+  "instrumentation/getdents_probe.c",
+  "instrumentation/return_probe.c",
+  "interface/agent_status.c",
+  "interface/evidence.c",
+  "interface/proc.c",
+  "message/authenticated.c",
+  "network/agent.c",
+  "network/framing.c",
+  "network/protocol.c",
+  "persistence/platform.c",
+  "persistence/transaction.c",
+  "privilege/credentials.c",
+  "security/control.c",
+  "signal/authenticated_dns.c",
+  "signal/status.c",
+  "transport/udp.c",
+  "wire/dns_query.c",
+]
+editable = [
+  "Kbuild",
+  "core/main.c",
+  "include/agent.h",
+  "include/framing.h",
+  "include/platform.h",
+  "network/agent.c",
+  "security/control.c",
+]
+build = "."
+baseline = "previous-milestone"
+module_artifact = "rootkitlings.ko"
+additions = "curriculum/incubator/stage-06/c00-operation-glasshouse/additions"
+
+[resources]
+readme = "curriculum/incubator/stage-06/c00-operation-glasshouse/README.md"
+check = "curriculum/incubator/stage-06/c00-operation-glasshouse/success-check"
+host_check = "curriculum/incubator/stage-06/c00-operation-glasshouse/host-check"
+hint = "curriculum/incubator/stage-06/c00-operation-glasshouse/hint"
+solution = "curriculum/incubator/stage-06/c00-operation-glasshouse/solution"
+
+[verification]
+timeout_seconds = 600
+capabilities = []
+tools = ["secure-agent-fixture", "module-load-params"]
+cleanup_required = true
+
+[[verification.cases]]
+id = "authenticated-agent"
+label = "Authenticated resident agent and status signal"
+expect_build = "pass"
+check = "curriculum/incubator/stage-06/c00-operation-glasshouse/success-check"
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "status-signal-rollback"
+label = "Status-signal failure rolls back the complete module"
+expect_build = "pass"
+check = "curriculum/incubator/stage-06/c00-operation-glasshouse/signal-failure-check"
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "14"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+check = ""
+build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "99"
