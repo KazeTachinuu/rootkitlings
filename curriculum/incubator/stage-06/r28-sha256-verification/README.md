@@ -52,7 +52,7 @@ Run:
 ./rootkitlings check
 ```
 
-The checker covers empty input, `"abc"`, binary inputs around the 64-byte SHA-256 block boundary, every input length through 513 bytes, every API and allocation failure, descriptor overflow boundaries, unchanged outputs, mismatch positions, an alternative implementation, hostile mutants, module-load rollback, reload, and clean guest logs.
+The checker covers published NIST examples, independently checked binary vectors around the 64-byte SHA-256 block boundary, every input length through 513 bytes, every API and allocation failure, descriptor overflow boundaries, unchanged outputs, mismatch positions, an alternative implementation, hostile mutants, module-load rollback, reload, and clean guest logs.
 
 ## Scope
 

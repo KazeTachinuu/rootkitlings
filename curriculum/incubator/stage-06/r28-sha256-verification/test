@@ -22,9 +22,24 @@ grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
 	printf '[x] pinned kernel build is not configured for GCC\n' >&2
 	exit 1
 }
-for command in gcc make nm; do
+for command in gcc make nm python3; do
 	command -v "$command" >/dev/null || { printf '[x] %s is required\n' "$command" >&2; exit 1; }
 done
+
+assert_clean_tree()
+{
+	local artifact
+	artifact=$(find "$HERE" -type f \( -name '*.o' -o -name '*.ko' -o \
+		-name '*.mod' -o -name '*.mod.c' -o -name 'modules.order' -o \
+		-name 'Module.symvers' -o -name '.*.cmd' \) -print -quit)
+	[[ -z $artifact ]] || {
+		printf '[x] generated artifact escaped into the lesson tree: %s\n' \
+			"$artifact" >&2
+		exit 1
+	}
+}
+
+assert_clean_tree
 for symbol in crypto_alloc_shash crypto_shash_digest crypto_destroy_tfm \
 		__crypto_memneq; do
 	awk -v symbol="$symbol" '$2 == symbol { found = 1 } END { exit !found }' \
@@ -41,6 +56,8 @@ if command -v shellcheck >/dev/null; then
 	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
 	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check.in"
 fi
+python3 "$HERE/fixtures/host/vector_oracle.py" \
+	"$HERE/solution/tests/selftest.c"
 
 mapfile -t changed_files < <(
 	diff -qr "$HERE/template" "$HERE/solution" |
@@ -114,6 +131,10 @@ build_mutant wrapped-descriptor \
 build_mutant short-descriptor \
 	's/sizeof(\*desc) + context_size/context_size/'
 build_mutant first-byte-compare 's/sizeof(digest),/1,/'
+build_mutant ignored-comparator-result \
+	'/\*matches = !api->crypto_memneq/,+1c\
+\t(void)api->crypto_memneq(digest, expected, sizeof(digest), context);\
+\t*matches = !memcmp(digest, expected, sizeof(digest));'
 build_mutant descriptor-leak '/api->free_descriptor(desc, context);/d'
 build_mutant transform-leak '/api->crypto_free_shash(tfm, context);/d'
 
@@ -166,5 +187,7 @@ run_guest "$scratch/kernel-only-check" \
 	"$scratch/kernel-only-build/rootkitlings.ko" kernel-only
 
 "$HERE/../r27-protection-property-selection/test"
+
+assert_clean_tree
 
 printf '[+] R28 SHA-256 verification passed\n'

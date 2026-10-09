@@ -30,6 +30,8 @@ struct fake_state {
 	unsigned long digests;
 	unsigned long comparisons;
 	unsigned long compared_bytes;
+	bool override_comparison;
+	int comparison_result;
 	int algorithm_ok;
 };
 
@@ -168,6 +170,8 @@ static int fake_memneq(const void *left, const void *right, size_t length,
 		difference |= a[index] ^ b[index];
 		state->compared_bytes++;
 	}
+	if (state->override_comparison)
+		return state->comparison_result;
 	return difference != 0;
 }
 
@@ -211,7 +215,9 @@ static void check_success_boundaries(void)
 		       "every bounded input length must hash");
 		expect(!memcmp(output, wanted, sizeof(wanted)),
 		       "committed digest must match the crypto operation");
-		expect(output[RK_SHA256_DIGEST_SIZE] == 0xa5,
+		expect(!memcmp(output + RK_SHA256_DIGEST_SIZE,
+			       (unsigned char[8]) { 0xa5, 0xa5, 0xa5, 0xa5,
+						    0xa5, 0xa5, 0xa5, 0xa5 }, 8),
 		       "digest stops after 32 bytes");
 		expect(state.algorithm_ok && state.tfm_allocations == 1 &&
 		       state.allocations == 1 && state.digests == 1 &&
@@ -423,12 +429,46 @@ static void check_comparison_positions(void)
 	}
 }
 
+static void check_comparison_result_is_authoritative(void)
+{
+	unsigned char input[65];
+	unsigned char expected[RK_SHA256_DIGEST_SIZE];
+	unsigned char altered[RK_SHA256_DIGEST_SIZE];
+	struct fake_state state;
+	bool matches;
+
+	fill(input, sizeof(input), 11);
+	fake_hash(input, sizeof(input), expected);
+	memcpy(altered, expected, sizeof(altered));
+	altered[17] ^= 0x80;
+
+	reset_state(&state);
+	state.override_comparison = true;
+	state.comparison_result = 1;
+	matches = true;
+	expect(!rk_sha256_verify_with(&fake_api, &state, input, sizeof(input),
+				      expected, &matches) && !matches,
+	       "verification publishes the supplied comparator result");
+	expect(state.comparisons == 1 &&
+	       state.compared_bytes == RK_SHA256_DIGEST_SIZE,
+	       "forced mismatch still compares all digest bytes");
+
+	reset_state(&state);
+	state.override_comparison = true;
+	state.comparison_result = 0;
+	matches = false;
+	expect(!rk_sha256_verify_with(&fake_api, &state, input, sizeof(input),
+				      altered, &matches) && matches,
+	       "verification does not recompute the comparator decision");
+}
+
 int main(void)
 {
 	check_success_boundaries();
 	check_failures();
 	check_descriptor_boundaries();
 	check_comparison_positions();
+	check_comparison_result_is_authoritative();
 	printf("[+] %lu SHA-256 lifecycle assertions passed\n", assertions);
 	return EXIT_SUCCESS;
 }

@@ -5,6 +5,11 @@
 #include "selftest.h"
 #include "sha256.h"
 
+/*
+ * Frozen known-answer values.  The empty and "abc" cases are the NIST
+ * examples; the remaining values are independently checked by the lesson's
+ * hashlib oracle before any module is built or loaded.
+ */
 static const unsigned char expected[][RK_SHA256_DIGEST_SIZE] = {
 	{ 0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
 	  0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
