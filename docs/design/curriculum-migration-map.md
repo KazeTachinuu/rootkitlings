@@ -480,12 +480,25 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
 
 #### R22 - Mutate a writable packet and repair its checksum state
 
-- Teaches: copy-on-write, reacquiring pointers, length consistency, checksum and
-  offload metadata, and narrow scope.
-- Produces: one controlled packet redirection.
+- Teaches: exact writable-prefix preparation, signed skb-relative offset
+  arithmetic, pointer reacquisition after possible storage relocation,
+  IPv4 UDP checksum-zero semantics, incremental checksum repair, partial and
+  complete checksum state, and flow-hash invalidation.
+- Produces: one controlled one-way loopback UDP destination-port rewrite.
 - Requires: R21.
-- Defensive evidence: exact target is redirected; unrelated traffic is unchanged.
-- Current source: L44.
+- Scope: this is not general NAT; the address and loopback route remain unchanged,
+  the hook precedes conntrack, and the lesson supplies no reverse translation,
+  route lookup, or XFRM policy handling.
+- Failure policy: unsupported checksum, conntrack, XFRM, GSO, stale-view, geometry,
+  or writable-preparation states leave header bytes unchanged and return
+  `NF_ACCEPT`; storage geometry may still have been pulled or copied by
+  `skb_ensure_writable()`.
+- Defensive evidence: real linear, page-fragment, `frag_list`, cloned, partial,
+  complete, zero-checksum, checksum-mangled-zero, hash, stale-view, overflow, GSO,
+  and unsupported-state fixtures; exact binary loopback redirection; unmatched and
+  alternate-address controls; concurrency; rollback; unload; reload; and clean logs.
+- Current source: L44, with its one-assignment task, duplicated parsing, fixed-port
+  logic, inaccurate routing wording, and unsupported capture claim retired.
 
 #### R23 - Own a kernel socket from creation through release
 
