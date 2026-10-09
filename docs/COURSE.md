@@ -2,8 +2,8 @@
 
 Rootkitlings teaches Linux kernel development by building a rootkit one
 observable mechanism at a time.
-The required route contains 31 lessons, four integration milestones, and one
-capstone.
+The required route contains 31 lessons, four integration labs, and one final
+project.
 
 ## Dependency spine
 
@@ -19,12 +19,12 @@ module lifecycle
     `-- packet boundaries, sockets, framing, and guarded file updates
         `-- M03 remote resident agent
             `-- authenticated messages, encryption, and DNS-shaped signals
-                `-- C00 authenticated resident agent
+                `-- C00 complete rootkit
 ```
 
 Each lesson teaches one reusable mechanism through success, rejection, and
 cleanup evidence.
-Milestones integrate only mechanisms already practiced.
+Integration labs combine only mechanisms already practiced.
 
 The exact graph is metadata, not prose:
 

@@ -6,7 +6,7 @@ begin "Omit the resident worker and map the affected view"
 
 mode=${1:-concealment-evidence}
 case $mode in
-	concealment-evidence|remote-agent|authenticated-agent) ;;
+	concealment-evidence|remote-agent|complete-rootkit) ;;
 	*) _fail "unknown cumulative check mode: $mode" ;;
 esac
 
@@ -212,7 +212,7 @@ trap cleanup EXIT INT TERM
 
 load_cumulative()
 {
-	if test "$mode" = authenticated-agent; then
+	if test "$mode" = complete-rootkit; then
 		load rootkitlings.ko peer_port=47023 retry_base_ms=5000 \
 			retry_max_ms=5000 session_id=72623859790382856 signal_id=4660
 	elif test "$mode" = remote-agent; then

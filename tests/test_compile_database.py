@@ -108,7 +108,7 @@ class CompileDatabaseTests(unittest.TestCase):
     def test_cumulative_source_includes_provider_headers(self) -> None:
         root = Path(__file__).resolve().parent.parent
         catalog = Catalog(root)
-        source = root / "curriculum/C00-authenticated-resident-agent/solution/security/control.c"
+        source = root / "curriculum/C00-complete-rootkit/solution/security/control.c"
         expected = root / "curriculum/M03-remote-resident-agent/starter/include"
 
         includes = source_include_directories(source, root, catalog)

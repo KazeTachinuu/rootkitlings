@@ -6,7 +6,7 @@ expected_errno=${1:-@EXPECTED_ERRNO@}
 label=${2:-@LABEL@}
 mode=${3:-remote-agent}
 case $mode in
-	remote-agent|authenticated-agent) ;;
+	remote-agent|complete-rootkit) ;;
 	*) _fail "unknown cumulative check mode: $mode" ;;
 esac
 begin "$label"
@@ -39,7 +39,7 @@ iterate_before=$(grep -c 'iterate_dir' /sys/kernel/debug/kprobes/list || true)
 attempt=1
 while test "$attempt" -le 2; do
 	parameters="peer_port=47023 retry_base_ms=20 retry_max_ms=80"
-	if test "$mode" = authenticated-agent; then
+	if test "$mode" = complete-rootkit; then
 		parameters="$parameters session_id=72623859790382856 signal_id=4660"
 	fi
 	if module_load_params /rootkitlings/rootkitlings.ko "$expected_errno" \

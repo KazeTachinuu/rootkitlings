@@ -149,7 +149,7 @@ def label(item):
 def kind_label(item):
     return {
         'lesson': 'Lesson',
-        'milestone': 'Milestone',
+        'milestone': 'Integration lab',
         'capstone': 'Capstone',
     }.get(item.kind, 'Exercise')
 

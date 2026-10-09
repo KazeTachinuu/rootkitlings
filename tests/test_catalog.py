@@ -78,7 +78,7 @@ class GeneratedSerialTests(unittest.TestCase):
         )
 
     def test_unique_capstone_prefix_resolves_c00(self) -> None:
-        self.assertEqual("authenticated-resident-agent", self.catalog.resolve("C0").id)
+        self.assertEqual("complete-rootkit", self.catalog.resolve("C0").id)
 
     def test_catalog_query_and_export_resolve_default_module_artifact(self) -> None:
         query = subprocess.run(

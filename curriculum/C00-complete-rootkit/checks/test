@@ -12,7 +12,7 @@ RESIDENT_CORE=$HERE/../../M00-controlled-resident-core
 AUTHENTICATED_ENCRYPTION=$HERE/../../L29-authenticated-encryption
 AUTHENTICATED_SIGNAL=$HERE/../../L30-authenticated-dns-signal
 AUTHENTICATED_MESSAGE=$HERE/../../L28-authenticated-replay-safe-message
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-authenticated-resident-agent.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-complete-rootkit.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || { printf '[x] capstone requires x86_64\n' >&2; exit 1; }
@@ -250,4 +250,4 @@ run_guest "$scratch/concealment-regression" "$scratch/solution/rootkitlings.ko" 
 "$AUTHENTICATED_ENCRYPTION/checks/test"
 "$AUTHENTICATED_SIGNAL/checks/test"
 
-printf '[+] authenticated-resident-agent passed\n'
+printf '[+] complete-rootkit passed\n'

@@ -1,6 +1,7 @@
-# Complete and verify the course rootkit
+# Build the complete rootkit
 
-This final challenge integrates the course mechanisms into one module:
+This final project builds one working rootkit from the course's completed
+subsystems:
 
 ```text
 local control ----> authorization ----> credential action
@@ -12,6 +13,9 @@ process filter ------> resident core <----> guarded boot request
 TCP peer <--------> AEAD framed agent ----> authenticated ready signal
 ```
 
+The result has local control, a bounded privilege action, syscall telemetry,
+process-view filtering, a guarded boot request, authenticated remote control,
+and an authenticated status signal.
 Every startup step needs rollback, and unload must release everything.
 
 The remote agent accepts only `PING`, `INFO`, `MARK label`, and `QUIT`.

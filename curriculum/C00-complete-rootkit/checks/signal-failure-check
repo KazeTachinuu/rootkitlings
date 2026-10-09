@@ -26,7 +26,7 @@ mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
 chmod 0700 "$root"
 printf 'operator-original\n' > "$target"
 chmod 0600 "$target"
-cp "$target" /tmp/authenticated-resident-agent-original
+cp "$target" /tmp/complete-rootkit-original
 ifconfig lo 127.0.0.1 up
 
 attempt=1
@@ -42,7 +42,7 @@ while test "$attempt" -le 2; do
 	assert_absent /proc/rootkitlings_events
 	assert_absent /proc/rootkitlings_evidence
 	assert_absent /proc/rootkitlings_agent
-	if cmp -s /tmp/authenticated-resident-agent-original "$target" &&
+	if cmp -s /tmp/complete-rootkit-original "$target" &&
 		test ! -e "$sibling"; then
 		_ok "attempt $attempt restored the boot request"
 	else

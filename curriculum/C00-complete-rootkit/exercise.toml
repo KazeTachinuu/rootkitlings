@@ -1,7 +1,7 @@
 schema_version = 2
-id = "authenticated-resident-agent"
-title = "Complete and verify the course rootkit"
-stage = "authenticated-operations"
+id = "complete-rootkit"
+title = "Build the complete rootkit"
+stage = "final-project"
 kind = "capstone"
 status = "required"
 tradecraft = [
@@ -95,14 +95,14 @@ editable = [
 ]
 build = "."
 baseline = "previous-milestone"
-additions = "curriculum/C00-authenticated-resident-agent/starter"
+additions = "curriculum/C00-complete-rootkit/starter"
 
 [resources]
-readme = "curriculum/C00-authenticated-resident-agent/README.md"
-check = "curriculum/C00-authenticated-resident-agent/checks/success-check"
-host_check = "curriculum/C00-authenticated-resident-agent/checks/host-check"
-hint = "curriculum/C00-authenticated-resident-agent/hint"
-solution = "curriculum/C00-authenticated-resident-agent/solution"
+readme = "curriculum/C00-complete-rootkit/README.md"
+check = "curriculum/C00-complete-rootkit/checks/success-check"
+host_check = "curriculum/C00-complete-rootkit/checks/host-check"
+hint = "curriculum/C00-complete-rootkit/hint"
+solution = "curriculum/C00-complete-rootkit/solution"
 
 [verification]
 timeout_seconds = 600
@@ -125,7 +125,7 @@ cleanup_required = true
 id = "complete-rootkit"
 label = "Complete course rootkit"
 expect_build = "pass"
-check = "curriculum/C00-authenticated-resident-agent/checks/success-check"
+check = "curriculum/C00-complete-rootkit/checks/success-check"
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
@@ -135,7 +135,7 @@ id = "concealment-evidence-regression"
 label = "Process view, evidence, and local control"
 expect_build = "pass"
 check = "curriculum/M02-concealment-evidence-map/checks/success-check"
-check_arguments = ["authenticated-agent"]
+check_arguments = ["complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
@@ -145,7 +145,7 @@ id = "authorized-actions-regression"
 label = "Credential action and syscall telemetry"
 expect_build = "pass"
 check = "curriculum/M01-authorized-actions-telemetry/checks/success-check"
-check_arguments = ["authenticated-agent"]
+check_arguments = ["complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
@@ -155,7 +155,7 @@ id = "preflight-rejection"
 label = "Preflight rejection"
 expect_build = "pass"
 check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
-check_arguments = ["125", "Preflight", "authenticated-agent"]
+check_arguments = ["125", "Preflight", "complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "1"
@@ -165,7 +165,7 @@ id = "allocation-rejection"
 label = "State allocation rejection"
 expect_build = "pass"
 check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
-check_arguments = ["12", "Allocation", "authenticated-agent"]
+check_arguments = ["12", "Allocation", "complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "2"
@@ -175,7 +175,7 @@ id = "control-publication-rejection"
 label = "Control publication rejection"
 expect_build = "pass"
 check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
-check_arguments = ["12", "Control publication", "authenticated-agent"]
+check_arguments = ["12", "Control publication", "complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "3"
@@ -185,7 +185,7 @@ id = "worker-start-rejection"
 label = "Worker start rejection"
 expect_build = "pass"
 check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
-check_arguments = ["4", "Worker", "authenticated-agent"]
+check_arguments = ["4", "Worker", "complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "4"
@@ -195,7 +195,7 @@ id = "authorization-start-rejection"
 label = "Authorization startup rejection"
 expect_build = "pass"
 check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
-check_arguments = ["4", "Authorization startup", "authenticated-agent"]
+check_arguments = ["4", "Authorization startup", "complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "5"
@@ -205,7 +205,7 @@ id = "missing-return-target"
 label = "Missing rmdir target"
 expect_build = "pass"
 check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
-check_arguments = ["2", "Missing rmdir target", "authenticated-agent"]
+check_arguments = ["2", "Missing rmdir target", "complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "6"
@@ -215,7 +215,7 @@ id = "events-publication-rejection"
 label = "Events publication rejection"
 expect_build = "pass"
 check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
-check_arguments = ["12", "Events publication", "authenticated-agent"]
+check_arguments = ["12", "Events publication", "complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "7"
@@ -225,7 +225,7 @@ id = "credential-prepare-rejection"
 label = "Credential preparation rejection"
 expect_build = "pass"
 check = "curriculum/M03-remote-resident-agent/checks/action-failure-check.in"
-check_arguments = ["12", "Credential preparation", "authenticated-agent"]
+check_arguments = ["12", "Credential preparation", "complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "8"
@@ -235,7 +235,7 @@ id = "credential-cancel-rejection"
 label = "Credential cancellation"
 expect_build = "pass"
 check = "curriculum/M03-remote-resident-agent/checks/action-failure-check.in"
-check_arguments = ["125", "Credential cancellation", "authenticated-agent"]
+check_arguments = ["125", "Credential cancellation", "complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "9"
@@ -245,7 +245,7 @@ id = "missing-iterate-target"
 label = "Missing iterate_dir target"
 expect_build = "pass"
 check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
-check_arguments = ["2", "Missing iterate_dir target", "authenticated-agent"]
+check_arguments = ["2", "Missing iterate_dir target", "complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "10"
@@ -255,7 +255,7 @@ id = "evidence-publication-rejection"
 label = "Evidence publication rejection"
 expect_build = "pass"
 check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
-check_arguments = ["12", "Evidence publication", "authenticated-agent"]
+check_arguments = ["12", "Evidence publication", "complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "11"
@@ -265,7 +265,7 @@ id = "agent-worker-rejection"
 label = "Agent worker creation rejection"
 expect_build = "pass"
 check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
-check_arguments = ["4", "Agent worker creation", "authenticated-agent"]
+check_arguments = ["4", "Agent worker creation", "complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "12"
@@ -275,7 +275,7 @@ id = "agent-status-publication-rejection"
 label = "Agent status publication rejection"
 expect_build = "pass"
 check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
-check_arguments = ["12", "Agent status publication", "authenticated-agent"]
+check_arguments = ["12", "Agent status publication", "complete-rootkit"]
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "13"
@@ -284,7 +284,7 @@ ROOTKITLINGS_FAIL_POINT = "13"
 id = "status-signal-rollback"
 label = "Status-signal failure rolls back the complete module"
 expect_build = "pass"
-check = "curriculum/C00-authenticated-resident-agent/checks/signal-failure-check"
+check = "curriculum/C00-complete-rootkit/checks/signal-failure-check"
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "14"

@@ -2,13 +2,13 @@
 # shellcheck source=/dev/null
 . /vm/checks/lib.sh
 
-begin "Authenticated resident agent"
+begin "Complete rootkit"
 
 root=/etc/modules-load.d
 target=$root/rootkitlings.conf
 sibling=$root/.rootkitlings.conf.rootkitlings
 status=/proc/rootkitlings_agent
-work=/tmp/rootkitlings-authenticated-resident-agent
+work=/tmp/rootkitlings-complete-rootkit
 helper=secure_agent_fixture
 capture=$work/dns-query
 fixture_pid=

@@ -173,4 +173,4 @@ module_init(rk_init);
 module_exit(rk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings authenticated remote resident agent");
+MODULE_DESCRIPTION("Rootkitlings complete course rootkit");

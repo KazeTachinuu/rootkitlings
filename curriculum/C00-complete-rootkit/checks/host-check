@@ -8,7 +8,7 @@ build=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found"
 module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 remote_agent=$here/../../M03-remote-resident-agent
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-authenticated-resident-agent-host.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-complete-rootkit-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
