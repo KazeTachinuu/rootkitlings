@@ -203,7 +203,7 @@ run_guest()
 {
 	local check=$1 module=$2 label=$3 output
 	if ! output=$("$HERE/../../../../vm/boot" --check "$check" \
-		"$module" --tool tools/module_load_test 2>&1); then
+		"$module" --tool vm/tools/module_load_test 2>&1); then
 		printf '%s\n' "$output" >&2
 		printf '[x] guest rejected %s\n' "$label" >&2
 		exit 1

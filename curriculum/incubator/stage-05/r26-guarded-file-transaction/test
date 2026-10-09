@@ -139,11 +139,11 @@ run_guest()
 }
 
 run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" solution \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 run_guest "$HERE/success-check" \
 	"$scratch/alternate-build/rootkitlings.ko" alternate \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 run_guest "$HERE/failure-check" "$scratch/template/rootkitlings.ko" template \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 
 printf '[+] R26 guarded file transaction passed\n'

@@ -93,7 +93,7 @@ run_guest()
 
 run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" solution
 run_guest "$HERE/failure-check" "$scratch/template/rootkitlings.ko" template \
-	--tool vm/tools/module_load_test
+	--tool vm/vm/tools/module_load_test
 
 build_mutant()
 {
@@ -120,7 +120,7 @@ mutate_offset_zero()
 }
 build_mutant offset-zero mutate_offset_zero
 run_guest "$HERE/failure-check" "$scratch/offset-zero/rootkitlings.ko" \
-	"zero network offset" --tool vm/tools/module_load_test
+	"zero network offset" --tool vm/vm/tools/module_load_test
 
 mutate_raw_len()
 {
@@ -128,7 +128,7 @@ mutate_raw_len()
 }
 build_mutant raw-len mutate_raw_len
 run_guest "$HERE/failure-check" "$scratch/raw-len/rootkitlings.ko" \
-	"raw skb length" --tool vm/tools/module_load_test
+	"raw skb length" --tool vm/vm/tools/module_load_test
 
 mutate_unreadable()
 {
@@ -136,7 +136,7 @@ mutate_unreadable()
 }
 build_mutant unreadable mutate_unreadable
 run_guest "$HERE/failure-check" "$scratch/unreadable/rootkitlings.ko" \
-	"ignored unreadable fragments" --tool vm/tools/module_load_test
+	"ignored unreadable fragments" --tool vm/vm/tools/module_load_test
 
 mutate_early_output()
 {
@@ -145,7 +145,7 @@ mutate_early_output()
 }
 build_mutant early-output mutate_early_output
 run_guest "$HERE/failure-check" "$scratch/early-output/rootkitlings.ko" \
-	"early output mutation" --tool vm/tools/module_load_test
+	"early output mutation" --tool vm/vm/tools/module_load_test
 
 mutate_prefix_only()
 {
@@ -155,7 +155,7 @@ mutate_prefix_only()
 }
 build_mutant prefix-only mutate_prefix_only
 run_guest "$HERE/failure-check" "$scratch/prefix-only/rootkitlings.ko" \
-	"IPv4-prefix-only adapter" --tool vm/tools/module_load_test
+	"IPv4-prefix-only adapter" --tool vm/vm/tools/module_load_test
 
 mutate_last_failure_byte()
 {
@@ -163,7 +163,7 @@ mutate_last_failure_byte()
 }
 build_mutant last-failure-byte mutate_last_failure_byte
 run_guest "$HERE/failure-check" "$scratch/last-failure-byte/rootkitlings.ko" \
-	"partial failure-output mutation" --tool vm/tools/module_load_test
+	"partial failure-output mutation" --tool vm/vm/tools/module_load_test
 
 mutate_direct_data()
 {
@@ -187,7 +187,7 @@ PY
 }
 build_mutant direct-data mutate_direct_data
 run_guest "$HERE/failure-check" "$scratch/direct-data/rootkitlings.ko" \
-	"direct linear-data access" --tool vm/tools/module_load_test
+	"direct linear-data access" --tool vm/vm/tools/module_load_test
 
 build_mutant plain-helper \
 	sed -i 's/skb_header_pointer_careful/skb_header_pointer/'

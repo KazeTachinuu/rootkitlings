@@ -43,14 +43,14 @@ for compiler in gcc clang; do
 	}
 	"$compiler" -std=c11 -Wall -Wextra -Werror -pthread -static \
 		-o "$scratch/cred_trigger_test.$compiler" \
-		"$HERE/../../../../tools/cred_trigger_test.c"
+		"$HERE/../../../../vm/tools/cred_trigger_test.c"
 done
-make -s -C "$HERE/../../../.." -B tools/cred_trigger_test
+make -s -C "$HERE/../../../.." -B vm/tools/cred_trigger_test
 
 legacy_target=$scratch/legacy-target
 : > "$legacy_target"
 legacy_expected="uid=$(id -ru) euid=$(id -u)"
-legacy_output=$("$HERE/../../../../tools/cred_trigger_test" \
+legacy_output=$("$HERE/../../../../vm/tools/cred_trigger_test" \
 	"$legacy_target" root)
 [[ $legacy_output == "$legacy_expected" ]] || {
 	printf '[x] legacy trigger output: expected %s, got %s\n' \
@@ -230,7 +230,7 @@ run_guest()
 	local check_script=$1 module=$2 output
 	shift 2
 	if ! output=$("$HERE/../../../../vm/boot" --check "$check_script" \
-		--tool tools/run_as "$@" \
+		--tool vm/tools/run_as "$@" \
 		"$module" 2>&1); then
 		printf '%s\n' "$output" >&2
 		printf '[x] disposable guest did not complete\n' >&2
@@ -244,16 +244,16 @@ run_guest()
 }
 
 run_guest "$HERE/../../stage-01/r04-proc-publication/failure-ecanceled-check" \
-	"$scratch/preflight/rootkitlings.ko" --tool tools/module_load_test
+	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
 run_guest "$HERE/../../stage-01/r04-proc-publication/failure-enomem-check" \
-	"$scratch/allocation/rootkitlings.ko" --tool tools/module_load_test
+	"$scratch/allocation/rootkitlings.ko" --tool vm/tools/module_load_test
 run_guest "$HERE/../../stage-01/r04-proc-publication/failure-after-state-check" \
-	"$scratch/publication/rootkitlings.ko" --tool tools/module_load_test
+	"$scratch/publication/rootkitlings.ko" --tool vm/tools/module_load_test
 run_guest "$scratch/prepare-check" \
 	"$scratch/credential_prepare/rootkitlings.ko" \
-	--tool tools/cred_trigger_test --tool tools/proc_write_test
+	--tool vm/tools/cred_trigger_test --tool vm/tools/proc_write_test
 run_guest "$scratch/cancel-check" \
 	"$scratch/credential_cancel/rootkitlings.ko" \
-	--tool tools/cred_trigger_test --tool tools/proc_write_test
+	--tool vm/tools/cred_trigger_test --tool vm/tools/proc_write_test
 run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
-	--tool tools/cred_trigger_test --tool tools/proc_write_test
+	--tool vm/tools/cred_trigger_test --tool vm/tools/proc_write_test

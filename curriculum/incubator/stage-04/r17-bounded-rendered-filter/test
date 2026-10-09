@@ -6,7 +6,7 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$HERE/../../../../scripts/lesson-env"
 ROOT=$ROOTKITLINGS_ROOT
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r17-test.XXXXXX")
-tool=$ROOT/tools/read_result_test
+tool=$ROOT/vm/tools/read_result_test
 trap 'rm -rf -- "$scratch"; rm -f -- "$tool"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || {
@@ -154,7 +154,7 @@ if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
 fi
 
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -static -pthread \
-	"$ROOT/tools/read_result_test.c" -o "$tool"
+	"$ROOT/vm/tools/read_result_test.c" -o "$tool"
 
 sed -e 's/@EXPECTED_ERRNO@/12/g' \
 	-e 's/@LABEL@/Proc publication rollback/g' \
@@ -182,19 +182,19 @@ run_guest()
 }
 
 run_guest "$HERE/../../stage-01/r04-proc-publication/failure-ecanceled-check" \
-	"$scratch/preflight/rootkitlings.ko" --tool tools/module_load_test
+	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
 run_guest "$HERE/missing-path-check" "$scratch/success/rootkitlings.ko" \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 run_guest "$scratch/publication-check" "$scratch/publication/rootkitlings.ko" \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 run_guest "$scratch/missing-check" "$scratch/missing/rootkitlings.ko" \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 run_guest "$HERE/copy-failure-check" "$scratch/copy-in/rootkitlings.ko" \
-	--tool tools/read_result_test
+	--tool vm/tools/read_result_test
 run_guest "$HERE/copy-failure-check" "$scratch/copy-out/rootkitlings.ko" \
-	--tool tools/read_result_test
+	--tool vm/tools/read_result_test
 run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
-	--tool tools/read_result_test
+	--tool vm/tools/read_result_test
 
 "$HERE/../../stage-03/r14-return-aware-syscall-telemetry/test"
 "$HERE/../r15-cross-view-evidence/test"

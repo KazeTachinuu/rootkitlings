@@ -72,10 +72,10 @@ run_guest()
 }
 
 run_guest "$HERE/../../stage-01/r04-proc-publication/failure-ecanceled-check" \
-	"$scratch/preflight/rootkitlings.ko" --tool tools/module_load_test
+	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
 run_guest "$HERE/../../stage-01/r04-proc-publication/failure-enomem-check" \
-	"$scratch/allocation/rootkitlings.ko" --tool tools/module_load_test
+	"$scratch/allocation/rootkitlings.ko" --tool vm/tools/module_load_test
 run_guest "$HERE/../../stage-01/r04-proc-publication/failure-after-state-check" \
-	"$scratch/publication/rootkitlings.ko" --tool tools/module_load_test
+	"$scratch/publication/rootkitlings.ko" --tool vm/tools/module_load_test
 run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
-	--tool tools/task_attribution_test
+	--tool vm/tools/task_attribution_test

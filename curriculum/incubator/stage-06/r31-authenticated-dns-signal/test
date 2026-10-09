@@ -208,9 +208,9 @@ guest()
 guest "$here/success-check" "$scratch/solution/rootkitlings.ko" solution
 guest "$here/success-check" "$scratch/alternate/rootkitlings.ko" alternate
 guest "$here/failure-check" "$scratch/template/rootkitlings.ko" template \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 guest "$here/invalid-parameter-check" "$scratch/solution/rootkitlings.ko" \
-	invalid-status --tool tools/module_load_params
+	invalid-status --tool vm/tools/module_load_params
 for point in 1 2 3; do
 	case $point in
 		1) expected=12 ;;
@@ -222,7 +222,7 @@ for point in 1 2 3; do
 	chmod 0755 "$scratch/failure-check-$point"
 	guest "$scratch/failure-check-$point" \
 		"$scratch/fail-$point/rootkitlings.ko" "failure point $point" \
-		--tool tools/module_load_test
+		--tool vm/tools/module_load_test
 done
 
 for dependency in \

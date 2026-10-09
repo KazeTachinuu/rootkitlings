@@ -34,7 +34,7 @@ for command in gcc timeout nm objdump strings; do
 done
 gcc -DRK_STANDALONE_HELPER -std=c11 -Wall -Wextra -Werror -pedantic \
 	-fsanitize=address,undefined -fno-omit-frame-pointer \
-	"$learner" "$root/tools/read_result_test.c" -o "$scratch/helper"
+	"$learner" "$root/vm/tools/read_result_test.c" -o "$scratch/helper"
 ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 timeout 15 "$scratch/helper" \
 	> "$scratch/helper.log" 2>&1 || {
 		cat "$scratch/helper.log" >&2

@@ -246,14 +246,14 @@ run_guest()
 }
 
 run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" \
-	solution --tool vm/tools/proc_read_test --tool vm/tools/packet_classifier_test
+	solution --tool vm/vm/tools/proc_read_test --tool vm/vm/tools/packet_classifier_test
 run_guest "$scratch/template-failure-check" \
-	"$scratch/template/rootkitlings.ko" template --tool vm/tools/module_load_test
+	"$scratch/template/rootkitlings.ko" template --tool vm/vm/tools/module_load_test
 run_guest "$scratch/register-failure-check" \
 	"$scratch/register-failure/rootkitlings.ko" registration-failure \
-	--tool vm/tools/module_load_test
+	--tool vm/vm/tools/module_load_test
 run_guest "$scratch/proc-failure-check" \
 	"$scratch/proc-failure/rootkitlings.ko" proc-failure \
-	--tool vm/tools/module_load_test
+	--tool vm/vm/tools/module_load_test
 
 printf '[+] R21 validated packet classification passed\n'

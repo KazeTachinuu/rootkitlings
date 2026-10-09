@@ -204,9 +204,9 @@ run_guest "$HERE/success-check" \
 	"$scratch/alternate-build/rootkitlings.ko" alternate
 run_guest "$HERE/failure-check" \
 	"$scratch/kernel-only-behavior/rootkitlings.ko" kernel-only-behavior \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 run_guest "$HERE/failure-check" "$scratch/template/rootkitlings.ko" template \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 
 "$HERE/../r18-hostile-packet-lengths/test"
 

@@ -74,5 +74,5 @@ run_guest()
 }
 
 run_guest "$HERE/failed-guest-check" "$scratch/rejected/rootkitlings.ko" \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 run_guest "$HERE/../support/module-lifecycle-check" "$scratch/success/rootkitlings.ko"

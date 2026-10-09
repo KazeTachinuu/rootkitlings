@@ -79,12 +79,12 @@ resolve_tools()
 	if (( ${#TOOLS[@]} == 0 )); then
 		return 0
 	fi
-	source_root=$(realpath -e -- "$ROOT_DIR/tools") || die "Tools directory not found"
+	source_root=$(realpath -e -- "$ROOT_DIR/vm/tools") || die "Tools directory not found"
 	for requested in "${TOOLS[@]}"; do
         [[ $requested != /* ]] || die "Tool path must be relative to the repository: $requested"
         case $requested in
-            tools/*) relative=${requested#tools/} ;;
-            */*) die "Tool path must be under tools/: $requested" ;;
+            vm/tools/*) relative=${requested#vm/tools/} ;;
+            */*) die "Tool path must be under vm/tools/: $requested" ;;
             *) relative=$requested ;;
         esac
         [[ -n $relative ]] || die "Tool path is empty"
@@ -97,17 +97,17 @@ resolve_tools()
 			[[ ! -L $candidate ]] || die "Tool path may not contain symlinks: $requested"
 		done
 		relatives+=("$relative")
-		targets+=("$WORK/tools/$relative")
+		targets+=("$WORK/tool-build/$relative")
 	done
 	env -i PATH="$PATH" LC_ALL=C LANG=C TZ=UTC CC=gcc HOSTCC=gcc \
-		make -C "$ROOT_DIR" --quiet TOOL_OUT="$WORK/tools" "${targets[@]}" ||
+		make -C "$ROOT_DIR" --quiet TOOL_OUT="$WORK/tool-build" "${targets[@]}" ||
 		die "Could not build the requested guest tools"
-	tools_root=$(realpath -e -- "$WORK/tools") || die "Tool build directory not found"
+	tools_root=$(realpath -e -- "$WORK/tool-build") || die "Tool build directory not found"
 	for relative in "${relatives[@]}"; do
 		candidate=$tools_root/$relative
 		resolved=$(realpath -e -- "$candidate" 2>/dev/null) || die "Unknown tool: $relative"
 		[[ $resolved == "$tools_root"/* && -f $resolved && -x $resolved && ! -L $candidate ]] ||
-			die "Tool is not a regular executable under tools/: $relative"
+			die "Tool is not a regular executable built from vm/tools/: $relative"
 		TOOL_PATHS+=("$resolved")
 	done
 }

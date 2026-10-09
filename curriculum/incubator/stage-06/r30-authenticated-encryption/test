@@ -49,7 +49,7 @@ mutant_perl over-publish 's@i < result_length; i\+\+\)\n\t\toutput\[i\] = work\[
 mutant_perl publish-on-failure 's@if \(error\)\n\t\tgoto out;\n\tfor \(size_t i = 0; i < result_length; i\+\+\)@if (false \&\& error)\n\t\tgoto out;\n\tfor (size_t i = 0; i < result_length; i++)@'
 mutant_perl free-transform-first 's@if \(request\)\n\t\tops->request_free\(request\);\n\tif \(tfm\)\n\t\tops->tfm_free\(tfm\);@if (tfm)\n\t\tops->tfm_free(tfm);\n\tif (request)\n\t\tops->request_free(request);@'
 
-guest(){ local check=$1 module=$2 label=$3 out; out=$("$here/../../../../vm/boot" --check "$check" "$module" --tool tools/module_load_test 2>&1) || { printf '%s\n[x] guest rejected %s\n' "$out" "$label" >&2; exit 1; }; printf '%s\n' "$out"; grep -Fq '[+] PASSED' <<<"$out"; }
+guest(){ local check=$1 module=$2 label=$3 out; out=$("$here/../../../../vm/boot" --check "$check" "$module" --tool vm/tools/module_load_test 2>&1) || { printf '%s\n[x] guest rejected %s\n' "$out" "$label" >&2; exit 1; }; printf '%s\n' "$out"; grep -Fq '[+] PASSED' <<<"$out"; }
 guest "$here/success-check" "$tmp/solution/rootkitlings.ko" solution
 guest "$here/success-check" "$tmp/alternate/rootkitlings.ko" alternate
 for point in 1 2 3; do sed -e "s/@LABEL@/R30 fail point $point/g" -e "s/@ERRNO@/$(case $point in 1) echo 12;;2) echo 129;;3) echo 5;;esac)/g" "$here/failure-check.in" >"$tmp/check-$point"; guest "$tmp/check-$point" "$tmp/fail-$point/rootkitlings.ko" "fail-$point"; done

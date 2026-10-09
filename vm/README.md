@@ -47,10 +47,10 @@ The script does not load it for you.
 ## Add guest tools
 
 Request only the tools an exercise needs.
-The option is repeatable and accepts either an executable filename or a repository-relative path under `tools/`:
+The option is repeatable and accepts either an executable filename or a repository-relative path under `vm/tools/`:
 
 ```bash
-./vm/boot --tool cred_trigger_test --tool tools/ioctl_test path/to/module.ko
+./vm/boot --tool cred_trigger_test --tool vm/tools/ioctl_test path/to/module.ko
 ```
 
 Requested tools are built first and copied to `/bin` in the guest.

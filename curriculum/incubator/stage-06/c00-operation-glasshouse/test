@@ -159,10 +159,10 @@ make -s -C "$KDIR" M="$scratch/fail-14" W=1 \
 	ROOTKITLINGS_FAIL_POINT=14 modules > "$scratch/fail-14.log" 2>&1
 
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
-	-o "$scratch/secure_agent_fixture" "$ROOT/vm/tools/secure_agent_fixture.c"
+	-o "$scratch/secure_agent_fixture" "$ROOT/vm/vm/tools/secure_agent_fixture.c"
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
 	-o "$scratch/module_load_params" \
-	"$ROOT/vm/tools/module_load_params.c"
+	"$ROOT/vm/vm/tools/module_load_params.c"
 
 run_guest()
 {
@@ -206,9 +206,9 @@ ifconfig lo 127.0.0.1 up' \
 	"$M02/success-check" > "$scratch/m02-regression"
 chmod 0755 "$scratch/m02-regression"
 run_guest "$scratch/m02-regression" "$scratch/solution/rootkitlings.ko" \
-	inherited-regression --tool vm/tools/run_as --tool vm/tools/getdents64_test \
-	--tool vm/tools/status_field_test --tool vm/tools/proc_write_test \
-	--tool vm/tools/proc_read_test
+	inherited-regression --tool vm/vm/tools/run_as --tool vm/vm/tools/getdents64_test \
+	--tool vm/vm/tools/status_field_test --tool vm/vm/tools/proc_write_test \
+	--tool vm/vm/tools/proc_read_test
 
 "$M03/test"
 "$R30/test"

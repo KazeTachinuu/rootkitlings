@@ -173,7 +173,7 @@ build_mutant spin-retry mutate_no_wait
 build_mutant single-attempt mutate_single_attempt
 build_mutant drops-marker mutate_drop_marker
 
-make -s -C "$ROOT" -B vm/tools/agent_fixture vm/tools/module_load_params
+make -s -C "$ROOT" -B vm/vm/tools/agent_fixture vm/vm/tools/module_load_params
 
 run_guest()
 {
@@ -201,11 +201,11 @@ reject_guest()
 }
 
 run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" success \
-	--tool vm/tools/agent_fixture
+	--tool vm/vm/tools/agent_fixture
 
 run_guest "$HERE/transaction-boundary-check" \
 	"$scratch/success/rootkitlings.ko" transaction-boundaries \
-	--tool vm/tools/module_load_params
+	--tool vm/vm/tools/module_load_params
 run_guest "$HERE/foreign-check" "$scratch/success/rootkitlings.ko" \
 	foreign-state
 
@@ -218,32 +218,32 @@ for point in 1 2 3 4 5 6 7 10 11 12 13; do
 	run_guest "$HERE/failure-check.in" \
 		"$scratch/failure-$point/rootkitlings.ko" "failpoint-$point" \
 		--check-arg "${errnos[$point]}" --check-arg "${labels[$point]}" \
-		--tool vm/tools/module_load_params
+		--tool vm/vm/tools/module_load_params
 done
 for specification in '8 12 Credential-preparation' '9 125 Credential-cancellation'; do
 	read -r point expected label <<< "$specification"
 	run_guest "$HERE/action-failure-check.in" \
 		"$scratch/failure-$point/rootkitlings.ko" "failpoint-$point" \
 		--check-arg "$expected" --check-arg "$label" \
-		--tool vm/tools/run_as --tool vm/tools/cred_trigger_test
+		--tool vm/vm/tools/run_as --tool vm/vm/tools/cred_trigger_test
 done
 
 run_guest "$M02/success-check" "$scratch/success/rootkitlings.ko" \
-	M02-regression --check-arg remote-agent --tool vm/tools/run_as \
-	--tool vm/tools/getdents64_test \
-	--tool vm/tools/status_field_test --tool vm/tools/proc_write_test \
-	--tool vm/tools/proc_read_test
+	M02-regression --check-arg remote-agent --tool vm/vm/tools/run_as \
+	--tool vm/vm/tools/getdents64_test \
+	--tool vm/vm/tools/status_field_test --tool vm/vm/tools/proc_write_test \
+	--tool vm/vm/tools/proc_read_test
 run_guest "$M01/success-check" "$scratch/success/rootkitlings.ko" \
-	M01-regression --check-arg remote-agent --tool vm/tools/run_as \
-	--tool vm/tools/event_stream_test --tool vm/tools/status_field_test \
-	--tool vm/tools/proc_write_test --tool vm/tools/proc_read_test \
-	--tool vm/tools/cred_trigger_test --tool vm/tools/rmdir_telemetry_test
+	M01-regression --check-arg remote-agent --tool vm/vm/tools/run_as \
+	--tool vm/vm/tools/event_stream_test --tool vm/vm/tools/status_field_test \
+	--tool vm/vm/tools/proc_write_test --tool vm/vm/tools/proc_read_test \
+	--tool vm/vm/tools/cred_trigger_test --tool vm/vm/tools/rmdir_telemetry_test
 reject_guest "$HERE/success-check" "$scratch/spin-retry/rootkitlings.ko" \
-	spin-retry --tool vm/tools/agent_fixture
+	spin-retry --tool vm/vm/tools/agent_fixture
 reject_guest "$HERE/success-check" \
 	"$scratch/single-attempt/rootkitlings.ko" single-attempt \
-	--tool vm/tools/agent_fixture
+	--tool vm/vm/tools/agent_fixture
 reject_guest "$HERE/success-check" "$scratch/drops-marker/rootkitlings.ko" \
-	drops-marker --tool vm/tools/agent_fixture
+	drops-marker --tool vm/vm/tools/agent_fixture
 
 printf '[+] M03 remote resident agent passed\n'

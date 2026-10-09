@@ -289,7 +289,7 @@ run_guest()
 	local check_script=$1 module=$2 output
 	shift 2
 	if ! output=$("$HERE/../../../../vm/boot" --check "$check_script" \
-		--tool vm/tools/run_as "$@" \
+		--tool vm/vm/tools/run_as "$@" \
 		"$module" 2>&1); then
 		printf '%s\n' "$output" >&2
 		printf '[x] disposable guest did not complete\n' >&2
@@ -303,12 +303,12 @@ run_guest()
 }
 
 run_guest "$HERE/../../stage-01/r04-proc-publication/failure-ecanceled-check" \
-	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
+	"$scratch/preflight/rootkitlings.ko" --tool vm/vm/tools/module_load_test
 run_guest "$HERE/../../stage-01/r04-proc-publication/failure-enomem-check" \
-	"$scratch/allocation/rootkitlings.ko" --tool vm/tools/module_load_test
+	"$scratch/allocation/rootkitlings.ko" --tool vm/vm/tools/module_load_test
 run_guest "$scratch/publication-check" \
-	"$scratch/publication/rootkitlings.ko" --tool vm/tools/module_load_test
+	"$scratch/publication/rootkitlings.ko" --tool vm/vm/tools/module_load_test
 run_guest "$scratch/missing-check" \
-	"$scratch/missing/rootkitlings.ko" --tool vm/tools/module_load_test
+	"$scratch/missing/rootkitlings.ko" --tool vm/vm/tools/module_load_test
 run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
-	--tool vm/tools/proc_read_test --tool vm/tools/proc_write_test
+	--tool vm/vm/tools/proc_read_test --tool vm/vm/tools/proc_write_test

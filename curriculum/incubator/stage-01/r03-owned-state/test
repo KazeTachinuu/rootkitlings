@@ -92,7 +92,7 @@ run_guest()
 }
 
 run_guest "$HERE/failure-ecanceled-check" "$scratch/preflight/rootkitlings.ko" \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 run_guest "$HERE/failure-enomem-check" "$scratch/allocation/rootkitlings.ko" \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 run_guest "$HERE/../support/module-lifecycle-check" "$scratch/success/rootkitlings.ko"

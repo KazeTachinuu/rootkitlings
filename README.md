@@ -72,7 +72,7 @@ curriculum/support/      checks and progressive hints
 curriculum/solutions/    reference implementations
 .rootkitlings/work/      learner-owned working copies
 engine/ and scripts/     course engine and maintenance commands
-tools/ and vm/           guest helpers and disposable runtime
+vm/                      guest runtime, checks, and verification tools
 ```
 
 The CLI derives paths, capabilities, tools, and checks from metadata; exercise files do not duplicate them.

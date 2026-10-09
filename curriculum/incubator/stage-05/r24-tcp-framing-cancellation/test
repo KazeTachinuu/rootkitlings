@@ -172,18 +172,18 @@ run_guest()
 
 for name in $modules; do
 	run_guest "$HERE/validation-check.in" "$scratch/$name" "$name" \
-		--tool tools/module_load_params \
+		--tool vm/tools/module_load_params \
 		--check-arg "$name" --check-arg "Reject $name"
 done
 run_guest "$HERE/failure-check.in" \
 	"$scratch/worker-failure/rootkitlings.ko" worker-failure \
-	--tool tools/module_load_params --tool tools/tcp_session_fixture \
+	--tool vm/tools/module_load_params --tool vm/tools/tcp_session_fixture \
 	--check-arg 4 --check-arg 'Worker creation failure' --check-arg 0
 run_guest "$HERE/failure-check.in" \
 	"$scratch/proc-failure/rootkitlings.ko" proc-failure \
-	--tool tools/module_load_params --tool tools/tcp_session_fixture \
+	--tool vm/tools/module_load_params --tool vm/tools/tcp_session_fixture \
 	--check-arg 12 --check-arg 'Proc publication rollback' --check-arg 1
 run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" \
-	solution --tool tools/proc_read_test --tool tools/tcp_session_fixture
+	solution --tool vm/tools/proc_read_test --tool vm/tools/tcp_session_fixture
 
 printf '[+] R24 cancellable framed TCP session passed\n'

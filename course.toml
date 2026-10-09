@@ -114,23 +114,23 @@ label = "Detection"
 
 [[tools]]
 id = "ioctl-test"
-binary = "tools/ioctl_test"
-source = "tools/ioctl_test.c"
+binary = "vm/tools/ioctl_test"
+source = "vm/tools/ioctl_test.c"
 
 [[tools]]
 id = "credential-trigger-test"
-binary = "tools/cred_trigger_test"
-source = "tools/cred_trigger_test.c"
+binary = "vm/tools/cred_trigger_test"
+source = "vm/tools/cred_trigger_test.c"
 
 [[tools]]
 id = "icmp-send"
-binary = "tools/icmp_send"
-source = "tools/icmp_send.c"
+binary = "vm/tools/icmp_send"
+source = "vm/tools/icmp_send.c"
 
 [[tools]]
 id = "run-as"
-binary = "tools/run_as"
-source = "tools/run_as.c"
+binary = "vm/tools/run_as"
+source = "vm/tools/run_as.c"
 
 [[sections]]
 id = "foundation"
