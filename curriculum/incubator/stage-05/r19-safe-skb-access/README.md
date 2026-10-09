@@ -5,12 +5,9 @@ The linear head may be followed by page fragments or a `frag_list`.
 The network header may also begin before or after the current data pointer.
 
 This exercise adds one bounded, network-relative read primitive.
-A supplied adapter uses it to copy the fixed 20-byte IPv4 prefix for the parser from L17.
-Later packet code can reuse the same primitive at a validated transport-header offset instead of repeating buffer geometry.
-
-## Prerequisite
-
-- L17: Parse packet lengths before touching payload
+A supplied adapter uses it to copy the fixed 20-byte IPv4 prefix for the
+bounded IPv4 parser. Later packet code can reuse the same primitive at a
+validated transport-header offset instead of repeating buffer geometry.
 
 ## Your task
 
@@ -70,7 +67,7 @@ Run:
 ```
 
 The checker builds the exact implementation for Linux 7.2 with `W=1`, protects all supplied integration code, rejects common unsafe substitutions, and loads a module whose tests construct real linear and non-linear buffers.
-It then reruns L17's complete parser corpus.
+It then reruns the complete bounded IPv4 parser corpus.
 
 ## References
 

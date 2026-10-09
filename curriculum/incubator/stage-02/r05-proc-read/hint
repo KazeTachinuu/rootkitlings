@@ -1,7 +1,6 @@
-Keep struct rk_state private. Let core/state.c answer the one question the
-interface needs: whether the state is active.
+Preserve the state boundary: procfs should receive an opaque state pointer and
+ask one accessor for the value it renders. Snapshot that value once per
+materialized record.
 
-Pass the state pointer to proc_create_single_data(). In the show function,
-store output->private in one local state pointer, store the accessor result in
-one local bool, and print that value with seq_printf(). seq_file already
-implements the read behavior.
+Keep the existing `seq_file` path. It already owns partial reads, offsets,
+seeking, and EOF; a second read implementation would create conflicting rules.

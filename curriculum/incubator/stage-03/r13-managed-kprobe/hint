@@ -1,7 +1,7 @@
-Keep the borrowed state pointer valid for exactly the registered lifetime.
+Treat the two registered probes and their borrowed state as one lifetime. Make
+the state reachable before registration and keep it valid until batch
+unregistration has drained both handlers.
 
-Each pre-handler reads actions_enabled once, conditionally calls its matching
-mark operation, and returns zero. Start stores the state before calling
-register_kprobes(). If that call fails, it only clears the borrowed pointer:
-the batch helper has already removed any earlier probe. Stop calls
-unregister_kprobes() before clearing the pointer.
+Each handler should do only the bounded observation described in the task. On
+registration failure, remember that the batch helper already rolled back any
+earlier probe.

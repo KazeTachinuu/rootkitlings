@@ -1,7 +1,3 @@
-Keep one byte index.
-
-Reject zero width and widths larger than the result before subtracting.
-Then scan while `index <= length - width`.
-
-After a match, use `memcpy()` for exactly `width` bytes, increment the count, and advance by `width`.
-After a mismatch, advance by one.
+Reason in complete byte spans, not strings. Validate the width before any
+subtraction. A match consumes the whole pattern so replacement bytes are not
+scanned again; a mismatch advances by one byte.

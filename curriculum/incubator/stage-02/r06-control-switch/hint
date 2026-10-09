@@ -1,10 +1,7 @@
-Keep the switch inside struct rk_state as a bool. Initialize it directly before
-publication, then use READ_ONCE() in the getter and WRITE_ONCE() in the setter.
+Keep the switch private and expose only whole-value reads and writes. A rejected
+command must leave it unchanged.
 
-The write callback needs one eight-byte stack buffer. Check *position, the raw
-count, and the empty case before copy_from_user(). After a complete copy, strip
-at most one final newline, compare exact lengths and bytes, then call the setter
-once. Return the original count without changing *position.
-
-Use proc_create_data() with explicit proc_ops. single_open() receives the state
-from pde_data(inode); the show callback receives it as output->private.
+Treat a write as validate-then-commit: bound the raw request before touching
+user memory, copy it into local storage, recognize one complete command, and
+perform one state change only after every check passes. Retain the existing
+`seq_file` read path when adding the write operation.

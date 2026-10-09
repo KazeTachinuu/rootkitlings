@@ -1,6 +1,6 @@
-Start with `Kbuild`: name `rootkitlings.o` as the module and list
-`core/main.o` as its only object.
+Treat the build and runtime lifecycles separately. `Kbuild` must turn the one
+source object into the requested module artifact; the C file must expose one
+successful load path and one unload path through the kernel's module macros.
 
-In `core/main.c`, write one init function that returns 0 and one exit function.
-Register them with `module_init()` and `module_exit()`, then add the required
-license and description.
+If the artifact builds but will not load, inspect its license, description, and
+registered callbacks before adding logging.

@@ -1,7 +1,8 @@
 # Mutate a writable packet and repair checksum state
 
-L20 gave you a validated `rk_udp_view` without changing the packet.
-This exercise uses that view to replace one UDP destination port safely.
+The packet classifier supplies a validated `rk_udp_view` without changing the
+packet. This exercise uses that view to replace one UDP destination port
+safely.
 
 Edit one file:
 
@@ -14,7 +15,9 @@ Run:
 ```
 
 The supplied IPv4 `LOCAL_OUT` hook handles only traffic in the initial network namespace whose destination is exactly `127.0.0.1`.
-It classifies the packet with the accepted L17-L20 code, calls your mutator for the configured match port, and always returns `NF_ACCEPT`.
+It classifies the packet with the supplied parser, bounded-access, observer,
+and classifier components, calls your mutator for the configured match port,
+and always returns `NF_ACCEPT`.
 
 This is a controlled one-way rewrite.
 It is not NAT: there is no reverse translation, route change, address change, or general conntrack support.

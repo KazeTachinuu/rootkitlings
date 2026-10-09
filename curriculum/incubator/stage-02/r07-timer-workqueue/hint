@@ -1,9 +1,6 @@
-In rk_action_timer(), call rk_state_record_timer_fire(), schedule_work(), then
-mod_timer() with jiffies + msecs_to_jiffies(RK_ACTION_INTERVAL_MS).
+Keep the timer callback bounded: record the firing, publish work, and rearm.
+Only the workqueue callback should decide whether an enabled action completes.
 
-In rk_action_run(), read rk_state_actions_enabled() once. If it is true, call
-rk_state_record_worker_run().
-
-In rk_scheduler_start(), store the borrowed state, initialize action_work and
-action_timer, then arm the timer. In rk_scheduler_stop(), call
-timer_shutdown_sync() before cancel_work_sync(), then clear the borrowed pointer.
+The scheduler borrows state, so initialize both callback objects before making
+the timer reachable. During shutdown, stop the rearming producer before
+draining its work and releasing the borrowed pointer.

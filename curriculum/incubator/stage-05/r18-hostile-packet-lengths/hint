@@ -1,6 +1,4 @@
-Read the fixed 20-byte header before using any field. Check version and IHL,
-then prove the full IHL is available. Decode Total Length in big-endian order,
-prove it is at least IHL and at most available, and only then subtract. Treat
-only More Fragments or a nonzero offset as fragmented. Linux calls the top
-flag bit IP_CE; it is not part of the fragment test. Commit a local output
-structure only after every check passes.
+Validate boundaries in dependency order: fixed prefix, header shape, complete
+declared header, then complete declared packet. Only after the larger lengths
+are proven may you subtract them. Keep the candidate view local until fragment
+policy and every length check pass.

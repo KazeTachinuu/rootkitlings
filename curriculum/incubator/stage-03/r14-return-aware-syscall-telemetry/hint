@@ -1,13 +1,7 @@
-Initialize the per-instance `selected` field before every admitted return.
+Use the Kretprobe instance as the join between entry-time path classification
+and the matching return value; shared scratch state cannot correlate concurrent
+calls. Initialize the instance before any admitted return path.
 
-When actions are disabled, return nonzero from the entry handler so this
-invocation has no return callback. Otherwise, get kernel argument zero from the
-outer register frame, treat it as the saved native syscall registers, and read
-the userspace path from `di`. Let the supplied helper perform the bounded
-no-fault copy and exact comparison.
-
-The return handler reads the same instance data, obtains the result through
-`regs_return_value()`, and marks exactly one monotonic flag for a selected call.
-
-Publish the borrowed state before `register_kretprobe()`. On registration
-failure, clear it. On shutdown, call `unregister_kretprobe()` before clearing it.
+Follow the pinned wrapper's two-level register mapping, and let the supplied
+helper own bounded no-fault copying. Keep borrowed module state valid from
+registration until unregistration has drained every instance.

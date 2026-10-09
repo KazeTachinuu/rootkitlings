@@ -1,1 +1,4 @@
-Prepare one complete credential from `&init_task`, return `-ENOMEM` for `NULL`, keep the supplied pre-commit abort path, and give the prepared reference directly to `commit_creds()` on success.
+A prepared credential has exactly one terminal owner: abort it before
+publication on failure, or transfer it to `commit_creds()` on success. Preserve
+the preparation error and never touch the credential after either terminal
+operation.

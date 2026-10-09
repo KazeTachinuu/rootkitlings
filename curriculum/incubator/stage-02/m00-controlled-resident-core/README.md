@@ -13,9 +13,9 @@ The timer and `run` command must not perform the action themselves.
 They call the same nonblocking request function.
 One kernel thread owns action execution.
 
-This milestone starts from your passed procfs publication module from Stage 1.
-Extend that module with the status fields, command, request sources, thread, and
-teardown described below.
+This milestone starts from your passed procfs-publication module.
+Extend it with the status fields, command, request sources, thread, and teardown
+described below.
 
 ## Interface
 
