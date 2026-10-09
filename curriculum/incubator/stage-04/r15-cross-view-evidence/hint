@@ -1,0 +1,6 @@
+The iterator passes a probe ID to rk_proc_show().
+
+Before the first seq_printf(), compare that ID with
+RK_PROBE_FILENAME_RMDIR. Return SEQ_SKIP for that one ID. Do not compare
+names or change registration: the remaining formatter already obtains the
+visible name from the registered descriptor.
