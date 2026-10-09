@@ -538,15 +538,44 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
   Its raw ICMP specialization, ambiguous row-count evidence, static status, missing
   namespace contrast, and lack of real lifecycle failures are retired.
 
-#### R24 - Frame and cancel a TCP client correctly
+#### R24 - Run one cancellable framed TCP session
 
-- Teaches: byte-stream framing, partial I/O, oversize-frame draining, retry/backoff,
-  blocked-I/O cancellation, and one socket owner.
-- Produces: the fixed-function resident agent transport.
+- Teaches: a two-byte big-endian length prefix, exact partial send and receive
+  loops, oversized-frame draining, one worker-owned socket, and shutdown-before-join
+  cancellation.
+- Produces: one bounded binary request/reply session over a TCP byte stream.
+  It does not reconnect, apply retry policy, or interpret general commands.
 - Requires: R08 and R23.
-- Defensive evidence: split/coalesced frames, reconnects, malformed commands,
-  unload while blocked, and socket cleanup.
-- Current source: the transport work in C07.
+- Framing: stage each at-most-64-byte outgoing frame as a two-byte length plus
+  payload and loop until every byte is accepted.
+  Receive the two-byte header exactly, then receive the declared payload exactly.
+  A frame larger than 64 bytes is drained for its complete declared length through
+  a fixed scratch buffer before reporting `EMSGSIZE`, so its tail cannot become a
+  second command.
+  Empty and binary frames are valid transport values; later command grammar decides
+  whether their payload has meaning.
+- Ownership: the worker is the sole socket owner and is the only path that releases
+  it.
+  Before any blocking connect or I/O, it publishes the active socket under the
+  session lock.
+  Stop first publishes a stopping gate under that same lock, shuts down any active
+  socket, wakes non-socket waits, and only then joins the worker.
+  The worker checks the gate before publishing a newly created socket, closing the
+  race in which stop observes no socket immediately before a blocking connect.
+- Scope: the supplied session loop applies one harmless fixed handler to accepted
+  frames.
+  It neither executes shell text nor introduces authentication, persistence, DNS,
+  or a reconnecting agent.
+- Defensive evidence: every positive partial-send and partial-receive boundary;
+  zero and negative returns at every phase; binary and empty payloads; headers and
+  payloads split across writes; multiple coalesced frames; a 65-byte and 65,535-byte
+  oversized frame followed by a valid frame; unload while blocked in connect,
+  header, payload, and receive; the publish/stop race; exact socket release; reload;
+  and clean logs.
+- Current source: the transport core of C07.
+  Its newline-only byte-at-a-time reader is replaced.
+  Reconnect and retry/backoff move to M03, where they are integration behavior rather
+  than hidden extra mechanisms in this lesson.
 
 #### R25 - Encode and decode a bounded DNS wire name
 
@@ -650,7 +679,7 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
 #### M03 - Remote resident agent
 
 Merge C07 and C08 into the cumulative project.
-The module connects only inside the declared lab network, accepts a small fixed command set such as `PING`, `INFO`, and a harmless bounded marker, exposes retry/error counters, unloads while blocked, and manages only its exact boot request.
+The module adds bounded reconnect and retry/backoff to the accepted framed session, connects only inside the declared lab network, accepts a small fixed command set such as `PING`, `INFO`, and a harmless bounded marker, exposes retry/error counters, unloads while blocked, and manages only its exact boot request.
 This milestone does not expose a general shell.
 
 ### Stage 6: Authenticated operations
