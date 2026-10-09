@@ -266,7 +266,10 @@ class Catalog:
         sections = tuple(_rows(data, "sections", {"id", "label"}, Section, "id"))
         concepts = tuple(_rows(data, "concepts", {"id", "label"}, Concept, "id"))
         tradecraft_tags = tuple(_rows(data, "tradecraft_tags", {"id", "label"}, Concept, "id"))
-        capabilities = tuple(_rows(data, "capabilities", {"id", "label"}, Concept, "id"))
+        capabilities = tuple(_rows(
+            data, "capabilities", {"id", "label"}, Concept, "id",
+            allow_empty=True,
+        ))
         tools = tuple(_tool_rows(data, self.root))
         return (revision, default_module_artifact, roots, route, elective_tracks,
                 tradecraft_tags,
@@ -937,9 +940,12 @@ def _exact_fields(data, expected, path):
         raise CatalogError(f"{path}: fields mismatch (missing={sorted(missing)}, unknown={sorted(unknown)})")
 
 
-def _rows(data, key, fields, cls, id_field):
+def _rows(data, key, fields, cls, id_field, *, allow_empty=False):
     value = data[key]
-    if not isinstance(value, list) or not value: raise CatalogError(f"course.toml: {key} must be non-empty")
+    if not isinstance(value, list):
+        raise CatalogError(f"course.toml: {key} must be an array of tables")
+    if not value and not allow_empty:
+        raise CatalogError(f"course.toml: {key} must be non-empty")
     result = []
     for index, row in enumerate(value):
         _exact_fields(row, fields, Path(f"course.toml/{key}/{index}"))

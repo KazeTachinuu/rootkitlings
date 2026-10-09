@@ -16,6 +16,8 @@ class VerificationBuildTests(unittest.TestCase):
         self.source = self.root / "source"
         self.repository.mkdir()
         self.source.mkdir()
+        self.kernel_build = self.root / "kernel-build"
+        self.kernel_build.mkdir()
         (self.source / "Kbuild").write_text("build\n", encoding="utf-8")
         (self.source / "main.c").write_text("original\n", encoding="utf-8")
         (self.source / "ignored.c").write_text("ignored\n", encoding="utf-8")
@@ -24,7 +26,7 @@ class VerificationBuildTests(unittest.TestCase):
 .PHONY: module
 module:
 \t@case \"$(MODE)\" in \\
-\t  pass) printf '%s\\n' \"$(VALUE)\" >> \"$(MODULE_DIR)/main.c\"; printf module > \"$(MODULE_DIR)/test.ko\" ;; \\
+\t  pass) printf '%s\\n' \"$(VALUE)\" >> \"$(MODULE_DIR)/main.c\"; printf '%s' \"$(KDIR)\" > \"$(MODULE_DIR)/kdir\"; printf '%s|%s|%s|%s' \"$(ARCH)\" \"$(CC)\" \"$(LC_ALL)\" \"$(KCFLAGS)\" > \"$(MODULE_DIR)/environment\"; printf module > \"$(MODULE_DIR)/test.ko\" ;; \\
 \t  reject) printf '%s\\n' \"expected marker\"; exit 2 ;; \\
 \t  reject-other) printf '%s\\n' \"different output\"; exit 2 ;; \\
 \t  warning) printf '%s\\n' \"warning: test warning\"; printf module > \"$(MODULE_DIR)/test.ko\" ;; \\
@@ -65,6 +67,7 @@ module:
             "test.ko",
             cases,
             timeout,
+            kernel_build_dir=self.kernel_build,
         )
 
     def test_cases_are_isolated_and_variables_are_argv_values(self) -> None:
@@ -89,6 +92,14 @@ module:
             self.assertTrue(verification.source_hash)
             retained = outcomes[0].build_root
             self.assertTrue(outcomes[0].artifact.is_file())
+            self.assertEqual(
+                (outcomes[0].build_root / "kdir").read_text(),
+                str(self.kernel_build.resolve()),
+            )
+            self.assertEqual(
+                (outcomes[0].build_root / "environment").read_text(),
+                "x86_64|gcc|C|",
+            )
         self.assertFalse(retained.exists())
 
     def test_expected_rejection_and_optional_marker(self) -> None:
@@ -147,6 +158,7 @@ module:
                 "test.ko",
                 (self.case("old", "pass"),),
                 5,
+                kernel_build_dir=self.kernel_build,
             ):
                 pass
 

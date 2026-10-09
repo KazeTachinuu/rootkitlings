@@ -23,6 +23,9 @@ class GeneratedSerialTests(unittest.TestCase):
         course = tomllib.loads((ROOT / "course.toml").read_text(encoding="utf-8"))
         self.assertNotIn("aliases", course)
 
+    def test_unused_capability_registry_is_empty(self) -> None:
+        self.assertEqual(self.catalog.capabilities, ())
+
     def test_serials_follow_route_and_kind(self) -> None:
         prefixes = {"lesson": "L", "milestone": "M", "capstone": "C"}
         counters = {kind: 0 for kind in prefixes}

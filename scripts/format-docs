@@ -80,7 +80,7 @@ def main() -> int:
 	changed: list[Path] = []
 
 	for path in sorted(ROOT.rglob("*.md")):
-		if ".git" in path.parts:
+		if ".git" in path.parts or ".rootkitlings" in path.parts:
 			continue
 		before = path.read_text(encoding="utf-8")
 		after = format_markdown(before)

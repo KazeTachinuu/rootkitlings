@@ -2,6 +2,7 @@ schema_version = 2
 revision = "2026.10-catalog-v2"
 default_module_artifact = "hello.ko"
 exercise_roots = ["lings", "capstones"]
+capabilities = []
 
 required_route = [
   "module-lifecycle",
@@ -111,14 +112,6 @@ label = "Cryptography"
 id = "detection"
 label = "Detection"
 
-[[capabilities]]
-id = "network"
-label = "Guest network access"
-
-[[capabilities]]
-id = "aes-gcm"
-label = "Kernel AES-GCM support"
-
 [[tools]]
 id = "ioctl-test"
 binary = "tools/ioctl_test"
@@ -133,6 +126,11 @@ source = "tools/cred_trigger_test.c"
 id = "icmp-send"
 binary = "tools/icmp_send"
 source = "tools/icmp_send.c"
+
+[[tools]]
+id = "run-as"
+binary = "tools/run_as"
+source = "tools/run_as.c"
 
 [[sections]]
 id = "foundation"

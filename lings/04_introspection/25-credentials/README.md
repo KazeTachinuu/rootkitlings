@@ -11,9 +11,11 @@ The same proc callback reports different values for root and an unprivileged rea
 cat /proc/rk_creds
 # uid=0 gid=0
 
-chpst -u 65534:65534 cat /proc/rk_creds
+run_as 65534 65534 cat /proc/rk_creds
 # uid=65534 gid=65534
 ```
+
+`run_as UID GID COMMAND` runs the command with those numeric credentials inside the guest.
 
 ## How it works
 

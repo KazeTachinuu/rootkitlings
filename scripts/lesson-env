@@ -1,0 +1,25 @@
+#!/usr/bin/bash
+
+ROOTKITLINGS_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd) || {
+	printf '[x] cannot locate the Rootkitlings repository\n' >&2
+	return 1 2>/dev/null || exit 1
+}
+
+KDIR=$("$ROOTKITLINGS_ROOT/scripts/kernel" build-dir) || {
+	printf '[x] course kernel is not ready; run: ./rootkitlings setup --accept\n' >&2
+	return 1 2>/dev/null || exit 1
+}
+if [[ ! -d $KDIR || -L $KDIR ]]; then
+	printf '[x] kernel build directory is unsafe or missing: %s\n' "$KDIR" >&2
+	return 1 2>/dev/null || exit 1
+fi
+
+KERNEL_RELEASE=$("$ROOTKITLINGS_ROOT/scripts/kernel" release) || {
+	printf '[x] cannot read the pinned course-kernel release\n' >&2
+	return 1 2>/dev/null || exit 1
+}
+
+export KDIR KERNEL_RELEASE ROOTKITLINGS_ROOT
+export LC_ALL=C LANG=C TZ=UTC ARCH=x86_64 CC=gcc HOSTCC=gcc
+unset CROSS_COMPILE KCONFIG_CONFIG LOCALVERSION KCFLAGS KCPPFLAGS KAFLAGS \
+	HOSTCFLAGS HOSTLDFLAGS LLVM LLVM_IAS MAKEFLAGS MFLAGS

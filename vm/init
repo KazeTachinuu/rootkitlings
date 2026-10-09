@@ -35,20 +35,10 @@ for _word in $_cmdline; do
 	case "$_word" in
 		rootkitlings=check) _check=1 ;;
 		rootkitlings=network) _network=1 ;;
-		rootkitlings=aes-gcm) _aes_gcm=1 ;;
 	esac
 done
 
-if [ "${_aes_gcm:-}" = 1 ]; then
-	for _module in /lib/modules/"$(uname -r)"/crypto/*.ko; do
-		run insmod "$_module"
-	done
-fi
-
 if [ "${_network:-}" = 1 ]; then
-	for _module in /lib/modules/"$(uname -r)"/network/*.ko; do
-		run insmod "$_module"
-	done
 	run ifconfig eth0 10.0.2.15 up
 fi
 
@@ -61,7 +51,7 @@ if [ "${_check:-}" = 1 ]; then
 	else
 		printf '[x] FAILED (exit %s)\n' "$_rc"
 	fi
-	poweroff -f
+	reboot -f
 	while :; do sleep 1; done
 fi
 
@@ -74,9 +64,9 @@ printf '[+] Working directory: /rootkitlings\n'
 show 'setsid -c sh -i </dev/ttyS0 >/dev/ttyS0 2>&1'
 setsid -c sh -i </dev/ttyS0 >/dev/ttyS0 2>&1
 
-show 'poweroff -f'
-poweroff -f
-printf '[x] poweroff failed\n' >&2
+show 'reboot -f'
+reboot -f
+printf '[x] reboot failed\n' >&2
 while :; do
 	sleep 1
 done

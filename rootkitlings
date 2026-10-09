@@ -10,11 +10,13 @@ import sys
 from pathlib import Path
 
 from lib.catalog import Catalog, CatalogError
+from lib.build_env import module_build_environment
 from lib.process import ProcessError, ProcessTimeout, run_process
 from lib.setup_gate import (
     SETUP_STAMP_PATH,
     SetupGateError,
     SetupStamp,
+    SetupStatus,
     boundary_hash,
     setup_status,
     write_setup_stamp,
@@ -44,11 +46,12 @@ SETUP_POLICY_TEXT = (
     'I am authorized to use this local lab. I will stop on unexpected host '
     'access, containment drift, or a kernel fault. The default guest is '
     'disposable, has no host mount, persistent disk, production data, or '
-    'network beyond loopback. Later networking lessons enable only the access '
-    'they need.'
+    'network beyond loopback. A check may explicitly enable only the access '
+    'it needs.'
 )
 DOCTOR_TIMEOUT = 30
-SETUP_PROBE_TIMEOUT = 60
+KERNEL_PREP_TIMEOUT = 3600
+SETUP_PROBE_TIMEOUT = 180
 
 
 class CLIError(RuntimeError):
@@ -117,7 +120,15 @@ def initialize_runtime():
 
 def expected_setup_stamp():
     inputs = {'policy': SETUP_POLICY_TEXT}
-    for relative in ('vm/boot', 'vm/init', 'vm/checks/containment'):
+    for relative in (
+        'scripts/kernel',
+        'scripts/toolbox/bc',
+        'vm/kernel.toml',
+        'vm/kernel.config',
+        'vm/boot',
+        'vm/init',
+        'vm/checks/containment',
+    ):
         path = ROOT / relative
         if path.is_symlink() or not path.is_file():
             raise SetupGateError(
@@ -129,16 +140,33 @@ def expected_setup_stamp():
             raise SetupGateError(
                 f'cannot read setup boundary input {relative}: {error}'
             ) from error
+    release = run(
+        [str(ROOT / 'scripts/kernel'), 'release'],
+        timeout=5,
+        capture=True,
+    )
+    if release.returncode or not (release.stdout or '').strip():
+        raise SetupGateError('cannot read the course kernel release')
     return SetupStamp(
         policy_version=SETUP_POLICY_VERSION,
         course_revision=CAT.revision,
-        kernel_release=os.uname().release,
+        kernel_release=release.stdout.strip(),
         boundary_hash=boundary_hash(inputs),
     )
 
 
 def current_setup_status():
-    return setup_status(SETUP_STAMP, expected_setup_stamp())
+    status = setup_status(SETUP_STAMP, expected_setup_stamp())
+    if not status.ready:
+        return status
+    kernel = run(
+        [str(ROOT / 'scripts/kernel'), 'status'],
+        timeout=10,
+        capture=True,
+    )
+    if kernel.returncode:
+        return SetupStatus(False, 'kernel-not-ready', status.stamp)
+    return status
 
 
 def require_setup():
@@ -155,7 +183,8 @@ def setup_reason(reason):
         'missing': 'not completed',
         'policy-version-changed': 'setup policy changed',
         'course-revision-changed': 'course revision changed',
-        'kernel-release-changed': 'host kernel changed',
+        'kernel-release-changed': 'course kernel changed',
+        'kernel-not-ready': 'course kernel missing or invalid',
         'boundary-changed': 'guest boundary changed',
     }
     if reason.startswith('invalid: '):
@@ -185,6 +214,14 @@ def cmd_setup(a):
             print(doctor.stdout, end='')
         die('Setup failed: scripts/doctor did not pass')
     done('Host tools ready')
+    info('Preparing the pinned course kernel')
+    kernel = run(
+        [str(ROOT / 'scripts/kernel'), 'ensure'],
+        timeout=KERNEL_PREP_TIMEOUT,
+    )
+    if kernel.returncode:
+        die('Setup failed: course kernel preparation did not pass')
+    done('Course kernel ready')
     info('Checking the disposable guest boundary')
     containment = run(
         [
@@ -313,13 +350,14 @@ def none(a, command):
         die(f'Usage: rootkitlings {command}')
 
 
-def run(cmd, timeout=None, capture=False):
+def run(cmd, timeout=None, capture=False, env=None):
     try:
         return run_process(
             cmd,
             cwd=ROOT,
             timeout=timeout,
             capture=capture,
+            env=env,
         )
     except ProcessTimeout as error:
         raise CLIError(str(error)) from error
@@ -462,20 +500,37 @@ def build_workspace(x):
         if not artifact.is_file():
             die(f'Expected artifact path is not a regular file: {shown(artifact)}')
         artifact.unlink()
+    kdir = course_kernel_build_dir()
     r = run([
         'make',
         '-C',
         str(ROOT),
+        f'KDIR={kdir}',
         f'MODULE_DIR={bd(x)}',
         'W=1',
         '--quiet',
         'module',
-    ])
+    ], env=module_build_environment())
     if r.returncode:
         die(f'Build failed for {label(x)}')
     if artifact.is_symlink() or not artifact.is_file():
         die(f'Build produced no fresh regular artifact: {shown(artifact)}')
     return artifact
+
+
+def course_kernel_build_dir():
+    located = run(
+        [str(ROOT / 'scripts/kernel'), 'build-dir'],
+        timeout=10,
+        capture=True,
+    )
+    output = (located.stdout or '').strip()
+    if located.returncode or not output or '\n' in output:
+        die('Course kernel is not ready; run: ./rootkitlings setup --accept')
+    path = Path(output)
+    if path.is_symlink() or not path.is_dir():
+        die('Course kernel build directory is unsafe or missing')
+    return path
 
 
 def run_host_check(x, build_directory, artifact, timeout):
@@ -589,6 +644,7 @@ def cmd_check(a):
             CAT.module_artifact(x),
             cases,
             timeout,
+            kernel_build_dir=course_kernel_build_dir(),
         ) as verification:
             outcomes = verification.outcomes
             for index, outcome in enumerate(outcomes, 1):
@@ -844,7 +900,7 @@ def cmd_clean(a):
     with STORE.read_locked() as s:
         x = resolve(one(a, 'clean'), s)
     need(x)
-    k = Path(os.getenv('KDIR', f'/lib/modules/{os.uname().release}/build'))
+    k = course_kernel_build_dir()
     if run(['make', '-C', str(k), f'M={bd(x)}', 'clean']).returncode:
         die(f'Could not clean {label(x)}')
     done(f'Cleaned {label(x)} build outputs')

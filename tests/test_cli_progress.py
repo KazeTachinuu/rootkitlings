@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import io
+import os
 from pathlib import Path
 import runpy
 from types import SimpleNamespace
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -52,29 +54,46 @@ class LearnerCLITests(unittest.TestCase):
             self.globals["cmd_reset"](arguments)
         return output.getvalue()
 
-    def test_setup_accept_runs_doctor_then_module_free_probe_and_stamps(self) -> None:
+    def test_setup_accept_prepares_kernel_then_probes_guest_and_stamps(self) -> None:
         calls = []
         original_run = self.globals["run"]
 
         def fake_run(command, **kwargs):
             calls.append((command, kwargs))
-            output = "[+] doctor passed\n" if len(calls) == 1 else "[+] PASSED\n"
-            return SimpleNamespace(returncode=0, stdout=output)
+            if command == [str(ROOT / "scripts/kernel"), "release"]:
+                return SimpleNamespace(returncode=0, stdout="7.2.9-rootkitlings\n")
+            if command == [str(ROOT / "scripts/kernel"), "status"]:
+                return SimpleNamespace(returncode=0, stdout="ready\n")
+            if command == [str(ROOT / "scripts/doctor")]:
+                return SimpleNamespace(returncode=0, stdout="[+] doctor passed\n")
+            if command == [str(ROOT / "scripts/kernel"), "ensure"]:
+                return SimpleNamespace(returncode=0, stdout=None)
+            if command == [
+                str(ROOT / "vm/boot"),
+                "--check",
+                str(ROOT / "vm/checks/containment"),
+            ]:
+                return SimpleNamespace(returncode=0, stdout="[+] PASSED\n")
+            self.fail(f"unexpected setup command: {command}")
 
         try:
             self.globals["run"] = fake_run
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.globals["cmd_setup"](["--accept"])
+            setup_ready = self.globals["current_setup_status"]().ready
         finally:
             self.globals["run"] = original_run
         self.assertEqual(calls[0][0], [str(ROOT / "scripts/doctor")])
-        self.assertEqual(calls[1][0], [
+        self.assertEqual(calls[1][0], [str(ROOT / "scripts/kernel"), "ensure"])
+        self.assertEqual(calls[2][0], [
             str(ROOT / "vm/boot"),
             "--check",
             str(ROOT / "vm/checks/containment"),
         ])
-        self.assertTrue(all(call[1]["capture"] for call in calls))
-        self.assertTrue(self.globals["current_setup_status"]().ready)
+        self.assertTrue(calls[0][1]["capture"])
+        self.assertFalse(calls[1][1].get("capture", False))
+        self.assertTrue(calls[2][1]["capture"])
+        self.assertTrue(setup_ready)
 
     def test_setup_failure_never_writes_stamp(self) -> None:
         original_run = self.globals["run"]
@@ -82,6 +101,11 @@ class LearnerCLITests(unittest.TestCase):
             [SimpleNamespace(returncode=1, stdout="doctor failed\n")],
             [
                 SimpleNamespace(returncode=0, stdout="doctor ok\n"),
+                SimpleNamespace(returncode=1, stdout=None),
+            ],
+            [
+                SimpleNamespace(returncode=0, stdout="doctor ok\n"),
+                SimpleNamespace(returncode=0, stdout=None),
                 SimpleNamespace(returncode=0, stdout="missing marker\n"),
             ],
         )
@@ -102,9 +126,11 @@ class LearnerCLITests(unittest.TestCase):
     def test_setup_without_accept_previews_policy_without_checks(self) -> None:
         original_run = self.globals["run"]
         try:
-            self.globals["run"] = lambda *_args, **_kwargs: self.fail(
-                "setup preview must not run checks"
-            )
+            def release_only(command, **_kwargs):
+                self.assertEqual(command, [str(ROOT / "scripts/kernel"), "release"])
+                return SimpleNamespace(returncode=0, stdout="7.2.9-rootkitlings\n")
+
+            self.globals["run"] = release_only
             output = io.StringIO()
             errors = io.StringIO()
             with redirect_stdout(output), redirect_stderr(errors):
@@ -143,6 +169,30 @@ class LearnerCLITests(unittest.TestCase):
             r"course revision changed.*rootkitlings setup --accept",
         ):
             self.globals["require_setup"]()
+
+    def test_missing_kernel_invalidates_an_otherwise_current_setup_stamp(self) -> None:
+        expected = self.globals["expected_setup_stamp"]()
+        self.globals["write_setup_stamp"](
+            self.globals["SETUP_STAMP"],
+            expected,
+            checks_passed=True,
+        )
+        original_run = self.globals["run"]
+
+        def fake_run(command, **_kwargs):
+            if command == [str(ROOT / "scripts/kernel"), "release"]:
+                return SimpleNamespace(returncode=0, stdout=expected.kernel_release + "\n")
+            if command == [str(ROOT / "scripts/kernel"), "status"]:
+                return SimpleNamespace(returncode=1, stdout="missing\n")
+            self.fail(f"unexpected setup status command: {command}")
+
+        try:
+            self.globals["run"] = fake_run
+            status = self.globals["current_setup_status"]()
+        finally:
+            self.globals["run"] = original_run
+        self.assertFalse(status.ready)
+        self.assertEqual(status.reason, "kernel-not-ready")
 
     def test_main_gates_only_build_and_execution_commands(self) -> None:
         original_commands = self.globals["CMDS"]
@@ -219,7 +269,7 @@ class LearnerCLITests(unittest.TestCase):
             resources=SimpleNamespace(host_check=host_check),
         )
 
-    def test_build_uses_override_and_removes_exact_stale_artifact(self) -> None:
+    def test_build_pins_kdir_and_removes_exact_stale_artifact(self) -> None:
         exercise = self._build_exercise()
         workspace = self.globals["WORK"] / exercise.id
         workspace.mkdir()
@@ -228,9 +278,15 @@ class LearnerCLITests(unittest.TestCase):
         original_catalog = self.globals["CAT"]
         original_run = self.globals["run"]
         observed = []
+        make_commands = []
 
         def fake_run(_command, **_kwargs):
+            if _command == [str(ROOT / "scripts/kernel"), "build-dir"]:
+                kernel = Path(self.temporary.name) / "kernel-build"
+                kernel.mkdir(exist_ok=True)
+                return SimpleNamespace(returncode=0, stdout=str(kernel) + "\n")
             observed.append(not artifact.exists())
+            make_commands.append(_command)
             artifact.write_bytes(b"fresh")
             return SimpleNamespace(returncode=0)
 
@@ -239,13 +295,16 @@ class LearnerCLITests(unittest.TestCase):
                 module_artifact=lambda _exercise: "rootkitlings.ko"
             )
             self.globals["run"] = fake_run
-            result = self.globals["build_workspace"](exercise)
+            with mock.patch.dict(os.environ, {"KDIR": "/tmp/untrusted-kdir"}):
+                result = self.globals["build_workspace"](exercise)
         finally:
             self.globals["CAT"] = original_catalog
             self.globals["run"] = original_run
         self.assertEqual(result, artifact)
         self.assertEqual(artifact.read_bytes(), b"fresh")
         self.assertEqual(observed, [True])
+        self.assertTrue(any(part.startswith("KDIR=") for part in make_commands[0]))
+        self.assertNotIn("KDIR=/tmp/untrusted-kdir", make_commands[0])
 
     def test_failed_build_cannot_reuse_stale_artifact(self) -> None:
         exercise = self._build_exercise()
@@ -254,10 +313,19 @@ class LearnerCLITests(unittest.TestCase):
         artifact = workspace / "hello.ko"
         artifact.write_bytes(b"stale")
         original_run = self.globals["run"]
+        calls = 0
+
+        def fail_build(command, **_kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                kernel = Path(self.temporary.name) / "kernel-build"
+                kernel.mkdir(exist_ok=True)
+                return SimpleNamespace(returncode=0, stdout=str(kernel) + "\n")
+            return SimpleNamespace(returncode=1)
+
         try:
-            self.globals["run"] = lambda _command, **_kwargs: SimpleNamespace(
-                returncode=1
-            )
+            self.globals["run"] = fail_build
             with self.assertRaisesRegex(self.globals["CLIError"], "Build failed"):
                 self.globals["build_workspace"](exercise)
         finally:
@@ -350,12 +418,14 @@ class LearnerCLITests(unittest.TestCase):
                 "run",
                 "run_host_check",
                 "record_attempt",
+                "course_kernel_build_dir",
             )
         }
         attempts = []
         guest_runs = []
         try:
             self.globals["build_verification_cases"] = fake_builds
+            self.globals["course_kernel_build_dir"] = lambda: build_root
             self.globals["run_host_check"] = (
                 lambda *_args: SimpleNamespace(returncode=0, stdout="")
             )

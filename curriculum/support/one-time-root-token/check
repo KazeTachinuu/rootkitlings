@@ -33,13 +33,13 @@ else
     _ok "proc status does not disclose the active token"
 fi
 
-if chpst -u 65534:65534 \
+if run_as 65534 65534 \
     cred_trigger_test /proc/rk_privesc wrong 2>/dev/null; then
     _fail "wrong token was accepted"
 else
     _ok "wrong token rejected"
 fi
-if chpst -u 65534:65534 \
+if run_as 65534 65534 \
     cred_trigger_test /proc/rk_privesc 0123456789abcdef00 2>/dev/null; then
     _fail "oversized token was accepted"
 else
@@ -47,7 +47,7 @@ else
 fi
 assert_contains /proc/rk_privesc "triggers=0"
 
-result=$(chpst -u 65534:65534 \
+result=$(run_as 65534 65534 \
     cred_trigger_test /proc/rk_privesc "$token")
 if [ "$result" = "uid=0 euid=0" ]; then
     _ok "the writing process changed from UID 65534 to UID 0"
@@ -64,14 +64,14 @@ else
     _fail "token did not rotate after use"
 fi
 
-if chpst -u 65534:65534 \
+if run_as 65534 65534 \
     cred_trigger_test /proc/rk_privesc "$token" 2>/dev/null; then
     _fail "burned token was accepted again"
 else
     _ok "burned token rejected"
 fi
 
-result=$(chpst -u 65534:65534 \
+result=$(run_as 65534 65534 \
     cred_trigger_test /proc/rk_privesc "$next_token")
 if [ "$result" = "uid=0 euid=0" ]; then
     _ok "rotated token authorized the next caller"

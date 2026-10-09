@@ -4,7 +4,6 @@ export LC_ALL=C
 
 VM_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "$VM_DIR/.." && pwd)
-RELEASE=$(uname -r)
 
 # -- marker output --
 
@@ -19,39 +18,26 @@ skip() { printf "${D}[=] %s${N}\n" "$1"; }
 warn() { printf "${Y}[-]${N} %s\n" "$1" >&2; }
 die()  { printf "${R}[x]${N} %s\n" "$1" >&2; exit 1; }
 
-# -- kernel detection --
-
-find_kernel()
-{
-    local k="/usr/lib/modules/$RELEASE/vmlinuz"
-    if [[ -f $k ]]; then
-        printf '%s' "$k"
-        return
-    fi
-    k="/boot/vmlinuz-$RELEASE"
-    if [[ -f $k ]]; then
-        printf '%s' "$k"
-        return
-    fi
-    die "Kernel image not found for $RELEASE"
-}
-
 # -- arguments --
 
 MODULE=
 CHECK=
 GDB=
 NETWORK=
-AES_GCM=
+ACCEL=auto
 declare -a TOOLS=() TOOL_PATHS=()
 while (( $# )); do
     case $1 in
         --check) CHECK=${2:?--check requires an argument}; shift 2 ;;
         --gdb)   GDB=1; shift ;;
         --tool)  TOOLS+=("${2:?--tool requires an argument}"); shift 2 ;;
+        --accel)
+            ACCEL=${2:?--accel requires an argument}
+            case $ACCEL in auto|kvm|tcg) ;; *) die "Unknown VM accelerator: $ACCEL" ;; esac
+            shift 2
+            ;;
         --cap)
             case ${2:?--cap requires an argument} in
-                aes-gcm) AES_GCM=1 ;;
                 network) NETWORK=1 ;;
                 *) die "Unknown VM capability: $2" ;;
             esac
@@ -74,21 +60,23 @@ trap 'exit 130' INT TERM
 
 ROOTFS="$WORK/rootfs"
 INITRAMFS="$WORK/initramfs.gz"
-KERNEL=$(find_kernel)
+RELEASE=$("$ROOT_DIR/scripts/kernel" release) || die "Course kernel manifest is invalid"
+KERNEL=$("$ROOT_DIR/scripts/kernel" image) || die "Course kernel is not ready; run: ./rootkitlings setup --accept"
+VMLINUX=$("$ROOT_DIR/scripts/kernel" vmlinux) || die "Course kernel is not ready; run: ./rootkitlings setup --accept"
 BUSYBOX=$(command -v busybox || true)
 
-readonly VM_DIR ROOT_DIR RELEASE KERNEL BUSYBOX WORK ROOTFS INITRAMFS MODULE CHECK GDB NETWORK AES_GCM
+readonly VM_DIR ROOT_DIR RELEASE KERNEL VMLINUX BUSYBOX WORK ROOTFS INITRAMFS MODULE CHECK GDB NETWORK ACCEL
 
 resolve_tools()
 {
-    local requested relative component candidate resolved tools_root
+	local requested relative component candidate resolved source_root tools_root
+	local -a relatives=() targets=()
 
-    if (( ${#TOOLS[@]} == 0 )); then
-        return 0
-    fi
-    make -C "$ROOT_DIR" --quiet tools
-    tools_root=$(realpath -e -- "$ROOT_DIR/tools") || die "Tools directory not found"
-    for requested in "${TOOLS[@]}"; do
+	if (( ${#TOOLS[@]} == 0 )); then
+		return 0
+	fi
+	source_root=$(realpath -e -- "$ROOT_DIR/tools") || die "Tools directory not found"
+	for requested in "${TOOLS[@]}"; do
         [[ $requested != /* ]] || die "Tool path must be relative to the repository: $requested"
         case $requested in
             tools/*) relative=${requested#tools/} ;;
@@ -97,26 +85,33 @@ resolve_tools()
         esac
         [[ -n $relative ]] || die "Tool path is empty"
         IFS=/ read -r -a components <<< "$relative"
-        candidate=$tools_root
-        for component in "${components[@]}"; do
-            [[ -n $component && $component != . && $component != .. ]] ||
-                die "Invalid tool path: $requested"
-            candidate+=/$component
-            [[ ! -L $candidate ]] || die "Tool path may not contain symlinks: $requested"
-        done
-        resolved=$(realpath -e -- "$candidate" 2>/dev/null) || die "Unknown tool: $requested"
-        [[ $resolved == "$tools_root"/* && -f $resolved && -x $resolved ]] ||
-            die "Tool is not a regular executable under tools/: $requested"
-        TOOL_PATHS+=("$resolved")
-    done
+		candidate=$source_root
+		for component in "${components[@]}"; do
+			[[ $component =~ ^[A-Za-z0-9._-]+$ && $component != . && $component != .. ]] ||
+				die "Invalid tool path: $requested"
+			candidate+=/$component
+			[[ ! -L $candidate ]] || die "Tool path may not contain symlinks: $requested"
+		done
+		relatives+=("$relative")
+		targets+=("$WORK/tools/$relative")
+	done
+	env -i PATH="$PATH" LC_ALL=C LANG=C TZ=UTC CC=gcc HOSTCC=gcc \
+		make -C "$ROOT_DIR" --quiet TOOL_OUT="$WORK/tools" "${targets[@]}" ||
+		die "Could not build the requested guest tools"
+	tools_root=$(realpath -e -- "$WORK/tools") || die "Tool build directory not found"
+	for relative in "${relatives[@]}"; do
+		candidate=$tools_root/$relative
+		resolved=$(realpath -e -- "$candidate" 2>/dev/null) || die "Unknown tool: $relative"
+		[[ $resolved == "$tools_root"/* && -f $resolved && -x $resolved && ! -L $candidate ]] ||
+			die "Tool is not a regular executable under tools/: $relative"
+		TOOL_PATHS+=("$resolved")
+	done
 }
 
 # -- prerequisites --
 
 check_prerequisites()
 {
-	local aes_gcm_modules
-
     resolve_tools
     [[ -n $BUSYBOX ]] || die "BusyBox not found; run make doctor for the package name"
     file "$BUSYBOX" | grep -q 'statically linked' ||
@@ -124,6 +119,9 @@ check_prerequisites()
     command -v cpio >/dev/null || die "cpio not found"
     command -v qemu-system-x86_64 >/dev/null || die "QEMU not found"
     command -v python3 >/dev/null || die "python3 not found"
+    if [[ -n $NETWORK ]] && ! qemu-system-x86_64 -netdev help 2>&1 | grep -q '^user$'; then
+        die "QEMU user networking was requested but SLIRP support is unavailable"
+    fi
     if [[ -n $GDB ]] && ! python3 - 2>/dev/null <<'PY'
 import socket
 
@@ -132,23 +130,6 @@ with socket.socket() as listener:
 PY
     then
         die "GDB port 1234 is already in use; connect to the running VM or stop it first"
-    fi
-    if [[ -n $AES_GCM || -n $NETWORK ]]; then
-        command -v modprobe >/dev/null || die "modprobe not found; run make doctor for the package name"
-    fi
-    if [[ -n $AES_GCM ]]; then
-        aes_gcm_modules=$(modprobe --show-depends gcm 2>/dev/null)
-        grep -q '^insmod ' <<< "$aes_gcm_modules" ||
-            die "Kernel crypto module not found: gcm"
-        case $aes_gcm_modules in
-            *.ko.gz*) command -v gzip >/dev/null || die "gzip not found" ;;
-            *.ko.xz*) command -v xz >/dev/null || die "xz not found" ;;
-            *.ko.zst*) command -v zstd >/dev/null || die "zstd not found" ;;
-        esac
-    fi
-    if [[ -n $NETWORK ]]; then
-        modprobe --show-depends virtio_net 2>/dev/null | grep -q '^insmod ' ||
-            die "Kernel network module not found: virtio_net"
     fi
     [[ -z $MODULE || -f $MODULE ]] || die "Module not found: $MODULE"
     [[ -z $CHECK  || -f $CHECK  ]] || die "Check script not found: $CHECK"
@@ -159,7 +140,7 @@ PY
 
 build_rootfs()
 {
-    local action applet index=0 source target
+    local applet
 
     hdr "Building the BusyBox root filesystem"
     mkdir -p "$ROOTFS"/{bin,dev,etc,lib,proc,rootkitlings,sys,tmp} \
@@ -168,10 +149,10 @@ build_rootfs()
     printf 'root:x:0:0:root:/rootkitlings:/bin/sh\n' > "$ROOTFS/etc/passwd"
     printf 'root:!:0:::::\n' > "$ROOTFS/etc/shadow"
     cp "$BUSYBOX" "$ROOTFS/bin/busybox"
-    for applet in cat chmod chpst cmp cut dd diff dmesg echo find grep head \
-        hexdump id \
-        ifconfig insmod kill ls lsmod mkdir modinfo mount nc ping poweroff \
-        printf ps rm rmdir rmmod sed setsid sh sha256sum sleep sort stat \
+    for applet in cat chmod cmp cut dd diff dmesg echo find grep head \
+		hexdump id \
+		ifconfig insmod kill ls lsmod mkdir modinfo mount nc ping poweroff \
+		printf ps reboot rm rmdir rmmod sed setsid sh sha256sum sleep sort stat \
         tail test touch tr uname wc xxd od; do
         ln -s busybox "$ROOTFS/bin/$applet"
     done
@@ -181,41 +162,6 @@ build_rootfs()
         cp "$MODULE" "$ROOTFS/rootkitlings/$(basename "$MODULE")"
         ok "Module copied to /rootkitlings/$(basename "$MODULE")"
     fi
-    if [[ -n $AES_GCM ]]; then
-        mkdir "$ROOTFS/lib/modules/$RELEASE/crypto"
-        index=0
-        while read -r action source; do
-            [[ $action == insmod ]] || continue
-            printf -v target '%s/lib/modules/%s/crypto/%02d.ko' \
-                "$ROOTFS" "$RELEASE" "$index"
-            case $source in
-                *.ko)    cp "$source" "$target" ;;
-                *.ko.gz) gzip -dc "$source" > "$target" ;;
-                *.ko.xz) xz -dc "$source" > "$target" ;;
-                *.ko.zst) zstd -dc "$source" > "$target" ;;
-                *) die "Unsupported kernel module compression: $source" ;;
-            esac
-            (( ++index ))
-        done < <(modprobe --show-depends gcm)
-        ok "AES-GCM dependencies added"
-    fi
-    if [[ -n $NETWORK ]]; then
-        mkdir "$ROOTFS/lib/modules/$RELEASE/network"
-        while read -r action source; do
-            [[ $action == insmod ]] || continue
-            printf -v target '%s/lib/modules/%s/network/%02d.ko' \
-                "$ROOTFS" "$RELEASE" "$index"
-            case $source in
-                *.ko)    cp "$source" "$target" ;;
-                *.ko.gz) command -v gzip >/dev/null || die "gzip not found"; gzip -dc "$source" > "$target" ;;
-                *.ko.xz) command -v xz >/dev/null || die "xz not found"; xz -dc "$source" > "$target" ;;
-                *.ko.zst) command -v zstd >/dev/null || die "zstd not found"; zstd -dc "$source" > "$target" ;;
-                *) die "Unsupported kernel module compression: $source" ;;
-            esac
-            (( ++index ))
-        done < <(modprobe --show-depends virtio_net)
-        ok "Interactive network drivers added"
-    fi
     if [[ -n $CHECK ]]; then
         cp "$ROOT_DIR/lib/check.sh" "$ROOTFS/lib/check.sh"
         cp "$CHECK" "$ROOTFS/check"
@@ -223,7 +169,7 @@ build_rootfs()
         ok "Check script copied to /check"
     fi
     for tool in "${TOOL_PATHS[@]}"; do
-        cp "$tool" "$ROOTFS/bin/$(basename "$tool")"
+		install -m 0755 -- "$tool" "$ROOTFS/bin/$(basename "$tool")"
         ok "Tool copied to /bin/$(basename "$tool")"
     done
     ok "Root filesystem ready"
@@ -245,17 +191,30 @@ pack_initramfs()
 
 run_vm()
 {
-    local -a qemu_args
-    local cmdline='console=ttyS0 rdinit=/init panic=1 loglevel=4'
-    local debugger debugger_prompt
+	local -a qemu_args
+	local cmdline='console=ttyS0 rdinit=/init panic=1 loglevel=4'
+	local debugger debugger_prompt qemu_status serial_log
 
-    if [[ -r /dev/kvm && -w /dev/kvm ]]; then
-        qemu_args=(-accel kvm -cpu host)
-        ok "KVM acceleration available"
-    else
-        qemu_args=(-accel tcg -cpu max)
-        warn "KVM unavailable; falling back to TCG"
-    fi
+    case $ACCEL in
+        kvm)
+            [[ -r /dev/kvm && -w /dev/kvm ]] || die "KVM was requested but /dev/kvm is unavailable"
+            qemu_args=(-accel kvm -cpu host)
+            ok "KVM acceleration selected"
+            ;;
+        tcg)
+            qemu_args=(-accel tcg -cpu max)
+            ok "TCG emulation selected"
+            ;;
+        auto)
+            if [[ -r /dev/kvm && -w /dev/kvm ]]; then
+                qemu_args=(-accel kvm -cpu host)
+                ok "KVM acceleration available"
+            else
+                qemu_args=(-accel tcg -cpu max)
+                warn "KVM unavailable; falling back to TCG"
+            fi
+            ;;
+    esac
 
     if [[ -n $CHECK ]]; then
         cmdline+=' rootkitlings=check'
@@ -263,15 +222,11 @@ run_vm()
     if [[ -n $NETWORK ]]; then
         cmdline+=' rootkitlings=network'
     fi
-    if [[ -n $AES_GCM ]]; then
-        cmdline+=' rootkitlings=aes-gcm'
-    fi
-
     if [[ -n $GDB ]]; then
         cmdline+=' nokaslr'
-        qemu_args+=(-s -S)
+        qemu_args+=(-gdb 'tcp:127.0.0.1:1234' -S)
         ok "GDB server on localhost:1234, VM paused waiting for debugger"
-        ok "QEMU -s opens :1234; -S pauses the guest CPU"
+        ok "The debugger socket is bound to 127.0.0.1 only"
         ok "KASLR disabled for stable symbol addresses"
         if command -v pwndbg >/dev/null; then
             debugger=pwndbg
@@ -281,7 +236,7 @@ run_vm()
             debugger_prompt='(gdb)'
         fi
         hdr "Connect from another terminal"
-        printf '    $ %s %q\n' "$debugger" "/lib/modules/$RELEASE/build/vmlinux"
+        printf '    $ %s %q\n' "$debugger" "$VMLINUX"
         printf '    %s target remote :1234\n' "$debugger_prompt"
         printf '    %s continue\n' "$debugger_prompt"
     fi
@@ -307,7 +262,18 @@ run_vm()
     printf ' %q' "${qemu_args[@]}"
     printf '%b\n' "$N"
 
-    qemu-system-x86_64 "${qemu_args[@]}"
+	serial_log=$WORK/serial.log
+	set +e
+	qemu-system-x86_64 "${qemu_args[@]}" 2>&1 | tee "$serial_log"
+	qemu_status=${PIPESTATUS[0]}
+	set -e
+	if (( qemu_status != 0 )); then
+		return "$qemu_status"
+	fi
+	if [[ -n $CHECK ]]; then
+		grep -Fq '[+] PASSED' "$serial_log" &&
+			! grep -Fq '[x] FAILED' "$serial_log"
+	fi
 }
 
 # -- main --

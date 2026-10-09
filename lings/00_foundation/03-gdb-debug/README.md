@@ -18,7 +18,7 @@ GDB runs on the host and controls the guest CPU through QEMU.
 terminal 1                                      terminal 2
 +-----------------------------------+           +-------------------------+
 | qemu-system-x86_64                |           | pwndbg vmlinux          |
-|   -s                             |<-- TCP --->| target remote :1234     |
+|   -gdb tcp:127.0.0.1:1234       |<-- TCP --->| target remote :1234     |
 |   -S                             |   1234     | continue                |
 |   -append "... nokaslr"           |           |                         |
 +----------------+------------------+           +-------------------------+
@@ -28,12 +28,12 @@ terminal 1                                      terminal 2
 ```
 
 ```text
--s       open the GDB server on port 1234
--S       wait for GDB before running the CPU
-nokaslr  make vmlinux addresses match the running kernel
+-gdb tcp:127.0.0.1:1234  listen for GDB on host loopback only
+-S                       wait for GDB before running the CPU
+nokaslr                  make vmlinux addresses match the running kernel
 ```
 
-`-s` is shorthand for `-gdb tcp::1234`.
+The explicit loopback address keeps the debugger socket off external interfaces.
 
 ```text
 without -S:  boot starts -> early breakpoint passes -> GDB connects
@@ -85,13 +85,13 @@ The guest has not started yet.
 Open the matching kernel image:
 
 ```bash
-pwndbg /lib/modules/$(uname -r)/build/vmlinux
+pwndbg "$(scripts/kernel vmlinux)"
 ```
 
 Use plain GDB if Pwndbg is unavailable:
 
 ```bash
-gdb /lib/modules/$(uname -r)/build/vmlinux
+gdb "$(scripts/kernel vmlinux)"
 ```
 
 Connect, then release the paused CPU:
@@ -137,7 +137,7 @@ Ctrl-C -> remote interrupt -> QEMU stops the guest CPU -> prompt returns
 Load `hello.ko` at the address printed in terminal 1:
 
 ```text
-add-symbol-file lings/00_foundation/03-gdb-debug/hello.ko 0xffffffffc0000000
+add-symbol-file .rootkitlings/work/kernel-debugging/hello.ko 0xffffffffc0000000
 break checksum
 continue
 ```

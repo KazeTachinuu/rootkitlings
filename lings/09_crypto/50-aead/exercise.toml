@@ -27,6 +27,6 @@ solution = "curriculum/solutions/authenticated-encryption"
 
 [verification]
 timeout_seconds = 60
-capabilities = ["aes-gcm"]
+capabilities = []
 tools = []
 cleanup_required = true

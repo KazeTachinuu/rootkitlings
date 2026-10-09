@@ -44,16 +44,13 @@ def boot_arguments(catalog: Catalog, item, timeout: int) -> list[str]:
         arguments += ["--cap", capability]
     for tool_id in item.verification.tools:
         binary = binaries[tool_id]
-        result = run(["make", "--quiet", binary], timeout)
-        if result.returncode:
-            raise SolutionCheckError(
-                f"could not build verification tool {binary}\n{result.stdout}"
-            )
         arguments += ["--tool", binary]
     return arguments
 
 
-def verify_item(catalog: Catalog, item, solution_root: Path) -> None:
+def verify_item(
+    catalog: Catalog, item, solution_root: Path, kernel_build_dir: Path
+) -> None:
     source = catalog.materialize_solution(item, solution_root, item.id)
     timeout = item.verification.timeout_seconds
     arguments = boot_arguments(catalog, item, timeout)
@@ -65,6 +62,7 @@ def verify_item(catalog: Catalog, item, solution_root: Path) -> None:
         catalog.module_artifact(item),
         catalog.verification_cases(item),
         timeout,
+        kernel_build_dir=kernel_build_dir,
     ) as verification:
         outcomes = verification.outcomes
         for index, outcome in enumerate(outcomes, 1):
@@ -112,13 +110,18 @@ def main(arguments: list[str]) -> int:
         items = [item for item in items if item.id in requested]
     passed = 0
     failed = 0
+    located = run([str(ROOT / "scripts/kernel"), "build-dir"], 10)
+    kernel_build_dir = Path((located.stdout or "").strip())
+    if located.returncode or not kernel_build_dir.is_dir() or kernel_build_dir.is_symlink():
+        print("[x] course kernel is not ready; run: scripts/kernel ensure", file=sys.stderr)
+        return 1
     with tempfile.TemporaryDirectory(prefix="rootkitlings-solutions-") as temporary:
         solution_root = Path(temporary)
         for item in items:
             shown = item.serial or item.id
             print(f"\n[*] {shown} ({item.id})")
             try:
-                verify_item(catalog, item, solution_root)
+                verify_item(catalog, item, solution_root, kernel_build_dir)
             except (OSError, SolutionCheckError, VerificationError) as error:
                 print(f"[x] {item.id} failed: {error}", file=sys.stderr)
                 failed += 1

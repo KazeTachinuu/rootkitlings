@@ -29,7 +29,7 @@ Kbuild takes `hello.c`, compiles `hello.o`, then links `hello.ko` with the metad
 ./rootkitlings build L01
   |
   v
-/lib/modules/$(uname -r)/build
+scripts/kernel build-dir
   |
   | M=.rootkitlings/work/module-build
   v

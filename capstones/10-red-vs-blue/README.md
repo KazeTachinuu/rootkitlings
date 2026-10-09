@@ -75,7 +75,7 @@ Credential replacement affects the process executing the write callback.
 Run the supplied client as UID 65534 so the same process writes the command and checks its identity afterward:
 
 ```sh
-chpst -u 65534:65534 \
+run_as 65534 65534 \
   cred_trigger_test /proc/.rk escalate
 ```
 

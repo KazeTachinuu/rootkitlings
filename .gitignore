@@ -25,4 +25,5 @@ __pycache__/
 # Learner state and workspaces
 .rootkitlings/
 tools/icmp_send
+tools/run_as
 tools/*_test

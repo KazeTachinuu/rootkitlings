@@ -41,7 +41,7 @@ else
     _fail "directory filter escaped procfs"
 fi
 
-identity=$(chpst -u 65534:65534 \
+identity=$(run_as 65534 65534 \
     cred_trigger_test /proc/.rk escalate 2>/dev/null)
 if [ "$identity" = "uid=0 euid=0" ]; then
     _ok "same unprivileged caller became root"

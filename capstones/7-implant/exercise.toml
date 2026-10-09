@@ -27,6 +27,6 @@ solution = "curriculum/solutions/connect-back-agent"
 
 [verification]
 timeout_seconds = 90
-capabilities = ["network"]
+capabilities = []
 tools = []
 cleanup_required = true

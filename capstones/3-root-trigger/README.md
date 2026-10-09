@@ -19,7 +19,7 @@ printf 'token: %s\n' "$token"
 Give that value to the supplied client running as UID 65534:
 
 ```sh
-chpst -u 65534:65534 \
+run_as 65534 65534 \
   cred_trigger_test /proc/rk_privesc "$token"
 ```
 

@@ -15,7 +15,7 @@ else
     _fail "unexpected root credentials: '$root_creds'"
 fi
 
-unpriv_creds=$(chpst -u 65534:65534 cat /proc/rk_creds)
+unpriv_creds=$(run_as 65534 65534 cat /proc/rk_creds)
 if [ "$unpriv_creds" = "uid=65534 gid=65534" ]; then
     _ok "unprivileged reader reported as uid=65534 gid=65534"
 else

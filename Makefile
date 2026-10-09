@@ -1,21 +1,24 @@
-KDIR ?= /lib/modules/$(shell uname -r)/build
+KDIR ?= $(shell scripts/kernel build-dir)
 MODULE_DIR ?=
-GUEST_TOOLS := \
-	tools/cred_trigger_test \
-	tools/credential_snapshot_test \
-	tools/event_stream_test \
-	tools/getdents64_test \
-	tools/icmp_send \
-	tools/ioctl_test \
-	tools/module_load_test \
-	tools/proc_read_test \
-	tools/proc_write_test \
-	tools/read_result_test \
-	tools/rmdir_telemetry_test \
-	tools/status_field_test \
-	tools/task_attribution_test
+TOOL_OUT ?= tools
+GUEST_TOOL_NAMES := \
+	cred_trigger_test \
+	credential_snapshot_test \
+	event_stream_test \
+	getdents64_test \
+	icmp_send \
+	ioctl_test \
+	module_load_test \
+	proc_read_test \
+	proc_write_test \
+	read_result_test \
+	run_as \
+	rmdir_telemetry_test \
+	status_field_test \
+	task_attribution_test
+GUEST_TOOLS := $(addprefix $(TOOL_OUT)/,$(GUEST_TOOL_NAMES))
 
-.PHONY: all help module clean compile-db test-solutions doctor validate validate-quick tools
+.PHONY: all help module clean compile-db test-solutions doctor validate validate-quick tools tool-output-directory
 
 .DEFAULT_GOAL := help
 
@@ -38,43 +41,49 @@ module:
 
 tools: $(GUEST_TOOLS)
 
-tools/cred_trigger_test: tools/cred_trigger_test.c
+tool-output-directory:
+	mkdir -p "$(TOOL_OUT)"
+
+$(TOOL_OUT)/cred_trigger_test: tools/cred_trigger_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
 
-tools/credential_snapshot_test: tools/credential_snapshot_test.c
+$(TOOL_OUT)/credential_snapshot_test: tools/credential_snapshot_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
 
-tools/event_stream_test: tools/event_stream_test.c
+$(TOOL_OUT)/event_stream_test: tools/event_stream_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
 
-tools/getdents64_test: tools/getdents64_test.c
+$(TOOL_OUT)/getdents64_test: tools/getdents64_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
 
-tools/icmp_send: tools/icmp_send.c
+$(TOOL_OUT)/icmp_send: tools/icmp_send.c | tool-output-directory
 	$(CC) -static -o $@ $<
 
-tools/ioctl_test: tools/ioctl_test.c
+$(TOOL_OUT)/ioctl_test: tools/ioctl_test.c | tool-output-directory
 	$(CC) -static -o $@ $<
 
-tools/module_load_test: tools/module_load_test.c
+$(TOOL_OUT)/module_load_test: tools/module_load_test.c | tool-output-directory
 	$(CC) -static -o $@ $<
 
-tools/proc_read_test: tools/proc_read_test.c
+$(TOOL_OUT)/proc_read_test: tools/proc_read_test.c | tool-output-directory
 	$(CC) -static -o $@ $<
 
-tools/proc_write_test: tools/proc_write_test.c
+$(TOOL_OUT)/proc_write_test: tools/proc_write_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
 
-tools/read_result_test: tools/read_result_test.c
+$(TOOL_OUT)/read_result_test: tools/read_result_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -pthread -static -o $@ $<
 
-tools/rmdir_telemetry_test: tools/rmdir_telemetry_test.c
+$(TOOL_OUT)/run_as: tools/run_as.c | tool-output-directory
+	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
+
+$(TOOL_OUT)/rmdir_telemetry_test: tools/rmdir_telemetry_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
 
-tools/status_field_test: tools/status_field_test.c
+$(TOOL_OUT)/status_field_test: tools/status_field_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
 
-tools/task_attribution_test: tools/task_attribution_test.c
+$(TOOL_OUT)/task_attribution_test: tools/task_attribution_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
 
 clean:

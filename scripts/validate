@@ -1,8 +1,10 @@
 #!/usr/bin/bash
 set -Eeuo pipefail
+export LC_ALL=C LANG=C TZ=UTC ARCH=x86_64 CC=gcc HOSTCC=gcc
+unset CROSS_COMPILE KCONFIG_CONFIG LOCALVERSION KCFLAGS KCPPFLAGS KAFLAGS \
+    HOSTCFLAGS HOSTLDFLAGS LLVM LLVM_IAS MAKEFLAGS MFLAGS
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
 BUILD_ASSETS=1
 if [[ ${1:-} == --quick ]]; then BUILD_ASSETS=0; shift; fi
 (( $# == 0 )) || { printf 'usage: %s [--quick]\n' "$0" >&2; exit 2; }
@@ -75,14 +77,14 @@ PY
 
 check_scripts()
 {
-    bash -n vm/boot scripts/doctor scripts/validate
+    bash -n vm/boot scripts/doctor scripts/lesson-env scripts/toolbox/bc scripts/validate
     sh -n vm/init vm/checks/containment lib/check.sh
-    python3 -m py_compile rootkitlings lib/catalog.py lib/setup_gate.py lib/verification.py scripts/catalog scripts/check-doc-links scripts/test-solutions
+    python3 -m py_compile rootkitlings lib/catalog.py lib/setup_gate.py lib/verification.py scripts/catalog scripts/check-doc-links scripts/kernel scripts/test-solutions
     while IFS= read -r check; do bash -n "$check"; done < <(find curriculum/support -name check -o -name host-check)
     python3 scripts/format-docs --check
     python3 scripts/check-doc-links
     if command -v shellcheck >/dev/null; then
-        shellcheck -S warning vm/boot vm/init scripts/validate
+        shellcheck -S warning vm/boot vm/init scripts/doctor scripts/lesson-env scripts/toolbox/bc scripts/validate
         shellcheck -S warning -s busybox lib/check.sh vm/checks/containment
         while IFS= read -r host_check; do shellcheck -S warning "$host_check"; done < <(find curriculum/support -name host-check -type f -print)
     fi
@@ -93,6 +95,7 @@ build_assets()
 {
     local id baseline source files build_path work tree log relative
     local templates=0 completions=0 solutions=0
+    KDIR=$(scripts/kernel build-dir) || fail 'course kernel is not ready; run scripts/kernel ensure'
     [[ -d $KDIR ]] || fail "kernel build directory not found: $KDIR"
     work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-validate.XXXXXX")
     trap 'rm -rf -- "$work"' RETURN

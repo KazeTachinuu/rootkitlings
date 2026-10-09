@@ -12,6 +12,7 @@ import tempfile
 from typing import Iterable, Iterator
 
 from .catalog import VerificationCase
+from .build_env import module_build_environment
 from .process import ProcessError, ProcessTimeout, run_process
 from .workspace import WorkspaceError, canonical_tree_hash, materialize
 
@@ -97,10 +98,13 @@ def build_verification_cases(
     artifact_basename: str,
     cases: Iterable[VerificationCase],
     timeout_seconds: int,
+    *,
+    kernel_build_dir: Path,
 ) -> Iterator[VerificationRun]:
     """Build every case in isolation and retain its tree for the context lifetime."""
     repository_root = _real_directory(repository_root, "repository root")
     source_tree = _real_directory(source_tree, "source tree")
+    kernel_build_dir = _real_directory(kernel_build_dir, "course kernel build directory")
     if not ARTIFACT_RE.fullmatch(artifact_basename):
         raise VerificationError("artifact must be a portable .ko basename")
     if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int) or timeout_seconds <= 0:
@@ -151,6 +155,7 @@ def build_verification_cases(
                 )
             command = [
                 "make", "-C", os.fspath(repository_root),
+                f"KDIR={kernel_build_dir}",
                 f"MODULE_DIR={build_root}", "W=1",
                 *(f"{name}={value}" for name, value in case.build_variables),
                 "module",
@@ -160,6 +165,7 @@ def build_verification_cases(
                     command,
                     timeout=timeout_seconds,
                     capture=True,
+                    env=module_build_environment(),
                 )
             except ProcessTimeout as exc:
                 raise VerificationError(

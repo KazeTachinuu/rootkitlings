@@ -1,10 +1,11 @@
 #!/usr/bin/bash
 set -u
+export LC_ALL=C LANG=C
 
+ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 missing=0
 family=unknown
 if [[ -r /etc/os-release ]]; then
-	# shellcheck source=/etc/os-release
 	. /etc/os-release
 	case " ${ID:-} ${ID_LIKE:-} " in
 		*' arch '*) family=arch ;;
@@ -16,12 +17,15 @@ fi
 package_name()
 {
 	case "$family:$1" in
-		arch:build|arch:compiler) printf base-devel ;;
+		arch:build|arch:compiler|arch:binutils) printf base-devel ;;
 		debian:build|debian:compiler) printf build-essential ;;
+		debian:libelf) printf libelf-dev ;;
+		debian:static-libc) printf libc6-dev ;;
 		fedora:build) printf make ;;
 		fedora:compiler) printf gcc ;;
-		*:build) printf make ;;
-		*:compiler) printf cc ;;
+		fedora:libelf) printf elfutils-libelf-devel ;;
+		fedora:static-libc) printf glibc-static ;;
+		*:binutils) printf binutils ;;
 		debian:busybox) printf busybox-static ;;
 		fedora:qemu) printf qemu-system-x86-core ;;
 		*:qemu) printf qemu-system-x86 ;;
@@ -34,24 +38,35 @@ check_command()
 {
 	local command=$1 package
 	package=$(package_name "$2")
-
 	if command -v "$command" >/dev/null; then
-		printf '[+] %-20s %s\n' "$command" "$(command -v "$command")"
+		printf '[+] %-22s %s\n' "$command" "$(command -v "$command")"
 	else
-		printf '[x] %-20s missing (package: %s)\n' "$command" "$package"
+		printf '[x] %-22s missing (package: %s)\n' "$command" "$package"
 		missing=$((missing + 1))
 	fi
 }
 
-printf '[*] Host tools\n'
-printf '[+] %-20s %s\n' distribution "${PRETTY_NAME:-unknown}"
+printf '[*] Host\n'
+printf '[+] %-22s %s\n' distribution "${PRETTY_NAME:-unknown}"
+if [[ $(uname -m) == x86_64 ]]; then
+	printf '[+] %-22s supported\n' architecture
+else
+	printf '[x] %-22s unsupported; the course currently targets x86-64\n' "$(uname -m)"
+	missing=$((missing + 1))
+fi
+printf '[+] %-22s irrelevant (%s)\n' 'host kernel' "$(uname -r)"
+
+printf '\n[*] Build and verification tools\n'
 check_command bash bash
 check_command make build
-check_command cc compiler
+check_command gcc compiler
+for command in ld as ar nm objcopy objdump readelf; do check_command "$command" binutils; done
+check_command bison bison
+check_command flex flex
+check_command perl perl
 check_command file file
-check_command gdb gdb
 check_command modinfo kmod
-check_command modprobe kmod
+check_command gdb gdb
 check_command python3 python
 check_command busybox busybox
 check_command cpio cpio
@@ -59,165 +74,107 @@ check_command gzip gzip
 check_command qemu-system-x86_64 qemu
 check_command timeout coreutils
 
-if command -v pwndbg >/dev/null; then
-	printf '[+] %-20s %s\n' pwndbg "$(command -v pwndbg)"
-else
-	printf '[-] %-20s optional enhanced GDB interface\n' pwndbg
+if command -v python3 >/dev/null; then
+	if python3 - <<'PY'
+import sys, tarfile
+raise SystemExit(not (sys.version_info >= (3, 11) and hasattr(tarfile, "data_filter")))
+PY
+	then
+		printf '[+] %-22s maintained 3.11+ with safe tar filters\n' Python
+	else
+		printf '[x] %-22s requires maintained Python 3.11+ with tar extraction filters\n' Python
+		missing=$((missing + 1))
+	fi
 fi
 
-if command -v cc >/dev/null; then
-	probe=$(mktemp "${TMPDIR:-/tmp}/rootkitlings-cc.XXXXXX")
-	if printf 'int main(void) { return 0; }\n' |
-		cc -static -x c -o "$probe" - >/dev/null 2>&1; then
-		printf '[+] %-20s available\n' 'static C linking'
+if command -v gcc >/dev/null; then
+	if printf '#include <libelf.h>\n#include <gelf.h>\nint main(void) { return elf_version(EV_CURRENT) == EV_NONE; }\n' | gcc -x c -o /dev/null - -lelf >/dev/null 2>&1; then
+		printf '[+] %-22s available\n' 'libelf development'
 	else
-		printf '[x] %-20s unavailable (install static libc development files)\n' 'static C linking'
+		printf '[x] %-22s missing (package: %s)\n' 'libelf development' "$(package_name libelf)"
+		missing=$((missing + 1))
+	fi
+	probe=$(mktemp "${TMPDIR:-/tmp}/rootkitlings-cc.XXXXXX")
+	if printf 'int main(void) { return 0; }\n' | gcc -static -x c -o "$probe" - >/dev/null 2>&1; then
+		printf '[+] %-22s available\n' 'static C linking'
+	else
+		printf '[x] %-22s unavailable (package: %s)\n' 'static C linking' "$(package_name static-libc)"
 		missing=$((missing + 1))
 	fi
 	rm -f -- "$probe"
 fi
 
 if command -v busybox >/dev/null; then
+	if file "$(command -v busybox)" | grep -q 'statically linked'; then
+		printf '[+] %-22s statically linked\n' BusyBox
+	else
+		printf '[x] %-22s must be statically linked (package: %s)\n' BusyBox "$(package_name busybox)"
+		missing=$((missing + 1))
+	fi
 	busybox_applets=$(busybox --list)
 	missing_applets=
-	for applet in cat chmod chpst cmp cut dd diff dmesg echo find grep head \
-		hexdump id \
-		ifconfig insmod kill ls lsmod mkdir modinfo mount nc ping poweroff \
-		printf ps rm rmdir rmmod sed setsid sh sha256sum sleep sort stat \
-		tail test touch tr uname wc xxd od; do
-		grep -qx "$applet" <<< "$busybox_applets" || missing_applets="$missing_applets $applet"
+	for applet in bc cat chmod cmp cut dd diff dmesg echo find grep head hexdump id \
+		ifconfig insmod kill ls lsmod mkdir modinfo mount nc ping poweroff printf ps \
+		reboot rm rmdir rmmod sed setsid sh sha256sum sleep sort stat tail test touch tr \
+		uname unshare wc xxd od; do
+		grep -qx "$applet" <<< "$busybox_applets" || missing_applets+=" $applet"
 	done
 	if [[ -z $missing_applets ]]; then
-		printf '[+] %-20s complete\n' 'BusyBox applets'
+		printf '[+] %-22s complete\n' 'BusyBox applets'
 	else
-		printf '[x] %-20s missing:%s\n' 'BusyBox applets' "$missing_applets"
+		printf '[x] %-22s missing:%s\n' 'BusyBox applets' "$missing_applets"
 		missing=$((missing + 1))
 	fi
 fi
 
 if command -v qemu-system-x86_64 >/dev/null; then
 	if qemu-system-x86_64 -netdev help 2>&1 | grep -q '^user$'; then
-		printf '[+] %-20s available\n' 'QEMU user network'
+		printf '[+] %-22s optional capability available\n' 'QEMU user network'
 	else
-		printf '[x] %-20s unavailable (QEMU needs SLIRP support)\n' 'QEMU user network'
-		missing=$((missing + 1))
+		printf '[-] %-22s optional capability unavailable\n' 'QEMU user network'
 	fi
 fi
 
-if command -v modprobe >/dev/null; then
-	aes_gcm_modules=$(modprobe --show-depends gcm 2>/dev/null)
-	if grep -q '^insmod ' <<< "$aes_gcm_modules"; then
-		printf '[+] %-20s dependency closure found\n' aes-gcm
-	else
-		printf '[x] %-20s kernel module missing\n' aes-gcm
-		missing=$((missing + 1))
-	fi
-	network_modules=$(modprobe --show-depends virtio_net 2>/dev/null)
-	if grep -q '^insmod ' <<< "$network_modules"; then
-		printf '[+] %-20s dependency closure found\n' virtio_net
-	else
-		printf '[x] %-20s kernel module missing\n' virtio_net
-		missing=$((missing + 1))
-	fi
-	case "$aes_gcm_modules $network_modules" in
-		*.ko.xz*) check_command xz xz ;;
-		*.ko.zst*) check_command zstd zstd ;;
-	esac
-fi
-
-release=$(uname -r)
-build=/lib/modules/$release/build
-kernel=/usr/lib/modules/$release/vmlinuz
-[[ -f $kernel ]] || kernel=/boot/vmlinuz-$release
-
-printf '\n[*] Architecture\n'
-if [[ $(uname -m) == x86_64 ]]; then
-	printf '[+] x86_64               supported\n'
+printf '\n[*] Capacity\n'
+memory_kib=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+if (( memory_kib >= 2 * 1024 * 1024 )); then
+	printf '[+] %-22s %.1f GiB (4 GiB recommended)\n' memory "$(awk -v value="$memory_kib" 'BEGIN { print value / 1048576 }')"
 else
-	printf '[x] %-20s unsupported (this course uses x86-64 registers)\n' "$(uname -m)"
+	printf '[x] %-22s %.1f GiB; at least 2 GiB is required\n' memory "$(awk -v value="$memory_kib" 'BEGIN { print value / 1048576 }')"
 	missing=$((missing + 1))
 fi
-
-printf '\n[*] Kernel %s\n' "$release"
-if [[ $release == 7.2.* || $release == 7.2-* ]]; then
-	printf '[+] version              supported 7.2.x API\n'
+free_kib=$(df -Pk "$ROOT_DIR" | awk 'NR == 2 { print $4 }')
+if (( free_kib >= 4 * 1024 * 1024 )); then
+	printf '[+] %-22s %.1f GiB free (6 GiB recommended)\n' storage "$(awk -v value="$free_kib" 'BEGIN { print value / 1048576 }')"
 else
-	printf '[x] version              requires Linux 7.2.x\n'
+	printf '[x] %-22s %.1f GiB free; at least 4 GiB is required\n' storage "$(awk -v value="$free_kib" 'BEGIN { print value / 1048576 }')"
 	missing=$((missing + 1))
 fi
-if [[ -d $build ]]; then
-	printf '[+] headers              %s\n' "$build"
-else
-	case $family in
-		arch) header_package='headers matching the running kernel' ;;
-		debian) header_package="linux-headers-$release" ;;
-		fedora) header_package="kernel-devel-$release" ;;
-		*) header_package='headers matching the running kernel' ;;
-	esac
-	printf '[x] headers              missing: %s (package: %s)\n' "$build" "$header_package"
-	missing=$((missing + 1))
-fi
-if [[ -f $kernel ]]; then
-	printf '[+] image                %s\n' "$kernel"
-else
-	printf '[x] image                no bootable image found\n'
-	missing=$((missing + 1))
-fi
+cpus=$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf 1)
+printf '[+] %-22s %s logical (4 recommended)\n' processors "$cpus"
 
-config=
-config_command=()
-if [[ -r /proc/config.gz ]]; then
-	config_command=(gzip -dc /proc/config.gz)
-elif [[ -r /boot/config-$release ]]; then
-	config_command=(cat "/boot/config-$release")
-elif [[ -r $build/.config ]]; then
-	config_command=(cat "$build/.config")
-fi
-
-if (( ${#config_command[@]} )); then
-	config=$("${config_command[@]}")
-	for option in MODULES MODULE_UNLOAD DEVTMPFS PROC_FS SYSFS DEBUG_FS TRACING \
-		KPROBES FPROBE NET NETFILTER INET CRYPTO CRYPTO_AES CRYPTO_HMAC CRYPTO_SHA256; do
-		if grep -q "^CONFIG_$option=y$" <<< "$config"; then
-			printf '[+] CONFIG_%-13s y\n' "$option"
-		else
-			printf '[x] CONFIG_%-13s must be built in (=y)\n' "$option"
-			missing=$((missing + 1))
-		fi
-	done
-	for option in CRYPTO_AEAD CRYPTO_GCM; do
-		if grep -Eq "^CONFIG_$option=(y|m)$" <<< "$config"; then
-			printf '[+] CONFIG_%-13s available\n' "$option"
-		else
-			printf '[x] CONFIG_%-13s must be enabled (=y or =m)\n' "$option"
-			missing=$((missing + 1))
-		fi
-	done
-	if grep -q '^CONFIG_MODULE_SIG_FORCE=y$' <<< "$config"; then
-		printf '[x] CONFIG_MODULE_SIG_FORCE unsigned lesson modules cannot load\n'
-		missing=$((missing + 1))
-	fi
+printf '\n[*] Course kernel\n'
+if "$ROOT_DIR/scripts/kernel" status; then
+	printf '[+] %-22s ready\n' 'pinned kernel'
 else
-	printf '[x] kernel config        unavailable (/proc/config.gz or /boot/config-%s)\n' "$release"
-	missing=$((missing + 1))
-fi
-
-if command -v busybox >/dev/null &&
-		! file "$(command -v busybox)" | grep -q 'statically linked'; then
-	printf '[x] busybox              must be statically linked\n'
-	missing=$((missing + 1))
+	printf '[-] %-22s setup will build it from the pinned source\n' 'pinned kernel'
 fi
 
 printf '\n[*] Acceleration\n'
 if [[ -r /dev/kvm && -w /dev/kvm ]]; then
-	printf '[+] KVM                  available\n'
+	printf '[+] %-22s available\n' KVM
 else
-	printf '[-] KVM                  unavailable; tests use slower emulation\n'
+	printf '[-] %-22s unavailable; tests use slower TCG emulation\n' KVM
+fi
+if command -v pwndbg >/dev/null; then
+	printf '[+] %-22s %s\n' pwndbg "$(command -v pwndbg)"
+else
+	printf '[-] %-22s optional enhanced GDB interface\n' pwndbg
 fi
 
 printf '\n'
 if (( missing == 0 )); then
-	printf '[+] Host ready\n'
+	printf '[+] Host ready for the pinned x86-64 course kernel\n'
 else
 	printf '[x] Not ready: %d required item(s) missing\n' "$missing"
 	exit 1

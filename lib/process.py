@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import signal
 import subprocess
-from typing import Sequence
+from typing import Mapping, Sequence
 
 
 class ProcessError(RuntimeError):
@@ -31,6 +31,7 @@ def run_process(
     timeout: int | float | None = None,
     capture: bool = False,
     discard_stdin: bool = False,
+    env: Mapping[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run an argv command in its own process group and kill the group on timeout."""
     values = tuple(os.fspath(value) for value in argv)
@@ -45,6 +46,7 @@ def run_process(
             stderr=subprocess.STDOUT if capture else None,
             text=True,
             start_new_session=True,
+            env=env,
         )
     except OSError as error:
         raise ProcessError(f"cannot execute {' '.join(values)}: {error}") from error

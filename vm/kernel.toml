@@ -1,0 +1,10 @@
+schema_version = 1
+architecture = "x86_64"
+version = "7.2.9"
+local_version = "-rootkitlings"
+compiler = "gcc"
+base_config = "allnoconfig"
+source_base_url = "https://cdn.kernel.org/pub/linux/kernel/v7.x"
+source_sha256 = "b4c5dfbe51a364a6c7f03869200f88c8e1f77403539005f14b7fc6bc91b8d8ba"
+source_size = 160392664
+config = "vm/kernel.config"

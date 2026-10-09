@@ -10,6 +10,14 @@ from lib.process import ProcessError, ProcessTimeout, run_process
 
 
 class ProcessTests(unittest.TestCase):
+    def test_explicit_environment_does_not_inherit_ambient_values(self) -> None:
+        result = run_process(
+            ["/bin/sh", "-c", "printf '%s|%s' \"$LC_ALL\" \"${KCFLAGS-unset}\""],
+            capture=True,
+            env={"PATH": os.environ.get("PATH", os.defpath), "LC_ALL": "C"},
+        )
+        self.assertEqual(result.stdout, "C|unset")
+
     def test_launch_error_is_translated(self) -> None:
         with self.assertRaisesRegex(ProcessError, "cannot execute"):
             run_process(["/definitely/missing/rootkitlings-command"])

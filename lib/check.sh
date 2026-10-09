@@ -192,7 +192,8 @@ load() {
 
 unload() {
     local mod="$1"
-    if rmmod "$mod"; then
+    if rmmod "$mod" && [ ! -d "/sys/module/$mod" ] &&
+       ! grep -q "^$mod " /proc/modules; then
         _ok "unloaded $mod"
     else
         _fail "failed to unload $mod"

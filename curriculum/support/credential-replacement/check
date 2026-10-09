@@ -7,7 +7,7 @@ load hello.ko
 assert_loaded hello
 assert_exists /proc/rk_escalate
 
-invalid=$(chpst -u 65534:65534 sh -c '
+invalid=$(run_as 65534 65534 sh -c '
     printf evil > /proc/rk_escalate 2>/dev/null || true
     cat /proc/rk_escalate
 ')
@@ -19,7 +19,7 @@ fi
 
 # commit_creds() changes this child shell, not the root check process.
 # shellcheck disable=SC2016 # The single-quoted program expands in the guest shell.
-result=$(chpst -u 65534:65534 sh -c '
+result=$(run_as 65534 65534 sh -c '
     before=$(cat /proc/rk_escalate) || exit
     printf escalate > /proc/rk_escalate || exit
     after=$(cat /proc/rk_escalate) || exit
