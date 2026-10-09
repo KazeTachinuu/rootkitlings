@@ -455,8 +455,12 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
   not a syscall, datagram, unique skb, or wire-packet count.
 - Defensive evidence: exact controlled IPv4 loopback deltas and payload delivery;
   IPv6 and child-network-namespace negative controls; registration and publication
-  rollback; concurrent traffic; unload under traffic; reload; and clean logs.
-- Current source: L40, with its PRE_ROUTING choice and ambiguous ping test retired.
+  rollback; concurrent traffic and status reads; a proc descriptor held across
+  removal; unload under live traffic; reload; and clean logs.
+- Accepted asset: `curriculum/incubator/stage-05/r20-netfilter-observer/`,
+  independently validated. Its controlled interval delivers 257 distinct UDP
+  payloads byte for byte and requires an exact callback delta of 257. The old L40
+  PRE_ROUTING choice and ambiguous ping test are retired.
 
 #### R21 - Classify one bounded IPv4 UDP datagram
 

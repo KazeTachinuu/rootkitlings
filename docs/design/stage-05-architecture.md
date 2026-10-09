@@ -1,6 +1,6 @@
 # Stage 5 architecture
 
-Status: R18 and R19 are independently validated.
+Status: R18 through R20 are independently validated.
 
 This document records only accepted Stage 5 contracts.
 It does not assign implementation status to later lessons.
@@ -107,3 +107,52 @@ Compiling hostile variants prove that assuming offset zero, reporting raw `skb->
 The complete 330,001-assertion R18 sanitizer corpus and its guest lifecycle check run as regressions.
 
 Primary implementation sources are Linux v7.2 `include/linux/skbuff.h` for skb geometry, `skb_network_offset()`, `skb_frags_readable()`, and `skb_header_pointer_careful()`, and `net/core/skbuff.c` for `skb_copy_bits()` across the linear head, page fragments, and `frag_list`.
+
+## R20: owned Netfilter observation
+
+Public alias: L19.
+Stable ID: `netfilter-observer`.
+Title: Observe local IPv4 traffic without changing it.
+Direct prerequisite: `proc-publication`.
+
+The learner owns only `instrumentation/netfilter_observer.c` and implements the callback, start, stop, and snapshot functions for one observer object.
+That object owns its hook descriptor, atomic callback counter, network namespace, and published registration state.
+
+Start rejects a null or already registered object, resets the counter, completely initializes the hook descriptor, and registers it before publishing the registered state.
+Registration uses `NFPROTO_IPV4`, `NF_INET_LOCAL_OUT`, `NF_IP_PRI_FIRST`, and `init_net`.
+The priority is the earliest numeric priority, but does not define ordering between hooks with the same priority.
+An exact registration error is returned without publishing a partially initialized observer.
+
+The callback recovers its owner from `priv`, increments the atomic counter exactly once, and returns `NF_ACCEPT`.
+It does not inspect or modify the skb, allocate, log, queue work, or sleep.
+`NF_ACCEPT` continues this Netfilter traversal; it does not promise final delivery.
+The callback executes inside Netfilter's RCU read-side critical section, but the lesson does not make a broader claim that every invocation runs in one fixed interrupt context.
+
+Stop is null-safe and idempotent.
+It unregisters the hook, waits for pre-existing RCU readers with `synchronize_rcu()`, and only then clears the published state.
+Module teardown removes the proc entry before stopping the observer, so a held proc descriptor cannot start a new snapshot while the observer is being retired.
+Module initialization and exit serialize lifecycle operations; concurrent start and stop calls are outside the component contract.
+
+`/proc/rootkitlings` reports exactly the configured family, hook, priority, namespace, verdict, state, and atomic callback count.
+The configuration fields prove what was registered, while only a controlled change in the counter proves callback execution.
+One count means one invocation for one skb traversal at this hook, not one send call, delivered datagram, unique skb, or wire packet.
+
+## Verification
+
+The checker accepts a bounded set of semantically equivalent lifecycle forms rather than requiring an exact source spelling.
+It rejects packet inspection, conditional counting, a different hook or namespace, a non-accept verdict, premature state publication or clearing, missing RCU drainage, hardcoded status, and changes to supplied files.
+
+In the guest, 257 distinct IPv4 UDP payloads must arrive byte for byte while the callback count increases by exactly 257 during the controlled traffic interval.
+IPv6 and traffic generated in a child network namespace are negative controls.
+Registration and proc-publication failures exercise rollback.
+The check also covers concurrent traffic and status reads, a proc descriptor held across removal, unload while IPv4 traffic is live, reload, and a clean kernel log.
+The registration failure injection is at the component boundary; it does not force an internal allocator failure inside `nf_register_net_hook()`.
+Uncontrolled `init_net` IPv4 traffic outside the measured interval may legitimately change the counter.
+
+## Primary sources
+
+- [Linux v7.2 Netfilter hook API and `nf_hook_ops`](https://github.com/torvalds/linux/blob/v7.2/include/linux/netfilter.h)
+- [Linux v7.2 IPv4 hook numbers and priorities](https://github.com/torvalds/linux/blob/v7.2/include/uapi/linux/netfilter_ipv4.h)
+- [Linux v7.2 hook registration and removal](https://github.com/torvalds/linux/blob/v7.2/net/netfilter/core.c)
+- [Linux v7.2 IPv4 `LOCAL_OUT` invocation](https://github.com/torvalds/linux/blob/v7.2/net/ipv4/ip_output.c)
+- [Linux v7.2 RCU overview](https://docs.kernel.org/7.2/RCU/whatisRCU.html)
