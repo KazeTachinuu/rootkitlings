@@ -1,0 +1,27 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Protection property selection"
+
+assert_absent /sys/module/rootkitlings
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	load rootkitlings.ko
+	assert_loaded rootkitlings
+	if dmesg | grep -q 'rootkitlings: protection self-tests passed: 294 assertions'; then
+		_ok "kernel decision table and XOR self-tests passed"
+	else
+		_fail "kernel self-test completion is missing"
+	fi
+	if dmesg | grep -q 'rootkitlings: runtime marker=rk-runtime-plaintext-visible'; then
+		_ok "decoded plaintext exists while the module runs"
+	else
+		_fail "runtime plaintext demonstration is missing"
+	fi
+	unload rootkitlings
+	assert_absent /sys/module/rootkitlings
+	attempt=$((attempt + 1))
+done
+
+summary

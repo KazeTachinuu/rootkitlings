@@ -1,0 +1,3 @@
+obj-m += rootkitlings.o
+rootkitlings-y := core/main.o protection/properties.o tests/selftest.o
+ccflags-y += -I$(src)/include
