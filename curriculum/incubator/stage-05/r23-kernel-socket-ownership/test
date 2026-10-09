@@ -208,6 +208,47 @@ sed -i '/mutex_lock(\&owner->lock);/,/status->owned/ { /mutex_lock(\&owner->lock
 	"$unlocked_snapshot/network/socket_owner.c"
 expect_rejection "$unlocked_snapshot" unlocked-snapshot
 
+late_snapshot_lock=$scratch/late-snapshot-lock
+cp -a "$scratch/solution" "$late_snapshot_lock"
+python3 - "$late_snapshot_lock/network/socket_owner.c" <<'PY'
+from pathlib import Path
+import sys
+
+p = Path(sys.argv[1])
+s = p.read_text(encoding="utf-8")
+start = s.index("void rk_socket_snapshot")
+lock = s.index("\tmutex_lock(&owner->lock);\n", start)
+unlock = s.index("\tmutex_unlock(&owner->lock);\n", lock)
+s = s[:lock] + s[lock + len("\tmutex_lock(&owner->lock);\n"):]
+unlock -= len("\tmutex_lock(&owner->lock);\n")
+s = s[:unlock] + "\tmutex_lock(&owner->lock);\n" + s[unlock:]
+p.write_text(s, encoding="utf-8")
+PY
+expect_rejection "$late_snapshot_lock" snapshot-copy-outside-lock
+
+stale_close_state=$scratch/stale-close-state
+cp -a "$scratch/solution" "$stale_close_state"
+sed -i '/owner->peer_port = 0;/d' \
+	"$stale_close_state/network/socket_owner.c"
+expect_rejection "$stale_close_state" stale-close-state
+
+early_close_unlock=$scratch/early-close-unlock
+cp -a "$scratch/solution" "$early_close_unlock"
+python3 - "$early_close_unlock/network/socket_owner.c" <<'PY'
+from pathlib import Path
+import sys
+
+p = Path(sys.argv[1])
+s = p.read_text(encoding="utf-8")
+start = s.index("void rk_socket_close")
+shutdown = s.index("\t(void)kernel_sock_shutdown", start)
+last_unlock = s.index("\tmutex_unlock(&owner->lock);\n", shutdown)
+s = s[:last_unlock] + s[last_unlock + len("\tmutex_unlock(&owner->lock);\n"):]
+s = s[:shutdown] + "\tmutex_unlock(&owner->lock);\n" + s[shutdown:]
+p.write_text(s, encoding="utf-8")
+PY
+expect_rejection "$early_close_unlock" release-outside-lock
+
 cp -a "$HERE/solution" "$scratch/unknown"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
 		ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then

@@ -167,6 +167,14 @@ for captured in ("sin_addr.s_addr", "sin_port"):
         fail(f"open must record both captured endpoint {captured} values")
 if opened.count("mutex_lock(") != 1 or opened.count("mutex_unlock(") < 2:
     fail("open must serialize ownership with the supplied mutex")
+open_lock = opened.find("mutex_lock(")
+if open_lock > create or any(
+        position < open_lock for position in (
+            connect, getsock, getpeer, publish,
+        )):
+    fail("open must hold the owner mutex throughout acquisition and publication")
+if opened.rfind("mutex_unlock(") < publish:
+    fail("open must publish ownership before releasing the owner mutex")
 
 clear = re.search(r"(?:WRITE_ONCE\([^;]*->socket,NULL\)|[^;]*->socket=NULL);", closed)
 shutdown = closed.find("kernel_sock_shutdown(")
@@ -179,19 +187,51 @@ if closed.count("mutex_lock(") != 1 or closed.count("mutex_unlock(") < 2:
     fail("close must serialize state invalidation and release")
 if not re.search(r"if\((?:!\w+|\w+==NULL)\)return;", closed):
     fail("close must accept a null owner")
+close_lock = closed.find("mutex_lock(")
+socket_read = re.search(
+    r"\w+=(?:READ_ONCE\()?\w+->socket\)?;", closed,
+)
+if (not socket_read or close_lock > socket_read.start() or
+        closed.rfind("mutex_unlock(") < release):
+    fail("close must hold the owner mutex while taking and releasing ownership")
+for field, empty in (
+    ("net", "NULL"),
+    ("family", "0"),
+    ("type", "0"),
+    ("protocol", "0"),
+    ("connect_flags", "0"),
+    ("connect_result", "0"),
+    ("local_address", "0"),
+    ("local_port", "0"),
+    ("peer_address", "0"),
+    ("peer_port", "0"),
+):
+    reset = re.search(rf"\w+->{field}={empty};", closed)
+    if not reset or not clear.start() < reset.start() < shutdown:
+        fail(f"close must clear {field} before shutting down the socket")
 
 if snapshot.count("mutex_lock(") != 1 or snapshot.count("mutex_unlock(") != 1:
     fail("snapshot must copy its complete view under the owner mutex")
+snapshot_lock = snapshot.find("mutex_lock(")
+snapshot_unlock = snapshot.find("mutex_unlock(")
 for field in (
     "family", "type", "protocol", "connect_flags", "connect_result",
     "local_address", "local_port", "peer_address", "peer_port",
 ):
-    if not re.search(rf"\w+->{field}=\w+->{field};", snapshot):
+    copied = re.search(rf"\w+->{field}=\w+->{field};", snapshot)
+    if not copied:
         fail(f"snapshot must copy the owned {field} field")
-if not re.search(r"\w+->owned=\w+->socket!=NULL;", snapshot):
+    if not snapshot_lock < copied.start() < snapshot_unlock:
+        fail(f"snapshot must copy {field} while holding the owner mutex")
+owned = re.search(r"\w+->owned=\w+->socket!=NULL;", snapshot)
+if not owned:
     fail("snapshot ownership must come from the published socket pointer")
-if not re.search(r"\w+->init_namespace=\w+->net==&init_net;", snapshot):
+namespace = re.search(r"\w+->init_namespace=\w+->net==&init_net;", snapshot)
+if not namespace:
     fail("snapshot namespace must come from the owned namespace pointer")
+if not (snapshot_lock < owned.start() < snapshot_unlock and
+        snapshot_lock < namespace.start() < snapshot_unlock):
+    fail("snapshot must derive ownership and namespace under the owner mutex")
 PY
 
 object=$build_dir/network/socket_owner.o
