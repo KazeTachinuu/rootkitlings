@@ -10,6 +10,6 @@ The target has an unscored authorization and containment setup gate followed by 
 - `engine-v3-requirements.md` records the engine changes required before route adoption.
 - `stage-01-architecture.md` fixes the cumulative source, ownership, failure, tracing, and snapshot contracts.
 - `stage-01-implementation.md` defines the setup-gate acceptance contract and tracks the Stage 1 implementation slice.
-- `stage-02-implementation.md` records the validated control boundary and the remaining resident-execution work.
+- `stage-02-implementation.md` records the validated control, scheduling, resident-thread, and M00 integration slice.
 
 Until the migration is complete, the repository root README and the generated catalog describe the implemented course.
