@@ -36,27 +36,9 @@ if command -v shellcheck >/dev/null; then
 	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check.in"
 fi
 
-for tree in template solution; do
-	cmp -s "$HERE/../r18-hostile-packet-lengths/solution/parser/ipv4.c" \
-		"$HERE/$tree/parser/ipv4.c" || {
-		printf '[x] %s parser differs from accepted L17\n' "$tree" >&2
-		exit 1
-	}
-	cmp -s "$HERE/../r19-safe-skb-access/solution/access/skb_access.c" \
-		"$HERE/$tree/access/skb_access.c" || {
-		printf '[x] %s skb access differs from accepted L18\n' "$tree" >&2
-		exit 1
-	}
-	cmp -s "$HERE/../r21-validated-packet-classification/solution/classifier/udp.c" \
-		"$HERE/$tree/classifier/udp.c" || {
-		printf '[x] %s classifier differs from accepted L20\n' "$tree" >&2
-		exit 1
-	}
-	done
-
 mapfile -t changed_files < <(
-	diff -qr "$HERE/template" "$HERE/solution" |
-		sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p'
+	cd "$HERE/solution-overlay"
+	find . -type f -printf '%P\n' | sort
 )
 (( ${#changed_files[@]} == 1 )) || {
 	printf '[x] expected one learner-edited file, found %d\n' \
@@ -87,10 +69,17 @@ build_tree()
 	fi
 }
 
-build_tree "$HERE/template" "$scratch/template"
-build_tree "$HERE/solution" "$scratch/solution"
-build_tree "$HERE/solution" "$scratch/register-failure" 1
-build_tree "$HERE/solution" "$scratch/proc-failure" 2
+starter=$scratch/starter-source
+solution=$scratch/solution-source
+cp -a "$HERE/../r21-validated-packet-classification/solution" "$starter"
+cp -a "$HERE/starter-overlay/." "$starter/"
+cp -a "$starter" "$solution"
+cp -a "$HERE/solution-overlay/." "$solution/"
+
+build_tree "$starter" "$scratch/template"
+build_tree "$solution" "$scratch/solution"
+build_tree "$solution" "$scratch/register-failure" 1
+build_tree "$solution" "$scratch/proc-failure" 2
 "$HERE/host-check" "$scratch/solution" \
 	"$scratch/solution/rootkitlings.ko"
 
@@ -103,10 +92,10 @@ fi
 build_mutant()
 {
 	local name=$1 expression=$2 replacement=$3
-	cp -a "$HERE/solution" "$scratch/$name"
+	cp -a "$solution" "$scratch/$name"
 	perl -0pi -e "s~$expression~$replacement~" \
 		"$scratch/$name/mutation/udp_redirect.c"
-	if cmp -s "$HERE/solution/mutation/udp_redirect.c" \
+	if cmp -s "$solution/mutation/udp_redirect.c" \
 		"$scratch/$name/mutation/udp_redirect.c"; then
 		printf '[x] mutant transformation did not apply: %s\n' "$name" >&2
 		exit 1
@@ -172,7 +161,7 @@ build_mutant trust-stale-destination \
 	'udp->len != before.len || ntohs(udp->source) != view->source_port ||'
 
 equivalent=$scratch/equivalent
-cp -a "$HERE/solution" "$equivalent"
+cp -a "$solution" "$equivalent"
 perl -0pi -e 's~if \(udp->check\) \{\n(.*?)\n\t\} else \{\n\t\tskb_checksum_complete_unset\(skb\);\n\t\}~if (!udp->check) {\n\t\tskb_checksum_complete_unset(skb);\n\t} else {\n$1\n\t}~s' \
 	"$equivalent/mutation/udp_redirect.c"
 perl -0pi -e 's~if \(udp->source != before.source \|\| udp->dest != before.dest \|\|\n\t    udp->len != before.len \|\|~if (__builtin_memcmp(udp, \&before, offsetof(struct udphdr, check)) ||~' \
@@ -181,7 +170,7 @@ build_tree "$equivalent" "$scratch/equivalent-build"
 "$HERE/host-check" "$scratch/equivalent-build" \
 	"$scratch/equivalent-build/rootkitlings.ko"
 
-cp -a "$HERE/solution" "$scratch/unknown"
+cp -a "$solution" "$scratch/unknown"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
 	ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure-point value compiled successfully\n' >&2
@@ -217,14 +206,14 @@ run_guest()
 }
 
 run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" \
-	solution --tool tools/proc_read_test --tool tools/packet_mutation_test
+	solution --tool vm/tools/proc_read_test --tool vm/tools/packet_mutation_test
 run_guest "$scratch/template-failure-check" \
-	"$scratch/template/rootkitlings.ko" template --tool tools/module_load_test
+	"$scratch/template/rootkitlings.ko" template --tool vm/tools/module_load_test
 run_guest "$scratch/register-failure-check" \
 	"$scratch/register-failure/rootkitlings.ko" registration-failure \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 run_guest "$scratch/proc-failure-check" \
 	"$scratch/proc-failure/rootkitlings.ko" proc-failure \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 
 printf '[+] R22 writable packet mutation passed\n'

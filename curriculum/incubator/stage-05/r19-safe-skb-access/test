@@ -30,20 +30,9 @@ if command -v shellcheck >/dev/null; then
 	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check"
 fi
 
-cmp -s "$HERE/../r18-hostile-packet-lengths/solution/parser/ipv4.c" \
-	"$HERE/solution/parser/ipv4.c" || {
-	printf '[x] supplied parser differs from accepted L17\n' >&2
-	exit 1
-}
-cmp -s "$HERE/../r18-hostile-packet-lengths/solution/include/ipv4_parser.h" \
-	"$HERE/solution/include/ipv4_parser.h" || {
-	printf '[x] supplied parser API differs from accepted L17\n' >&2
-	exit 1
-}
-
 mapfile -t changed_files < <(
-	diff -qr "$HERE/template" "$HERE/solution" |
-		sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p'
+	cd "$HERE/solution-overlay"
+	find . -type f -printf '%P\n' | sort
 )
 (( ${#changed_files[@]} == 1 )) || {
 	printf '[x] expected one learner-edited file, found %d\n' \
@@ -73,8 +62,15 @@ build_tree()
 	fi
 }
 
-build_tree "$HERE/template" "$scratch/template"
-build_tree "$HERE/solution" "$scratch/solution"
+starter=$scratch/starter-source
+solution=$scratch/solution-source
+cp -a "$HERE/../r18-hostile-packet-lengths/solution" "$starter"
+cp -a "$HERE/starter-overlay/." "$starter/"
+cp -a "$starter" "$solution"
+cp -a "$HERE/solution-overlay/." "$solution/"
+
+build_tree "$starter" "$scratch/template"
+build_tree "$solution" "$scratch/solution"
 "$HERE/host-check" "$scratch/solution" \
 	"$scratch/solution/rootkitlings.ko"
 
@@ -97,12 +93,12 @@ run_guest()
 
 run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" solution
 run_guest "$HERE/failure-check" "$scratch/template/rootkitlings.ko" template \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 
 build_mutant()
 {
 	local name=$1
-	cp -a "$HERE/solution" "$scratch/$name"
+	cp -a "$solution" "$scratch/$name"
 	shift
 	"$@" "$scratch/$name/access/skb_access.c"
 	local log=$scratch/$name.log
@@ -124,7 +120,7 @@ mutate_offset_zero()
 }
 build_mutant offset-zero mutate_offset_zero
 run_guest "$HERE/failure-check" "$scratch/offset-zero/rootkitlings.ko" \
-	"zero network offset" --tool tools/module_load_test
+	"zero network offset" --tool vm/tools/module_load_test
 
 mutate_raw_len()
 {
@@ -132,7 +128,7 @@ mutate_raw_len()
 }
 build_mutant raw-len mutate_raw_len
 run_guest "$HERE/failure-check" "$scratch/raw-len/rootkitlings.ko" \
-	"raw skb length" --tool tools/module_load_test
+	"raw skb length" --tool vm/tools/module_load_test
 
 mutate_unreadable()
 {
@@ -140,7 +136,7 @@ mutate_unreadable()
 }
 build_mutant unreadable mutate_unreadable
 run_guest "$HERE/failure-check" "$scratch/unreadable/rootkitlings.ko" \
-	"ignored unreadable fragments" --tool tools/module_load_test
+	"ignored unreadable fragments" --tool vm/tools/module_load_test
 
 mutate_early_output()
 {
@@ -149,7 +145,7 @@ mutate_early_output()
 }
 build_mutant early-output mutate_early_output
 run_guest "$HERE/failure-check" "$scratch/early-output/rootkitlings.ko" \
-	"early output mutation" --tool tools/module_load_test
+	"early output mutation" --tool vm/tools/module_load_test
 
 mutate_prefix_only()
 {
@@ -159,7 +155,7 @@ mutate_prefix_only()
 }
 build_mutant prefix-only mutate_prefix_only
 run_guest "$HERE/failure-check" "$scratch/prefix-only/rootkitlings.ko" \
-	"IPv4-prefix-only adapter" --tool tools/module_load_test
+	"IPv4-prefix-only adapter" --tool vm/tools/module_load_test
 
 mutate_last_failure_byte()
 {
@@ -167,7 +163,7 @@ mutate_last_failure_byte()
 }
 build_mutant last-failure-byte mutate_last_failure_byte
 run_guest "$HERE/failure-check" "$scratch/last-failure-byte/rootkitlings.ko" \
-	"partial failure-output mutation" --tool tools/module_load_test
+	"partial failure-output mutation" --tool vm/tools/module_load_test
 
 mutate_direct_data()
 {
@@ -191,7 +187,7 @@ PY
 }
 build_mutant direct-data mutate_direct_data
 run_guest "$HERE/failure-check" "$scratch/direct-data/rootkitlings.ko" \
-	"direct linear-data access" --tool tools/module_load_test
+	"direct linear-data access" --tool vm/tools/module_load_test
 
 build_mutant plain-helper \
 	sed -i 's/skb_header_pointer_careful/skb_header_pointer/'

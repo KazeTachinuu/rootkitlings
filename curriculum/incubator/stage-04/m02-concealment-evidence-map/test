@@ -6,6 +6,7 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$HERE/../../../../scripts/lesson-env"
 ROOT=$ROOTKITLINGS_ROOT
 M01=$HERE/../../stage-03/m01-authorized-actions-telemetry
+M00=$HERE/../../stage-02/m00-controlled-resident-core
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m02.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
@@ -41,7 +42,9 @@ expected_overlay=(./Kbuild ./core/main.c ./execution/worker.c \
 }
 while IFS= read -r addition; do
 	relative=${addition#"$HERE/additions/"}
-	[[ ! -e $M01/solution/$relative ]] || {
+	[[ ! -e $M00/solution/$relative &&
+		! -e $M01/additions/$relative &&
+		! -e $M01/solution-overlay/$relative ]] || {
 		printf '[x] addition replaces inherited path: %s\n' "$relative" >&2
 		exit 1
 	}
@@ -62,15 +65,17 @@ if command -v shellcheck >/dev/null; then
 	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check.in" \
 		"$M01/success-check" "$M01/action-failure-check.in"
 fi
-make -s -C "$ROOT" -B tools/getdents64_test tools/event_stream_test \
-	tools/cred_trigger_test tools/module_load_test tools/status_field_test \
-	tools/proc_write_test tools/proc_read_test tools/rmdir_telemetry_test
+make -s -C "$ROOT" -B vm/tools/getdents64_test vm/tools/event_stream_test \
+	vm/tools/cred_trigger_test vm/tools/module_load_test vm/tools/status_field_test \
+	vm/tools/proc_write_test vm/tools/proc_read_test vm/tools/rmdir_telemetry_test
 
 compose_tree()
 {
 	local directory=$1
 	mkdir -p "$directory"
-	cp -a "$M01/solution/." "$directory/"
+	cp -a "$M00/solution/." "$directory/"
+	cp -a "$M01/additions/." "$directory/"
+	cp -a "$M01/solution-overlay/." "$directory/"
 	cp -a "$HERE/additions/." "$directory/"
 }
 
@@ -127,7 +132,7 @@ for file in Kbuild include/rootkit.h core/main.c core/state.c interface/proc.c \
 	instrumentation/return_probe.c instrumentation/events.c; do
 	cp "$scratch/success/$file" "$m01_view/$file"
 done
-cp "$M01/solution/execution/worker.c" "$m01_view/execution/worker.c"
+cp "$M00/solution/execution/worker.c" "$m01_view/execution/worker.c"
 for object in rootkitlings.ko core/main.o core/state.o interface/proc.o \
 	execution/worker.o execution/scheduler.o control/authorization.o \
 	privilege/credentials.o instrumentation/return_probe.o \
@@ -159,7 +164,7 @@ run_guest()
 {
 	local check=$1 module=$2 output
 	shift 2
-	if ! output=$("$ROOT/vm/boot" --check "$check" --tool tools/run_as \
+	if ! output=$("$ROOT/vm/boot" --check "$check" --tool vm/tools/run_as \
 		"$@" "$module" 2>&1); then
 		printf '%s\n' "$output" >&2; exit 1
 	fi
@@ -171,7 +176,7 @@ reject_guest()
 {
 	local check=$1 module=$2 label=$3 output
 	shift 3
-	if output=$("$ROOT/vm/boot" --check "$check" --tool tools/run_as \
+	if output=$("$ROOT/vm/boot" --check "$check" --tool vm/tools/run_as \
 		"$@" "$module" 2>&1); then
 		printf '%s\n' "$output" >&2
 		printf '[x] guest accepted mutant: %s\n' "$label" >&2
@@ -192,7 +197,7 @@ for point in 1 2 3 4 5 6 7 10 11; do
 	chmod 0755 "$scratch/check-$point"
 	run_guest "$scratch/check-$point" \
 		"$scratch/failure-$point/rootkitlings.ko" \
-		--tool tools/module_load_test
+		--tool vm/tools/module_load_test
 done
 for specification in '8 12 Credential preparation' '9 125 Credential cancellation'; do
 	read -r point expected label_rest <<< "$specification"
@@ -201,23 +206,23 @@ for specification in '8 12 Credential preparation' '9 125 Credential cancellatio
 	chmod 0755 "$scratch/action-$point"
 	run_guest "$scratch/action-$point" \
 		"$scratch/failure-$point/rootkitlings.ko" \
-		--tool tools/cred_trigger_test
+		--tool vm/tools/cred_trigger_test
 done
 
 run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
-	--tool tools/getdents64_test --tool tools/status_field_test \
-	--tool tools/proc_write_test --tool tools/proc_read_test
+	--tool vm/tools/getdents64_test --tool vm/tools/status_field_test \
+	--tool vm/tools/proc_write_test --tool vm/tools/proc_read_test
 reject_guest "$HERE/success-check" "$changed_worker_loop/rootkitlings.ko" \
-	changed-worker-loop --tool tools/getdents64_test \
-	--tool tools/status_field_test --tool tools/proc_write_test \
-	--tool tools/proc_read_test
+	changed-worker-loop --tool vm/tools/getdents64_test \
+	--tool vm/tools/status_field_test --tool vm/tools/proc_write_test \
+	--tool vm/tools/proc_read_test
 reject_guest "$HERE/success-check" "$changed_evidence_ops/rootkitlings.ko" \
-	changed-evidence-ops --tool tools/getdents64_test \
-	--tool tools/status_field_test --tool tools/proc_write_test \
-	--tool tools/proc_read_test
+	changed-evidence-ops --tool vm/tools/getdents64_test \
+	--tool vm/tools/status_field_test --tool vm/tools/proc_write_test \
+	--tool vm/tools/proc_read_test
 run_guest "$M01/success-check" "$scratch/success/rootkitlings.ko" \
-	--tool tools/event_stream_test --tool tools/status_field_test \
-	--tool tools/proc_write_test --tool tools/proc_read_test \
-	--tool tools/cred_trigger_test --tool tools/rmdir_telemetry_test
+	--tool vm/tools/event_stream_test --tool vm/tools/status_field_test \
+	--tool vm/tools/proc_write_test --tool vm/tools/proc_read_test \
+	--tool vm/tools/cred_trigger_test --tool vm/tools/rmdir_telemetry_test
 
 printf '[+] omit the resident worker and map the affected view milestone passed\n'

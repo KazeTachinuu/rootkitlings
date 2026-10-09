@@ -22,14 +22,20 @@ grep -Eqx '(CONFIG_PREEMPT_RT=n|# CONFIG_PREEMPT_RT is not set)' \
 	printf '[x] M01 requires CONFIG_PREEMPT_RT=n\n' >&2; exit 1;
 }
 
-for supplied in core/state.c execution/worker.c execution/scheduler.c \
-	privilege/credentials.c; do
-	cmp -s "$HERE/template/$supplied" "$HERE/solution/$supplied" || {
-		printf '[x] supplied file differs: %s\n' "$supplied" >&2; exit 1;
-	}
-done
-mapfile -t changed < <(diff -qr "$HERE/template" "$HERE/solution" |
-	sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p')
+mapfile -t supplied < <(
+	cd "$HERE/additions"
+	find . -type f -printf '%P\n' | sort
+)
+expected_supplied=(control/authorization.c instrumentation/events.c \
+	instrumentation/return_probe.c privilege/credentials.c)
+[[ ${supplied[*]} == "${expected_supplied[*]}" ]] || {
+	printf '[x] cumulative additions differ\n' >&2
+	exit 1
+}
+mapfile -t changed < <(
+	cd "$HERE/solution-overlay"
+	find . -type f -printf '%P\n' | sort
+)
 expected=(Kbuild control/authorization.c core/main.c include/rootkit.h \
 	instrumentation/events.c instrumentation/return_probe.c interface/proc.c)
 [[ ${changed[*]} == "${expected[*]}" ]] || {
@@ -47,17 +53,21 @@ if command -v shellcheck >/dev/null; then
 fi
 for compiler in gcc clang; do
 	"$compiler" -std=c11 -Wall -Wextra -Werror -static \
-		-o "$scratch/event_stream_test.$compiler" "$ROOT/tools/event_stream_test.c"
+		-o "$scratch/event_stream_test.$compiler" "$ROOT/vm/tools/event_stream_test.c"
 done
-make -s -C "$ROOT" -B tools/event_stream_test tools/cred_trigger_test \
-	tools/module_load_test tools/status_field_test
+make -s -C "$ROOT" -B vm/tools/event_stream_test vm/tools/cred_trigger_test \
+	vm/tools/module_load_test vm/tools/status_field_test
 
 build_variant()
 {
 	local name=$1 point=$2 directory log
 	directory=$scratch/$name
 	log=$scratch/$name.log
-	cp -a "$HERE/solution/." "$directory/"
+	mkdir -p "$directory"
+	cp -a "$HERE/../../stage-02/m00-controlled-resident-core/solution/." \
+		"$directory/"
+	cp -a "$HERE/additions/." "$directory/"
+	cp -a "$HERE/solution-overlay/." "$directory/"
 	if ! make -s -C "$KDIR" M="$directory" W=1 \
 		ROOTKITLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
 		cat "$log" >&2; printf '[x] %s build failed\n' "$name" >&2; exit 1
@@ -194,7 +204,11 @@ sed -i '/oldest = 0;/i\
 rebuild_fixture "$second_lock" second-lock
 reject_fixture "$second_lock" split-ring-lock-ownership
 
-cp -a "$HERE/solution/." "$scratch/unknown/"
+mkdir -p "$scratch/unknown"
+cp -a "$HERE/../../stage-02/m00-controlled-resident-core/solution/." \
+	"$scratch/unknown/"
+cp -a "$HERE/additions/." "$scratch/unknown/"
+cp -a "$HERE/solution-overlay/." "$scratch/unknown/"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
 	ROOTKITLINGS_FAIL_POINT=99 modules >"$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure point compiled\n' >&2; exit 1
@@ -204,7 +218,7 @@ run_guest()
 {
 	local check=$1 module=$2 output
 	shift 2
-	if ! output=$("$ROOT/vm/boot" --check "$check" --tool tools/run_as \
+	if ! output=$("$ROOT/vm/boot" --check "$check" --tool vm/tools/run_as \
 		"$@" "$module" 2>&1); then
 		printf '%s\n' "$output" >&2; exit 1
 	fi
@@ -222,7 +236,7 @@ for point in {1..7}; do
 		"$HERE/failure-check.in" > "$scratch/check-$point"
 	chmod 0755 "$scratch/check-$point"
 	run_guest "$scratch/check-$point" "$scratch/failure-$point/rootkitlings.ko" \
-		--tool tools/module_load_test
+		--tool vm/tools/module_load_test
 done
 for specification in '8 12 Credential preparation' '9 125 Credential cancellation'; do
 	read -r point expected label_rest <<< "$specification"
@@ -230,11 +244,11 @@ for specification in '8 12 Credential preparation' '9 125 Credential cancellatio
 		"$HERE/action-failure-check.in" > "$scratch/action-$point"
 	chmod 0755 "$scratch/action-$point"
 	run_guest "$scratch/action-$point" "$scratch/failure-$point/rootkitlings.ko" \
-		--tool tools/cred_trigger_test
+		--tool vm/tools/cred_trigger_test
 done
 run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
-	--tool tools/event_stream_test --tool tools/status_field_test \
-	--tool tools/proc_write_test --tool tools/proc_read_test \
-	--tool tools/cred_trigger_test --tool tools/rmdir_telemetry_test
+	--tool vm/tools/event_stream_test --tool vm/tools/status_field_test \
+	--tool vm/tools/proc_write_test --tool vm/tools/proc_read_test \
+	--tool vm/tools/cred_trigger_test --tool vm/tools/rmdir_telemetry_test
 
 printf '[+] record authorized actions and rmdir results milestone passed\n'

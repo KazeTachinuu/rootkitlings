@@ -47,12 +47,12 @@ for tree in template solution; do
 		printf '[x] %s parser API differs from accepted L17\n' "$tree" >&2
 		exit 1
 	}
-	cmp -s "$HERE/../r19-safe-skb-access/solution/access/skb_access.c" \
+	cmp -s "$HERE/../r19-safe-skb-access/solution-overlay/access/skb_access.c" \
 		"$HERE/$tree/access/skb_access.c" || {
 		printf '[x] %s skb access differs from accepted L18\n' "$tree" >&2
 		exit 1
 	}
-	cmp -s "$HERE/../r19-safe-skb-access/solution/include/skb_access.h" \
+	cmp -s "$HERE/../r19-safe-skb-access/starter-overlay/include/skb_access.h" \
 		"$HERE/$tree/include/skb_access.h" || {
 		printf '[x] %s skb access API differs from accepted L18\n' "$tree" >&2
 		exit 1
@@ -246,14 +246,14 @@ run_guest()
 }
 
 run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" \
-	solution --tool tools/proc_read_test --tool tools/packet_classifier_test
+	solution --tool vm/tools/proc_read_test --tool vm/tools/packet_classifier_test
 run_guest "$scratch/template-failure-check" \
-	"$scratch/template/rootkitlings.ko" template --tool tools/module_load_test
+	"$scratch/template/rootkitlings.ko" template --tool vm/tools/module_load_test
 run_guest "$scratch/register-failure-check" \
 	"$scratch/register-failure/rootkitlings.ko" registration-failure \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 run_guest "$scratch/proc-failure-check" \
 	"$scratch/proc-failure/rootkitlings.ko" proc-failure \
-	--tool tools/module_load_test
+	--tool vm/tools/module_load_test
 
 printf '[+] R21 validated packet classification passed\n'
