@@ -4,6 +4,12 @@
 
 begin "Omit the resident worker and map the affected view"
 
+mode=${1:-m02}
+case $mode in
+	m02|remote-agent) ;;
+	*) _fail "unknown cumulative check mode: $mode" ;;
+esac
+
 control=/proc/rootkitlings
 events=/proc/rootkitlings_events
 evidence=/proc/rootkitlings_evidence
@@ -198,8 +204,31 @@ cleanup()
 		rmmod rootkitlings 2>/dev/null || true
 	fi
 	rm -rf "$fixtures" 2>/dev/null || true
+	if test "$mode" = remote-agent; then
+		umount /etc/modules-load.d 2>/dev/null || true
+	fi
 }
 trap cleanup EXIT INT TERM
+
+load_cumulative()
+{
+	if test "$mode" = remote-agent; then
+		load rootkitlings.ko peer_port=47023 retry_base_ms=5000 \
+			retry_max_ms=5000
+	else
+		load rootkitlings.ko
+	fi
+}
+
+if test "$mode" = remote-agent; then
+	mkdir -p /etc/modules-load.d
+	mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs \
+		/etc/modules-load.d
+	chmod 0700 /etc/modules-load.d
+	printf 'operator-original\n' > /etc/modules-load.d/rootkitlings.conf
+	chmod 0600 /etc/modules-load.d/rootkitlings.conf
+	ifconfig lo 127.0.0.1 up
+fi
 
 case $(uname -r) in 7.2.*|7.2-*) _ok "guest runs Linux 7.2.x" ;; *) _fail "wrong kernel" ;; esac
 if test "$(uname -m)" = x86_64; then
@@ -215,7 +244,7 @@ assert_registry_delta 0 "unloaded state"
 
 attempt=1
 while test "$attempt" -le 2; do
-	load rootkitlings.ko
+	load_cumulative
 	assert_loaded rootkitlings
 	assert_exists "$control"
 	assert_exists "$events"

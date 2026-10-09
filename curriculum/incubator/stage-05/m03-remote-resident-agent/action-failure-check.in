@@ -2,7 +2,9 @@
 # shellcheck source=/dev/null
 . /lib/check.sh
 
-begin "@LABEL@"
+expected_errno=${1:-@EXPECTED_ERRNO@}
+label=${2:-@LABEL@}
+begin "$label"
 
 root=/etc/modules-load.d
 target=$root/rootkitlings.conf
@@ -33,7 +35,7 @@ while test "$attempt" -le 2; do
 	printf enable > "$control"
 	token=$(sed -n 's/^token=//p' "$control")
 	if run_as 65534 65534 cred_trigger_test token-race "$control" \
-			"$token" 24 @EXPECTED_ERRNO@ >/dev/null; then
+			"$token" 24 "$expected_errno" >/dev/null; then
 		_ok "attempt $attempt admits exactly one failing writer"
 	else
 		_fail "attempt $attempt violated one-use failure admission"

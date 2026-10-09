@@ -123,12 +123,15 @@ The worker must remain alive until the process-view component has stopped.
 
 Complete the milestone in:
 
+- `Kbuild`
+- `include/rootkit.h`
 - `execution/worker.c`
 - `instrumentation/getdents_probe.c`
 - `interface/evidence.c`
 - `core/main.c`
 
-The declarations, constants, proc operations, packed-record helper, and all other cumulative mechanisms are supplied.
+Add the three new objects and their declarations to the cumulative build and shared header.
+The proc operations, packed-record helper, and all other cumulative mechanisms are supplied.
 
 Run:
 

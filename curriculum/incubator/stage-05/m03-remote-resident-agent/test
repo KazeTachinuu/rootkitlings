@@ -6,6 +6,7 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$HERE/../../../../scripts/lesson-env"
 ROOT=$ROOTKITLINGS_ROOT
 M02=$HERE/../../stage-04/m02-concealment-evidence-map
+M01=$HERE/../../stage-03/m01-authorized-actions-telemetry
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m03.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
@@ -18,7 +19,7 @@ for option in X86_64 KPROBES KRETPROBES KRETPROBE_ON_RETHOOK \
 	}
 done
 grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || exit 1
-for command in base64 gcc gzip make nm sed; do
+for command in gcc make nm sed; do
 	command -v "$command" >/dev/null || { printf '[x] %s is required\n' "$command" >&2; exit 1; }
 done
 
@@ -42,17 +43,33 @@ expected_overlay=(./Kbuild ./core/main.c ./network/agent.c)
 }
 while IFS= read -r addition; do
 	relative=${addition#"$HERE/additions/"}
-	[[ ! -e $M02/solution/$relative ]] || {
+	[[ ! -e $M01/solution/$relative &&
+		! -e $M02/additions/$relative &&
+		! -e $M02/solution-overlay/$relative ]] || {
 		printf '[x] addition replaces inherited path: %s\n' "$relative" >&2
 		exit 1
 	}
+	if [[ -e $HERE/solution/$relative ]] &&
+		cmp -s "$addition" "$HERE/solution/$relative"; then
+		printf '[x] solution overlay duplicates unchanged addition: %s\n' \
+			"$relative" >&2
+		exit 1
+	fi
 done < <(find "$HERE/additions" -type f | sort)
+
+compose_m02_solution()
+{
+	local destination=$1
+	mkdir -p "$destination"
+	cp -a "$M01/solution/." "$destination/"
+	cp -a "$M02/additions/." "$destination/"
+	cp -a "$M02/solution-overlay/." "$destination/"
+}
 
 compose_tree()
 {
 	local destination=$1
-	mkdir -p "$destination"
-	cp -a "$M02/solution/." "$destination/"
+	compose_m02_solution "$destination"
 	cp -a "$HERE/additions/." "$destination/"
 }
 
@@ -85,6 +102,15 @@ compose_tree "$scratch/success"
 cp -a "$HERE/solution/." "$scratch/success/"
 build_tree "$scratch/success"
 "$HERE/host-check" "$scratch/success" "$scratch/success/rootkitlings.ko"
+
+# An equivalent passed M02 snapshot remains a valid cumulative provider.
+compose_tree "$scratch/alternate-baseline"
+printf '\n/* Equivalent inherited M02 implementation. */\n' >> \
+	"$scratch/alternate-baseline/core/state.c"
+cp -a "$HERE/solution/." "$scratch/alternate-baseline/"
+build_tree "$scratch/alternate-baseline"
+"$HERE/host-check" "$scratch/alternate-baseline" \
+	"$scratch/alternate-baseline/rootkitlings.ko"
 
 # Equivalent labels and parameter-variable names must remain acceptable.
 cp -a "$scratch/success" "$scratch/equivalent"
@@ -142,27 +168,7 @@ build_mutant spin-retry mutate_no_wait
 build_mutant single-attempt mutate_single_attempt
 build_mutant drops-marker mutate_drop_marker
 
-gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
-	-o "$scratch/agent_fixture" "$HERE/fixtures/host/agent_fixture.c"
-gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
-	-o "$scratch/module_load_params" \
-	"$HERE/../r24-tcp-framing-cancellation/fixtures/host/module_load_params.c"
-
-append_agent_fixture()
-{
-	local script=$1
-	printf '\n__ROOTKITLINGS_AGENT_FIXTURE__\n' >> "$script"
-	gzip -c "$scratch/agent_fixture" | base64 -w 76 >> "$script"
-	chmod 0755 "$script"
-}
-
-append_loader()
-{
-	local script=$1
-	printf '\n__ROOTKITLINGS_MODULE_LOADER__\n' >> "$script"
-	gzip -c "$scratch/module_load_params" | base64 -w 76 >> "$script"
-	chmod 0755 "$script"
-}
+make -s -C "$ROOT" -B tools/agent_fixture tools/module_load_params
 
 run_guest()
 {
@@ -180,7 +186,8 @@ run_guest()
 reject_guest()
 {
 	local check=$1 module=$2 label=$3 output
-	if output=$("$ROOT/vm/boot" --check "$check" "$module" 2>&1); then
+	shift 3
+	if output=$("$ROOT/vm/boot" --check "$check" "$@" "$module" 2>&1); then
 		printf '%s\n' "$output" >&2
 		printf '[x] guest accepted mutant: %s\n' "$label" >&2
 		exit 1
@@ -188,14 +195,12 @@ reject_guest()
 	printf '[+] rejected mutant: %s\n' "$label"
 }
 
-cp "$HERE/success-check" "$scratch/success-check"
-append_agent_fixture "$scratch/success-check"
-run_guest "$scratch/success-check" "$scratch/success/rootkitlings.ko" success
+run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" success \
+	--tool tools/agent_fixture
 
-cp "$HERE/transaction-boundary-check" "$scratch/transaction-boundary-check"
-append_loader "$scratch/transaction-boundary-check"
-run_guest "$scratch/transaction-boundary-check" \
-	"$scratch/success/rootkitlings.ko" transaction-boundaries
+run_guest "$HERE/transaction-boundary-check" \
+	"$scratch/success/rootkitlings.ko" transaction-boundaries \
+	--tool tools/module_load_params
 run_guest "$HERE/foreign-check" "$scratch/success/rootkitlings.ko" \
 	foreign-state
 
@@ -205,48 +210,35 @@ declare -a labels=(unused Preflight Allocation 'Control publication' Worker \
 	'Agent worker creation' 'Agent status publication')
 declare -a errnos=(0 125 12 12 4 4 2 12 0 0 2 12 4 12)
 for point in 1 2 3 4 5 6 7 10 11 12 13; do
-	sed -e "s/@LABEL@/${labels[$point]}/g" \
-		-e "s/@EXPECTED_ERRNO@/${errnos[$point]}/g" \
-		"$HERE/failure-check.in" > "$scratch/failure-check-$point"
-	append_loader "$scratch/failure-check-$point"
-	run_guest "$scratch/failure-check-$point" \
-		"$scratch/failure-$point/rootkitlings.ko" "failpoint-$point"
+	run_guest "$HERE/failure-check.in" \
+		"$scratch/failure-$point/rootkitlings.ko" "failpoint-$point" \
+		--check-arg "${errnos[$point]}" --check-arg "${labels[$point]}" \
+		--tool tools/module_load_params
 done
 for specification in '8 12 Credential-preparation' '9 125 Credential-cancellation'; do
 	read -r point expected label <<< "$specification"
-	sed -e "s/@LABEL@/$label/g" -e "s/@EXPECTED_ERRNO@/$expected/g" \
-		"$HERE/action-failure-check.in" > "$scratch/action-$point"
-	chmod 0755 "$scratch/action-$point"
-	run_guest "$scratch/action-$point" \
+	run_guest "$HERE/action-failure-check.in" \
 		"$scratch/failure-$point/rootkitlings.ko" "failpoint-$point" \
+		--check-arg "$expected" --check-arg "$label" \
 		--tool tools/run_as --tool tools/cred_trigger_test
 done
 
-prepare_inherited_check()
-{
-	local source=$1 destination=$2
-	sed -e '/^begin /a\
-mkdir -p /etc/modules-load.d\
-mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs /etc/modules-load.d\
-chmod 0700 /etc/modules-load.d\
-printf "operator-original\\n" > /etc/modules-load.d/rootkitlings.conf\
-chmod 0600 /etc/modules-load.d/rootkitlings.conf\
-ifconfig lo 127.0.0.1 up' \
-		-e 's/load rootkitlings\.ko/load rootkitlings.ko peer_port=47023 retry_base_ms=5000 retry_max_ms=5000/g' \
-		"$source" > "$destination"
-	chmod 0755 "$destination"
-}
-
-prepare_inherited_check "$M02/success-check" "$scratch/m02-regression"
-run_guest "$scratch/m02-regression" "$scratch/success/rootkitlings.ko" \
-	M02-regression --tool tools/run_as --tool tools/getdents64_test \
+run_guest "$M02/success-check" "$scratch/success/rootkitlings.ko" \
+	M02-regression --check-arg remote-agent --tool tools/run_as \
+	--tool tools/getdents64_test \
 	--tool tools/status_field_test --tool tools/proc_write_test \
 	--tool tools/proc_read_test
-reject_guest "$scratch/success-check" "$scratch/spin-retry/rootkitlings.ko" \
-	spin-retry
-reject_guest "$scratch/success-check" \
-	"$scratch/single-attempt/rootkitlings.ko" single-attempt
-reject_guest "$scratch/success-check" "$scratch/drops-marker/rootkitlings.ko" \
-	drops-marker
+run_guest "$M01/success-check" "$scratch/success/rootkitlings.ko" \
+	M01-regression --check-arg remote-agent --tool tools/run_as \
+	--tool tools/event_stream_test --tool tools/status_field_test \
+	--tool tools/proc_write_test --tool tools/proc_read_test \
+	--tool tools/cred_trigger_test --tool tools/rmdir_telemetry_test
+reject_guest "$HERE/success-check" "$scratch/spin-retry/rootkitlings.ko" \
+	spin-retry --tool tools/agent_fixture
+reject_guest "$HERE/success-check" \
+	"$scratch/single-attempt/rootkitlings.ko" single-attempt \
+	--tool tools/agent_fixture
+reject_guest "$HERE/success-check" "$scratch/drops-marker/rootkitlings.ko" \
+	drops-marker --tool tools/agent_fixture
 
 printf '[+] M03 remote resident agent passed\n'

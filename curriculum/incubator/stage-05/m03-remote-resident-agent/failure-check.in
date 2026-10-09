@@ -2,12 +2,13 @@
 # shellcheck source=/dev/null
 . /lib/check.sh
 
-begin "@LABEL@"
+expected_errno=${1:-@EXPECTED_ERRNO@}
+label=${2:-@LABEL@}
+begin "$label"
 
 root=/etc/modules-load.d
 target=$root/rootkitlings.conf
 sibling=$root/.rootkitlings.conf.rootkitlings
-loader=/tmp/rootkitlings-module-loader
 original=/tmp/rootkitlings-m03-original
 
 cleanup()
@@ -19,9 +20,6 @@ cleanup()
 }
 trap cleanup EXIT INT TERM
 
-sed -n '/^__ROOTKITLINGS_MODULE_LOADER__$/,$p' /check |
-	sed '1d' | busybox base64 -d | busybox gzip -d > "$loader"
-chmod 0755 "$loader"
 mkdir -p "$root"
 mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
 chmod 0700 "$root"
@@ -35,9 +33,9 @@ iterate_before=$(grep -c 'iterate_dir' /sys/kernel/debug/kprobes/list || true)
 
 attempt=1
 while test "$attempt" -le 2; do
-	if "$loader" /rootkitlings/rootkitlings.ko @EXPECTED_ERRNO@ \
+	if module_load_params /rootkitlings/rootkitlings.ko "$expected_errno" \
 			"peer_port=47023 retry_base_ms=20 retry_max_ms=80"; then
-		_ok "attempt $attempt returns errno @EXPECTED_ERRNO@"
+		_ok "attempt $attempt returns errno $expected_errno"
 	else
 		_fail "attempt $attempt returned the wrong result"
 	fi

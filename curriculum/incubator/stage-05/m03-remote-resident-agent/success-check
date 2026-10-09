@@ -95,9 +95,7 @@ rmdir_before=$(probe_count r __x64_sys_rmdir)
 filldir_before=$(probe_count k filldir64)
 iterate_before=$(probe_count r iterate_dir)
 
-sed -n '/^__ROOTKITLINGS_AGENT_FIXTURE__$/,$p' /check |
-	sed '1d' | busybox base64 -d | busybox gzip -d > "$helper"
-chmod 0755 "$helper"
+helper=agent_fixture
 "$helper" reserve "$fixtures/port"
 port=$(cat "$fixtures/port")
 

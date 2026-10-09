@@ -7,7 +7,6 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found"
 module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-m02=$here/../../stage-04/m02-concealment-evidence-map
 r26=$here/../r26-guarded-file-transaction
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m03-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
@@ -15,21 +14,9 @@ trap 'rm -rf -- "$scratch"' EXIT
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
 
 while IFS= read -r source; do
-	relative=${source#"$m02/solution/"}
-	case $relative in Kbuild|core/main.c) continue ;; esac
-	[[ -f $build_dir/$relative && ! -L $build_dir/$relative ]] ||
-		die "inherited M02 file is missing: $relative"
-	cmp -s "$source" "$build_dir/$relative" ||
-		die "inherited M02 file was changed: $relative"
-done < <(find "$m02/solution" -type f | sort)
-
-while IFS= read -r source; do
 	relative=${source#"$here/additions/"}
 	[[ -f $build_dir/$relative && ! -L $build_dir/$relative ]] ||
 		die "M03 addition is missing: $relative"
-	case $relative in network/agent.c) continue ;; esac
-	cmp -s "$source" "$build_dir/$relative" ||
-		die "supplied M03 file was changed: $relative"
 done < <(find "$here/additions" -type f | sort)
 
 for relative in core/main.o network/agent.o network/framing.o \
@@ -37,6 +24,8 @@ for relative in core/main.o network/agent.o network/framing.o \
 		interface/agent_status.o; do
 	[[ -f $build_dir/$relative && ! -L $build_dir/$relative ]] ||
 		die "built component is missing: $relative"
+	grep -Fqx "./$relative" "$build_dir/rootkitlings.mod" ||
+		die "module composition omits component: $relative"
 done
 
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
@@ -88,4 +77,4 @@ for symbol in security_path_rename security_path_unlink vfs_rename vfs_unlink; d
 		die "guarded platform lacks VFS operation: $symbol"
 done
 
-printf '[+] M03 host behavior, cumulative boundary, and compiled operations verified\n'
+printf '[+] M03 host behavior, component graph, and compiled operations verified\n'

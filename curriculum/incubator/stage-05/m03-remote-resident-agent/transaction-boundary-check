@@ -8,7 +8,6 @@ root=/etc/modules-load.d
 target=$root/rootkitlings.conf
 sibling=$root/.rootkitlings.conf.rootkitlings
 extra=$root/extra-link
-loader=/tmp/rootkitlings-module-loader
 
 cleanup()
 {
@@ -19,9 +18,6 @@ cleanup()
 }
 trap cleanup EXIT INT TERM
 
-sed -n '/^__ROOTKITLINGS_MODULE_LOADER__$/,$p' /check |
-	sed '1d' | busybox base64 -d | busybox gzip -d > "$loader"
-chmod 0755 "$loader"
 mkdir -p "$root"
 mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
 chmod 0700 "$root"
@@ -37,7 +33,7 @@ expect_load_error()
 {
 	expected=$1
 	label=$2
-	if "$loader" /rootkitlings/rootkitlings.ko "$expected" \
+	if module_load_params /rootkitlings/rootkitlings.ko "$expected" \
 			"peer_port=47023 retry_base_ms=200 retry_max_ms=200"; then
 		_ok "$label returns errno $expected"
 	else

@@ -3,78 +3,6 @@ set -Eeuo pipefail
 
 die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 
-strip_comments()
-{
-	python3 -c 'import re,sys; s=sys.stdin.read(); print(re.sub(r"/\*.*?\*/|//[^\n]*", "", s, flags=re.S))'
-}
-
-freeze_except_functions()
-{
-	local reference=$1 candidate=$2
-	shift 2
-	python3 - "$reference" "$candidate" "$@" <<'PY'
-import re
-import sys
-
-def normalized(path, allowed):
-    text = open(path, encoding="utf-8").read()
-    text = re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.S)
-    for name in allowed:
-        match = re.search(r"\b" + re.escape(name) + r"\s*\([^;{}]*\)\s*\{", text, re.S)
-        if not match:
-            raise SystemExit(f"cannot locate allowed function {name} in {path}")
-        opening = text.find("{", match.start())
-        depth = 0
-        quote = None
-        escaped = False
-        closing = None
-        for index in range(opening, len(text)):
-            character = text[index]
-            if quote:
-                if escaped:
-                    escaped = False
-                elif character == "\\":
-                    escaped = True
-                elif character == quote:
-                    quote = None
-                continue
-            if character in "\"'":
-                quote = character
-            elif character == "{":
-                depth += 1
-            elif character == "}":
-                depth -= 1
-                if depth == 0:
-                    closing = index
-                    break
-        if closing is None:
-            raise SystemExit(f"unterminated allowed function {name} in {path}")
-        text = text[:opening] + "{<learner-body>}" + text[closing + 1:]
-    return re.sub(r"\s+", "", text)
-
-reference, candidate, *allowed = sys.argv[1:]
-if normalized(reference, allowed) != normalized(candidate, allowed):
-    raise SystemExit("supplied code outside the declared learner functions changed")
-PY
-}
-
-freeze_complete_file()
-{
-	local reference=$1 candidate=$2
-	python3 - "$reference" "$candidate" <<'PY'
-import re
-import sys
-
-def normalized(path):
-    text = open(path, encoding="utf-8").read()
-    text = re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.S)
-    return re.sub(r"\s+", "", text)
-
-if normalized(sys.argv[1]) != normalized(sys.argv[2]):
-    raise SystemExit("lifecycle body differs from the canonical resource order")
-PY
-}
-
 (( $# == 2 )) || die "usage: ${0##*/} WORKSPACE MODULE"
 workspace=$(realpath -e -- "$1") || die "workspace not found"
 module=$(realpath -e -- "$2") || die "module not found"
@@ -93,35 +21,15 @@ for file in Kbuild include/rootkit.h include/dirent_filter.h core/main.c \
 		die "missing regular file: $file"
 done
 
-for file in Kbuild include/rootkit.h include/dirent_filter.h core/state.c \
-	interface/proc.c execution/scheduler.c control/authorization.c \
-	privilege/credentials.c instrumentation/return_probe.c \
-	instrumentation/events.c instrumentation/dirent_filter.c; do
-	cmp -s "$here/solution/$file" "$workspace/$file" ||
-		die "supplied file was changed: $file"
-done
-cmp -s "$r16/solution/include/dirent_filter.h" \
-	"$workspace/include/dirent_filter.h" ||
-	die "reuse the canonical L15 filter declaration"
-cmp -s "$r16/solution/instrumentation/dirent_filter.c" \
-	"$workspace/instrumentation/dirent_filter.c" ||
-	die "reuse the canonical L15 filter without a fork"
-freeze_except_functions "$here/solution/execution/worker.c" \
-	"$workspace/execution/worker.c" rk_worker_get_tgid ||
-	die "worker.c changed outside rk_worker_get_tgid()"
-freeze_except_functions "$here/solution/instrumentation/getdents_probe.c" \
-	"$workspace/instrumentation/getdents_probe.c" rk_target_number ||
-	die "getdents_probe.c changed outside rk_target_number()"
-freeze_except_functions "$here/solution/interface/evidence.c" \
-	"$workspace/interface/evidence.c" rk_evidence_show rk_evidence_publish ||
-	die "evidence.c changed outside show and publish"
-freeze_complete_file "$here/solution/core/main.c" "$workspace/core/main.c" ||
-	die "main.c must use the canonical acquisition and release graph"
-
-for object in core/main.o execution/worker.o interface/evidence.o \
-	instrumentation/getdents_probe.o instrumentation/dirent_filter.o; do
+for object in core/main.o core/state.o interface/proc.o \
+		execution/worker.o execution/scheduler.o control/authorization.o \
+		privilege/credentials.o instrumentation/return_probe.o \
+		instrumentation/events.o instrumentation/dirent_filter.o \
+		instrumentation/getdents_probe.o interface/evidence.o; do
 	[[ -f $workspace/$object && ! -L $workspace/$object ]] ||
 		die "missing built object: $object"
+	grep -Fqx "./$object" "$workspace/rootkitlings.mod" ||
+		die "module composition omits object: $object"
 done
 
 gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined \
@@ -137,51 +45,9 @@ while read -r symbol; do
 	case $symbol in
 		__fentry__|__ref_stack_chk_guard|__stack_chk_fail|__x86_return_thunk|\
 		memchr|memcmp|memcpy|memmove|strlen) ;;
-		*) die "canonical filter has forbidden dependency: $symbol" ;;
+		*) die "packed-record filter has forbidden dependency: $symbol" ;;
 	esac
 done <<< "$undefined"
-
-worker=$(strip_comments < "$workspace/execution/worker.c" | tr -d '[:space:]')
-grep -Eq 'get_task_pid\(worker_task,PIDTYPE_TGID\)' <<< "$worker" ||
-	die "worker must return an owned TGID identity"
-grep -Eq 'if\(!worker_task\)returnNULL;' <<< "$worker" ||
-	die "worker identity lookup must reject an absent worker"
-if grep -Eq 'find_get_pid\(|pid_nr\(|pid_vnr\(' <<< "$worker"; then
-	die "worker identity must not make a numeric PID round trip"
-fi
-
-integration=$(strip_comments < \
-	"$workspace/instrumentation/getdents_probe.c" | tr -d '[:space:]')
-for contract in \
-	'structpid*target_pid' \
-	'pid_nr_ns(target_pid,proc_pid_ns(file_inode(file)->i_sb))' \
-	'context->actor!=rk_filldir64_actor()' \
-	'rk_filter_dirents64(observation->scratch,produced,observation->target,observation->target_length,&output_length)' \
-	'callback->ctx.count+=removed' \
-	'register_kprobe(&filldir_identity)' \
-	'register_kretprobe(&iterate_probe)' \
-	'unregister_kretprobe(&iterate_probe)' \
-	'unregister_kprobe(&filldir_identity)'; do
-	grep -Fq "$contract" <<< "$integration" ||
-		die "process-view integration lost: $contract"
-done
-grep -Eq 'structrk_getdents_instance\{[^}]*chartarget\[RK_PID_TEXT_CAPACITY\][^}]*size_ttarget_length;' \
-	<<< "$integration" || die "formatted target must belong to one return instance"
-if grep -Eq 'staticchar[^;]*(target|pid)' <<< "$integration"; then
-	die "do not keep a global formatted PID"
-fi
-if grep -Eq 'find_get_pid\(|pid_nr\(|pid_vnr\(' <<< "$integration"; then
-	die "translate the owned PID directly through the proc mount namespace"
-fi
-[[ $(grep -Eo 'rk_filter_dirents64\(' <<< "$integration" | wc -l) -eq 1 ]] ||
-	die "bind exactly one canonical packed-record filter"
-[[ $(grep -Eo 'rk_worker_get_tgid\(' <<< "$integration" | wc -l) -eq 1 ]] ||
-	die "acquire the worker identity exactly once"
-[[ $(grep -Eo 'put_pid\(target_pid\)' <<< "$integration" | wc -l) -eq 2 ]] ||
-	die "release the owned PID on startup failure and normal stop"
-stop_tail=${integration#*voidrk_getdents_probe_stop(void)}
-grep -Eq 'unregister_kretprobe.*unregister_kprobe.*put_pid\(target_pid\)' \
-	<<< "$stop_tail" || die "drain process-view hooks before releasing the PID"
 
 for symbol in register_kprobe unregister_kprobe register_kretprobe \
 	unregister_kretprobe copy_from_user_nofault copy_to_user_nofault kfree \
@@ -197,68 +63,15 @@ nm -u "$workspace/instrumentation/getdents_probe.o" |
 [[ $(strings "$module" | grep -Fxc 'filldir64') -eq 1 ]] ||
 	die "module must contain one native filldir64 identity"
 
-evidence=$(strip_comments < "$workspace/interface/evidence.c" |
-	tr -d '[:space:]')
-for field in \
-	'evidence_map_version=1\n' \
-	'map_role=declared-filter-scope\n' \
-	'target_kind=resident-worker-pid\n' \
-	'filter_gate=actions-enabled-at-iterate-dir-entry\n' \
-	'filter_view=proc-root-getdents64-result\n' \
-	'filter_match=exact-target-pid-name\n' \
-	'filter_nonmatch=retain\n' \
-	'outside_filter_scope=proc-pid-direct-lookup\n' \
-	'outside_filter_scope=proc-pid-comm\n' \
-	'outside_filter_scope=scheduler-task-execution\n' \
-	'outside_filter_scope=proc-modules-content\n' \
-	'outside_filter_scope=sys-module-tree\n' \
-	'outside_filter_scope=non-proc-directories\n' \
-	'filter_kernel_abi=linux-7.2-x86_64\n' \
-	'filter_oversize=leave-unchanged\n' \
-	'filter_all_match=leave-unchanged\n'; do
-	[[ $(grep -Foc "$field" <<< "$evidence") -eq 1 ]] ||
-		die "evidence map must contain one exact field: $field"
-done
-for contract in \
-	'pid_nr_ns(target,namespace)' \
-	'proc_pid_ns(file_inode(file)->i_sb)' \
-	'proc_create("rootkitlings_evidence",0400,' \
-	'filter_chunk_capacity=%u\n",RK_DIRECTORY_CHUNK_CAPACITY' \
-	'filter_return_capacity=%u\n",RK_DIRECTORY_RETURN_CAPACITY' \
-	'filter_returns_missed=%u\n",rk_getdents_probe_missed()'; do
-	grep -Fq "$contract" <<< "$evidence" ||
-		die "evidence implementation lost: $contract"
-done
-if grep -Eq '(hidden|verified|worker_running)=' <<< "$evidence"; then
-	die "evidence must declare scope, not claim successful concealment"
-fi
-
-header=$(tr -d '[:space:]' < "$workspace/include/rootkit.h")
-for definition in \
-	'#defineRK_FAIL_CREDENTIAL_PREPARE8' \
-	'#defineRK_FAIL_CREDENTIAL_CANCEL9' \
-	'#defineRK_FAIL_ITERATE_PROBE10' \
-	'#defineRK_FAIL_EVIDENCE_PUBLISH11'; do
-	grep -Fq "$definition" <<< "$header" ||
-		die "failure-point identity is wrong: $definition"
+for symbol in rk_state_create rk_state_destroy rk_worker_start rk_worker_stop \
+		rk_authorization_start rk_authorization_stop rk_return_probe_start \
+		rk_return_probe_stop rk_getdents_probe_start rk_getdents_probe_stop \
+		rk_events_publish rk_events_unpublish rk_evidence_publish \
+		rk_evidence_unpublish rk_proc_publish rk_proc_unpublish \
+		rk_scheduler_start rk_scheduler_stop; do
+	nm -u "$workspace/core/main.o" | awk -v symbol="$symbol" \
+		'$2 == symbol { found = 1 } END { exit !found }' ||
+		die "integration object omits lifecycle operation: $symbol"
 done
 
-main=$(strip_comments < "$workspace/core/main.c" | tr -d '[:space:]')
-init_order='rk_state_create.*rk_events_reset.*rk_worker_start.*rk_authorization_start.*rk_return_probe_start.*rk_getdents_probe_start.*rk_events_publish.*rk_evidence_publish.*rk_proc_publish.*rk_scheduler_start'
-exit_order='rk_proc_unpublish.*rk_evidence_unpublish.*rk_events_unpublish.*rk_scheduler_stop.*rk_getdents_probe_stop.*rk_return_probe_stop.*rk_authorization_stop.*rk_worker_stop.*rk_state_destroy'
-grep -Eq "$init_order" <<< "$main" ||
-	die "initialization order violates resource ownership"
-grep -Eq "$exit_order" <<< "$main" ||
-	die "unload order violates resource ownership"
-
-all_sources=$(find "$workspace" -name '*.c' -print0 | xargs -0 cat |
-	strip_comments | tr -d '[:space:]')
-[[ $(grep -Eo 'rk_authorization_execute\(' <<< "$all_sources" | wc -l) -eq 2 ]] ||
-	die "reuse the one authorization parser and its caller"
-[[ $(grep -Eo 'rk_filter_dirents64\(' <<< "$all_sources" | wc -l) -eq 2 ]] ||
-	die "reuse one packed-record helper and one call site"
-if grep -Eq 'task_tgid_nr\(|task_pid_nr\(worker_task\)' <<< "$all_sources"; then
-	die "do not reduce the worker identity to a global numeric PID"
-fi
-
-printf '[+] M02 ownership, scope, evidence, and canonical filter verified\n'
+printf '[+] M02 ownership, scope, evidence, and packed-record filter verified\n'

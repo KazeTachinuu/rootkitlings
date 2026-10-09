@@ -2,7 +2,10 @@
 # shellcheck source=/dev/null
 . /lib/check.sh
 
-begin "@LABEL@"
+expected_errno=${1:-@EXPECTED_ERRNO@}
+label=${2:-@LABEL@}
+expect_allocation=${3:-@EXPECT_ALLOCATION@}
+begin "$label"
 
 probe_count()
 {
@@ -21,8 +24,8 @@ kmem_trace_setup
 
 for attempt in 1 2; do
 	kmem_trace_start
-	if module_load_test /rootkitlings/rootkitlings.ko @EXPECTED_ERRNO@; then
-		_ok "attempt $attempt returns errno @EXPECTED_ERRNO@"
+	if module_load_test /rootkitlings/rootkitlings.ko "$expected_errno"; then
+		_ok "attempt $attempt returns errno $expected_errno"
 	else
 		_fail "attempt $attempt returned the wrong result"
 	fi
@@ -48,7 +51,7 @@ for attempt in 1 2; do
 	else
 		_fail "attempt $attempt left a worker"
 	fi
-	if test @EXPECT_ALLOCATION@ -eq 1; then
+	if test "$expect_allocation" -eq 1; then
 		assert_one_loader_allocation_freed \
 			"attempt $attempt frees its state allocation"
 	fi
