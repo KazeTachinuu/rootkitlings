@@ -224,6 +224,8 @@ Do not delete an old concept merely because it leaves the required route; retain
 
 No complete target asset set currently exists for the redesigned route.
 
+- Validated incubation assets exist for L00 through L05, but they are not yet the public route or final metadata.
+
 - L06, L16, L20, and L21 have no adequate standalone current exercise
   satisfying their contracts.
 - Every milestone and the final capstone require new cumulative checks, hints,
