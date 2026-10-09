@@ -21,13 +21,23 @@ for point in 1 2 3; do build "$here/solution" "$tmp/fail-$point" "$point"; done
 if "$here/host-check" "$tmp/template" "$tmp/template/rootkitlings.ko" >/dev/null 2>&1; then printf '[x] template accepted\n' >&2; exit 1; fi
 cp -a "$here/solution" "$tmp/alternate-src"; cp "$here/fixtures/alternate/aead.c" "$tmp/alternate-src/crypto/aead.c"; build "$tmp/alternate-src" "$tmp/alternate"; "$here/host-check" "$tmp/alternate" "$tmp/alternate/rootkitlings.ko"
 
-mutant(){ local name=$1 old=$2 new=$3 dir="$tmp/mutant-$1"; cp -a "$here/solution" "$dir"; sed -i "s@$old@$new@" "$dir/crypto/aead.c"; build "$dir" "$tmp/built-$name"; if "$here/host-check" "$tmp/built-$name" "$tmp/built-$name/rootkitlings.ko" >/dev/null 2>&1; then printf '[x] mutant accepted: %s\n' "$name" >&2; exit 1; fi; }
+mutant(){ local name=$1 old=$2 new=$3 dir="$tmp/mutant-$1"; cp -a "$here/solution" "$dir"; sed -i "s@$old@$new@" "$dir/crypto/aead.c"; ! cmp -s "$here/solution/crypto/aead.c" "$dir/crypto/aead.c" || { printf '[x] mutant edit did not apply: %s\n' "$name" >&2; exit 1; }; build "$dir" "$tmp/built-$name"; if "$here/host-check" "$tmp/built-$name" "$tmp/built-$name/rootkitlings.ko" >/dev/null 2>&1; then printf '[x] mutant accepted: %s\n' "$name" >&2; exit 1; fi; }
+mutant_perl(){ local name=$1 edit=$2 dir="$tmp/mutant-$1"; cp -a "$here/solution" "$dir"; perl -0pi -e "$edit" "$dir/crypto/aead.c"; ! cmp -s "$here/solution/crypto/aead.c" "$dir/crypto/aead.c" || { printf '[x] mutant edit did not apply: %s\n' "$name" >&2; exit 1; }; build "$dir" "$tmp/built-$name"; if "$here/host-check" "$tmp/built-$name" "$tmp/built-$name/rootkitlings.ko" >/dev/null 2>&1; then printf '[x] mutant accepted: %s\n' "$name" >&2; exit 1; fi; }
 mutant no-aad 'ops->set_ad(request, (unsigned int)aad_length);' 'ops->set_ad(request, 0);'
 mutant wrong-open-length 'ops->set_crypt(request, \&sg, (unsigned int)input_length, iv);' 'ops->set_crypt(request, \&sg, (unsigned int)(input_length - (decrypt ? RK_AEAD_TAG_LENGTH : 0)), iv);'
-mutant publish-on-failure 'if (error)' 'if (false \&\& error)'
+mutant wrong-seal-length 'ops->set_crypt(request, \&sg, (unsigned int)input_length, iv);' 'ops->set_crypt(request, \&sg, (unsigned int)(input_length + (decrypt ? 0 : RK_AEAD_TAG_LENGTH)), iv);'
 mutant no-iv-check 'ops->iv_size(tfm) != RK_AEAD_NONCE_LENGTH' 'false'
 mutant no-auth-check 'ops->auth_size(tfm) != RK_AEAD_TAG_LENGTH' 'false'
 mutant skip-wait 'error = ops->wait_request(error, \&wait);' 'error = error;'
+mutant wait-only-async 'error = ops->wait_request(error, \&wait);' 'error = (error == -EINPROGRESS || error == -EBUSY) ? ops->wait_request(error, \&wait) : error;'
+mutant wrong-callback-flags 'RK_AEAD_MAY_BACKLOG | RK_AEAD_MAY_SLEEP' 'RK_AEAD_MAY_SLEEP'
+mutant short-work-buffer 'work_length = aad_length + input_length + (decrypt ? 0 : RK_AEAD_TAG_LENGTH);' 'work_length = aad_length + input_length;'
+mutant partial-clear 'ops->clear(work, sizeof(work));' 'ops->clear(work, result_length);'
+mutant_perl alias-before-copy 's@work\[aad_length \+ i\] = input\[i\];@output[i] = input[i], work[aad_length + i] = output[i];@'
+mutant_perl expose-aad 's@output\[i\] = work\[aad_length \+ i\];@output[i] = work[i];@'
+mutant_perl over-publish 's@i < result_length; i\+\+\)\n\t\toutput\[i\] = work\[aad_length \+ i\];@i < work_length; i++)\n\t\toutput[i] = work[aad_length + i];@'
+mutant_perl publish-on-failure 's@if \(error\)\n\t\tgoto out;\n\tfor \(size_t i = 0; i < result_length; i\+\+\)@if (false \&\& error)\n\t\tgoto out;\n\tfor (size_t i = 0; i < result_length; i++)@'
+mutant_perl free-transform-first 's@if \(request\)\n\t\tops->request_free\(request\);\n\tif \(tfm\)\n\t\tops->tfm_free\(tfm\);@if (tfm)\n\t\tops->tfm_free(tfm);\n\tif (request)\n\t\tops->request_free(request);@'
 
 guest(){ local check=$1 module=$2 label=$3 out; out=$("$here/../../../../vm/boot" --cap aes-gcm --check "$check" "$module" --tool tools/module_load_test 2>&1) || { printf '%s\n[x] guest rejected %s\n' "$out" "$label" >&2; exit 1; }; printf '%s\n' "$out"; grep -Fq '[+] PASSED' <<<"$out"; }
 guest "$here/success-check" "$tmp/solution/rootkitlings.ko" solution

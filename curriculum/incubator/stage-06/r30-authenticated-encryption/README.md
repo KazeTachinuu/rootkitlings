@@ -56,8 +56,12 @@ This is essential on `-EBADMSG`: a provider may have written unauthenticated can
 The same rule applies to every allocation, setup, and asynchronous failure.
 Copying inputs into local storage before any output also makes overlapping input and output safe.
 
+Each call owns its transform, request, wait object, IV, and work buffer, so calls do not share mutable state.
+This helper has no start or stop state; nonce allocation and the lifetime of the surrounding module belong to its caller.
+
 Free the request before the transform.
-Clear the work buffer and IV on every path.
+After input bytes have been copied locally, clear the complete work buffer and IV on every exit path.
+Validation failures occur before either local buffer contains caller data.
 Linux's `aead_request_free()` uses `kfree_sensitive()` for the request allocation, but no local cleanup can erase the caller-owned key or promise to erase undocumented copies held by a provider or device.
 
 ## Required behavior
@@ -68,16 +72,18 @@ Linux's `aead_request_free()` uses `kfree_sensitive()` for the request allocatio
 - preserve `-EBADMSG` from authentication failure;
 - reject unexpected IV or configured tag sizes;
 - handle immediate, `-EINPROGRESS`, and `-EBUSY` completion;
-- release each acquired object exactly once and clear both local secret-bearing
-  buffers on every operation path.
+- release each acquired object exactly once and, after copying caller data,
+  clear both complete local buffers on every operation path.
 
-The guest self-test checks NIST CAVP AES-256-GCM Count 0 with 128-bit plaintext, AAD, and tag.
-Host tests use an independent instrumented fake only to inspect lifetime, request layout, errors, aliasing, and publication behavior; they do not use that fake as a cryptographic oracle.
+The guest self-test checks `gcmEncryptExtIV256.rsp`, Count 0 in NIST's official vector set for the section with a 96-bit IV and 128-bit plaintext, AAD, and tag.
+It also exercises every supported boundary around AES's 16-byte block size through the real Linux provider and changes every byte of the vector's ciphertext, tag, AAD, nonce, and key to verify rejection.
+Host tests use an instrumented state machine to inspect request layout, deferred completion, object lifetime, errors, overlap, cleanup, and publication.
+That fake is not a cryptographic oracle; only the NIST bytes judge AES-GCM output.
 
 ## Sources
 
 - Linux v7.2 [`include/crypto/aead.h`](https://github.com/torvalds/linux/blob/v7.2/include/crypto/aead.h)
 - Linux v7.2 [`include/linux/crypto.h`](https://github.com/torvalds/linux/blob/v7.2/include/linux/crypto.h)
 - [NIST SP 800-38D](https://csrc.nist.gov/pubs/sp/800/38/d/final)
-- [NIST CAVP GCM vectors](https://csrc.nist.gov/Projects/cryptographic-algorithm-validation-program/cavp-testing-block-cipher-modes)
+- [NIST CAVP GCM vector archive](https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/mac/gcmtestvectors.zip)
 - [RFC 5116, AEAD interface and AES-256-GCM](https://www.rfc-editor.org/rfc/rfc5116.html)
