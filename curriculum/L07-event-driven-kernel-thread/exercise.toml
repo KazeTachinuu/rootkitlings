@@ -1,6 +1,6 @@
 schema_version = 2
 id = "event-driven-kernel-thread"
-title = "Run and stop an event-driven kernel thread"
+title = "Wake a sleeping kernel worker"
 stage = "control-execution"
 kind = "lesson"
 status = "required"

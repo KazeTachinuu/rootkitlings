@@ -1,4 +1,12 @@
-# Classify one bounded IPv4 UDP datagram
+# Recognize one UDP signal without changing it
+
+The outbound watch sees every local IPv4 packet.
+Select only a structurally valid UDP datagram addressed to one chosen port, and
+leave every packet untouched.
+
+Success proves that packet access, IPv4 validation, and UDP classification can
+form one strict inspection path.
+It recognizes structure only; it does not inspect a message or prove delivery.
 
 This exercise joins three already-tested pieces:
 

@@ -1,8 +1,14 @@
-# Build, load, inspect, and unload a kernel module
+# Load your first kernel implant
+
+Start with one small kernel implant: a module that can enter and leave the test
+kernel cleanly.
+Build it, load it, confirm that it is resident, then unload it.
+Success proves that you control the complete module lifecycle before adding any
+rootkit behavior.
 
 Most programs run in **userspace**, isolated from the operating system.
-A kernel module runs with kernel privileges.
-Drivers and loadable-module rootkits use this mechanism to add functionality.
+A kernel module runs inside the kernel with full kernel privileges.
+Drivers and loadable rootkits use this mechanism to add functionality.
 
 A bug in a module can crash or corrupt the whole kernel.
 This exercise loads code only in the disposable test VM, never in the host

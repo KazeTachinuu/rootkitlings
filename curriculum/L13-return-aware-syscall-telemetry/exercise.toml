@@ -1,6 +1,6 @@
 schema_version = 2
 id = "return-aware-syscall-telemetry"
-title = "Correlate an rmdir path with its result"
+title = "Set a tripwire on one directory removal"
 stage = "identity-observation"
 kind = "lesson"
 status = "required"

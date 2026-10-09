@@ -1,6 +1,13 @@
-# Manage two named Kprobes
+# Watch directory activity with Kprobes
 
-Observe without altering two filesystem functions:
+Turn the module into a small filesystem tripwire.
+Watch directory creation and removal inside the kernel without blocking or
+changing either operation.
+Success proves that both observation points are installed and removed as one
+owned set, including when startup fails halfway through.
+
+A **Kprobe** attaches a short handler to a named kernel function at runtime.
+Observe these two functions:
 
 - `vfs_mkdir` when a directory is created
 - `filename_rmdir` when a directory is removed

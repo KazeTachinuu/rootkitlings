@@ -1,6 +1,6 @@
 schema_version = 2
 id = "transactional-credential-replacement"
-title = "Replace the writing task's credentials as one transaction"
+title = "Give one caller root"
 stage = "identity-observation"
 kind = "lesson"
 status = "required"

@@ -1,6 +1,6 @@
 schema_version = 2
 id = "hostile-packet-lengths"
-title = "Parse packet lengths before touching payload"
+title = "Reject deceptive IPv4 lengths"
 stage = "network-state"
 kind = "lesson"
 status = "required"

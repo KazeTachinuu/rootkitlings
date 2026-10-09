@@ -1,6 +1,6 @@
 schema_version = 2
 id = "bounded-dns-wire-name"
-title = "Encode and decode a bounded DNS wire name"
+title = "Prepare a bounded DNS wire name"
 stage = "network-state"
 kind = "lesson"
 status = "required"

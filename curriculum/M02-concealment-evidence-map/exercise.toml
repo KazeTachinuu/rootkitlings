@@ -1,6 +1,6 @@
 schema_version = 2
 id = "concealment-evidence-map"
-title = "Omit the resident worker and map the affected view"
+title = "Hide the worker and map the blind spot"
 stage = "views-detection"
 kind = "milestone"
 status = "required"

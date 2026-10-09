@@ -1,6 +1,6 @@
 schema_version = 2
 id = "current-task-attribution"
-title = "Attribute a proc read to the executing task"
+title = "Identify who reads the status channel"
 stage = "identity-observation"
 kind = "lesson"
 status = "required"

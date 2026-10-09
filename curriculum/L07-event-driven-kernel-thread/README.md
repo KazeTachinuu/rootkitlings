@@ -1,8 +1,14 @@
-# Run and stop an event-driven kernel thread
+# Wake a sleeping kernel worker
 
-Add a `run` command to `/proc/rootkitlings`.
-Each accepted command submits one unit to a kernel thread, which sleeps when
-idle and records one completion per unit.
+An operator command should not trap the proc writer inside long-running kernel
+work.
+Add `run` to wake a dedicated kernel thread, let that worker complete one unit,
+then put it back to sleep.
+Success proves that accepted commands are neither lost nor merged and that the
+worker stops before its state is freed.
+
+A **kernel thread** is a task created by the kernel rather than a userspace
+program.
 The proc callback only validates and queues bounded requests.
 
 The complete grammar is `enable`, `disable`, or `run`, each with one optional

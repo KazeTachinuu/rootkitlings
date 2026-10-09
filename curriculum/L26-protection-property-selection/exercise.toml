@@ -1,6 +1,6 @@
 schema_version = 2
 id = "protection-property-selection"
-title = "Choose the protection property before the primitive"
+title = "Build a protection selector"
 stage = "authenticated-operations"
 kind = "lesson"
 status = "required"

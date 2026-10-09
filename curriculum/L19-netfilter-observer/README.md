@@ -1,6 +1,15 @@
-# Observe local IPv4 traffic without changing it
+# Place a passive watch on outbound IPv4
 
-Observe locally generated IPv4 at `LOCAL_OUT` in `init_net` only.
+Install a traffic watch where locally generated IPv4 leaves the host network
+stack.
+Count each visit and always allow the packet to continue unchanged.
+
+Success proves that you can register, publish, drain, and remove a Netfilter
+hook safely.
+Netfilter is Linux's framework for running callbacks at packet-processing
+points.
+
+Place the watch at `LOCAL_OUT` in `init_net` only.
 
 Use `NF_IP_PRI_FIRST`, the earliest numeric priority.
 Equal-priority order is unspecified, and later processing may still change or

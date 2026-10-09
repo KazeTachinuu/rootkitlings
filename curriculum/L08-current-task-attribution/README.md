@@ -1,7 +1,11 @@
-# Attribute a proc read to the executing task
+# Identify who reads the status channel
 
-Add the thread ID and command name of the task that materializes the proc
-record:
+The status channel may be opened by one process and read by another.
+Record the exact thread that causes the kernel to produce each status snapshot.
+Success proves who materialized the record, even when a file descriptor was
+shared or inherited.
+
+Add that reader's thread ID and command name:
 
 ```text
 active=1

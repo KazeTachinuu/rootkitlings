@@ -1,6 +1,6 @@
 schema_version = 2
 id = "safe-skb-access"
-title = "Read packet bytes safely from an sk_buff"
+title = "Read a packet split across kernel storage"
 stage = "network-state"
 kind = "lesson"
 status = "required"

@@ -1,6 +1,6 @@
 schema_version = 2
 id = "one-use-authorization"
-title = "Authorize one credential change with a fresh token"
+title = "Issue a one-use operator key"
 stage = "identity-observation"
 kind = "lesson"
 status = "required"

@@ -1,6 +1,6 @@
 schema_version = 2
 id = "tcp-framing-cancellation"
-title = "Run one cancellable framed TCP session"
+title = "Run a stoppable call-home session"
 stage = "network-state"
 kind = "lesson"
 status = "required"

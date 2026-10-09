@@ -1,6 +1,6 @@
 schema_version = 2
 id = "controlled-resident-core"
-title = "Unify timed and requested work"
+title = "Establish the foothold"
 stage = "control-execution"
 kind = "milestone"
 status = "required"

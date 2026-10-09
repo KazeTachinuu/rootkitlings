@@ -1,7 +1,12 @@
-# Read module state through procfs
+# Read live state through the status channel
 
-The proc entry from the previous lesson prints a fixed word.
-This lesson makes it report the state the module actually owns:
+The status channel says `active`, but that fixed word proves little.
+Connect it to the module's real private state and make every read return one
+stable record.
+Success proves that userspace can inspect live state without exposing its
+internal layout.
+
+The record is:
 
 ```text
 active=1

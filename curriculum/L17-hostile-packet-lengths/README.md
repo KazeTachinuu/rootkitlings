@@ -1,4 +1,14 @@
-# Parse packet lengths before touching payload
+# Reject deceptive IPv4 lengths
+
+Before a traffic watcher inspects a signal, it must find the packet's real
+boundaries.
+An IPv4 header may claim bytes that are missing, overlap its own header, or
+belong to fragments that this module cannot reassemble.
+
+Build a bounded parser that accepts one complete, unfragmented packet and
+classifies every rejection.
+Success proves that later code can inspect the returned payload view without
+trusting hostile length fields.
 
 An IPv4 packet carries two different bounds:
 

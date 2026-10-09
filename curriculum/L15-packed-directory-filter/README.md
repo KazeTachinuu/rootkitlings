@@ -1,9 +1,12 @@
-# Filter packed directory records safely
+# Hide one name from a directory listing
 
-`getdents64()` returns a byte buffer containing adjacent variable-length
-records.
-Remove one exact name from one controlled enumeration result without corrupting
-the other records.
+An object can remain reachable by its exact path while a directory listing omits
+its name.
+Hide one controlled proc entry from native x86-64 directory listings without
+changing the object or corrupting its neighbors.
+
+Success proves that you can validate and compact a packed result safely.
+`getdents64()` supplies that result as adjacent variable-length records.
 
 The supplied module creates `/proc/rootkitlings_hidden`.
 A direct read still returns:

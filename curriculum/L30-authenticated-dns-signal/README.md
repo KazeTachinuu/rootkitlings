@@ -1,8 +1,13 @@
-# Emit an authenticated DNS-shaped signal
+# Send an authenticated DNS-shaped status flare
 
-Send one status datagram to `127.0.0.1:5300` using a DNS question layout.
-It is capture-decodable, but performs no lookup, never leaves the guest, and is
-not a command channel.
+Build a one-shot status flare for a resident module.
+It packs status `0` through `3`, an epoch, a sequence, and an HMAC tag into a
+DNS question sent to `127.0.0.1:5300`.
+Ordinary capture tools can decode it, but only a receiver with the shared key
+can authenticate it.
+
+The flare performs no lookup, never leaves the guest, and is not a command
+channel.
 
 An epoch and sequence make status `0` through `3` fresh.
 The packet carries the first 16 HMAC-SHA-256 bytes under the laboratory key.

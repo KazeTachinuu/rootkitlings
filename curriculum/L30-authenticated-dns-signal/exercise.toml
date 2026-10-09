@@ -1,6 +1,6 @@
 schema_version = 2
 id = "authenticated-dns-signal"
-title = "Emit an authenticated DNS-shaped signal"
+title = "Send an authenticated DNS-shaped status flare"
 stage = "authenticated-operations"
 kind = "lesson"
 status = "required"

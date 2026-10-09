@@ -1,6 +1,6 @@
 schema_version = 2
 id = "linux-credential-model"
-title = "Interpret the current task's credentials"
+title = "Read the caller's kernel identity"
 stage = "identity-observation"
 kind = "lesson"
 status = "required"

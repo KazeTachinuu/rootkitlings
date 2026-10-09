@@ -1,6 +1,12 @@
-# Reject initialization with a precise error
+# Abort a bad start cleanly
 
-A module becomes resident only if its load callback returns `0`.
+An implant must refuse to load when a required condition is missing.
+Add a controlled preflight failure, report its exact cause, and prove that no
+module remains behind.
+Success means a rejected start is clean and diagnosable, not a partial install.
+
+A module becomes **resident**, or remains loaded, only if its load callback
+returns `0`.
 If initialization returns a negative Linux error number, the loader reports that
 error and the module never becomes loaded.
 

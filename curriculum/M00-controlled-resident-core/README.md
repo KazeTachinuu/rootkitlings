@@ -1,6 +1,16 @@
-# Unify timed and requested work
+# Establish the foothold
 
-Build one resident execution path with two request sources:
+The earlier lessons built state, a control file, a timer, and a kernel thread in
+isolation.
+Now turn them into one small resident implant.
+
+The operator can enable or disable actions and request work through
+`/proc/rootkitlings`.
+A timer can request the same work automatically.
+Only one worker performs it, so the two request paths cannot race through the
+action.
+
+This is the first complete foothold:
 
 ```text
 timer expiry ----\
@@ -9,12 +19,11 @@ procfs `run` -----/                                     |
                                                          -> worker_runs
 ```
 
-The timer and `run` command call the same nonblocking request function; only the
-kernel thread executes actions.
+The action is deliberately harmless: increment a counter.
+The mission is to make control, background execution, and unload behave as one
+system.
 
-Extend the passed procfs-publication module with this interface and lifetime.
-
-## Interface
+## Operator controls
 
 `/proc/rootkitlings` accepts these complete commands, with or without one
 trailing newline:
@@ -35,7 +44,7 @@ worker_runs=7
 `timer_fires` counts every callback; `worker_runs` counts thread-completed
 actions and is the complete observable action here.
 
-## One pending request
+## Keep one job waiting
 
 Keep one private capacity-one `atomic_t pending` in `execution/worker.c`:
 
@@ -49,7 +58,7 @@ if full, and wake the queue only after publishing `1`.
 The timer ignores either error and drops a request when full.
 Procfs returns the error; successful `run` means queued, not completed.
 
-## Consume in one thread
+## Run jobs in one thread
 
 The thread waits until `pending` is nonzero or `kthread_should_stop()` is true.
 After waking:
@@ -68,7 +77,7 @@ Use `READ_ONCE()` and `WRITE_ONCE()` for the whole-value gate and single-writer
 counters.
 The producer/consumer slot requires atomic read-modify-write operations.
 
-## Start and stop ownership
+## Start and stop safely
 
 Create resources in this order:
 

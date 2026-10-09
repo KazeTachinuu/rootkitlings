@@ -1,4 +1,13 @@
-# Encode and decode a bounded DNS wire name
+# Prepare a bounded DNS wire name
+
+A DNS-shaped signal first needs its labels translated into the exact bytes used
+on the wire.
+Encode and parse one bounded name without allocation or partial output.
+
+Success proves that binary labels, length limits, truncation, and unsupported
+compression are handled before any transport uses the result.
+This lesson builds only the name codec; it sends no traffic and claims no
+concealment.
 
 DNS encodes length-prefixed labels followed by a zero-length root label.
 For example, `a.example` is:

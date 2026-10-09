@@ -1,7 +1,13 @@
-# Enable and disable module actions through procfs
+# Add an operator control switch
 
-The proc file can report state.
-Now make it change one piece of state:
+Observation is not enough: an operator needs a safe way to pause new actions
+without unloading the module.
+Accept only `enable` and `disable`, reject every malformed write, and change
+state only after the whole command is valid.
+Success proves that the status channel is also a narrow, predictable control
+channel.
+
+The proc record becomes:
 
 ```text
 active=1

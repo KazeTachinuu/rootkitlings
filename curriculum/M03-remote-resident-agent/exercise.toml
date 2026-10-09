@@ -1,6 +1,6 @@
 schema_version = 2
 id = "remote-resident-agent"
-title = "Remote resident agent"
+title = "Call home and request loading at boot"
 stage = "network-state"
 kind = "milestone"
 status = "required"

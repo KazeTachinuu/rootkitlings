@@ -1,9 +1,12 @@
-# Allocate and own private kernel state
+# Give the implant private state
 
-A module often needs memory that lives for exactly as long as the module is
-active.
-That memory needs one owner: one component creates it, and the same component
-destroys it.
+The implant now needs memory for information that must survive between calls.
+Give that memory one clear owner and release it on every exit path.
+Success proves that private state lives exactly as long as the module, including
+when startup fails.
+
+Kernel memory with this lifetime is the module's **private state**.
+One component creates it, and the same component destroys it.
 
 Here, `core/state.c` owns a small heap object.
 `core/main.c` controls when that object exists but cannot inspect its fields.

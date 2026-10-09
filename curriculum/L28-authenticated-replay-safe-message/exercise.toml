@@ -1,6 +1,6 @@
 schema_version = 2
 id = "authenticated-replay-safe-message"
-title = "Authenticate a message and reject replay"
+title = "Accept one authenticated order, once"
 stage = "authenticated-operations"
 kind = "lesson"
 status = "required"

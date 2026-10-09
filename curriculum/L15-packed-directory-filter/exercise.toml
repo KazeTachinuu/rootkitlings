@@ -1,6 +1,6 @@
 schema_version = 2
 id = "packed-directory-filter"
-title = "Filter packed directory records safely"
+title = "Hide one name from a directory listing"
 stage = "views-detection"
 kind = "lesson"
 status = "required"

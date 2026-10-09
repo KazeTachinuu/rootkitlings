@@ -1,6 +1,11 @@
-# Correlate an rmdir path with its result
+# Set a tripwire on one directory removal
 
-Observe one exact `rmdir()` path without changing the system call.
+A watched directory may be removed, or a failed call may leave it untouched.
+Set a tripwire that tells those outcomes apart without changing `rmdir()`.
+
+Watch one exact path, carry the match from entry to return, and record the
+result.
+Success proves that concurrent calls keep their observations separate.
 
 The selected path is:
 

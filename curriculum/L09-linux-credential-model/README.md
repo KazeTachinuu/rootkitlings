@@ -1,7 +1,13 @@
-# Interpret the current task's credentials
+# Read the caller's kernel identity
 
-Extend `/proc/rootkitlings` with the credentials of the task that materializes
-the record:
+A thread name and ID do not explain what that thread may do.
+Snapshot the reader's kernel identity: user IDs, group IDs, capabilities, and
+the user namespace in which those capabilities have meaning.
+Success proves that the record describes one consistent caller while rendering
+its numeric IDs for the process that opened the channel.
+
+Linux stores this identity and authority in an immutable **credential** object.
+Extend `/proc/rootkitlings` with that snapshot:
 
 ```text
 active=1

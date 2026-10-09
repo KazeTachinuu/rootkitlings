@@ -1,7 +1,11 @@
-# Choose the protection before the algorithm
+# Build a protection selector
 
-Encoding changes representation, not who can read or alter bytes.
-Repeating-key XOR makes this visible:
+Build the decision point for a small secure-message toolkit.
+Given the required protection and the keys or trusted references available, it
+must choose a suitable mechanism or refuse the request.
+
+The first test is repeating-key XOR.
+It changes how bytes look, but not who can read or alter them:
 
 ```text
 plaintext XOR key = encoded bytes

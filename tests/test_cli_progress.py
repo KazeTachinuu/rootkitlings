@@ -908,7 +908,7 @@ class LearnerCLITests(unittest.TestCase):
         with redirect_stdout(output):
             self.globals["cmd_read"]([])
         read_text = output.getvalue()
-        self.assertIn("# Build, load, inspect, and unload a kernel module", read_text)
+        self.assertIn("# Load your first kernel implant", read_text)
         self.assertIn("./rootkitlings start L00", read_text)
 
         output = io.StringIO()
@@ -981,7 +981,7 @@ class LearnerCLITests(unittest.TestCase):
         self.assertIn("$ /usr/bin/bat", rendered)
         self.assertRegex(rendered, r"Exit\s+2")
         self.assertIn(
-            "# Build, load, inspect, and unload a kernel module",
+            "# Load your first kernel implant",
             rendered,
         )
 

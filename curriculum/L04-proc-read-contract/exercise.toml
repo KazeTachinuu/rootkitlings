@@ -1,6 +1,6 @@
 schema_version = 2
 id = "proc-read-contract"
-title = "Read module state through procfs"
+title = "Read live state through the status channel"
 stage = "control-execution"
 kind = "lesson"
 status = "required"

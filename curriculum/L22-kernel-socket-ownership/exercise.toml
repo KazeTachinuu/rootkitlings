@@ -1,6 +1,6 @@
 schema_version = 2
 id = "kernel-socket-ownership"
-title = "Own a kernel TCP socket from creation through release"
+title = "Open and close a kernel call-home socket"
 stage = "network-state"
 kind = "lesson"
 status = "required"

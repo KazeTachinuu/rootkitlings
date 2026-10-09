@@ -1,13 +1,20 @@
-# Omit the resident worker and map the affected view
+# Hide the worker and map the blind spot
 
-While actions are enabled, omit the resident worker's numeric name from bounded
-`getdents64()` results for a procfs root.
-The worker still runs, and direct `/proc/PID`, `comm`, `/proc/modules`, and
-`/sys/module` views remain unchanged.
-The evidence endpoint declares this narrow scope without claiming invisibility
-or independent verification.
+An operator wants the resident worker omitted from an ordinary listing of
+`/proc`.
+A defender wants to know exactly which view was altered and which views still
+tell the truth.
 
-## Identity and directory result
+This mission does both.
+While actions are enabled, one filtered directory listing omits the worker's
+numeric PID.
+The process still runs and remains visible through direct `/proc/PID` access,
+its `comm` file, scheduler state, `/proc/modules`, and `/sys/module`.
+
+The second endpoint is an evidence map: a precise statement of the blind spot,
+not a claim that the module is invisible.
+
+## Identify the worker in each PID namespace
 
 After creating the worker, acquire its `PIDTYPE_TGID` identity with
 `get_task_pid()`.
@@ -18,8 +25,9 @@ the identity into that mount's namespace.
 Leave the result unchanged when translation returns zero.
 
 Reuse the supplied `rk_filter_dirents64()` helper.
-The integration resolves private `filldir64()` state with a managed Kprobe and
-observes `iterate_dir()` with a Kretprobe.
+The module observes the kernel function that fills a directory result and its
+return value.
+The implementation uses a Kprobe and Kretprobe for those two observation points.
 Use the actual entry-time directory file so close or descriptor reuse cannot
 redirect the scope check.
 Pinned Linux 7.2 x86-64 layout checks bound the private cast.
@@ -41,7 +49,7 @@ iteration and the return handler.
 A fault cannot roll back bytes already written by either path.
 A missed Kretprobe instance is diagnostic, not a missed-omission count.
 
-## Evidence endpoint
+## Describe exactly what changed
 
 Publish `/proc/rootkitlings_evidence` as root-owned mode `0400` with exactly:
 
@@ -73,7 +81,7 @@ read.
 The first offset-zero read snapshots one record; partial reads drain it, EOF
 persists, and seeking to zero requests a new snapshot.
 
-## Integration and lifetime
+## Start and stop safely
 
 Complete `Kbuild`, `include/rootkit.h`, `execution/worker.c`,
 `instrumentation/getdents_probe.c`, `interface/evidence.c`, and `core/main.c`.

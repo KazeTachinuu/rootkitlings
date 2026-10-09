@@ -1,7 +1,13 @@
-# Own a kernel TCP socket from creation through release
+# Open and close a kernel call-home socket
 
-Own one kernel IPv4 TCP connection to the checker's loopback listener.
-Do not send or receive application data.
+Build a small call-home socket owner for one IPv4 TCP connection to the
+checker's loopback listener.
+Open it, verify both endpoints, publish it only when complete, and close it
+exactly once on every path.
+
+No application data moves yet.
+Success proves that the kernel socket has one clear owner from creation through
+failure, publication, and release.
 
 ## The lifetime
 

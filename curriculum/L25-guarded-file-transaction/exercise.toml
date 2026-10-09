@@ -1,6 +1,6 @@
 schema_version = 2
 id = "guarded-file-transaction"
-title = "Replace one owned file and restore it conditionally"
+title = "Leave a reversible note in an owned file"
 stage = "network-state"
 kind = "lesson"
 status = "required"

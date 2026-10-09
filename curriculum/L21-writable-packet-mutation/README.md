@@ -1,4 +1,11 @@
-# Mutate a writable packet and repair checksum state
+# Redirect one UDP signal to a new port
+
+The traffic watch has recognized a target UDP datagram.
+Redirect that one datagram to a different local port while allowing all local
+IPv4 traffic to continue.
+
+Success proves that you can make shared packet storage writable, reject a stale
+classification, and repair checksum state after changing the header.
 
 The packet classifier supplies a validated `rk_udp_view` without changing the
 packet.

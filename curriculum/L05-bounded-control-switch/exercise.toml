@@ -1,6 +1,6 @@
 schema_version = 2
 id = "bounded-control-switch"
-title = "Enable and disable module actions through procfs"
+title = "Add an operator control switch"
 stage = "control-execution"
 kind = "lesson"
 status = "required"

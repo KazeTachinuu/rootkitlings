@@ -1,6 +1,6 @@
 schema_version = 2
 id = "managed-kprobe"
-title = "Manage two named Kprobes"
+title = "Watch directory activity with Kprobes"
 stage = "identity-observation"
 kind = "lesson"
 status = "required"

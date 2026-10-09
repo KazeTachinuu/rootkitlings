@@ -1,6 +1,6 @@
 schema_version = 2
 id = "timer-workqueue-scheduler"
-title = "Defer timer work to a worker"
+title = "Build a kernel heartbeat"
 stage = "control-execution"
 kind = "lesson"
 status = "required"

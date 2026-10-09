@@ -1,6 +1,6 @@
 schema_version = 2
 id = "bounded-rendered-filter"
-title = "Replace bytes in one bounded read result"
+title = "Redact one marker from a file read"
 stage = "views-detection"
 kind = "lesson"
 status = "required"

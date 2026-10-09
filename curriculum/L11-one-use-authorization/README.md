@@ -1,6 +1,13 @@
-# Authorize one credential change with a fresh token
+# Issue a one-use operator key
 
-Protect the `root` action with a one-use, 16-byte bearer token.
+An exposed `root` command is not an acceptable control channel.
+Require a fresh one-use secret, consume it before attempting the action, and
+replace it even when the credential change fails.
+Success proves that two writers cannot spend the same secret and that replaying
+an old command never grants credentials.
+
+This operator key is a 16-byte **bearer token**: possession authorizes one
+attempt, regardless of the writer's identity.
 The endpoint accepts `enable`, `disable`, or
 `root 0123456789abcdef0123456789abcdef`, each with one optional final newline.
 The token text must be exactly 32 lowercase hexadecimal digits; the shown value

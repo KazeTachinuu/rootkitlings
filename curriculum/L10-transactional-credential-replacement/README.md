@@ -1,10 +1,17 @@
-# Replace the writing task's credentials as one transaction
+# Give one caller root
 
-The proc endpoint accepts `enable`, `disable`, and `root`, each with one
-optional final newline.
+The control channel now has a sensitive action: grant initial-namespace root
+credentials to the thread that sends `root`.
+Build the replacement completely before publishing it, or discard it without
+changing the caller.
+Success proves that only the writing thread changes and that cancellation leaves
+its old identity intact.
+
+The endpoint accepts `enable`, `disable`, and `root`, each with one optional
+final newline.
 It starts disabled, so `root` returns `-EACCES` until enabled.
-A successful `root` changes only the thread executing that write, not the module
-loader, parent shell, another process, or an existing sibling thread.
+A successful `root` does not change the module loader, parent shell, another
+process, or an existing sibling thread.
 
 ## Replace one complete credential
 

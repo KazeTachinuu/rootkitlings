@@ -1,7 +1,11 @@
-# Authenticate one fixed command and reject replay
+# Accept one authenticated order, once
 
-This exercise authenticates one command: set a level from `0` through `3`.
-It neither encrypts the fields nor exposes a runtime control file.
+Build the receiver for a tiny command channel.
+An operator can set a resident agent's level from `0` through `3`, but the
+receiver must accept each authentic order exactly once and in sequence.
+Copies, gaps, tampering, and commands from the wrong key must change nothing.
+
+The message does not encrypt its fields or expose a runtime control file.
 
 Each message is exactly 36 bytes:
 

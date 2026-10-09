@@ -1,6 +1,6 @@
 schema_version = 2
 id = "authenticated-encryption"
-title = "Use AEAD without releasing unauthenticated plaintext"
+title = "Seal and open an encrypted envelope"
 stage = "authenticated-operations"
 kind = "lesson"
 status = "required"

@@ -1,8 +1,13 @@
-# Defer timer work to a worker
+# Build a kernel heartbeat
 
-A timer callback cannot sleep.
-A normal workqueue callback runs in worker-thread context, where later actions
-may use sleep-capable APIs.
+The implant needs a periodic heartbeat, but a timer callback cannot do work that
+may sleep.
+Make the timer signal a normal kernel worker and keep the timer itself short.
+Success proves that scheduled activity reaches the right execution context and
+can still be stopped cleanly.
+
+A **workqueue** runs deferred functions in kernel worker threads, where
+sleep-capable APIs may be used.
 Build this path:
 
 ```text

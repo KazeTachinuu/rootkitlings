@@ -1,4 +1,13 @@
-# Run one cancellable framed TCP session
+# Run a stoppable call-home session
+
+The call-home socket now carries binary messages.
+Its peer may split a message across reads, send an oversized frame, or remain
+blocked while the module unloads.
+
+Echo valid frames, drain oversized ones, and guarantee that stop wakes and joins
+the worker.
+Success proves that one kernel thread can own a framed TCP session without
+leaking a blocked socket.
 
 TCP is a byte stream, and successful socket calls may transfer short.
 Add framing while one kernel thread owns every blocking socket operation.

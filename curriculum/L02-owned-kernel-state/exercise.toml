@@ -1,6 +1,6 @@
 schema_version = 2
 id = "owned-kernel-state"
-title = "Allocate and own private kernel state"
+title = "Give the implant private state"
 stage = "module-core"
 kind = "lesson"
 status = "required"

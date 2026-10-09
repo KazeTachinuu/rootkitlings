@@ -1,6 +1,6 @@
 schema_version = 2
 id = "writable-packet-mutation"
-title = "Mutate a writable packet and repair checksum state"
+title = "Redirect one UDP signal to a new port"
 stage = "network-state"
 kind = "lesson"
 status = "required"

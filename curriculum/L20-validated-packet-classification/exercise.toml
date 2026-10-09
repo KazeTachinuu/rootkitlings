@@ -1,6 +1,6 @@
 schema_version = 2
 id = "validated-packet-classification"
-title = "Classify one bounded IPv4 UDP datagram"
+title = "Recognize one UDP signal without changing it"
 stage = "network-state"
 kind = "lesson"
 status = "required"

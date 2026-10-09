@@ -1,6 +1,6 @@
 schema_version = 2
 id = "proc-publication"
-title = "Publish and roll back a procfs entry"
+title = "Open a procfs dead drop"
 stage = "module-core"
 kind = "lesson"
 status = "required"

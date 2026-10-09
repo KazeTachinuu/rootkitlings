@@ -1,6 +1,6 @@
 schema_version = 2
 id = "authorized-actions-telemetry"
-title = "Record authorized actions and rmdir results"
+title = "Authorize the operator and record activity"
 stage = "identity-observation"
 kind = "milestone"
 status = "required"

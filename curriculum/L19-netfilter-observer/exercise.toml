@@ -1,6 +1,6 @@
 schema_version = 2
 id = "netfilter-observer"
-title = "Observe local IPv4 traffic without changing it"
+title = "Place a passive watch on outbound IPv4"
 stage = "network-state"
 kind = "lesson"
 status = "required"

@@ -1,6 +1,6 @@
 schema_version = 2
 id = "module-build-lifecycle"
-title = "Build, load, inspect, and unload a kernel module"
+title = "Load your first kernel implant"
 stage = "module-core"
 kind = "lesson"
 status = "required"

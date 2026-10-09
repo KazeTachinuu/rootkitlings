@@ -1,4 +1,9 @@
-# Use AEAD without releasing unauthenticated plaintext
+# Seal and open an encrypted envelope
+
+Build a kernel helper for a small encrypted envelope.
+Seal turns private bytes into ciphertext with an authentication tag.
+Open releases the complete plaintext only when that tag is valid; a forged or
+damaged envelope releases no plaintext to the caller.
 
 Edit `crypto/aead.c` only.
 Implement `rk_aead_seal_with()` and `rk_aead_open_with()`, then keep the two

@@ -1,8 +1,16 @@
-# Publish and roll back a procfs entry
+# Open a procfs dead drop
 
-Module state is private until the module publishes an interface for userspace.
-This lesson adds `/proc/rootkitlings` after the state object from the previous
-lesson is ready.
+Private state is invisible to an operator in userspace.
+Open `/proc/rootkitlings` as a local exchange point only after the module is
+ready, then remove it before its state disappears.
+Success proves that a failed start leaves neither the channel nor its state
+behind.
+
+`procfs` is Linux's virtual `/proc` filesystem.
+Kernel code can publish small runtime records there without creating a normal
+disk file.
+This dead drop is a memorable control point, not a hidden one: system tools can
+see the proc entry.
 
 The order matters:
 

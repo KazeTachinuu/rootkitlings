@@ -1,7 +1,13 @@
-# Replace one owned file and restore it conditionally
+# Leave a reversible note in an owned file
 
-This exercise changes one file without losing the original when a later step
-fails.
+A resident component needs to replace one small request file, then restore the
+original when it leaves.
+A failed step or outside change must not destroy either version.
+
+Stage the note beside the original, exchange the names atomically, and restore
+only while both files still match the identities you recorded.
+Success proves that a kernel file change can be reversible without overwriting
+someone else's later work.
 It uses only a private test directory created by the checker:
 
 - `/run/rootkitlings-guarded-file-transaction/request.conf`

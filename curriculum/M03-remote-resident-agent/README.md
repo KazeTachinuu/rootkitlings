@@ -1,10 +1,19 @@
-# Build the remote resident agent
+# Call home and request loading at boot
 
-Add two components to the cumulative module:
+The implant can now run and conceal one worker, but the operator still needs a
+local procfs write.
+Give it a bounded call-home channel and a reversible request to load at the next
+boot.
 
-- a kernel thread that connects to one loopback TCP listener, handles one framed
-  session, and reconnects after a bounded delay;
-- a guarded modules-load request at `/etc/modules-load.d/rootkitlings.conf`.
+This mission adds two field behaviors:
+
+- call one control point, exchange a small command, and reconnect if the point
+  is unavailable;
+- replace one `modules-load.d` request without destroying a file owned by
+  someone else.
+
+The control point is a loopback listener in the disposable guest.
+C00 later protects this channel with authenticated encryption.
 
 The agent does not accept shell commands.
 Its complete command set is:
@@ -19,7 +28,7 @@ Anything else returns `ERR` without changing it.
 Use the supplied two-byte big-endian framing and its exact partial-I/O and
 oversized-frame behavior.
 
-## Reconnect and stop
+## Call home, retry, and stop
 
 The worker is the only socket owner.
 For each attempt it:
@@ -39,7 +48,7 @@ Under the publication lock, stop sets its gate and shuts down an active socket.
 It then wakes retry and joins; the worker performs the matching
 `sock_release()`.
 
-## Boot request
+## Leave a reversible boot request
 
 The request file contains exactly:
 

@@ -1,4 +1,10 @@
-# Omit one live probe from a proc view
+# Keep a live probe off the status page
+
+A module can choose what its own status page reports.
+That report may disagree with the kernel's independent record of live probes.
+
+Omit one probe from `/proc/rootkitlings` while keeping it registered and active.
+Success proves that hiding a row does not hide the underlying hook.
 
 The module still registers the two Kprobes from the previous exercise:
 

@@ -1,9 +1,15 @@
-# Read packet bytes safely from an `sk_buff`
+# Read a packet split across kernel storage
 
-An `sk_buff` may span a linear head, page fragments, and `frag_list`.
+A traffic watcher cannot assume that packet bytes form one flat array.
+Linux stores a packet in an `sk_buff`, a container that may divide data across
+its main buffer, page fragments, and linked fragments.
+
+Build one bounded reader relative to the network header without changing the
+packet.
+Success proves that later inspection works across real kernel storage layouts,
+not only convenient contiguous buffers.
+
 Its network header may precede or follow `skb->data`.
-
-Build one bounded, network-relative reader.
 The supplied adapter uses it for the 20-byte IPv4 prefix.
 
 ## Your task

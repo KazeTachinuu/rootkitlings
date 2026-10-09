@@ -1,10 +1,15 @@
-# Replace bytes in one bounded read result
+# Redact one marker from a file read
 
+A process reads a controlled file containing the marker `SECRET`.
+Return `XXXXXX` in its place without changing the file on disk or altering the
+read length.
+
+Success proves that a return probe can select one file by identity and edit a
+bounded read result without treating arbitrary bytes as a C string.
 At load, the module retains the inode opened from
 `/tmp/rootkitlings-read-target`.
-For a result of at most 512 bytes, it replaces each complete, non-overlapping
-`SECRET` with `XXXXXX` and copies the bytes back.
-The file on disk is never changed.
+It handles results of at most 512 bytes and replaces complete, non-overlapping
+matches only.
 
 Equal widths preserve the read length.
 

@@ -1,6 +1,6 @@
 schema_version = 2
 id = "precise-init-failure"
-title = "Reject initialization with a precise error"
+title = "Abort a bad start cleanly"
 stage = "module-core"
 kind = "lesson"
 status = "required"

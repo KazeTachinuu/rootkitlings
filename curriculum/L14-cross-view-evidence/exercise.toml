@@ -1,6 +1,6 @@
 schema_version = 2
 id = "cross-view-evidence"
-title = "Omit one live probe from a proc view"
+title = "Keep a live probe off the status page"
 stage = "views-detection"
 kind = "lesson"
 status = "required"

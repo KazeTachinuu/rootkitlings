@@ -1,7 +1,11 @@
-# Verify bytes with SHA-256
+# Build a byte-fingerprint verifier
+
+Build the verifier for an artifact delivered with a trusted fingerprint.
+It hashes the artifact's bytes and reports whether they still match, without
+publishing a partial result when the kernel Crypto API fails.
 
 SHA-256 maps any byte string to a 32-byte digest.
-Changing the input should change the digest, so a known digest can detect a
+Changing the input should change the digest, so a known digest can reveal a
 changed artifact.
 
 That statement depends on where the known digest came from.

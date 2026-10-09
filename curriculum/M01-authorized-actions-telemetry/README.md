@@ -1,9 +1,19 @@
-# Record authorized actions and rmdir results
+# Authorize the operator and record activity
 
-Add a bounded event ring to the supplied resident worker, one-use credential
-action, and selected `rmdir()` return probe.
-Fixed capacity avoids probe-time allocation; one lock protects slots and
-sequence allocation across both producers.
+The foothold from M00 accepts local commands, but any process with write access
+could use them.
+Give the operator a one-use secret for the privileged action, then keep a short
+activity log showing what actually happened.
+
+The mission combines three jobs:
+
+- accept one authorized credential change;
+- observe whether one selected `rmdir()` call succeeded or failed;
+- retain the newest 16 events in order.
+
+The log uses fixed storage because observation code must not stop to allocate
+memory.
+When the log is full, the next event replaces the oldest one.
 
 The control endpoint remains `/proc/rootkitlings` with mode `0622`.
 It accepts exactly:
@@ -33,7 +43,7 @@ sequence=N kind=rmdir tid=N result=success
 sequence=N kind=rmdir tid=N result=failure
 ```
 
-## Ring state
+## Keep the newest events
 
 `instrumentation/events.c` owns 16 complete records and four fields:
 
@@ -52,7 +62,7 @@ kernel.
 Under the lock, never allocate, copy user memory, format, unregister probes, or
 sleep.
 
-## Typed producers
+## Record two event types
 
 Expose two functions:
 
@@ -64,7 +74,7 @@ Record credentials only after successful replacement; failures, cancellation,
 rejected tokens, and replay append nothing.
 Record `rmdir()` only for the exact selected path after return.
 
-## Reading a snapshot
+## Read one stable snapshot
 
 Copy records and counters into a bounded snapshot under the lock, then unlock
 before any `seq_*()` call.
@@ -73,7 +83,7 @@ Opening does not snapshot.
 The first offset-zero read snapshots; partial reads drain it, EOF persists, and
 seeking to zero requests a new snapshot.
 
-## Lifetime
+## Start and stop safely
 
 Acquire resources in this order:
 
