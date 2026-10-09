@@ -1,0 +1,5 @@
+Use one private `AAD || input || tag-space` buffer for both operations. Set
+`cryptlen` to plaintext length when sealing and ciphertext-plus-tag length when
+opening. Wait before freeing anything. Only after a zero result copy from
+`work + aad_length` and set the caller's length. A single cleanup label should
+free request, free transform, and clear the complete work buffer and IV.
