@@ -54,6 +54,10 @@ access_line=$(grep -n 'return[[:space:]]\+-EACCES' "$proc_source" |
 
 worker_source=$build_dir/execution/worker.c
 worker_undefined=$(nm -u "$build_dir/execution/worker.o")
+grep -Eq 'static[[:space:]]+atomic_t[[:space:]]+pending' "$worker_source" ||
+	die "pending requests must be private atomic_t state"
+[[ $(grep -Ec 'static[[:space:]]+struct[[:space:]]+task_struct[[:space:]]*\*worker_task' \
+	"$worker_source") -eq 1 ]] || die "keep exactly one private worker task pointer"
 for symbol in __init_waitqueue_head __wake_up finish_wait kthread_create_on_node \
 	kthread_should_stop kthread_stop prepare_to_wait_event rk_state_record_worker_run \
 	schedule wake_up_process; do
@@ -92,6 +96,15 @@ for operation in wait_event_interruptible kthread_should_stop \
 	grep -Eq "\b${operation}[[:space:]]*\(" <<< "$worker_main" ||
 		die "rk_worker_main must call $operation"
 done
+worker_main_flat=$(tr '\n' ' ' <<< "$worker_main")
+grep -Eq 'wait_event_interruptible[[:space:]]*\([^;]*atomic_read[[:space:]]*\([[:space:]]*&pending[[:space:]]*\)[[:space:]]*>[[:space:]]*0[[:space:]]*\|\|[[:space:]]*kthread_should_stop[[:space:]]*\(' \
+	<<< "$worker_main_flat" ||
+	die "wait for pending > 0 or kthread_should_stop()"
+grep -Eq 'if[[:space:]]*\([[:space:]]*atomic_dec_if_positive[[:space:]]*\([[:space:]]*&pending[[:space:]]*\)[[:space:]]*>=[[:space:]]*0[[:space:]]*\)' \
+	<<< "$worker_main_flat" ||
+	die "record a run only after atomic_dec_if_positive consumes one unit"
+[[ $(grep -Ec 'rk_state_record_worker_run[[:space:]]*\(' <<< "$worker_main") -eq 1 ]] ||
+	die "the worker loop must have one completion-record point"
 wait_line=$(grep -n 'wait_event_interruptible[[:space:]]*(' <<< "$worker_main" |
 	head -n1 | cut -d: -f1)
 stop_line=$(grep -n 'if[[:space:]]*(kthread_should_stop[[:space:]]*())' \
@@ -104,6 +117,23 @@ record_line=$(grep -n 'rk_state_record_worker_run[[:space:]]*(' <<< "$worker_mai
 	$wait_line -lt $stop_line && $stop_line -lt $consume_line && \
 	$consume_line -lt $record_line ]] ||
 	die "worker order must be wait, stop check, one consume, then one record"
+
+worker_request=$(sed -n '/^__must_check int rk_worker_request(/,/^}/p' "$worker_source")
+[[ -n $worker_request ]] || die "execution/worker.c must define rk_worker_request"
+add_line=$(grep -n 'atomic_add_unless[[:space:]]*(' <<< "$worker_request" |
+	head -n1 | cut -d: -f1)
+wake_line=$(grep -n 'wake_up_interruptible[[:space:]]*(' <<< "$worker_request" |
+	head -n1 | cut -d: -f1)
+[[ -n $add_line && -n $wake_line && $add_line -lt $wake_line ]] ||
+	die "publish one pending unit before waking the worker"
+
+worker_stop=$(sed -n '/^void rk_worker_stop(/,/^}/p' "$worker_source")
+stop_task_line=$(grep -n 'kthread_stop[[:space:]]*(' <<< "$worker_stop" |
+	head -n1 | cut -d: -f1)
+clear_state_line=$(grep -n 'worker_state[[:space:]]*=[[:space:]]*NULL' <<< "$worker_stop" |
+	head -n1 | cut -d: -f1)
+[[ -n $stop_task_line && -n $clear_state_line && $stop_task_line -lt $clear_state_line ]] ||
+	die "join the worker before releasing its borrowed state"
 
 main_undefined=$(nm -u "$build_dir/core/main.o")
 for symbol in rk_worker_start rk_worker_stop; do
