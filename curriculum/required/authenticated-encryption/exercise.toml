@@ -1,0 +1,81 @@
+schema_version = 2
+id = "authenticated-encryption"
+title = "Use AEAD without releasing unauthenticated plaintext"
+stage = "authenticated-operations"
+kind = "lesson"
+status = "required"
+tradecraft = ["cryptography"]
+difficulty = "advanced"
+prerequisites = ["authenticated-replay-safe-message"]
+teaches = ["authenticated-encryption", "aead-plaintext-gating"]
+requires = ["kernel-allocation", "hmac-authentication", "replay-resistant-state"]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "core/main.c", "crypto/aead.c", "crypto/platform.c", "include/aead.h", "include/platform.h", "include/selftest.h", "tests/selftest.c"]
+editable = ["crypto/aead.c"]
+build = "."
+baseline = "template"
+module_artifact = "rootkitlings.ko"
+source = "curriculum/required/authenticated-encryption/starter"
+
+[resources]
+readme = "curriculum/required/authenticated-encryption/README.md"
+check = "curriculum/required/authenticated-encryption/checks/success-check"
+host_check = "curriculum/required/authenticated-encryption/checks/host-check"
+hint = "curriculum/required/authenticated-encryption/hint"
+solution = "curriculum/required/authenticated-encryption/solution"
+
+[verification]
+timeout_seconds = 360
+capabilities = []
+tools = ["module-load-test"]
+cleanup_required = true
+
+[[verification.cases]]
+id = "aead-publication"
+label = "AEAD encryption and authenticated publication"
+expect_build = "pass"
+check = "curriculum/required/authenticated-encryption/checks/success-check"
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "transform-allocation-failure"
+label = "AEAD transform allocation failure"
+expect_build = "pass"
+check = "curriculum/required/authenticated-encryption/checks/failure-check.in"
+build_output_contains = ""
+check_arguments = ["12", "AEAD transform allocation failure"]
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "1"
+
+[[verification.cases]]
+id = "key-setup-failure"
+label = "AEAD key setup failure"
+expect_build = "pass"
+check = "curriculum/required/authenticated-encryption/checks/failure-check.in"
+build_output_contains = ""
+check_arguments = ["129", "AEAD key setup failure"]
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "2"
+
+[[verification.cases]]
+id = "encryption-failure"
+label = "AEAD encryption failure"
+expect_build = "pass"
+check = "curriculum/required/authenticated-encryption/checks/failure-check.in"
+build_output_contains = ""
+check_arguments = ["5", "AEAD encryption failure"]
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "3"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+check = ""
+build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "99"

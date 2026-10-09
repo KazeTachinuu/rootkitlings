@@ -1,0 +1,96 @@
+schema_version = 2
+id = "return-aware-syscall-telemetry"
+title = "Correlate an rmdir path with its result"
+stage = "identity-observation"
+kind = "lesson"
+status = "required"
+tradecraft = ["instrumentation", "detection"]
+difficulty = "standard"
+prerequisites = ["managed-kprobe"]
+teaches = ["kretprobes", "syscall-argument-decoding", "nofault-user-copy", "return-correlation"]
+requires = ["bounded-user-copy", "action-control-switch", "kernel-abi-contract", "managed-hook-lifecycle"]
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interface/proc.c", "instrumentation/return_probe.c"]
+editable = ["instrumentation/return_probe.c"]
+build = "."
+baseline = "scaffold"
+module_artifact = "rootkitlings.ko"
+source = "curriculum/required/return-aware-syscall-telemetry/starter"
+parent = "bounded-control-switch"
+
+[resources]
+readme = "curriculum/required/return-aware-syscall-telemetry/README.md"
+check = "curriculum/required/return-aware-syscall-telemetry/checks/success-check"
+host_check = "curriculum/required/return-aware-syscall-telemetry/checks/learner-host-check"
+hint = "curriculum/required/return-aware-syscall-telemetry/hint"
+solution = "curriculum/required/return-aware-syscall-telemetry/solution"
+
+[verification]
+timeout_seconds = 180
+capabilities = []
+tools = ["module-load-test", "rmdir-telemetry-test"]
+cleanup_required = true
+
+[[verification.cases]]
+id = "normal-return-correlation"
+label = "Return-aware rmdir telemetry"
+expect_build = "pass"
+check = "curriculum/required/return-aware-syscall-telemetry/checks/success-check"
+build_output_contains = ""
+
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "preflight-rejection"
+label = "Preflight rejection"
+expect_build = "pass"
+check = "curriculum/required/proc-publication/checks/failure-ecanceled-check"
+build_output_contains = ""
+
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "1"
+
+[[verification.cases]]
+id = "allocation-rejection"
+label = "State allocation rejection"
+expect_build = "pass"
+check = "curriculum/required/proc-publication/checks/failure-enomem-check"
+build_output_contains = ""
+
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "2"
+
+[[verification.cases]]
+id = "publication-probe-rollback"
+label = "Return-probe cleanup after publication failure"
+expect_build = "pass"
+check = "curriculum/required/return-aware-syscall-telemetry/checks/probe-failure-check.in"
+build_output_contains = ""
+check_arguments = ["12", "Probe cleanup after procfs publication failure"]
+
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "3"
+
+[[verification.cases]]
+id = "missing-target-rollback"
+label = "Missing return target cleanup"
+expect_build = "pass"
+check = "curriculum/required/return-aware-syscall-telemetry/checks/probe-failure-check.in"
+build_output_contains = ""
+check_arguments = ["2", "Missing Kretprobe target cleanup"]
+
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "4"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+check = ""
+build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "99"

@@ -1,0 +1,181 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR ARTIFACT_PATH"
+build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
+artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+"$here/../../bounded-control-switch/checks/host-check" "$build_dir" "$artifact"
+
+for path in execution/worker.c execution/worker.o; do
+	[[ -f $build_dir/$path && ! -L $build_dir/$path ]] ||
+		die "build output is missing regular file: $path"
+done
+
+for symbol in rk_state_worker_runs rk_state_record_worker_run; do
+	nm "$build_dir/core/state.o" | grep -Eq "[[:space:]]T[[:space:]]+$symbol$" ||
+		die "core/state.o must define $symbol"
+done
+
+state_source=$build_dir/core/state.c
+grep -Eq 'unsigned[[:space:]]+long[[:space:]]+worker_runs' "$state_source" ||
+	die "worker_runs must be a private unsigned long"
+[[ $(grep -Ec 'READ_ONCE[[:space:]]*\([^;]*worker_runs' "$state_source") -eq 2 ]] ||
+	die "the single writer and proc reader must access worker_runs with READ_ONCE"
+grep -Eq 'WRITE_ONCE[[:space:]]*\([^;]*worker_runs' "$state_source" ||
+	die "the single worker writer must update worker_runs with WRITE_ONCE"
+if grep -Eq 'atomic(_long)?_(set|read|inc)[[:space:]]*\([^;]*worker_runs' "$state_source"; then
+	die "worker_runs has one writer and must not use atomic RMW operations"
+fi
+
+proc_undefined=$(nm -u "$build_dir/interface/proc.o")
+for symbol in rk_state_worker_runs rk_worker_request; do
+	grep -Eq "[[:space:]]$symbol$" <<< "$proc_undefined" ||
+		die "interface/proc.o has no $symbol dependency"
+done
+
+proc_source=$build_dir/interface/proc.c
+[[ $(grep -Ec 'rk_worker_request[[:space:]]*\(' "$proc_source") -eq 1 ]] ||
+	die "proc write must have one worker-request commit point"
+grep -Eq 'return[[:space:]]+-EACCES' "$proc_source" ||
+	die "a disabled run command must return -EACCES"
+grep -Eq 'sizeof\("disable\\n"\)[[:space:]]*-[[:space:]]*1' "$proc_source" ||
+	die "derive the command bound from the longest command"
+
+request_line=$(grep -n 'rk_worker_request[[:space:]]*(' "$proc_source" |
+	tail -n1 | cut -d: -f1)
+access_line=$(grep -n 'return[[:space:]]\+-EACCES' "$proc_source" |
+	tail -n1 | cut -d: -f1)
+[[ -n $request_line && -n $access_line && $access_line -lt $request_line ]] ||
+	die "check the action switch before publishing a worker request"
+
+worker_source=$build_dir/execution/worker.c
+worker_undefined=$(nm -u "$build_dir/execution/worker.o")
+grep -Eq 'static[[:space:]]+atomic_t[[:space:]]+pending' "$worker_source" ||
+	die "pending requests must be private atomic_t state"
+[[ $(grep -Ec 'static[[:space:]]+struct[[:space:]]+task_struct[[:space:]]*\*worker_task' \
+	"$worker_source") -eq 1 ]] || die "keep exactly one private worker task pointer"
+for symbol in __init_waitqueue_head __wake_up finish_wait kthread_create_on_node \
+	kthread_should_stop kthread_stop prepare_to_wait_event rk_state_record_worker_run \
+	schedule wake_up_process; do
+	grep -Eq "[[:space:]]$symbol$" <<< "$worker_undefined" ||
+		die "execution/worker.o has no $symbol dependency"
+done
+
+for operation in wait_event_interruptible atomic_add_unless atomic_dec_if_positive \
+	kthread_run IS_ERR PTR_ERR kthread_stop wake_up_interruptible; do
+	grep -Eq "\b${operation}[[:space:]]*\(" "$worker_source" ||
+		die "execution/worker.c must call $operation"
+done
+grep -Eq 'atomic_add_unless[[:space:]]*\([^;]*INT_MAX' "$worker_source" ||
+	die "bound the pending count with atomic_add_unless(..., INT_MAX)"
+grep -Eq 'ERR_PTR[[:space:]]*\([[:space:]]*-EINTR[[:space:]]*\)' "$worker_source" ||
+	die "worker creation injection must use ERR_PTR(-EINTR)"
+grep -Eq '^#define[[:space:]]+RK_WORKER_NAME[[:space:]]+"rkling_event"$' \
+	"$worker_source" || die "keep the supplied RK_WORKER_NAME definition"
+grep -Eq 'kthread_run[[:space:]]*\([^;]*RK_WORKER_NAME[[:space:]]*\)' \
+	"$worker_source" || die "pass RK_WORKER_NAME to kthread_run"
+
+if grep -Eq '\b(msleep|msleep_interruptible|ssleep|usleep_range|schedule_timeout|mod_timer|timer_setup|schedule_work|queue_work|alloc_workqueue|mutex_lock|spin_lock|wait_for_completion|complete)[[:space:]]*\(' \
+	"$worker_source"; then
+	die "worker requests must use a wait queue without polling, timers, workqueues, or extra synchronization"
+fi
+if grep -Eq '\b(pr_(info|notice|warn|err|debug)|printk)[[:space:]]*\(' "$worker_source"; then
+	die "worker behavior must be observable through owned state, not logging"
+fi
+if grep -Eq '[[:space:]](__kmalloc|__kmalloc_cache_noprof|kmalloc_noprof|kfree|kvfree|vfree)$' \
+	<<< "$worker_undefined"; then
+	die "the worker path must not allocate its request units"
+fi
+
+worker_main=$(sed -n '/^static int rk_worker_main(/,/^}/p' "$worker_source")
+[[ -n $worker_main ]] || die "execution/worker.c must define rk_worker_main"
+for operation in wait_event_interruptible kthread_should_stop \
+	atomic_dec_if_positive rk_state_record_worker_run; do
+	grep -Eq "\b${operation}[[:space:]]*\(" <<< "$worker_main" ||
+		die "rk_worker_main must call $operation"
+done
+worker_main_flat=$(tr '\n' ' ' <<< "$worker_main")
+grep -Eq 'wait_event_interruptible[[:space:]]*\([^;]*atomic_read[[:space:]]*\([[:space:]]*&pending[[:space:]]*\)[[:space:]]*>[[:space:]]*0' \
+	<<< "$worker_main_flat" ||
+	die "the wait condition must test pending > 0"
+grep -Eq 'wait_event_interruptible[[:space:]]*\([^;]*kthread_should_stop[[:space:]]*\(' \
+	<<< "$worker_main_flat" ||
+	die "the wait condition must test kthread_should_stop()"
+grep -Eq 'wait_event_interruptible[[:space:]]*\([^;]*\|\|' <<< "$worker_main_flat" ||
+	die "join the pending and stop conditions with logical OR"
+grep -Eq 'if[[:space:]]*\([[:space:]]*atomic_dec_if_positive[[:space:]]*\([[:space:]]*&pending[[:space:]]*\)[[:space:]]*>=[[:space:]]*0[[:space:]]*\)' \
+	<<< "$worker_main_flat" ||
+	die "record a run only after atomic_dec_if_positive consumes one unit"
+[[ $(grep -Ec 'rk_state_record_worker_run[[:space:]]*\(' <<< "$worker_main") -eq 1 ]] ||
+	die "the worker loop must have one completion-record point"
+wait_line=$(grep -n 'wait_event_interruptible[[:space:]]*(' <<< "$worker_main" |
+	head -n1 | cut -d: -f1)
+stop_line=$(grep -n 'if[[:space:]]*(kthread_should_stop[[:space:]]*())' \
+	<<< "$worker_main" | tail -n1 | cut -d: -f1)
+consume_line=$(grep -n 'atomic_dec_if_positive[[:space:]]*(' <<< "$worker_main" |
+	head -n1 | cut -d: -f1)
+record_line=$(grep -n 'rk_state_record_worker_run[[:space:]]*(' <<< "$worker_main" |
+	head -n1 | cut -d: -f1)
+[[ -n $wait_line && -n $stop_line && -n $consume_line && -n $record_line && \
+	$wait_line -lt $stop_line && $stop_line -lt $consume_line && \
+	$consume_line -lt $record_line ]] ||
+	die "worker order must be wait, stop check, one consume, then one record"
+
+worker_request=$(sed -n '/^__must_check int rk_worker_request(/,/^}/p' "$worker_source")
+[[ -n $worker_request ]] || die "execution/worker.c must define rk_worker_request"
+worker_request_flat=$(tr '\n' ' ' <<< "$worker_request")
+grep -Eq 'if[[:space:]]*\([[:space:]]*!atomic_add_unless[[:space:]]*\([[:space:]]*&pending[[:space:]]*,[[:space:]]*1[[:space:]]*,[[:space:]]*INT_MAX[[:space:]]*\)[[:space:]]*\)[[:space:]]*return[[:space:]]+-EOVERFLOW[[:space:]]*;' \
+	<<< "$worker_request_flat" ||
+	die "a saturated pending count must immediately return -EOVERFLOW"
+[[ $(grep -Ec 'wake_up_interruptible[[:space:]]*\(' <<< "$worker_request") -eq 1 ]] ||
+	die "wake exactly once after a successful request"
+add_line=$(grep -n 'atomic_add_unless[[:space:]]*(' <<< "$worker_request" |
+	head -n1 | cut -d: -f1)
+wake_line=$(grep -n 'wake_up_interruptible[[:space:]]*(' <<< "$worker_request" |
+	head -n1 | cut -d: -f1)
+[[ -n $add_line && -n $wake_line && $add_line -lt $wake_line ]] ||
+	die "publish one pending unit before waking the worker"
+
+worker_stop=$(sed -n '/^void rk_worker_stop(/,/^}/p' "$worker_source")
+stop_task_line=$(grep -n 'kthread_stop[[:space:]]*(' <<< "$worker_stop" |
+	head -n1 | cut -d: -f1)
+clear_state_line=$(grep -n 'worker_state[[:space:]]*=[[:space:]]*NULL' <<< "$worker_stop" |
+	head -n1 | cut -d: -f1)
+[[ -n $stop_task_line && -n $clear_state_line && $stop_task_line -lt $clear_state_line ]] ||
+	die "join the worker before releasing its borrowed state"
+
+main_undefined=$(nm -u "$build_dir/core/main.o")
+for symbol in rk_worker_start rk_worker_stop; do
+	grep -Eq "[[:space:]]$symbol$" <<< "$main_undefined" ||
+		die "core/main.o has no $symbol dependency"
+done
+
+main_source=$build_dir/core/main.c
+start_line=$(grep -n 'rk_worker_start[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
+publish_line=$(grep -n 'rk_proc_publish[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
+rollback_stop_line=$(grep -n 'rk_worker_stop[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
+rollback_destroy_line=$(grep -n 'rk_state_destroy[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
+unpublish_line=$(grep -n 'rk_proc_unpublish[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
+exit_stop_line=$(grep -n 'rk_worker_stop[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
+exit_destroy_line=$(grep -n 'rk_state_destroy[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
+[[ -n $start_line && -n $publish_line && $start_line -lt $publish_line ]] ||
+	die "start the worker before procfs publication"
+[[ -n $rollback_stop_line && -n $rollback_destroy_line && \
+	$rollback_stop_line -lt $rollback_destroy_line ]] ||
+	die "publication rollback must stop the worker before destroying state"
+[[ -n $unpublish_line && -n $exit_stop_line && -n $exit_destroy_line && \
+	$unpublish_line -lt $exit_stop_line && $exit_stop_line -lt $exit_destroy_line ]] ||
+	die "unload order must be proc unpublish, worker stop, state destroy"
+
+header_text=$(tr '\n' ' ' < "$build_dir/include/rootkit.h")
+for declaration in rk_state_worker_runs rk_state_record_worker_run \
+	rk_worker_start rk_worker_request rk_worker_stop; do
+	grep -Eq "${declaration}[[:space:]]*\(" <<< "$header_text" ||
+		die "rootkit.h must declare $declaration"
+done
+
+printf '[+] bounded event requests, wait queue, worker, rollback, and teardown verified\n'

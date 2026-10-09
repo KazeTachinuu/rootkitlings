@@ -412,7 +412,7 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
   failures; descriptor reuse; cookies; all-match progress; unrelated live PIDs;
   child PID-namespace enumeration; concurrency; unload; reload; and the canonical
   M01 regression suite.
-- Accepted asset: `curriculum/incubator/stage-04/m02-concealment-evidence-map/`,
+- Accepted asset: `curriculum/required/concealment-evidence-map/`,
   independently validated.
 
 ### Stage 5: Networking and durable state
@@ -424,7 +424,7 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
 - Requires: basic IPv4 packet knowledge declared as entry knowledge.
 - Memory contract: the input exposes the fixed 20-byte prefix; `available` describes what the backing object can provide, so the parser never reads options or payload directly.
 - Defensive evidence: exhaustive first-octet, Total Length, fragment-field, and protocol sweeps under address and undefined-behavior sanitizers; null, unaligned, truncation, maximum-IHL fixed-prefix, capture-padding, unchanged-output, result-precedence, and deliberately incorrect implementation cases; pinned-kernel build and guest lifecycle checks.
-- Accepted asset: `curriculum/incubator/stage-05/r18-hostile-packet-lengths/`, independently validated.
+- Accepted asset: `curriculum/required/hostile-packet-lengths/`, independently validated.
 
 #### R19 - Read packet bytes safely from an `sk_buff`
 
@@ -439,7 +439,7 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
   offsets; linear storage, every page-fragment split, `frag_list`, shared and cloned
   buffers; nonzero transport offsets; helper arithmetic limits; unreadable storage;
   hostile variants; packet immutability; and the complete R18 regression corpus.
-- Accepted asset: `curriculum/incubator/stage-05/r19-safe-skb-access/`,
+- Accepted asset: `curriculum/required/safe-skb-access/`,
   independently validated.
 
 #### R20 - Observe local IPv4 traffic without changing it
@@ -455,7 +455,7 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
   IPv6 and child-network-namespace negative controls; registration and publication
   rollback; concurrent traffic and status reads; a proc descriptor held across
   removal; unload under live traffic; reload; and clean logs.
-- Accepted asset: `curriculum/incubator/stage-05/r20-netfilter-observer/`,
+- Accepted asset: `curriculum/required/netfilter-observer/`,
   independently validated. Its controlled interval delivers 257 distinct UDP
   payloads byte for byte and requires an exact callback delta of 257. The old L40
   PRE_ROUTING choice and ambiguous ping test are retired.

@@ -1,0 +1,256 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 4 )) ||
+	die "usage: ${0##*/} SUCCESS_DIR SUCCESS_ARTIFACT PREPARE_DIR CANCEL_DIR"
+success_dir=$(realpath -e -- "$1" 2>/dev/null) ||
+	die "success directory not found: $1"
+artifact=$(realpath -e -- "$2" 2>/dev/null) ||
+	die "artifact not found: $2"
+prepare_dir=$(realpath -e -- "$3" 2>/dev/null) ||
+	die "prepare directory not found: $3"
+cancel_dir=$(realpath -e -- "$4" 2>/dev/null) ||
+	die "cancel directory not found: $4"
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+extract_function()
+{
+	python3 - "$1" "$2" <<'PY'
+import re
+import sys
+
+source = open(sys.argv[1], encoding="utf-8").read()
+name = re.escape(sys.argv[2])
+match = re.search(r"\b" + name + r"\s*\([^;]*?\)\s*\{", source, re.S)
+if not match:
+    raise SystemExit(1)
+start = match.start()
+index = match.end() - 1
+depth = 0
+state = "code"
+while index < len(source):
+    byte = source[index]
+    following = source[index + 1] if index + 1 < len(source) else ""
+    if state == "code":
+        if byte == "/" and following == "*":
+            state = "block"
+            index += 2
+            continue
+        if byte == "/" and following == "/":
+            state = "line"
+            index += 2
+            continue
+        if byte == '"':
+            state = "string"
+        elif byte == "'":
+            state = "char"
+        elif byte == "{":
+            depth += 1
+        elif byte == "}":
+            depth -= 1
+            if depth == 0:
+                print(re.sub(r"\s+", " ", source[start:index + 1]))
+                raise SystemExit(0)
+    elif state == "block" and byte == "*" and following == "/":
+        state = "code"
+        index += 2
+        continue
+    elif state == "line" and byte == "\n":
+        state = "code"
+    elif state in {"string", "char"}:
+        if byte == "\\":
+            index += 2
+            continue
+        if (state == "string" and byte == '"') or (state == "char" and byte == "'"):
+            state = "code"
+    index += 1
+raise SystemExit(1)
+PY
+}
+
+assert_ordered()
+{
+	local text=$1 label=$2
+	shift 2
+	python3 - "$text" "$@" <<'PY' || die "$label"
+import re
+import sys
+
+text = sys.argv[1]
+offset = 0
+for pattern in sys.argv[2:]:
+    match = re.search(pattern, text[offset:])
+    if not match:
+        raise SystemExit(1)
+    offset += match.end()
+PY
+}
+
+[[ -d $success_dir && ! -L $success_dir ]] ||
+	die "success directory must be a real directory"
+[[ -f $artifact && ! -L $artifact && $artifact == "$success_dir/rootkitlings.ko" ]] ||
+	die "expected a regular artifact at $success_dir/rootkitlings.ko"
+for path in core/main.o core/state.o interface/proc.o \
+	privilege/credentials.o control/authorization.o include/rootkit.h; do
+	[[ -f $success_dir/$path && ! -L $success_dir/$path ]] ||
+		die "success build is missing regular file: $path"
+done
+for directory in "$prepare_dir" "$cancel_dir"; do
+	for path in privilege/credentials.o control/authorization.o; do
+		[[ -f $directory/$path && ! -L $directory/$path ]] ||
+			die "failure build is missing regular file: $path"
+	done
+done
+
+command -v modinfo >/dev/null || die "modinfo is required"
+command -v nm >/dev/null || die "nm is required"
+[[ $(modinfo -F license "$artifact") == GPL ]] ||
+	die "module license must be GPL"
+[[ $(modinfo -F description "$artifact") == 'Rootkitlings kernel module' ]] ||
+	die "module description must be: Rootkitlings kernel module"
+
+cmp -s "$success_dir/privilege/credentials.c" \
+	"$here/../../transactional-credential-replacement/solution/privilege/credentials.c" ||
+	die "keep the passed L10 credential primitive unchanged"
+
+authorization_source=$success_dir/control/authorization.c
+authorization_text=$(tr '\n' ' ' < "$authorization_source")
+start_text=$(extract_function "$authorization_source" rk_authorization_start) ||
+	die "could not inspect rk_authorization_start"
+stop_text=$(extract_function "$authorization_source" rk_authorization_stop) ||
+	die "could not inspect rk_authorization_stop"
+rotate_text=$(extract_function "$authorization_source" rk_rotate_token) ||
+	die "could not inspect rk_rotate_token"
+tokens_equal_text=$(extract_function "$authorization_source" rk_tokens_equal) ||
+	die "could not inspect rk_tokens_equal"
+execute_text=$(extract_function "$authorization_source" rk_authorization_execute) ||
+	die "could not inspect rk_authorization_execute"
+authorization_undefined=$(nm -u "$success_dir/control/authorization.o")
+for symbol in __crypto_memneq bin2hex get_random_bytes hex2bin mutex_lock \
+	mutex_unlock rk_credentials_replace_current rk_state_actions_enabled \
+	wait_for_random_bytes; do
+	grep -Eq "[[:space:]]$symbol$" <<< "$authorization_undefined" ||
+		die "control/authorization.o has no $symbol dependency"
+done
+for symbol in rk_authorization_start rk_authorization_stop \
+	rk_authorization_snapshot rk_authorization_execute; do
+	nm "$success_dir/control/authorization.o" |
+		grep -Eq "[[:space:]]T[[:space:]]+$symbol$" ||
+		die "control/authorization.o must define $symbol"
+done
+
+grep -Eq 'static[[:space:]]+u8[[:space:]]+active_token[[:space:]]*\[[[:space:]]*RK_AUTHORIZATION_TOKEN_BYTES[[:space:]]*\]' \
+	"$authorization_source" || die "store the active token as a fixed byte array"
+grep -Eq 'DEFINE_MUTEX[[:space:]]*\([[:space:]]*authorization_lock[[:space:]]*\)' \
+	"$authorization_source" || die "protect authorization state with one mutex"
+assert_ordered "$start_text" \
+	"propagate the RNG readiness error before generating a token" \
+	'error\s*=\s*wait_for_random_bytes\s*\(' \
+	'if\s*\(\s*error\s*\)' 'return\s+error\s*;' \
+	'mutex_lock\s*\(' 'memzero_explicit\s*\(\s*active_token' \
+	'completed_actions\s*=\s*0\s*;' 'rk_rotate_token\s*\(' \
+	'authorization_started\s*=\s*true\s*;' 'mutex_unlock\s*\(' \
+	'memzero_explicit\s*\(\s*empty' 'return\s+0\s*;'
+assert_ordered "$rotate_text" \
+	"generate repeatedly until the replacement differs" \
+	'do\s*\{' 'get_random_bytes\s*\(' '\}\s*while\s*\(' \
+	'rk_tokens_equal\s*\(\s*active_token\s*,\s*previous\s*\)'
+grep -Eq 'while\s*\(\s*rk_tokens_equal\s*\(\s*active_token\s*,\s*previous\s*\)\s*\)\s*;' \
+	<<< "$rotate_text" ||
+	die "retry rotation exactly while the candidate equals the previous token"
+[[ $(grep -Eo '\bget_random_bytes[[:space:]]*\(' <<< "$rotate_text" |
+	wc -l) -eq 1 ]] || die "rotation must draw exactly one candidate per loop"
+grep -Eq 'length[[:space:]]*!=[[:space:]]*RK_ROOT_COMMAND_LENGTH' \
+	<<< "$authorization_text" || die "require the exact derived command length"
+grep -Eq "byte[[:space:]]*>=[[:space:]]*'0'.*byte[[:space:]]*<=[[:space:]]*'9'.*byte[[:space:]]*>=[[:space:]]*'a'.*byte[[:space:]]*<=[[:space:]]*'f'" \
+	<<< "$authorization_text" || die "accept only lowercase hexadecimal token text"
+grep -Eq 'hex2bin[[:space:]]*\([^,]+,[^,]+,[[:space:]]*RK_AUTHORIZATION_TOKEN_BYTES[[:space:]]*\)' \
+	<<< "$authorization_text" || die "decode exactly one fixed-size binary token"
+grep -Eq 'return\s+crypto_memneq\s*\(\s*left\s*,\s*right\s*,\s*RK_AUTHORIZATION_TOKEN_BYTES\s*\)\s*==\s*0\s*;' \
+	<<< "$tokens_equal_text" ||
+	die "return the crypto_memneq result from the token comparison wrapper"
+if grep -Eq '\b(memcmp|bcmp)[[:space:]]*\(' <<< "$tokens_equal_text"; then
+	die "do not add a content-dependent token comparison"
+fi
+assert_ordered "$execute_text" \
+	"serialize gate, match, consumption, action, rotation, and accounting" \
+	'rk_parse_root_command\s*\(' 'mutex_lock\s*\(' \
+	'rk_state_actions_enabled\s*\(' 'rk_tokens_equal\s*\(' \
+	'memcpy\s*\(\s*consumed\s*,\s*active_token' \
+	'memzero_explicit\s*\(\s*active_token' \
+	'rk_credentials_replace_current\s*\(' 'rk_rotate_token\s*\(' \
+	'if\s*\(\s*!\s*error\s*\)' 'completed_actions\s*\+\+' \
+	'memzero_explicit\s*\(\s*consumed' 'mutex_unlock\s*\(' \
+	'memzero_explicit\s*\(\s*presented' 'return\s+error\s*;'
+[[ $(grep -Eo '\bmutex_lock[[:space:]]*\(' <<< "$execute_text" | wc -l) -eq 1 &&
+	$(grep -Eo '\bmutex_unlock[[:space:]]*\(' <<< "$execute_text" | wc -l) -eq 1 ]] ||
+	die "the authorization transition must have one lock and one shared unlock"
+[[ $(grep -Eo '\brk_credentials_replace_current[[:space:]]*\(' \
+	<<< "$authorization_text" | wc -l) -eq 1 ]] ||
+	die "the serialized transition must invoke the credential action once"
+[[ $(grep -Eo '\bwait_for_random_bytes[[:space:]]*\(' \
+	<<< "$authorization_text" | wc -l) -eq 1 ]] ||
+	die "authorization start must wait for randomness exactly once"
+assert_ordered "$stop_text" "reset and erase authorization state on stop" \
+	'mutex_lock\s*\(' 'memzero_explicit\s*\(\s*active_token' \
+	'completed_actions\s*=\s*0\s*;' \
+	'authorization_started\s*=\s*false\s*;' 'mutex_unlock\s*\('
+if grep -Eq '\b(strcmp|strncmp|strncasecmp|strcasecmp)[[:space:]]*\(' \
+	<<< "$authorization_text"; then
+	die "compare parsed token bytes, not token strings"
+fi
+if grep -Eq '\b(pr_info|pr_notice|pr_warn|pr_err|printk)[[:space:]]*\(' \
+	<<< "$authorization_text"; then
+	die "do not disclose or describe bearer tokens in the kernel log"
+fi
+
+header_text=$(tr '\n' ' ' < "$success_dir/include/rootkit.h")
+grep -Eq '#define[[:space:]]+RK_AUTHORIZATION_TOKEN_BYTES[[:space:]]+16U' \
+	"$success_dir/include/rootkit.h" || die "use one 16-byte token contract"
+grep -Eq 'RK_AUTHORIZATION_TOKEN_HEX_LENGTH[[:space:]]+.*RK_AUTHORIZATION_TOKEN_BYTES[[:space:]]*\*[[:space:]]*2U' \
+	<<< "$header_text" || die "derive hexadecimal length from token bytes"
+grep -Eq 'RK_ROOT_COMMAND_LENGTH[[:space:]]+.*sizeof[[:space:]]*\([[:space:]]*RK_ROOT_COMMAND_PREFIX[[:space:]]*\).*RK_AUTHORIZATION_TOKEN_HEX_LENGTH' \
+	<<< "$header_text" || die "derive command length from its prefix and token"
+grep -Eq '__must_check[[:space:]]+int[[:space:]]+rk_authorization_execute' \
+	<<< "$header_text" || die "expose a checked authorization transition"
+
+proc_source=$success_dir/interface/proc.c
+proc_text=$(tr '\n' ' ' < "$proc_source")
+proc_undefined=$(nm -u "$success_dir/interface/proc.o")
+for symbol in proc_create_data proc_remove rk_authorization_execute \
+	rk_authorization_snapshot rk_state_set_actions_enabled seq_read \
+	single_open single_release; do
+	grep -Eq "[[:space:]]$symbol$" <<< "$proc_undefined" ||
+		die "interface/proc.o has no $symbol dependency"
+done
+grep -Eq '[[:space:]](_copy_from_user|copy_from_user)$' <<< "$proc_undefined" ||
+	die "interface/proc.o has no bounded user-copy dependency"
+grep -Eq 'char[[:space:]]+command[[:space:]]*\[[[:space:]]*RK_CONTROL_COMMAND_CAPACITY[[:space:]]*\]' \
+	"$proc_source" || die "derive the bounded command buffer from the grammar"
+grep -Eq 'proc_create_data[[:space:]]*\([[:space:]]*"rootkitlings"[[:space:]]*,[[:space:]]*0*622' \
+	<<< "$proc_text" || die "publish a root-readable, all-writable 0622 endpoint"
+for field in completed_actions token; do
+	grep -Fq "${field}=" "$proc_source" ||
+		die "status is missing $field"
+done
+if grep -Eq '\b(prepare_creds|prepare_kernel_cred|commit_creds|abort_creds|rk_credentials_replace_current)[[:space:]]*\(' \
+	"$proc_source"; then
+	die "procfs must delegate the protected action to authorization"
+fi
+grep -Eq 'memzero_explicit[[:space:]]*\([[:space:]]*command' "$proc_source" ||
+	die "clear the copied command on every post-copy exit"
+grep -Eq 'memzero_explicit[[:space:]]*\([[:space:]]*token' "$proc_source" ||
+	die "clear the rendered token after seq_file copies it"
+
+main_text=$(tr '\n' ' ' < "$success_dir/core/main.c")
+grep -Eq 'rk_state_create[[:space:]]*\([^)]*\).*rk_authorization_start[[:space:]]*\([^)]*\).*rk_proc_publish[[:space:]]*\(' \
+	<<< "$main_text" || die "start state, authorization, then procfs"
+grep -Eq 'rk_proc_unpublish[[:space:]]*\([^)]*\).*rk_authorization_stop[[:space:]]*\([^)]*\).*rk_state_destroy[[:space:]]*\(' \
+	<<< "$main_text" || die "stop procfs, authorization, then state"
+[[ $(grep -Ec 'rk_authorization_stop[[:space:]]*\(' \
+	"$success_dir/core/main.c") -eq 2 ]] ||
+	die "stop authorization on publication rollback and module exit"
+
+printf '[+] fresh binary token, serialized consumption, rotation, and lifecycle verified\n'

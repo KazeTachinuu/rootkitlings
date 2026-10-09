@@ -1,0 +1,202 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../../scripts/lesson-env"
+ROOT=$ROOTKITLINGS_ROOT
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r17-test.XXXXXX")
+tool=$ROOT/vm/tools/read_result_test
+trap 'rm -rf -- "$scratch"; rm -f -- "$tool"' EXIT
+
+[[ $(uname -m) == x86_64 ]] || {
+	printf '[x] this lesson requires x86_64\n' >&2
+	exit 1
+}
+for option in X86_64 IKCONFIG_PROC KPROBES KRETPROBES \
+	KRETPROBE_ON_RETHOOK KPROBES_ON_FTRACE KALLSYMS KALLSYMS_ALL DEBUG_FS; do
+	grep -qx "CONFIG_$option=y" "$KDIR/.config" || {
+		printf '[x] this lesson requires CONFIG_%s=y\n' "$option" >&2
+		exit 1
+	}
+done
+grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
+	printf '[x] pinned kernel build is not configured for GCC\n' >&2
+	exit 1
+}
+for command in gcc python3 timeout; do
+	command -v "$command" >/dev/null || {
+		printf '[x] %s is required\n' "$command" >&2
+		exit 1
+	}
+done
+for symbol in copy_from_user_nofault copy_to_user_nofault; do
+	awk -v symbol="$symbol" '$2 == symbol && $4 == "EXPORT_SYMBOL_GPL" { found = 1 }
+		END { exit !found }' "$KDIR/Module.symvers" || {
+		printf '[x] pinned kernel must GPL-export %s\n' "$symbol" >&2
+		exit 1
+	}
+done
+for symbol in filp_open fput igrab iput; do
+	awk -v symbol="$symbol" '$2 == symbol { found = 1 } END { exit !found }' \
+		"$KDIR/Module.symvers" || {
+		printf '[x] pinned kernel must export %s\n' "$symbol" >&2
+		exit 1
+	}
+done
+awk '$3 == "vfs_read" { found = 1 } END { exit !found }' /proc/kallsyms || {
+	printf '[x] running kernel lacks vfs_read\n' >&2
+	exit 1
+}
+
+for script in test host-check success-check copy-failure-check \
+	missing-path-check probe-failure-check.in; do
+	bash -n "$HERE/$script"
+done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
+	shellcheck -x -s sh "$HERE/success-check" "$HERE/copy-failure-check" \
+		"$HERE/missing-path-check" "$HERE/probe-failure-check.in"
+fi
+
+mapfile -t changed_files < <(
+	diff -qr "$HERE/../starter" "$HERE/../solution" |
+		sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p'
+)
+(( ${#changed_files[@]} == 1 )) || {
+	printf '[x] expected one learner-edited file, found %d\n' \
+		"${#changed_files[@]}" >&2
+	exit 1
+}
+[[ ${changed_files[0]} == instrumentation/replace.c ]] || {
+	printf '[x] learner edit surface is %s\n' "${changed_files[0]}" >&2
+	exit 1
+}
+
+build_variant()
+{
+	local name=$1 point=$2 source=${3:-$HERE/../solution}
+	local destination=$scratch/$name log=$scratch/$name.log
+
+	cp -a "$source/." "$destination/"
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] %s build failed\n' "$name" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] %s build has warnings\n' "$name" >&2
+		exit 1
+	fi
+}
+
+build_variant template 0 "$HERE/../starter"
+build_variant success 0
+build_variant preflight 1
+build_variant publication 2
+build_variant missing 3
+build_variant copy-in 4
+build_variant copy-out 5
+
+"$HERE/host-check" "$scratch/success" \
+	"$scratch/success/rootkitlings.ko" "$scratch/missing"
+
+expect_host_rejection()
+{
+	local directory=$1 label=$2
+
+	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+		"$scratch/missing" > "$scratch/host-$label.log" 2>&1; then
+		printf '[x] host checker accepted %s\n' "$label" >&2
+		exit 1
+	fi
+}
+
+expect_host_rejection "$scratch/starter" an-empty-helper
+
+off_by_one=$scratch/host-off-by-one
+cp -a "$scratch/success" "$off_by_one"
+sed -i 's/index <= length - width/index < length - width/' \
+	"$off_by_one/instrumentation/replace.c"
+expect_host_rejection "$off_by_one" an-off-by-one-loop
+
+overlap=$scratch/host-overlap
+cp -a "$scratch/success" "$overlap"
+sed -i 's/index += width;/index++;/' "$overlap/instrumentation/replace.c"
+expect_host_rejection "$overlap" overlapping-matches
+
+string_only=$scratch/host-string-only
+cp -a "$scratch/success" "$string_only"
+sed -i '/size_t count = 0;/a\
+\tlength = strlen((const char *)bytes);' \
+	"$string_only/instrumentation/replace.c"
+expect_host_rejection "$string_only" C-string-processing
+
+secret_only=$scratch/host-secret-only
+cp -a "$scratch/success" "$secret_only"
+sed -i 's/memcmp(bytes + index, from, width)/memcmp(bytes + index, "SECRET", 6)/' \
+	"$secret_only/instrumentation/replace.c"
+expect_host_rejection "$secret_only" a-hard-coded-pattern
+
+out_of_range=$scratch/host-out-of-range
+cp -a "$scratch/success" "$out_of_range"
+sed -i 's/index <= length - width/index <= length/' \
+	"$out_of_range/instrumentation/replace.c"
+expect_host_rejection "$out_of_range" an-out-of-range-comparison
+
+cp -a "$HERE/../solution/." "$scratch/unknown/"
+if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
+	ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
+	printf '[x] unknown failure-point value compiled successfully\n' >&2
+	exit 1
+fi
+
+gcc -std=c11 -Wall -Wextra -Werror -pedantic -static -pthread \
+	"$ROOT/vm/tools/read_result_test.c" -o "$tool"
+
+sed -e 's/@EXPECTED_ERRNO@/12/g' \
+	-e 's/@LABEL@/Proc publication rollback/g' \
+	"$HERE/probe-failure-check.in" > "$scratch/publication-check"
+sed -e 's/@EXPECTED_ERRNO@/2/g' \
+	-e 's/@LABEL@/Missing vfs_read target rollback/g' \
+	"$HERE/probe-failure-check.in" > "$scratch/missing-check"
+chmod 0755 "$scratch/publication-check" "$scratch/missing-check"
+
+run_guest()
+{
+	local check_script=$1 module=$2 output
+	shift 2
+	if ! output=$("$ROOT/vm/boot" --check "$check_script" "$@" \
+		"$module" 2>&1); then
+		printf '%s\n' "$output" >&2
+		printf '[x] disposable guest did not complete\n' >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+	grep -Fq '[+] PASSED' <<< "$output" || {
+		printf '[x] guest checks did not pass\n' >&2
+		exit 1
+	}
+}
+
+run_guest "$HERE/../../proc-publication/checks/failure-ecanceled-check" \
+	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
+run_guest "$HERE/missing-path-check" "$scratch/success/rootkitlings.ko" \
+	--tool vm/tools/module_load_test
+run_guest "$scratch/publication-check" "$scratch/publication/rootkitlings.ko" \
+	--tool vm/tools/module_load_test
+run_guest "$scratch/missing-check" "$scratch/missing/rootkitlings.ko" \
+	--tool vm/tools/module_load_test
+run_guest "$HERE/copy-failure-check" "$scratch/copy-in/rootkitlings.ko" \
+	--tool vm/tools/read_result_test
+run_guest "$HERE/copy-failure-check" "$scratch/copy-out/rootkitlings.ko" \
+	--tool vm/tools/read_result_test
+run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
+	--tool vm/tools/read_result_test
+
+"$HERE/../../return-aware-syscall-telemetry/checks/test"
+"$HERE/../../cross-view-evidence/checks/test"
+
+printf '[+] bounded read-result lesson passed\n'

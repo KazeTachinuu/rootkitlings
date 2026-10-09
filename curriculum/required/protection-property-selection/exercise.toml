@@ -1,0 +1,41 @@
+schema_version = 2
+id = "protection-property-selection"
+title = "Choose the protection property before the primitive"
+stage = "authenticated-operations"
+kind = "lesson"
+status = "required"
+tradecraft = ["cryptography", "detection"]
+difficulty = "standard"
+prerequisites = ["bounded-dns-wire-name"]
+teaches = ["protection-property-selection", "xor-obfuscation", "traffic-analysis-limits"]
+requires = ["dns-wire-encoding"]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "core/main.c", "include/protection.h", "include/selftest.h", "protection/properties.c", "tests/selftest.c"]
+editable = ["protection/properties.c"]
+build = "."
+baseline = "template"
+module_artifact = "rootkitlings.ko"
+source = "curriculum/required/protection-property-selection/starter"
+
+[resources]
+readme = "curriculum/required/protection-property-selection/README.md"
+check = "curriculum/required/protection-property-selection/checks/success-check"
+host_check = "curriculum/required/protection-property-selection/checks/host-check"
+hint = "curriculum/required/protection-property-selection/hint"
+solution = "curriculum/required/protection-property-selection/solution"
+
+[verification]
+timeout_seconds = 240
+capabilities = []
+tools = []
+cleanup_required = true
+
+[[verification.cases]]
+id = "property-selection"
+label = "Protection selection and bounded XOR behavior"
+expect_build = "pass"
+check = "curriculum/required/protection-property-selection/checks/success-check"
+build_output_contains = ""
+[verification.cases.build_variables]

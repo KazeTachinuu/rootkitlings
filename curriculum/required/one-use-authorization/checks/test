@@ -1,0 +1,275 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../../scripts/lesson-env"
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r12-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r12-work.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r12-test.XXXXXX")
+trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
+
+for source in \
+	"$HERE/../../owned-kernel-state/solution" \
+	"$HERE/../../proc-publication/solution" \
+	"$HERE/../../proc-read-contract/solution" \
+	"$HERE/../../bounded-control-switch/solution" \
+	"$HERE/../../current-task-attribution/solution" \
+	"$HERE/../../linux-credential-model/solution" \
+	"$HERE/../../transactional-credential-replacement/starter" \
+	"$HERE/../../transactional-credential-replacement/solution"; do
+	cp -a "$source/." "$baseline/"
+done
+cp -a "$baseline/." "$work/"
+for source in "$HERE/../starter" "$HERE/../solution"; do
+	while IFS= read -r -d '' file; do
+		relative=${file#"$source/"}
+		mkdir -p "$work/$(dirname "$relative")"
+		cp -p "$file" "$work/$relative"
+	done < <(find "$source" -type f -print0)
+done
+
+for option in CONFIG_MULTIUSER=y CONFIG_USER_NS=y CONFIG_CRYPTO_LIB_UTILS=y; do
+	grep -qx "$option" "$KDIR/.config" || {
+		printf '[x] this lesson requires %s\n' "$option" >&2
+		exit 1
+	}
+done
+
+for compiler in gcc clang; do
+	command -v "$compiler" >/dev/null || {
+		printf '[x] %s is required\n' "$compiler" >&2
+		exit 1
+	}
+	"$compiler" -std=c11 -Wall -Wextra -Werror -pthread -static \
+		-o "$scratch/cred_trigger_test.$compiler" \
+		"$HERE/../../../../vm/tools/cred_trigger_test.c"
+done
+make -s -C "$HERE/../../../.." -B vm/tools/cred_trigger_test \
+	vm/tools/proc_write_test
+
+for script in test host-check success-check credential-failure-check.in; do
+	bash -n "$HERE/$script"
+done
+	if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
+	shellcheck -x -s sh "$HERE/success-check" \
+		"$HERE/credential-failure-check.in"
+fi
+
+mapfile -t changed_files < <(
+	diff -qr "$HERE/../starter" "$HERE/../solution" |
+		sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p'
+)
+(( ${#changed_files[@]} == 1 )) || {
+	printf '[x] expected one learner-edited file, found %d\n' \
+		"${#changed_files[@]}" >&2
+	exit 1
+}
+[[ ${changed_files[0]} == control/authorization.c ]] || {
+	printf '[x] learner edit surface is %s, expected control/authorization.c\n' \
+		"${changed_files[0]}" >&2
+	exit 1
+}
+
+template_build=$scratch/starter
+cp -a "$baseline/." "$template_build/"
+cp -a "$HERE/../starter/." "$template_build/"
+if ! make -s -C "$KDIR" M="$template_build" W=1 \
+	ROOTKITLINGS_FAIL_POINT=0 modules > "$scratch/template.log" 2>&1; then
+	cat "$scratch/template.log" >&2
+	printf '[x] template build failed\n' >&2
+	exit 1
+fi
+if grep -q 'warning:' "$scratch/template.log"; then
+	cat "$scratch/template.log" >&2
+	printf '[x] template builds with warnings\n' >&2
+	exit 1
+fi
+
+build_variant()
+{
+	local name=$1 point=$2 destination=$scratch/$1 log=$scratch/$1.log
+	cp -a "$work" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] %s build failed\n' "$name" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] %s builds with warnings\n' "$name" >&2
+		exit 1
+	fi
+}
+
+build_variant success 0
+build_variant preflight 1
+build_variant allocation 2
+build_variant publication 3
+build_variant credential_prepare 4
+build_variant credential_cancel 5
+"$HERE/host-check" "$scratch/success" \
+	"$scratch/success/rootkitlings.ko" "$scratch/credential_prepare" \
+	"$scratch/credential_cancel"
+
+formatted=$scratch/host-formatting
+cp -a "$scratch/success" "$formatted"
+awk '
+	/error = wait_for_random_bytes\(\);/ {
+		print "\terror = wait_for_random_bytes("
+		print "\t);"
+		next
+	}
+	/error = rk_credentials_replace_current\(\);/ {
+		print "\terror = rk_credentials_replace_current("
+		print "\t);"
+		next
+	}
+	{ print }
+' "$formatted/control/authorization.c" > \
+	"$formatted/control/authorization.c.new"
+mv "$formatted/control/authorization.c.new" \
+	"$formatted/control/authorization.c"
+"$HERE/host-check" "$formatted" "$formatted/rootkitlings.ko" \
+	"$scratch/credential_prepare" "$scratch/credential_cancel" \
+	> "$scratch/host-formatting.log"
+
+no_wait=$scratch/host-no-wait
+cp -a "$scratch/success" "$no_wait"
+sed -i 's/error = wait_for_random_bytes();/error = 0;/' \
+	"$no_wait/control/authorization.c"
+if "$HERE/host-check" "$no_wait" "$no_wait/rootkitlings.ko" \
+	"$scratch/credential_prepare" "$scratch/credential_cancel" \
+	> "$scratch/host-no-wait.log" 2>&1; then
+	printf '[x] host checker accepted token generation without RNG readiness\n' >&2
+	exit 1
+fi
+
+no_retry=$scratch/host-no-retry
+cp -a "$scratch/success" "$no_retry"
+sed -i 's/} while (rk_tokens_equal(active_token, previous));/} while (rk_tokens_equal(active_token, previous) \&\& false);/' \
+	"$no_retry/control/authorization.c"
+if "$HERE/host-check" "$no_retry" "$no_retry/rootkitlings.ko" \
+	"$scratch/credential_prepare" "$scratch/credential_cancel" \
+	> "$scratch/host-no-retry.log" 2>&1; then
+	printf '[x] host checker accepted rotation without a freshness retry\n' >&2
+	exit 1
+fi
+
+timing_leak=$scratch/host-timing-leak
+cp -a "$scratch/success" "$timing_leak"
+sed -i '/return crypto_memneq(left, right, RK_AUTHORIZATION_TOKEN_BYTES) == 0;/c\
+\tcrypto_memneq(left, right, RK_AUTHORIZATION_TOKEN_BYTES);\
+\treturn memcmp(left, right, RK_AUTHORIZATION_TOKEN_BYTES) == 0;' \
+	"$timing_leak/control/authorization.c"
+if "$HERE/host-check" "$timing_leak" "$timing_leak/rootkitlings.ko" \
+	"$scratch/credential_prepare" "$scratch/credential_cancel" \
+	> "$scratch/host-timing-leak.log" 2>&1; then
+	printf '[x] host checker accepted a content-dependent token comparison\n' >&2
+	exit 1
+fi
+
+action_unlocked=$scratch/host-action-unlocked
+cp -a "$scratch/success" "$action_unlocked"
+sed -i '/error = rk_credentials_replace_current();/i\	mutex_unlock(\&authorization_lock);' \
+	"$action_unlocked/control/authorization.c"
+if "$HERE/host-check" "$action_unlocked" \
+	"$action_unlocked/rootkitlings.ko" "$scratch/credential_prepare" \
+	"$scratch/credential_cancel" > "$scratch/host-action-unlocked.log" 2>&1; then
+	printf '[x] host checker accepted an action outside the serialized transition\n' >&2
+	exit 1
+fi
+
+uncleared_local=$scratch/host-uncleared-local
+cp -a "$scratch/success" "$uncleared_local"
+sed -i '/memzero_explicit(presented, sizeof(presented));/d' \
+	"$uncleared_local/control/authorization.c"
+if "$HERE/host-check" "$uncleared_local" \
+	"$uncleared_local/rootkitlings.ko" "$scratch/credential_prepare" \
+	"$scratch/credential_cancel" > "$scratch/host-uncleared-local.log" 2>&1; then
+	printf '[x] host checker accepted an uncleared presented token\n' >&2
+	exit 1
+fi
+
+bad_mode=$scratch/host-bad-mode
+cp -a "$scratch/success" "$bad_mode"
+sed -i 's/"rootkitlings", 0622/"rootkitlings", 0666/' \
+	"$bad_mode/interface/proc.c"
+if "$HERE/host-check" "$bad_mode" "$bad_mode/rootkitlings.ko" \
+	"$scratch/credential_prepare" "$scratch/credential_cancel" \
+	> "$scratch/host-bad-mode.log" 2>&1; then
+	printf '[x] host checker accepted a publicly readable bearer token\n' >&2
+	exit 1
+fi
+
+not_consumed=$scratch/host-not-consumed
+cp -a "$scratch/success" "$not_consumed"
+sed -i '/memcpy(consumed, active_token, sizeof(consumed));/{n;s/memzero_explicit/memset/;}' \
+	"$not_consumed/control/authorization.c"
+if "$HERE/host-check" "$not_consumed" "$not_consumed/rootkitlings.ko" \
+	"$scratch/credential_prepare" "$scratch/credential_cancel" \
+	> "$scratch/host-not-consumed.log" 2>&1; then
+	printf '[x] host checker accepted action-before-consumption ordering\n' >&2
+	exit 1
+fi
+
+changed_credentials=$scratch/host-changed-credentials
+cp -a "$scratch/success" "$changed_credentials"
+sed -i '/replacement = prepare_kernel_cred/a\	replacement->uid = GLOBAL_ROOT_UID;' \
+	"$changed_credentials/privilege/credentials.c"
+if "$HERE/host-check" "$changed_credentials" \
+	"$changed_credentials/rootkitlings.ko" "$scratch/credential_prepare" \
+	"$scratch/credential_cancel" > "$scratch/host-changed-credentials.log" 2>&1; then
+	printf '[x] host checker accepted a changed L10 credential primitive\n' >&2
+	exit 1
+fi
+
+cp -a "$work" "$scratch/unknown"
+if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
+	ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
+	printf '[x] unknown failure-point value compiled successfully\n' >&2
+	exit 1
+fi
+
+sed -e 's/@EXPECTED_ERRNO@/12/g' \
+	-e 's/@LABEL@/Credential preparation failure/g' \
+	"$HERE/credential-failure-check.in" > "$scratch/prepare-check"
+sed -e 's/@EXPECTED_ERRNO@/125/g' \
+	-e 's/@LABEL@/Credential cancellation/g' \
+	"$HERE/credential-failure-check.in" > "$scratch/cancel-check"
+chmod 0755 "$scratch/prepare-check" "$scratch/cancel-check"
+
+run_guest()
+{
+	local check_script=$1 module=$2 output
+	shift 2
+	if ! output=$("$HERE/../../../../vm/boot" --check "$check_script" \
+		--tool vm/tools/run_as "$@" \
+		"$module" 2>&1); then
+		printf '%s\n' "$output" >&2
+		printf '[x] disposable guest did not complete\n' >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+	grep -Fq '[+] PASSED' <<< "$output" || {
+		printf '[x] guest checks did not pass\n' >&2
+		exit 1
+	}
+}
+
+run_guest "$HERE/../../proc-publication/checks/failure-ecanceled-check" \
+	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
+run_guest "$HERE/../../proc-publication/checks/failure-enomem-check" \
+	"$scratch/allocation/rootkitlings.ko" --tool vm/tools/module_load_test
+run_guest "$HERE/../../proc-publication/checks/failure-after-state-check" \
+	"$scratch/publication/rootkitlings.ko" --tool vm/tools/module_load_test
+run_guest "$scratch/prepare-check" \
+	"$scratch/credential_prepare/rootkitlings.ko" \
+	--tool vm/tools/cred_trigger_test --tool vm/tools/proc_write_test
+run_guest "$scratch/cancel-check" \
+	"$scratch/credential_cancel/rootkitlings.ko" \
+	--tool vm/tools/cred_trigger_test --tool vm/tools/proc_write_test
+run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
+	--tool vm/tools/cred_trigger_test --tool vm/tools/proc_write_test

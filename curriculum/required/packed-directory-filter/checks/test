@@ -1,0 +1,165 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../../scripts/lesson-env"
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r16-test.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+[[ $(uname -m) == x86_64 ]] || { printf '[x] x86_64 is required\n' >&2; exit 1; }
+for option in X86_64 PROC_FS KPROBES KPROBES_ON_FTRACE OPTPROBES KALLSYMS \
+	KALLSYMS_ALL DEBUG_FS; do
+	grep -qx "CONFIG_$option=y" "$KDIR/.config" || {
+		printf '[x] CONFIG_%s=y is required\n' "$option" >&2
+		exit 1
+	}
+done
+awk '$2 == "iterate_dir" && $4 == "EXPORT_SYMBOL" { found = 1 }
+	END { exit !found }' "$KDIR/Module.symvers" || {
+	printf '[x] iterate_dir must be exported by the pinned kernel\n' >&2
+	exit 1
+}
+awk '$3 == "filldir64" { found = 1 } END { exit !found }' \
+	"$KDIR/System.map" || {
+	printf '[x] filldir64 must exist in the pinned kernel symbol table\n' >&2
+	exit 1
+}
+grep -qx '# CONFIG_PREEMPT_RT is not set' "$KDIR/.config" || {
+	printf '[x] the pinned non-RT kernel is required\n' >&2
+	exit 1
+}
+for script in test host-check success-check failure-check.in; do
+	bash -n "$HERE/$script"
+done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
+	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check.in"
+fi
+
+mapfile -t changed < <(
+	cd "$HERE/../solution"
+	find . -type f -printf '%P\n' | sort
+)
+(( ${#changed[@]} == 1 )) || { printf '[x] expected one learner file\n' >&2; exit 1; }
+[[ ${changed[0]} == instrumentation/dirent_filter.c ]] || {
+	printf '[x] unexpected learner file: %s\n' "${changed[0]}" >&2
+	exit 1
+}
+
+build_tree()
+{
+	local source=$1 destination=$2 point=${3:-0} log=$scratch/build-${2##*/}.log
+	cp -a "$source" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		cat "$log" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] build warning in %s\n' "${destination##*/}" >&2
+		exit 1
+	fi
+}
+
+parent=$scratch/parent
+mkdir -p "$parent"
+for source in \
+	"$HERE/../../owned-kernel-state/solution" \
+	"$HERE/../../proc-publication/solution" \
+	"$HERE/../../proc-read-contract/solution" \
+	"$HERE/../../bounded-control-switch/solution" \
+	"$HERE/../../managed-kprobe/starter" \
+	"$HERE/../../managed-kprobe/solution" \
+	"$HERE/../../cross-view-evidence/starter" \
+	"$HERE/../../cross-view-evidence/solution"; do
+	cp -a "$source/." "$parent/"
+done
+starter=$scratch/starter-source
+solution=$scratch/solution-source
+cp -a "$parent" "$starter"
+cp -a "$HERE/../starter/." "$starter/"
+cp -a "$starter" "$solution"
+cp -a "$HERE/../solution/." "$solution/"
+
+build_tree "$starter" "$scratch/starter"
+build_tree "$solution" "$scratch/success"
+for point in 1 2 3 4 5 6; do
+	build_tree "$solution" "$scratch/failure-$point" "$point"
+done
+if make -s -C "$KDIR" M="$scratch/success" W=1 \
+	ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
+	printf '[x] unknown failure point compiled\n' >&2
+	exit 1
+fi
+
+"$HERE/host-check" "$scratch/success" "$scratch/success/rootkitlings.ko"
+
+expect_mutation_rejected()
+{
+	local name=$1 expression=$2 replacement=$3 tree=$scratch/mutation-$1
+	cp -a "$scratch/success" "$tree"
+	sed -i "$expression" "$tree/instrumentation/dirent_filter.c"
+	if "$HERE/host-check" "$tree" "$tree/rootkitlings.ko" \
+		> "$scratch/mutation-$name.log" 2>&1; then
+		printf '[x] host checker accepted mutation: %s\n' "$name" >&2
+		exit 1
+	fi
+	: "$replacement"
+}
+
+expect_mutation_rejected memcpy-overlap 's/memmove(/memcpy(/' semantic
+expect_mutation_rejected one-pass-partial \
+	's/matches++;/memmove(bytes, bytes + record_length, remaining - record_length); matches++;/' semantic
+expect_mutation_rejected prefix-match \
+	's/name_length == target_length &&/name_length <= target_length \&\&/; s/memcmp(name, target, target_length)/memcmp(name, target, name_length)/g' semantic
+expect_mutation_rejected hard-coded-target \
+	'/\*output_length = length;/i\
+\ttarget = "rootkitlings_hidden"; target_length = sizeof("rootkitlings_hidden") - 1;' semantic
+expect_mutation_rejected missing-output-length \
+	's/\*output_length = write_offset;/\/\* missing length \*\//' semantic
+expect_mutation_rejected all-match-zero \
+	's/return RK_DIRENT_FILTER_UNCHANGED;/\* hostile all-match \*\/ *output_length = 0; return RK_DIRENT_FILTER_CHANGED;/' semantic
+expect_mutation_rejected missing-cookie \
+	's/memcpy(bytes + previous_retained/if (0) memcpy(bytes + previous_retained/' semantic
+expect_mutation_rejected corrupt-retained-record \
+	'/previous_retained = write_offset;/i\
+\t\t\tbytes[write_offset + offsetof(struct linux_dirent64, d_type)] ^= 1;' semantic
+
+render_failure()
+{
+	local point=$1 errno=$2 label=$3
+	local output=$scratch/failure-$point-check
+	sed -e "s/@EXPECTED_ERRNO@/$errno/g" -e "s/@LABEL@/$label/g" \
+		"$HERE/failure-check.in" > "$output"
+	chmod 0755 "$output"
+}
+render_failure 3 12 'Public proc publication rollback'
+render_failure 4 2 'Inherited Kprobe batch rollback'
+render_failure 5 2 'Missing iterate_dir target rollback'
+render_failure 6 12 'Hidden proc publication rollback'
+
+run_guest()
+{
+	local check=$1 module=$2 output
+	shift 2
+	if ! output=$("$HERE/../../../../vm/boot" --check "$check" "$@" "$module" 2>&1); then
+		printf '%s\n' "$output" >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+	grep -Fq '[+] PASSED' <<< "$output" || exit 1
+}
+
+run_guest "$HERE/../../proc-publication/checks/failure-ecanceled-check" \
+	"$scratch/failure-1/rootkitlings.ko" --tool vm/tools/module_load_test
+run_guest "$HERE/../../proc-publication/checks/failure-enomem-check" \
+	"$scratch/failure-2/rootkitlings.ko" --tool vm/tools/module_load_test
+for point in 3 4 5 6; do
+	run_guest "$scratch/failure-$point-check" \
+		"$scratch/failure-$point/rootkitlings.ko" --tool vm/tools/module_load_test
+done
+run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
+	--tool vm/tools/proc_read_test --tool vm/tools/proc_write_test \
+	--tool vm/tools/getdents64_test

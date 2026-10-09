@@ -14,7 +14,7 @@ The public v2 catalog still depends on:
 - `curriculum/support/`
 - `curriculum/solutions/`
 
-The replacement route is being built under `curriculum/incubator/`.
+The replacement route is staged under `curriculum/required/`.
 These are different implementations, not byte-for-byte duplicate files.
 Removing the public trees before route adoption would break the learner CLI and saved progress.
 
