@@ -1,0 +1,7 @@
+Keep the borrowed state pointer valid for exactly the registered lifetime.
+
+Each pre-handler reads actions_enabled once, conditionally calls its matching
+mark operation, and returns zero. Start stores the state before calling
+register_kprobes(). If that call fails, it only clears the borrowed pointer:
+the batch helper has already removed any earlier probe. Stop calls
+unregister_kprobes() before clearing the pointer.

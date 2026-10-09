@@ -1,0 +1,208 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+extract_function()
+{
+	local source=$1 name=$2
+	awk -v name="$name" '
+		BEGIN { found = 0; depth = 0; opened = 0 }
+		!found && $0 ~ name "[[:space:]]*\\(" { found = 1 }
+		found {
+			print
+			line = $0
+			opens = gsub(/\{/, "{", line)
+			line = $0
+			closes = gsub(/\}/, "}", line)
+			if (opens > 0) opened = 1
+			depth += opens - closes
+			if (opened && depth == 0) exit
+		}
+	' "$source"
+}
+
+(( $# == 3 )) || die "usage: ${0##*/} SUCCESS_DIR SUCCESS_ARTIFACT MISSING_DIR"
+success_dir=$(realpath -e -- "$1" 2>/dev/null) || die "success directory not found: $1"
+success_artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
+missing_dir=$(realpath -e -- "$3" 2>/dev/null) || die "missing-symbol directory not found: $3"
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+"$here/../../stage-02/r06-control-switch/host-check" \
+	"$success_dir" "$success_artifact"
+
+for path in instrumentation/probes.c instrumentation/probes.o; do
+	[[ -f $success_dir/$path && ! -L $success_dir/$path ]] ||
+		die "success build is missing regular file: $path"
+	done
+[[ -f $missing_dir/instrumentation/probes.o &&
+	! -L $missing_dir/instrumentation/probes.o ]] ||
+	die "missing-symbol build lacks instrumentation/probes.o"
+
+probe_undefined=$(nm -u "$success_dir/instrumentation/probes.o")
+for symbol in register_kprobes rk_state_actions_enabled \
+	rk_state_mark_filename_rmdir_seen rk_state_mark_vfs_mkdir_seen \
+	unregister_kprobes; do
+	grep -Eq "[[:space:]]$symbol$" <<< "$probe_undefined" ||
+		die "instrumentation/probes.o has no $symbol dependency"
+done
+if grep -Eq '[[:space:]](register_kprobe|unregister_kprobe)$' \
+	<<< "$probe_undefined"; then
+	die "manage the hook set with the batch Kprobe API"
+fi
+
+success_source=$success_dir/instrumentation/probes.c
+missing_source=$missing_dir/instrumentation/probes.c
+success_text=$(tr '\n' ' ' < "$success_source")
+missing_text=$(tr '\n' ' ' < "$missing_source")
+
+for target in vfs_mkdir filename_rmdir; do
+	grep -Eq "\.symbol_name[[:space:]]*=[[:space:]]*\"$target\"" \
+		<<< "$success_text" || die "success probe set must target $target by name"
+done
+grep -Fq '"__rootkitlings_missing_kprobe_target_7_2__"' \
+	<<< "$missing_text" || die "failure point 4 must use the real missing target"
+if strings "$success_dir/instrumentation/probes.o" |
+	grep -Fqx '__rootkitlings_missing_kprobe_target_7_2__'; then
+	die "the success object contains the missing failure target"
+fi
+strings "$missing_dir/instrumentation/probes.o" |
+	grep -Fqx '__rootkitlings_missing_kprobe_target_7_2__' ||
+	die "failure point 4 did not compile the missing target"
+
+[[ $(grep -Ec 'static[[:space:]]+struct[[:space:]]+kprobe[[:space:]]+[[:alnum:]_]+' \
+	"$success_source") -eq 2 ]] || die "define exactly two private Kprobe objects"
+[[ $(grep -Ec 'static[[:space:]]+struct[[:space:]]+kprobe[[:space:]]*\*' \
+	"$success_source") -eq 1 ]] || die "define one private probe-pointer array"
+
+for specification in \
+	'rk_vfs_mkdir_pre rk_state_mark_vfs_mkdir_seen rk_state_mark_filename_rmdir_seen' \
+	'rk_filename_rmdir_pre rk_state_mark_filename_rmdir_seen rk_state_mark_vfs_mkdir_seen'; do
+	read -r handler expected forbidden <<< "$specification"
+	body=$(extract_function "$success_source" "$handler")
+	[[ -n $body ]] || die "instrumentation/probes.c must define $handler"
+	flat=$(tr '\n' ' ' <<< "$body")
+	[[ $(grep -Eo '\brk_state_actions_enabled[[:space:]]*\(' <<< "$flat" | wc -l) -eq 1 ]] ||
+		die "$handler must read the action switch exactly once"
+	[[ $(grep -Eo "\b${expected}[[:space:]]*\(" <<< "$flat" | wc -l) -eq 1 ]] ||
+		die "$handler must mark only its matching observation"
+	grep -Eq "if[[:space:]]*\([[:space:]]*rk_state_actions_enabled[[:space:]]*\([[:space:]]*probe_state[[:space:]]*\)[[:space:]]*\)[[:space:]]*(\{[[:space:]]*)?${expected}[[:space:]]*\([[:space:]]*probe_state[[:space:]]*\)[[:space:]]*;" \
+		<<< "$flat" || die "$handler must gate its matching marker directly"
+	if grep -Eq "\b${forbidden}[[:space:]]*\(" <<< "$flat"; then
+		die "$handler marks the wrong target"
+	fi
+	grep -Eq 'return[[:space:]]+0[[:space:]]*;' <<< "$flat" ||
+		die "$handler must return zero"
+	if grep -Eq -- '->|\b(kmalloc|kzalloc|kfree|copy_(from|to)_user|pr_[[:alnum:]_]+|printk|mutex_lock|down|schedule|msleep|wait_event|seq_|vfs_|kernel_)[[:space:]]*\(' \
+		<<< "$flat"; then
+		die "$handler must only gate and mark bounded state"
+	fi
+done
+
+for operation in register_kprobes unregister_kprobes; do
+	[[ $(grep -Eo "\b${operation}[[:space:]]*\(" <<< "$success_text" | wc -l) -eq 1 ]] ||
+		die "call $operation exactly once"
+done
+start_body=$(extract_function "$success_source" rk_probes_start)
+stop_body=$(extract_function "$success_source" rk_probes_stop)
+[[ -n $start_body && -n $stop_body ]] || die "define probe start and stop operations"
+start_flat=$(tr '\n' ' ' <<< "$start_body")
+stop_flat=$(tr '\n' ' ' <<< "$stop_body")
+grep -Eq 'register_kprobes[[:space:]]*\([[:space:]]*probes[[:space:]]*,[[:space:]]*ARRAY_SIZE[[:space:]]*\([[:space:]]*probes[[:space:]]*\)[[:space:]]*\)' \
+	<<< "$start_flat" || die "register the complete pointer array in one batch"
+grep -Eq 'unregister_kprobes[[:space:]]*\([[:space:]]*probes[[:space:]]*,[[:space:]]*ARRAY_SIZE[[:space:]]*\([[:space:]]*probes[[:space:]]*\)[[:space:]]*\)' \
+	<<< "$stop_flat" || die "unregister the complete pointer array in one batch"
+
+start_set_line=$(grep -n 'probe_state[[:space:]]*=[[:space:]]*state' <<< "$start_body" |
+	head -n1 | cut -d: -f1)
+register_line=$(grep -n 'register_kprobes[[:space:]]*(' <<< "$start_body" |
+	head -n1 | cut -d: -f1)
+start_clear_line=$(grep -n 'probe_state[[:space:]]*=[[:space:]]*NULL' <<< "$start_body" |
+	tail -n1 | cut -d: -f1)
+[[ -n $start_set_line && -n $register_line && -n $start_clear_line &&
+	$start_set_line -lt $register_line && $register_line -lt $start_clear_line ]] ||
+	die "publish borrowed state before registration and clear it after failure"
+unregister_line=$(grep -n 'unregister_kprobes[[:space:]]*(' <<< "$stop_body" |
+	head -n1 | cut -d: -f1)
+stop_clear_line=$(grep -n 'probe_state[[:space:]]*=[[:space:]]*NULL' <<< "$stop_body" |
+	tail -n1 | cut -d: -f1)
+[[ -n $unregister_line && -n $stop_clear_line &&
+	$unregister_line -lt $stop_clear_line ]] ||
+	die "unregister and synchronize before releasing borrowed state"
+
+owned_sources=(
+	"$success_dir/Kbuild"
+	"$success_dir/core/main.c"
+	"$success_dir/core/state.c"
+	"$success_dir/include/rootkit.h"
+	"$success_dir/instrumentation/probes.c"
+	"$success_dir/interface/proc.c"
+)
+if grep -Eq '(\.addr[[:space:]]*=|->[[:space:]]*addr|\.[[:space:]]*addr|%p[xsS]?|kallsyms_lookup|sprint_symbol|lookup_symbol)' \
+	"${owned_sources[@]}"; then
+	die "do not copy, format, publish, or resolve raw probe addresses"
+fi
+if grep -Eq '\b(pr_(info|notice|warn|err|debug)|printk)[[:space:]]*\(' \
+	"$success_source"; then
+	die "probe behavior must be observable through owned state, not logging"
+fi
+
+state_source=$success_dir/core/state.c
+for field in vfs_mkdir_seen filename_rmdir_seen; do
+	grep -Eq "bool[[:space:]]+${field}" "$state_source" ||
+		die "$field must be a private bool"
+	grep -Eq "READ_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*\)" \
+		"$state_source" || die "$field reader must use READ_ONCE"
+	grep -Eq "WRITE_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*,[[:space:]]*true[[:space:]]*\)" \
+		"$state_source" || die "$field marker must store only true with WRITE_ONCE"
+	[[ $(grep -Eoc "WRITE_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*," \
+		"$state_source") -eq 1 ]] || die "$field must have one monotonic WRITE_ONCE store"
+	[[ $(grep -Eoc "state->${field}[[:space:]]*=" "$state_source") -eq 1 ]] ||
+		die "$field must be initialized once and never reset"
+done
+if grep -Eq 'atomic(_long)?_(set|read|inc)|\b(atomic_t|atomic_long_t)\b' \
+	"$state_source"; then
+	die "same-value monotonic flags do not need atomic read-modify-write operations"
+fi
+
+proc_source=$success_dir/interface/proc.c
+for field in vfs_mkdir_seen filename_rmdir_seen; do
+	grep -Fq "${field}=%u" "$proc_source" ||
+		die "proc status must publish $field as one bit"
+done
+if grep -Eq '(%p[xsS]?|0x%|addr=|address=)' "$proc_source"; then
+	die "proc status must not publish a kernel address"
+fi
+
+main_source=$success_dir/core/main.c
+start_line=$(grep -n 'rk_probes_start[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
+publish_line=$(grep -n 'rk_proc_publish[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
+rollback_stop_line=$(grep -n 'rk_probes_stop[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
+rollback_destroy_line=$(grep -n 'rk_state_destroy[[:space:]]*(' "$main_source" | head -n1 | cut -d: -f1)
+unpublish_line=$(grep -n 'rk_proc_unpublish[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
+exit_stop_line=$(grep -n 'rk_probes_stop[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
+exit_destroy_line=$(grep -n 'rk_state_destroy[[:space:]]*(' "$main_source" | tail -n1 | cut -d: -f1)
+[[ -n $start_line && -n $publish_line && $start_line -lt $publish_line ]] ||
+	die "register probes before procfs publication"
+[[ -n $rollback_stop_line && -n $rollback_destroy_line &&
+	$rollback_stop_line -lt $rollback_destroy_line ]] ||
+	die "publication rollback must unregister probes before destroying state"
+[[ -n $unpublish_line && -n $exit_stop_line && -n $exit_destroy_line &&
+	$unpublish_line -lt $exit_stop_line && $exit_stop_line -lt $exit_destroy_line ]] ||
+	die "unload order must be proc unpublish, probe unregister, state destroy"
+
+main_undefined=$(nm -u "$success_dir/core/main.o")
+for symbol in rk_probes_start rk_probes_stop; do
+	grep -Eq "[[:space:]]$symbol$" <<< "$main_undefined" ||
+		die "core/main.o has no $symbol dependency"
+done
+
+header_text=$(tr '\n' ' ' < "$success_dir/include/rootkit.h")
+for declaration in rk_state_vfs_mkdir_seen rk_state_mark_vfs_mkdir_seen \
+	rk_state_filename_rmdir_seen rk_state_mark_filename_rmdir_seen \
+	rk_probes_start rk_probes_stop; do
+	grep -Eq "${declaration}[[:space:]]*\(" <<< "$header_text" ||
+		die "rootkit.h must declare $declaration"
+done
+
+printf '[+] named probe set, bounded handlers, batch rollback, and teardown verified\n'
