@@ -41,7 +41,7 @@ rk_redirect_ipv4_udp(struct sk_buff *skb, const struct rk_udp_view *view,
 	    view->datagram_offset > UINT_MAX - (unsigned int)network_offset)
 		return RK_UDP_REDIRECT_INVALID_GEOMETRY;
 	udp_offset = (unsigned int)network_offset + view->datagram_offset;
-	if (udp_offset > skb->len ||
+	if (udp_offset > INT_MAX || udp_offset > skb->len ||
 	    sizeof(struct udphdr) > skb->len - udp_offset ||
 	    view->datagram_length > skb->len - udp_offset)
 		return RK_UDP_REDIRECT_INVALID_GEOMETRY;

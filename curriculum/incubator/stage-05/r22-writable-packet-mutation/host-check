@@ -50,7 +50,7 @@ while read -r symbol; do
 	case $symbol in
 		__fentry__|__ref_stack_chk_guard|__stack_chk_fail|\
 		__x86_return_thunk|inet_proto_csum_replace4|\
-		rk_skb_make_writable|skb_copy_bits) ;;
+		memcmp|rk_skb_make_writable|skb_copy_bits) ;;
 		*) die "mutator has unexpected external dependency: $symbol" ;;
 	esac
 done <<< "$undefined"

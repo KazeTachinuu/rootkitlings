@@ -113,6 +113,11 @@ build_mutant()
 	cp -a "$HERE/solution" "$scratch/$name"
 	perl -0pi -e "s~$expression~$replacement~" \
 		"$scratch/$name/mutation/udp_redirect.c"
+	if cmp -s "$HERE/solution/mutation/udp_redirect.c" \
+		"$scratch/$name/mutation/udp_redirect.c"; then
+		printf '[x] mutant transformation did not apply: %s\n' "$name" >&2
+		exit 1
+	fi
 	local log=$scratch/$name.log
 	if ! make -s -C "$KDIR" M="$scratch/$name" W=1 modules \
 		> "$log" 2>&1; then
@@ -154,10 +159,30 @@ build_mutant accept-conntrack \
 	'if (false && (skb_nfct(skb) || secpath_exists(skb)))'
 build_mutant omit-datagram-width \
 	' \|\|\n\t    view->datagram_length > UINT_MAX' ''
+build_mutant omit-int-offset-bound \
+	'udp_offset > INT_MAX \|\| ' ''
+build_mutant short-writable-prefix \
+	'writable_length = udp_offset \+ sizeof\(struct udphdr\);' \
+	'writable_length = udp_offset + sizeof(struct udphdr) - 1;'
+build_mutant accept-xfrm \
+	'secpath_exists\(skb\)' 'false'
+build_mutant accept-incoherent-gso \
+	'if \(skb_is_gso\(skb\) && skb->ip_summed != CHECKSUM_PARTIAL\)' \
+	'if (false && skb_is_gso(skb))'
+build_mutant wrong-checksum-domain \
+	'replacement, false\);' 'replacement, true);'
+build_mutant omit-mangled-zero \
+	'if \(!udp->check\)\n\t\t\tudp->check = CSUM_MANGLED_0;' \
+	'if (!udp->check)\n\t\t\t(void)udp;'
+build_mutant trust-stale-destination \
+	'udp->dest != before.dest \|\|\n\t    udp->len != before.len \|\| ntohs\(udp->source\) != view->source_port \|\|\n\t    ntohs\(udp->dest\) != view->destination_port \|\|' \
+	'udp->len != before.len || ntohs(udp->source) != view->source_port ||'
 
 equivalent=$scratch/equivalent
 cp -a "$HERE/solution" "$equivalent"
 perl -0pi -e 's~if \(udp->check\) \{\n(.*?)\n\t\} else \{\n\t\tskb_checksum_complete_unset\(skb\);\n\t\}~if (!udp->check) {\n\t\tskb_checksum_complete_unset(skb);\n\t} else {\n$1\n\t}~s' \
+	"$equivalent/mutation/udp_redirect.c"
+perl -0pi -e 's~if \(udp->source != before.source \|\| udp->dest != before.dest \|\|\n\t    udp->len != before.len \|\|~if (__builtin_memcmp(udp, \&before, offsetof(struct udphdr, check)) ||~' \
 	"$equivalent/mutation/udp_redirect.c"
 build_tree "$equivalent" "$scratch/equivalent-build"
 "$HERE/host-check" "$scratch/equivalent-build" \

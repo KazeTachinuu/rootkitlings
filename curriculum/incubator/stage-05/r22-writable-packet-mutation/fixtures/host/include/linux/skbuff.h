@@ -28,6 +28,8 @@ struct sk_buff {
 	bool gso;
 	bool nfct;
 	bool secpath;
+	bool copy_error;
+	unsigned int copy_calls;
 };
 
 static inline int skb_network_offset(const struct sk_buff *skb)
@@ -43,6 +45,9 @@ static inline unsigned int skb_headlen(const struct sk_buff *skb)
 static inline int skb_copy_bits(const struct sk_buff *skb, int offset,
 				void *to, int length)
 {
+	((struct sk_buff *)skb)->copy_calls++;
+	if (skb->copy_error)
+		return -1;
 	if (offset < 0 || length < 0 || (unsigned int)offset > skb->len ||
 	    (unsigned int)length > skb->len - (unsigned int)offset)
 		return -1;

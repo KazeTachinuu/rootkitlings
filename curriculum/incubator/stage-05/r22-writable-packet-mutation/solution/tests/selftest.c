@@ -90,6 +90,34 @@ static struct sk_buff *rk_split_skb(const unsigned char *packet,
 	return skb;
 }
 
+static struct sk_buff *rk_frag_list_skb(const unsigned char *packet,
+					unsigned int split)
+{
+	struct sk_buff *head;
+	struct sk_buff *tail;
+
+	if (split > RK_TEST_PACKET_LENGTH)
+		return NULL;
+	head = alloc_skb(split + 64, GFP_KERNEL);
+	if (!head)
+		return NULL;
+	skb_reserve(head, 32);
+	memcpy(skb_put(head, split), packet, split);
+	tail = alloc_skb(RK_TEST_PACKET_LENGTH - split + 32, GFP_KERNEL);
+	if (!tail) {
+		kfree_skb(head);
+		return NULL;
+	}
+	memcpy(skb_put(tail, RK_TEST_PACKET_LENGTH - split), packet + split,
+	       RK_TEST_PACKET_LENGTH - split);
+	skb_shinfo(head)->frag_list = tail;
+	head->len += tail->len;
+	head->data_len += tail->len;
+	head->truesize += tail->truesize;
+	skb_reset_network_header(head);
+	return head;
+}
+
 static int rk_view(struct sk_buff *skb, struct rk_udp_view *view)
 {
 	return rk_inspect_ipv4_udp(skb, RK_TEST_MATCH_PORT, view) ==
@@ -139,7 +167,54 @@ static int rk_test_linear_and_checksum_modes(void)
 		kfree_skb(skb);
 		if (error)
 			return error;
+
+		rk_make_packet(packet, htons(0x2222));
+		skb = rk_linear_skb(packet);
+		if (rk_expect(skb != NULL, "nonzero checksum fixture allocation"))
+			return -ENOMEM;
+		skb->ip_summed = modes[index];
+		if (modes[index] == CHECKSUM_PARTIAL) {
+			skb->csum_start = skb_headroom(skb) + 20;
+			skb->csum_offset = offsetof(struct udphdr, check);
+		}
+		error = rk_view(skb, &view);
+		if (!error)
+			error = rk_expect(rk_redirect_ipv4_udp(
+				skb, &view, RK_TEST_MATCH_PORT,
+				RK_TEST_REPLACEMENT_PORT) == RK_UDP_REDIRECT_OK,
+				"nonzero checksum mode redirects");
+		udp = (struct udphdr *)(skb->data + 20);
+		if (!error && modes[index] == CHECKSUM_PARTIAL)
+			error = rk_expect(udp->check == htons(0x2222),
+					  "partial checksum seed stays unchanged");
+		if (!error && modes[index] != CHECKSUM_PARTIAL)
+			error = rk_expect(udp->check == htons(0x2221),
+					  "nonpartial checksum is adjusted");
+		if (!error && modes[index] == CHECKSUM_COMPLETE)
+			error = rk_expect(skb->ip_summed == CHECKSUM_COMPLETE,
+					  "compensated complete state stays valid");
+		kfree_skb(skb);
+		if (error)
+			return error;
 	}
+
+	rk_make_packet(packet, htons(1));
+	skb = rk_linear_skb(packet);
+	if (rk_expect(skb != NULL, "mangled-zero fixture allocation"))
+		return -ENOMEM;
+	error = rk_view(skb, &view);
+	if (!error)
+		error = rk_expect(rk_redirect_ipv4_udp(
+			skb, &view, RK_TEST_MATCH_PORT,
+			RK_TEST_REPLACEMENT_PORT) == RK_UDP_REDIRECT_OK,
+			"checksum producing zero redirects");
+	udp = (struct udphdr *)(skb->data + 20);
+	if (!error)
+		error = rk_expect(udp->check == CSUM_MANGLED_0,
+				  "adjusted nonzero checksum maps zero to mangled zero");
+	kfree_skb(skb);
+	if (error)
+		return error;
 	return 0;
 }
 
@@ -158,10 +233,19 @@ static int rk_test_writable_layouts(void)
 	skb = rk_split_skb(packet, 24);
 	if (rk_expect(skb != NULL, "fragmented fixture allocation"))
 		return -ENOMEM;
-	if (rk_view(skb, &view) ||
-	    rk_expect(rk_redirect_ipv4_udp(skb, &view, RK_TEST_MATCH_PORT,
+	if (rk_view(skb, &view)) {
+		error = -EINVAL;
+		goto out_split;
+	}
+	skb_set_hash(skb, 0x12345678, PKT_HASH_TYPE_L4);
+	if (rk_expect(rk_redirect_ipv4_udp(skb, &view, RK_TEST_MATCH_PORT,
 		      RK_TEST_REPLACEMENT_PORT) == RK_UDP_REDIRECT_OK,
 		      "nonlinear UDP header becomes writable")) {
+		error = -EINVAL;
+		goto out_split;
+	}
+	if (rk_expect(!skb->hash && !skb->sw_hash && !skb->l4_hash,
+		      "successful mutation clears packet hash")) {
 		error = -EINVAL;
 		goto out_split;
 	}
@@ -177,6 +261,22 @@ static int rk_test_writable_layouts(void)
 		goto out_split;
 	}
 out_split:
+	kfree_skb(skb);
+	if (error)
+		return error;
+
+	rk_make_packet(packet, (__force __sum16)0x3412);
+	skb = rk_frag_list_skb(packet, 24);
+	if (rk_expect(skb != NULL, "frag_list fixture allocation"))
+		return -ENOMEM;
+	if (rk_view(skb, &view) ||
+	    rk_expect(rk_redirect_ipv4_udp(skb, &view, RK_TEST_MATCH_PORT,
+		      RK_TEST_REPLACEMENT_PORT) == RK_UDP_REDIRECT_OK,
+		      "frag_list UDP header becomes writable") ||
+	    rk_expect(ntohs(((struct udphdr *)(skb->data + 20))->dest) ==
+		      RK_TEST_REPLACEMENT_PORT,
+		      "frag_list destination is redirected"))
+		error = -EINVAL;
 	kfree_skb(skb);
 	if (error)
 		return error;

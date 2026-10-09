@@ -31,6 +31,7 @@ static unsigned int writable_length;
 static int writable_error;
 static unsigned int relocate_by;
 static unsigned int stale_field;
+static bool linearize_prefix;
 static unsigned int checksum_calls;
 static __be16 checksum_from;
 static __be16 checksum_to;
@@ -58,6 +59,7 @@ static void reset_controls(void)
 	writable_error = 0;
 	relocate_by = 0;
 	stale_field = 0;
+	linearize_prefix = false;
 	checksum_calls = 0;
 	checksum_from = 0;
 	checksum_to = 0;
@@ -108,6 +110,10 @@ int rk_skb_make_writable(struct sk_buff *skb, unsigned int length)
 
 	writable_calls++;
 	writable_length = length;
+	if (linearize_prefix && skb->head_length < length) {
+		skb->head_length = length;
+		skb->data_len = skb->len - length;
+	}
 	if (relocate_by) {
 		memset(relocated, 0xa5, sizeof(relocated));
 		memcpy(relocated, skb->wire, old_network);
@@ -137,15 +143,18 @@ void rk_skb_fail_next_writable(void)
 void inet_proto_csum_replace2(__sum16 *sum, struct sk_buff *skb,
 			      __be16 from, __be16 to, bool pseudohdr)
 {
-	(void)skb;
 	checksum_calls++;
 	checksum_from = from;
 	checksum_to = to;
 	checksum_pseudohdr = pseudohdr;
-	if (*sum == htons(0x1111))
-		*sum = 0;
-	else
-		*sum ^= from ^ to ^ htons(0x5a5a);
+	if (skb->ip_summed != CHECKSUM_PARTIAL) {
+		uint32_t value = ((~ntohs(*sum)) & UINT16_MAX) +
+			((~ntohs(from)) & UINT16_MAX) + ntohs(to);
+
+		value = (value & UINT16_MAX) + (value >> 16);
+		value = (value & UINT16_MAX) + (value >> 16);
+		*sum = htons((u16)~value);
+	}
 }
 
 static void expect_unchanged_header(const unsigned char *before,
@@ -182,9 +191,12 @@ static void test_checksum_space(void)
 			       checksum_to == htons(REPLACEMENT_PORT) &&
 			       !checksum_pseudohdr,
 			       "checksum delta arguments are wrong");
-			if (checksum == 0x1111)
+			if (checksum == 1)
 				EXPECT(udp->check == CSUM_MANGLED_0,
 				       "computed zero was not mangled");
+			else
+				EXPECT(ntohs(udp->check) == checksum - 1,
+				       "checksum was not adjusted exactly once");
 		}
 		EXPECT(!fixture.skb.hash && !fixture.skb.sw_hash &&
 		       !fixture.skb.l4_hash, "success did not clear packet hash");
@@ -220,6 +232,30 @@ static void test_checksum_modes(void)
 		if (modes[index] == CHECKSUM_PARTIAL)
 			EXPECT(fixture.skb.ip_summed == CHECKSUM_PARTIAL,
 			       "zero partial checksum changed offload mode");
+		EXPECT(checksum_calls == 0,
+		       "zero checksum called the replacement helper");
+
+		make_fixture(&fixture, 0x1234, 0x2222);
+		fixture.skb.ip_summed = modes[index];
+		if (modes[index] == CHECKSUM_PARTIAL) {
+			fixture.skb.csum_start = fixture.skb.network_offset +
+						 UDP_OFFSET;
+			fixture.skb.csum_offset = offsetof(struct udphdr, check);
+		}
+		EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, MATCH_PORT,
+			REPLACEMENT_PORT) == RK_UDP_REDIRECT_OK,
+		       "nonzero checksum mode rejected valid packet");
+		EXPECT(checksum_calls == 1 && !checksum_pseudohdr,
+		       "nonzero checksum did not use the documented helper");
+		if (modes[index] == CHECKSUM_PARTIAL)
+			EXPECT(ntohs(fixture_udp(&fixture)->check) == 0x2222,
+			       "partial checksum helper changed its seed");
+		else
+			EXPECT(ntohs(fixture_udp(&fixture)->check) == 0x2221,
+			       "complete checksum was not adjusted");
+		if (modes[index] == CHECKSUM_COMPLETE)
+			EXPECT(fixture.skb.ip_summed == CHECKSUM_COMPLETE,
+			       "compensated checksum invalidated complete state");
 	}
 }
 
@@ -239,6 +275,19 @@ static void test_relocation_and_stale_views(void)
 	       "relocated destination was not changed");
 	EXPECT(writable_length == 3 + UDP_OFFSET + 8,
 	       "helper length used post-helper geometry");
+	EXPECT(checksum_calls == 1,
+	       "relocated checksum was not adjusted once");
+
+	make_fixture(&fixture, 0x1234, 0x2222);
+	fixture.skb.head_length = fixture.skb.network_offset + UDP_OFFSET + 4;
+	fixture.skb.data_len = fixture.skb.len - fixture.skb.head_length;
+	linearize_prefix = true;
+	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, MATCH_PORT,
+		REPLACEMENT_PORT) == RK_UDP_REDIRECT_OK,
+	       "nonlinear header was not made writable");
+	EXPECT(fixture.skb.head_length == writable_length &&
+	       ntohs(fixture_udp(&fixture)->dest) == REPLACEMENT_PORT,
+	       "exact nonlinear prefix was not linearized and changed");
 
 	for (field = 1; field <= 3; field++) {
 		make_fixture(&fixture, 0x1234, 0x2222);
@@ -263,6 +312,8 @@ static void test_relocation_and_stale_views(void)
 	expect_unchanged_header(before, &fixture.skb);
 	EXPECT(fixture.skb.network_offset == 8,
 	       "failure fixture did not change geometry");
+	EXPECT(!checksum_calls && fixture.skb.hash == 0x12345678,
+	       "helper failure changed derived packet state");
 }
 
 static void test_invalid_inputs_and_geometry(void)
@@ -285,6 +336,32 @@ static void test_invalid_inputs_and_geometry(void)
 	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, MATCH_PORT,
 	       MATCH_PORT) == RK_UDP_REDIRECT_INVALID_ARGUMENT,
 	       "identical ports accepted");
+	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, 65536,
+	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_INVALID_ARGUMENT,
+	       "oversize match port accepted");
+	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, MATCH_PORT,
+	       65536) == RK_UDP_REDIRECT_INVALID_ARGUMENT,
+	       "oversize replacement port accepted");
+	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, MATCH_PORT,
+	       0) == RK_UDP_REDIRECT_INVALID_ARGUMENT,
+	       "zero replacement port accepted");
+
+	changed = view;
+	changed.source_port = 65536;
+	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &changed, MATCH_PORT,
+	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_INVALID_ARGUMENT,
+	       "oversize source port accepted");
+	changed = view;
+	changed.destination_port--;
+	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &changed, MATCH_PORT,
+	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_INVALID_ARGUMENT,
+	       "view for another destination accepted");
+	changed = view;
+	changed.datagram_length = 7;
+	changed.payload_length = 0;
+	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &changed, MATCH_PORT,
+	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_INVALID_ARGUMENT,
+	       "datagram shorter than a UDP header accepted");
 
 	changed = view;
 	changed.datagram_offset = SIZE_MAX;
@@ -308,16 +385,69 @@ static void test_invalid_inputs_and_geometry(void)
 	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &changed, MATCH_PORT,
 	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_INVALID_ARGUMENT,
 	       "inconsistent payload length accepted");
+	EXPECT(!writable_calls && !checksum_calls &&
+	       fixture.skb.hash == 0x12345678,
+	       "invalid arguments reached mutation state");
+	expect_unchanged_header(before, &fixture.skb);
 
+	make_fixture(&fixture, 0x1234, 0x2222);
 	fixture.skb.data_len = fixture.skb.len + 1;
 	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, MATCH_PORT,
 	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_INVALID_GEOMETRY,
 	       "impossible skb lengths accepted");
+
+	make_fixture(&fixture, 0x1234, 0x2222);
+	fixture.skb.len = fixture.skb.network_offset + UDP_OFFSET + 7;
+	fixture.skb.head_length = fixture.skb.len;
+	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, MATCH_PORT,
+	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_INVALID_GEOMETRY,
+	       "truncated UDP header accepted");
+
+	make_fixture(&fixture, 0x1234, 0x2222);
+	fixture.skb.len = fixture.skb.network_offset + UDP_OFFSET + 15;
+	fixture.skb.head_length = fixture.skb.len;
+	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, MATCH_PORT,
+	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_INVALID_GEOMETRY,
+	       "datagram beyond skb length accepted");
+
+	make_fixture(&fixture, 0x1234, 0x2222);
+	fixture.skb.copy_error = true;
+	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, MATCH_PORT,
+	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_INVALID_GEOMETRY,
+	       "unreadable UDP header accepted");
+
+	make_fixture(&fixture, 0x1234, 0x2222);
 	fixture.skb.data_len = 0;
 	fixture.skb.network_offset = -1;
 	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, MATCH_PORT,
 	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_INVALID_GEOMETRY,
 	       "negative network offset accepted");
+
+#if SIZE_MAX > UINT_MAX
+	make_fixture(&fixture, 0x1234, 0x2222);
+	changed = view;
+	changed.datagram_offset = (size_t)UINT_MAX - INT_MAX + 1;
+	changed.payload_offset = changed.datagram_offset + 8;
+	fixture.skb.network_offset = INT_MAX;
+	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &changed, MATCH_PORT,
+	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_INVALID_GEOMETRY,
+	       "network and datagram offsets wrapped unsigned int");
+	EXPECT(fixture.skb.copy_calls == 0,
+	       "overflowing offset reached skb_copy_bits");
+
+	make_fixture(&fixture, 0x1234, 0x2222);
+	changed = view;
+	changed.datagram_offset = (size_t)INT_MAX + 1;
+	changed.payload_offset = changed.datagram_offset + 8;
+	fixture.skb.network_offset = 0;
+	fixture.skb.len = UINT_MAX;
+	fixture.skb.head_length = UINT_MAX;
+	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &changed, MATCH_PORT,
+	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_INVALID_GEOMETRY,
+	       "offset outside skb_copy_bits int range accepted");
+	EXPECT(fixture.skb.copy_calls == 0,
+	       "out-of-range int conversion reached skb_copy_bits");
+#endif
 	expect_unchanged_header(before, &(struct sk_buff) {
 		.data = fixture.storage + 1,
 		.network_offset = 3,
@@ -334,22 +464,33 @@ static void test_unsupported_states(void)
 	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, MATCH_PORT,
 	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_UNSUPPORTED_STATE,
 	       "conntrack state accepted");
+	EXPECT(!writable_calls && !checksum_calls &&
+	       fixture.skb.hash == 0x12345678,
+	       "conntrack rejection changed packet state");
 	fixture.skb.nfct = false;
 	fixture.skb.secpath = true;
 	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, MATCH_PORT,
 	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_UNSUPPORTED_STATE,
 	       "XFRM state accepted");
+	EXPECT(!writable_calls && !checksum_calls &&
+	       fixture.skb.hash == 0x12345678,
+	       "XFRM rejection changed packet state");
 	fixture.skb.secpath = false;
 	fixture.skb.gso = true;
 	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, MATCH_PORT,
 	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_UNSUPPORTED_STATE,
 	       "GSO without partial checksum accepted");
+	EXPECT(!writable_calls && !checksum_calls,
+	       "incoherent GSO reached mutation helpers");
 	fixture.skb.ip_summed = CHECKSUM_PARTIAL;
 	fixture.skb.csum_start = fixture.skb.network_offset + UDP_OFFSET;
 	fixture.skb.csum_offset = offsetof(struct udphdr, check);
 	EXPECT(rk_redirect_ipv4_udp(&fixture.skb, &view, MATCH_PORT,
 	       REPLACEMENT_PORT) == RK_UDP_REDIRECT_OK,
 	       "coherent UDP GSO was rejected");
+	EXPECT(ntohs(fixture_udp(&fixture)->check) == 0x2222 &&
+	       checksum_calls == 1,
+	       "partial GSO seed was not preserved by the checksum helper");
 
 	make_fixture(&fixture, 0x1234, 0x2222);
 	fixture.skb.ip_summed = CHECKSUM_PARTIAL;
