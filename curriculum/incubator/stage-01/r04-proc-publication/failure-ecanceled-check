@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /lib/check.sh
+. /vm/checks/lib.sh
 
 begin "Preflight rejection"
 

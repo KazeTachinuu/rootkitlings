@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from lib.migration import (
+from engine.migration import (
     CompletionCredit,
     CurriculumContract,
     HistoryMerge,
@@ -15,7 +15,7 @@ from lib.migration import (
     apply_migration,
     migrate_state_file,
 )
-from lib.state import ExerciseState, LearnerState, dump_state, parse_state
+from engine.state import ExerciseState, LearnerState, dump_state, parse_state
 
 
 HASH_A = "a" * 64

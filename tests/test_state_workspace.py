@@ -7,7 +7,7 @@ import stat
 import tempfile
 import unittest
 
-from lib.state import (
+from engine.state import (
     ExerciseState,
     StateError,
     StateStore,
@@ -16,7 +16,7 @@ from lib.state import (
     migrate_v2_state,
     new_state,
 )
-from lib.workspace import (
+from engine.workspace import (
     WorkspaceError,
     archive_and_remove_workspaces,
     archive_workspace,

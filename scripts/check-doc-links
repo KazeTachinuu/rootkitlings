@@ -5,8 +5,8 @@ from pathlib import Path
 import re
 import sys
 
-sys.path.insert(0, str(Path.cwd() / "lib"))
-from catalog import Catalog
+sys.path.insert(0, str(Path.cwd()))
+from engine.catalog import Catalog
 
 
 catalog = Catalog(Path.cwd())

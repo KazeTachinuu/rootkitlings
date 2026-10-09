@@ -15,10 +15,7 @@ import shutil
 import tempfile
 from typing import Iterable, Mapping
 
-try:
-    from .workspace import WorkspaceError, _real_directory, _relative, _stable_id
-except ImportError:  # scripts add lib/ directly to sys.path
-    from workspace import WorkspaceError, _real_directory, _relative, _stable_id
+from .workspace import WorkspaceError, _real_directory, _relative, _stable_id
 
 
 @dataclass(frozen=True)

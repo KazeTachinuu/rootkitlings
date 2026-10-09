@@ -5,11 +5,11 @@ import tempfile
 import tomllib
 import unittest
 
-from lib.catalog import (
+from engine.catalog import (
     Catalog, CatalogError, ElectiveTrack, Exercise, Resources, Verification,
     VerificationCase, Workspace, _elective_track_rows,
 )
-from lib.workspace import WorkspaceError
+from engine.workspace import WorkspaceError
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -774,7 +774,7 @@ class DerivedBaselineTests(unittest.TestCase):
 
 class ModuleArtifactValidationTests(unittest.TestCase):
     def test_rejects_unsafe_or_non_module_names(self) -> None:
-        from lib.catalog import _module_artifact
+        from engine.catalog import _module_artifact
 
         for value in (
             "hello",
@@ -791,7 +791,7 @@ class ModuleArtifactValidationTests(unittest.TestCase):
                     _module_artifact(value, Path("test"))
 
     def test_accepts_portable_module_names(self) -> None:
-        from lib.catalog import _module_artifact
+        from engine.catalog import _module_artifact
 
         self.assertEqual(
             _module_artifact("rootkitlings_test-1.ko", Path("test")),

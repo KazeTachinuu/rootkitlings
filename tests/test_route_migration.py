@@ -8,8 +8,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from lib.migration import CurriculumContract, MigrationError
-from lib.route_migration import (
+from engine.migration import CurriculumContract, MigrationError
+from engine.route_migration import (
     DESTINATION_CONTRACT,
     DESTINATION_DIRECT_PREREQUISITES,
     DESTINATION_REVISION,
@@ -21,8 +21,8 @@ from lib.route_migration import (
     SOURCE_ROUTE,
     migrate_core_route,
 )
-from lib.state import ExerciseState, LearnerState, dump_state, parse_state
-from lib.workspace import WorkspaceError, canonical_tree_hash
+from engine.state import ExerciseState, LearnerState, dump_state, parse_state
+from engine.workspace import WorkspaceError, canonical_tree_hash
 
 
 HASH_A = "a" * 64
@@ -344,7 +344,7 @@ class RouteMigrationTests(unittest.TestCase):
         workspace = self.write_workspace("proc-read")
 
         with patch(
-            "lib.route_migration.archive_and_remove_workspaces",
+            "engine.route_migration.archive_and_remove_workspaces",
             side_effect=WorkspaceError("injected archival failure"),
         ):
             with self.assertRaisesRegex(MigrationError, "injected archival failure"):
@@ -369,7 +369,7 @@ class RouteMigrationTests(unittest.TestCase):
         workspace = self.write_workspace("proc-read")
 
         with patch(
-            "lib.route_migration._atomic_replace",
+            "engine.route_migration._atomic_replace",
             side_effect=OSError("injected replace failure"),
         ):
             with self.assertRaisesRegex(OSError, "injected replace failure"):

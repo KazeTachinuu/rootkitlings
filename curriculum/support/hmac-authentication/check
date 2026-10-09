@@ -1,5 +1,5 @@
 #!/bin/sh
-. /lib/check.sh
+. /vm/checks/lib.sh
 
 begin "52-hmac"
 

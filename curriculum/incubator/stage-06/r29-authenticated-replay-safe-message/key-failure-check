@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /lib/check.sh
+. /vm/checks/lib.sh
 
 begin "HMAC key setup failure"
 if module_load_test /rootkitlings/rootkitlings.ko 129; then

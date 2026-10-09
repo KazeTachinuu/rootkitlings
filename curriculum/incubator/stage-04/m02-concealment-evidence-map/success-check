@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /lib/check.sh
+. /vm/checks/lib.sh
 
 begin "Omit the resident worker and map the affected view"
 

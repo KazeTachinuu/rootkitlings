@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /lib/check.sh
+. /vm/checks/lib.sh
 
 expected=${1:-@ERRNO@}
 label=${2:-@LABEL@}

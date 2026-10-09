@@ -16,8 +16,8 @@ catalog_rows()
     python3 - <<'PY'
 from pathlib import Path
 import sys
-sys.path.insert(0, str(Path.cwd() / "lib"))
-from catalog import Catalog
+sys.path.insert(0, str(Path.cwd()))
+from engine.catalog import Catalog
 catalog = Catalog(Path.cwd())
 for item in catalog.display_order():
     print("\x1f".join((item.id, item.workspace.baseline, item.workspace.source,
@@ -31,8 +31,8 @@ check_catalog_assets()
     python3 - <<'PY'
 from pathlib import Path
 import subprocess, sys
-sys.path.insert(0, str(Path.cwd() / "lib"))
-from catalog import Catalog
+sys.path.insert(0, str(Path.cwd()))
+from engine.catalog import Catalog
 root = Path.cwd(); catalog = Catalog(root); failures = []
 templates, solutions, support = set(), set(), set()
 def executable(path):
@@ -78,14 +78,14 @@ PY
 check_scripts()
 {
     bash -n vm/boot scripts/doctor scripts/lesson-env scripts/toolbox/bc scripts/validate
-    sh -n vm/init vm/checks/containment lib/check.sh
-    python3 -m py_compile rootkitlings lib/catalog.py lib/verification.py scripts/catalog scripts/check-doc-links scripts/kernel scripts/test-solutions
+    sh -n vm/init vm/checks/containment vm/checks/lib.sh
+    python3 -m py_compile rootkitlings engine/*.py scripts/catalog scripts/check-doc-links scripts/kernel scripts/test-solutions
     while IFS= read -r check; do bash -n "$check"; done < <(find curriculum/support -name check -o -name host-check)
     python3 scripts/format-docs --check
     python3 scripts/check-doc-links
     if command -v shellcheck >/dev/null; then
         shellcheck -S warning vm/boot vm/init scripts/doctor scripts/lesson-env scripts/toolbox/bc scripts/validate
-        shellcheck -S warning -s busybox lib/check.sh vm/checks/containment
+        shellcheck -S warning -s busybox vm/checks/lib.sh vm/checks/containment
         while IFS= read -r host_check; do shellcheck -S warning "$host_check"; done < <(find curriculum/support -name host-check -type f -print)
     fi
     printf '[+] scripts\n'
@@ -103,8 +103,8 @@ build_assets()
     python3 - "$work/solutions" <<'PY'
 from pathlib import Path
 import sys
-sys.path.insert(0, str(Path.cwd() / "lib"))
-from catalog import Catalog
+sys.path.insert(0, str(Path.cwd()))
+from engine.catalog import Catalog
 catalog = Catalog(Path.cwd())
 destination = Path(sys.argv[1])
 for item in catalog.exercises:

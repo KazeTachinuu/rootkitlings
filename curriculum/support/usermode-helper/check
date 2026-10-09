@@ -1,5 +1,5 @@
 #!/bin/sh
-. /lib/check.sh
+. /vm/checks/lib.sh
 begin "16-usermode-exec"
 
 marker=/tmp/rk_helper_marker

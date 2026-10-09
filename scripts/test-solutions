@@ -12,9 +12,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT))
 
-from lib.catalog import Catalog, CatalogError  # noqa: E402
-from lib.process import ProcessError, ProcessTimeout, run_process  # noqa: E402
-from lib.verification import (  # noqa: E402
+from engine.catalog import Catalog, CatalogError  # noqa: E402
+from engine.process import ProcessError, ProcessTimeout, run_process  # noqa: E402
+from engine.verification import (  # noqa: E402
     VerificationError,
     build_verification_cases,
 )

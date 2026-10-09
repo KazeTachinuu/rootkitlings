@@ -1,7 +1,7 @@
 #!/bin/sh
 # shellcheck disable=SC3043 # Checks run under BusyBox ash, which provides local.
 # shellcheck source=/dev/null
-. /lib/check.sh
+. /vm/checks/lib.sh
 
 begin "Event-driven kernel thread"
 

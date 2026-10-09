@@ -147,7 +147,7 @@ build_rootfs()
     local applet
 
     hdr "Building the BusyBox root filesystem"
-    mkdir -p "$ROOTFS"/{bin,dev,etc,lib,proc,rootkitlings,sys,tmp} \
+    mkdir -p "$ROOTFS"/{bin,dev,etc,lib,proc,rootkitlings,sys,tmp,vm/checks} \
         "$ROOTFS/lib/modules/$RELEASE"
     : > "$ROOTFS/lib/modules/$RELEASE/modules.dep"
     printf 'root:x:0:0:root:/rootkitlings:/bin/sh\n' > "$ROOTFS/etc/passwd"
@@ -167,7 +167,7 @@ build_rootfs()
         ok "Module copied to /rootkitlings/$(basename "$MODULE")"
     fi
     if [[ -n $CHECK ]]; then
-        cp "$ROOT_DIR/lib/check.sh" "$ROOTFS/lib/check.sh"
+        cp "$ROOT_DIR/vm/checks/lib.sh" "$ROOTFS/vm/checks/lib.sh"
         cp "$CHECK" "$ROOTFS/check"
         chmod 755 "$ROOTFS/check"
         if (( ${#CHECK_ARGS[@]} )); then

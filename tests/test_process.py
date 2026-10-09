@@ -6,7 +6,7 @@ import tempfile
 import time
 import unittest
 
-from lib.process import ProcessError, ProcessTimeout, run_process
+from engine.process import ProcessError, ProcessTimeout, run_process
 
 
 class ProcessTests(unittest.TestCase):

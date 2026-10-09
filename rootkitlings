@@ -9,18 +9,18 @@ import shutil
 import sys
 from pathlib import Path
 
-from lib.catalog import Catalog, CatalogError
-from lib.build_env import module_build_environment
-from lib.migration import MigrationError
-from lib.process import ProcessError, ProcessTimeout, run_process
-from lib.route_migration import (
+from engine.catalog import Catalog, CatalogError
+from engine.build_env import module_build_environment
+from engine.migration import MigrationError
+from engine.process import ProcessError, ProcessTimeout, run_process
+from engine.route_migration import (
     DESTINATION_REVISION as ROUTE_MIGRATION_REVISION,
     active_destination_contract,
     migrate_core_route,
 )
-from lib.state import StateStore, StateError
-from lib.verification import VerificationError, build_verification_cases
-from lib.workspace import (
+from engine.state import StateStore, StateError
+from engine.verification import VerificationError, build_verification_cases
+from engine.workspace import (
     WorkspaceError,
     archive_and_remove_workspaces,
     canonical_tree_hash,

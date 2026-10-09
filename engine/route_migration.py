@@ -9,7 +9,7 @@ from pathlib import Path
 import tomllib
 from typing import Mapping
 
-from lib.migration import (
+from engine.migration import (
     CurriculumContract,
     HistoryMerge,
     MigrationError,
@@ -21,8 +21,8 @@ from lib.migration import (
     apply_migration,
     parse_state_for_contract,
 )
-from lib.state import dump_state
-from lib.workspace import (
+from engine.state import dump_state
+from engine.workspace import (
     WorkspaceError,
     _scan_regular_tree,
     archive_and_remove_workspaces,

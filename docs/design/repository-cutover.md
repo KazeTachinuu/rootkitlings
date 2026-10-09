@@ -62,8 +62,8 @@ Generated L, M and C serials remain route labels rather than filesystem identiti
 ## Namespace decisions
 
 - Keep `rootkitlings`, `course.toml`, `curriculum`, `vm`, `scripts`, `tests` and `docs`.
-- Move the Python course engine from the generic `lib/` name to `engine/`.
-- Move the guest assertion library from `lib/check.sh` to `vm/checks/lib.sh`.
+- Keep the Python course engine under `engine/`.
+- Keep the guest assertion library at `vm/checks/lib.sh`.
 - Move guest verification programs from the generic `tools/` name to `vm/tools/`.
 - Remove the temporary `rNN-` and `mNN-` directory prefixes when bundles move to their stable IDs.
 - Remove implementation-status documents after their durable decisions exist in metadata, tests and concise architecture documentation.
@@ -98,7 +98,7 @@ If several such files are added, place them in one tracked `references/` directo
 5. Adopt the v3 `course.toml`, bundled-asset validation, README, links and compile-database discovery together.
 6. Validate the new catalog, every reference solution, migration from representative old states, a clean checkout and the learner CLI.
 7. Remove the five legacy content trees explicitly with `git rm`.
-8. In a separate mechanical commit, move `lib/*.py`, `lib/check.sh` and `tools/` to their final namespaces and update every consumer.
+8. In a separate mechanical commit, move `tools/` to its final namespace and update every consumer.
 9. Consolidate durable research and architecture decisions, then delete temporary implementation and migration documents.
 10. Search for every stale path and run both quick and full validation.
 
@@ -110,7 +110,7 @@ It must not use a broad cleanup command or infer that an untracked path is dispo
 The final check must include:
 
 ```sh
-rg -n 'lings/|capstones/|curriculum/(templates|support|solutions|incubator)|lib/check\.sh|tools/' \
+rg -n 'lings/|capstones/|curriculum/(templates|support|solutions|incubator)|tools/' \
   README.md Makefile course.toml rootkitlings curriculum docs engine scripts tests vm
 git status --short
 make validate-quick

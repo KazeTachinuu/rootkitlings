@@ -58,7 +58,7 @@ The R08 matrix proves exact sequential, burst, concurrent, and switch-race accou
 
 The M00 matrix proves that both producers share one capacity-one admission point, validates `EACCES` and `EAGAIN`, derives its completion bound from observed admissions and timer firings, exercises blocked and active unload, traces state cleanup on failures, checks two load cycles, and leaves no worker or kernel warning.
 
-The three checks that trace state rollback share one allocation-tracing helper in `lib/check.sh`; the event lessons do not carry copied trace parsers.
+The three checks that trace state rollback share one allocation-tracing helper in `vm/checks/lib.sh`; the event lessons do not carry copied trace parsers.
 
 ## Public adoption boundary
 

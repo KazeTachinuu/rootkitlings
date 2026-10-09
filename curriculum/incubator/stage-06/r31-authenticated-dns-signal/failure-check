@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /lib/check.sh
+. /vm/checks/lib.sh
 
 expected=${1:-22}
 label=${2:-Rejected unfinished authenticated DNS signal}

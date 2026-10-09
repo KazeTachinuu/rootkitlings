@@ -3,9 +3,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from lib.catalog import VerificationCase
-from lib.verification import VerificationError, build_verification_cases
-from lib.workspace import materialize as real_materialize
+from engine.catalog import VerificationCase
+from engine.verification import VerificationError, build_verification_cases
+from engine.workspace import materialize as real_materialize
 
 
 class VerificationBuildTests(unittest.TestCase):
@@ -175,7 +175,7 @@ module:
                 (self.source / "main.c").write_text("changed\n", encoding="utf-8")
             return result
 
-        with patch("lib.verification.materialize", changing_materialize):
+        with patch("engine.verification.materialize", changing_materialize):
             with self.assertRaisesRegex(VerificationError, "changed while"):
                 with self.builds((self.case("pass", "pass"),)):
                     pass
@@ -192,7 +192,7 @@ module:
             self.case("first", "pass", value="one"),
             self.case("second", "pass", value="two"),
         )
-        with patch("lib.verification.materialize", changing_live_source):
+        with patch("engine.verification.materialize", changing_live_source):
             with self.builds(cases) as verification:
                 first, second = verification.outcomes
                 self.assertEqual(

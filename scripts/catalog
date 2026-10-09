@@ -10,9 +10,9 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(ROOT / "lib"))
+sys.path.insert(0, str(ROOT))
 
-from catalog import Catalog, CatalogError, QUERY_FIELDS  # noqa: E402
+from engine.catalog import Catalog, CatalogError, QUERY_FIELDS  # noqa: E402
 
 CATALOG_QUERY_FIELDS = QUERY_FIELDS | {"module_artifact"}
 

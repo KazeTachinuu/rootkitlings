@@ -3,12 +3,12 @@ import os
 import tempfile
 import unittest
 
-from lib.solutions import (
+from engine.solutions import (
     full_solution_tree,
     materialize_solution_tree,
     overlay_solution_tree,
 )
-from lib.workspace import WorkspaceError
+from engine.workspace import WorkspaceError
 
 
 class SolutionCompositionTests(unittest.TestCase):

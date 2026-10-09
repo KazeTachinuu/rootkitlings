@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /lib/check.sh
+. /vm/checks/lib.sh
 
 module=${1:?module basename argument is required}
 label=${2:?validation label argument is required}

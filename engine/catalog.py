@@ -8,22 +8,13 @@ from pathlib import Path, PurePosixPath
 import re
 import tomllib
 
-try:
-    from .solutions import (
-        SolutionTree,
-        full_solution_tree,
-        materialize_solution_tree,
-        overlay_solution_tree,
-    )
-    from .workspace import WorkspaceError
-except ImportError:  # scripts add lib/ directly to sys.path
-    from solutions import (
-        SolutionTree,
-        full_solution_tree,
-        materialize_solution_tree,
-        overlay_solution_tree,
-    )
-    from workspace import WorkspaceError
+from .solutions import (
+    SolutionTree,
+    full_solution_tree,
+    materialize_solution_tree,
+    overlay_solution_tree,
+)
+from .workspace import WorkspaceError
 
 
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")

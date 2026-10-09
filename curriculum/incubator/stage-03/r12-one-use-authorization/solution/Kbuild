@@ -1,7 +1,0 @@
-ROOTKITLINGS_FAIL_POINT ?= 0
-
-obj-m += rootkitlings.o
-rootkitlings-y := core/main.o core/state.o interface/proc.o \
-	privilege/credentials.o control/authorization.o
-ccflags-y += -I$(src)/include
-ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)

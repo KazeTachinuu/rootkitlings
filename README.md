@@ -71,7 +71,7 @@ curriculum/templates/    immutable starting code
 curriculum/support/      checks and progressive hints
 curriculum/solutions/    reference implementations
 .rootkitlings/work/      learner-owned working copies
-lib/ and scripts/        course engine and maintenance commands
+engine/ and scripts/     course engine and maintenance commands
 tools/ and vm/           guest helpers and disposable runtime
 ```
 
