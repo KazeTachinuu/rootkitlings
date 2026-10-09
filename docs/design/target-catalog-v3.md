@@ -65,7 +65,7 @@ An unused general competency is omitted rather than attached to L00 as a course-
 | L13 | `return-aware-syscall-telemetry` — Correlate an rmdir path with its result | S3 | `managed-kprobe` | `kretprobes`, `syscall-argument-decoding`, `nofault-user-copy`, `return-correlation` | `bounded-user-copy`, `action-control-switch`, `kernel-abi-contract`, `managed-hook-lifecycle` | instrumentation, detection | L30, L32 | adapt |
 | L14 | `cross-view-evidence` — Omit one live probe from a proc view | S4 | `managed-kprobe` | `cross-view-evidence`, `positive-negative-controls` | `proc-read`, `kprobes` | detection, concealment | implicit in L34–L39 | new |
 | L15 | `packed-directory-filter` — Filter packed directory records safely | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `packed-record-validation`, `overlap-safe-record-compaction`, `directory-cookie-preservation`, `false-eof-avoidance` | `kretprobes`, `nofault-user-copy`, `kernel-allocation`, `kernel-abi-contract`, `managed-hook-lifecycle`, `cross-view-evidence` | concealment, detection | L36 | adapt |
-| L16 | `bounded-rendered-filter` — Filter a bounded rendered result | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `read-view-filtering`, `bounded-rendered-filter` | `kretprobes`, `cross-view-evidence` | concealment, detection | L37 | adapt |
+| L16 | `bounded-rendered-filter` — Replace bytes in one bounded read result | S4 | `return-aware-syscall-telemetry`, `cross-view-evidence` | `bounded-rendered-filter`, `binary-safe-equal-width-replacement`, `inode-identity-selection` | `kretprobes`, `nofault-user-copy`, `kernel-abi-contract`, `managed-hook-lifecycle`, `cross-view-evidence` | concealment, detection | L37 | adapt |
 | L17 | `hostile-packet-lengths` — Parse hostile packet lengths before touching payload | S5 | — | `packet-length-validation`, `network-byte-order-policy` | `ipv4-packet-basics` | networking, detection | fragments in L41/L42/L44/L46 | new |
 | L18 | `safe-skb-access` — Read an sk_buff without assuming linear storage | S5 | `hostile-packet-lengths` | `skb-safe-access`, `nonlinear-packet-access` | `packet-length-validation` | networking | hidden in current scaffolds | new |
 | L19 | `netfilter-observer` — Register a non-disruptive Netfilter observer | S5 | `safe-skb-access`, `proc-publication` | `netfilter-hooks`, `accept-by-default-observation`, `netfilter-callback-constraints` | `resource-ownership`, `skb-safe-access` | networking, instrumentation, detection | L40 | adapt |
@@ -170,6 +170,8 @@ Add these genuinely new concepts:
 - `directory-cookie-preservation`
 - `false-eof-avoidance`
 - `bounded-rendered-filter`
+- `binary-safe-equal-width-replacement`
+- `inode-identity-selection`
 - `packet-length-validation`
 - `network-byte-order-policy`
 - `skb-safe-access`
@@ -239,11 +241,10 @@ The removed `module-view-suppression` checkpoint receives no replacement alias.
 
 No complete target asset set currently exists for the redesigned route.
 
-- Independently validated incubation assets exist for L00 through L14 and for M00 and M01.
-- L15 has an implemented incubation asset awaiting independent audit.
+- Independently validated incubation assets exist for L00 through L16 and for M00 and M01.
 - These assets are not yet the public route or final metadata.
 
-- L16 through L30 still require target assets satisfying their contracts.
+- L17 through L30 still require target assets satisfying their contracts.
 - M02, M03, and the final capstone still require cumulative checks, hints, and
   sparse solution overlays on the declared project lineage.
 - The authenticated DNS signal source lacks the required replay-safe state machine.

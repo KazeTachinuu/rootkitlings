@@ -1,6 +1,6 @@
 # Stage 4 architecture
 
-Status: R15 is independently validated; R16 is implemented and awaits independent audit.
+Status: R15 through R17 are independently validated.
 
 ## Module-list decision
 
@@ -53,3 +53,60 @@ Guest verification uses raw `getdents64()` rather than `ls` alone.
 It compares direct lookup, proc-root enumeration, an unrelated directory, Kprobe registry state, exact status, small read behavior, cookie seeks, isolated all-match progress, oversized fail-open behavior, concurrency, enable/disable, rollback, unload, and reload.
 
 Primary implementation sources are Linux v7.2 `fs/readdir.c`, `include/linux/dirent.h`, `kernel/kprobes.c`, `Documentation/trace/kprobes.rst`, `include/linux/uaccess.h`, and `fs/proc/root.c`.
+
+## R17: bounded read-result replacement
+
+Public alias: L16.
+Stable ID: `bounded-rendered-filter`.
+Title: Replace bytes in one bounded read result.
+Direct prerequisites: `return-aware-syscall-telemetry` and `cross-view-evidence`.
+
+The learner owns only `instrumentation/replace.c`.
+Its allocation-free helper scans a byte buffer without string termination, replaces complete non-overlapping equal-width patterns, and returns the occurrence count.
+Zero width and widths larger than the result change nothing.
+A match advances by the full width, so replacement bytes are not scanned again.
+
+The supplied integration opens `/tmp/rootkitlings-read-target` during initialization, retains its inode, and closes the temporary file.
+Hard links and renames therefore remain selected, while a new inode created at the original path is not selected until reload.
+It registers a 32-instance named return probe on the Linux v7.2 `vfs_read()` ABI.
+Each instance stores the user buffer and a 512-byte scratch buffer; probe callbacks allocate nothing.
+
+Only a positive actual result of at most 512 bytes is copied without faults and passed to the learner helper.
+The request size does not decide eligibility.
+A result larger than 512 bytes is unchanged and increments `oversize_results`.
+A pattern split across separate results is unchanged.
+Zero matches avoid copy-back.
+Successful copy-back adds the occurrence count to `redactions`.
+Either copy failure increments `copy_failures`, returns `-EFAULT`, and adds no redactions.
+Copy-back remains nontransactional if userspace changes its mapping concurrently.
+
+The read-only `/proc/rootkitlings` endpoint reports:
+
+```text
+limit=512
+redactions=N
+oversize_results=N
+copy_failures=N
+return_capacity=32
+returns_missed=N
+```
+
+The Kretprobe reserves an instance before its entry handler rejects unrelated files, so `returns_missed` can include unrelated `vfs_read()` calls.
+The module has no control toggle.
+
+This mechanism changes only the `vfs_read()` result path.
+Ordinary `read` and `pread64` use that path on the pinned kernel.
+Vectored reads, memory mappings, `sendfile`, splice and copy paths, in-kernel reads, and results over the limit remain independent views of the original bytes.
+It is neither access control nor reliable concealment.
+
+Acquisition order is retained inode, return probe, then proc publication.
+Release and rollback use the exact reverse order.
+Separate failures cover preflight rejection, a missing path, a missing probe target, proc publication, copy-in, and copy-out.
+
+Host verification runs the learner helper under address and undefined-behavior sanitizers.
+It covers every length through 512, embedded NUL bytes, first, last, adjacent and overlapping candidates, alternate patterns and widths, red zones, guard pages, generated reference cases, and replacement text containing the pattern.
+Hostile mutations prove that string-only, hard-coded, off-by-one, overlapping, rescanning, and out-of-range implementations are rejected.
+
+Guest verification exercises raw `read`, `pread64`, `readv`, `preadv`, mapping, and `sendfile` paths; binary data; exact 512- and 513-byte results; a short result from a large request; split patterns; inode identity; deterministic copy failures; exact proc reads; registry state; concurrency; unload; and reload.
+
+Primary implementation sources are Linux v7.2 `fs/read_write.c`, `fs/splice.c`, `mm/filemap.c`, `mm/maccess.c`, `include/linux/kprobes.h`, `kernel/kprobes.c`, `Documentation/trace/kprobes.rst`, and `arch/x86/include/asm/ptrace.h`.
