@@ -1,0 +1,41 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "@LABEL@"
+
+target=/tmp/rootkitlings-read-target
+endpoint=/proc/rootkitlings
+registry=/sys/kernel/debug/kprobes/list
+printf 'SECRET\n' > "$target"
+
+probe_count()
+{
+	awk '$2 == "r" { split($3, name, "+"); if (name[1] == "vfs_read") count++ }
+		END { print count + 0 }' "$registry"
+}
+
+before=$(probe_count)
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	if module_load_test /rootkitlings/rootkitlings.ko @EXPECTED_ERRNO@; then
+		_ok "attempt $attempt returned errno @EXPECTED_ERRNO@"
+	else
+		_fail "attempt $attempt returned the wrong error"
+	fi
+	assert_absent /sys/module/rootkitlings
+	assert_absent "$endpoint"
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_fail "attempt $attempt left rootkitlings in /proc/modules"
+	else
+		_ok "attempt $attempt leaves no loaded module"
+	fi
+	if [ "$(probe_count)" -eq "$before" ]; then
+		_ok "attempt $attempt leaves no return probe"
+	else
+		_fail "attempt $attempt leaked a return probe"
+	fi
+	attempt=$((attempt + 1))
+done
+
+summary

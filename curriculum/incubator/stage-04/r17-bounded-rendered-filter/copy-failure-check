@@ -1,0 +1,48 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Deterministic no-fault copy failure"
+
+endpoint=/proc/rootkitlings
+target=/tmp/rootkitlings-read-target
+original=534543524554
+expected='limit=512
+redactions=0
+oversize_results=0
+copy_failures=1
+return_capacity=32
+returns_missed=0'
+
+cleanup()
+{
+	if test -d /sys/module/rootkitlings; then
+		rmmod rootkitlings 2>/dev/null || true
+	fi
+	rm -f "$target" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+read_result_test write "$target" "$original"
+load rootkitlings.ko
+assert_loaded rootkitlings
+if read_result_test error read "$target" 14; then
+	_ok "injected copy failure changes the selected read to EFAULT"
+else
+	_fail "injected copy failure did not return EFAULT"
+fi
+if [ "$(cat "$endpoint")" = "$expected" ]; then
+	_ok "copy failure increments only copy_failures"
+else
+	_fail "copy failure status is incorrect"
+	cat "$endpoint" >&2
+fi
+if read_result_test check mmap "$target" 0 6 "$original"; then
+	_ok "copy failure does not change the file on disk"
+else
+	_fail "underlying file bytes changed"
+fi
+unload rootkitlings
+assert_absent "$endpoint"
+
+summary
