@@ -1,0 +1,91 @@
+schema_version = 2
+id = "authenticated-dns-signal"
+title = "Emit an authenticated DNS-shaped signal"
+stage = "authenticated-operations"
+kind = "lesson"
+status = "required"
+tradecraft = ["networking", "cryptography", "detection"]
+difficulty = "advanced"
+prerequisites = ["cross-view-evidence", "kernel-socket-ownership", "authenticated-replay-safe-message"]
+teaches = ["authenticated-dns-signals", "paired-network-detection"]
+requires = ["cross-view-evidence", "socket-lifecycle", "dns-wire-encoding", "hmac-authentication", "replay-resistant-state"]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "core/main.c", "crypto/platform.c", "include/authenticated.h", "include/authenticated_dns.h", "include/dns_query.h", "include/platform.h", "include/selftest.h", "include/transport.h", "message/authenticated.c", "signal/authenticated_dns.c", "tests/selftest.c", "transport/udp.c", "wire/dns_query.c"]
+editable = ["signal/authenticated_dns.c"]
+build = "."
+baseline = "scaffold"
+parent = "authenticated-replay-safe-message"
+module_artifact = "rootkitlings.ko"
+source = "curriculum/incubator/stage-06/r31-authenticated-dns-signal/starter-overlay"
+
+[resources]
+readme = "curriculum/incubator/stage-06/r31-authenticated-dns-signal/README.md"
+check = "curriculum/incubator/stage-06/r31-authenticated-dns-signal/success-check"
+host_check = "curriculum/incubator/stage-06/r31-authenticated-dns-signal/host-check"
+hint = "curriculum/incubator/stage-06/r31-authenticated-dns-signal/hint"
+solution = "curriculum/incubator/stage-06/r31-authenticated-dns-signal/solution-overlay"
+
+[verification]
+timeout_seconds = 360
+capabilities = []
+tools = ["module-load-test", "module-load-params"]
+cleanup_required = true
+
+[[verification.cases]]
+id = "authenticated-dns-signal"
+label = "Authenticated DNS-shaped signal"
+expect_build = "pass"
+check = "curriculum/incubator/stage-06/r31-authenticated-dns-signal/success-check"
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "invalid-status"
+label = "Reject an out-of-range signal status"
+expect_build = "pass"
+check = "curriculum/incubator/stage-06/r31-authenticated-dns-signal/invalid-parameter-check"
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "context-allocation-failure"
+label = "Signal authentication context allocation failure"
+expect_build = "pass"
+check = "curriculum/incubator/stage-06/r31-authenticated-dns-signal/failure-check"
+build_output_contains = ""
+check_arguments = ["12", "Signal authentication context allocation failure"]
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "1"
+
+[[verification.cases]]
+id = "key-setup-failure"
+label = "Signal HMAC key setup failure"
+expect_build = "pass"
+check = "curriculum/incubator/stage-06/r31-authenticated-dns-signal/failure-check"
+build_output_contains = ""
+check_arguments = ["129", "Signal HMAC key setup failure"]
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "2"
+
+[[verification.cases]]
+id = "digest-failure"
+label = "Signal HMAC calculation failure"
+expect_build = "pass"
+check = "curriculum/incubator/stage-06/r31-authenticated-dns-signal/failure-check"
+build_output_contains = ""
+check_arguments = ["5", "Signal HMAC calculation failure"]
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "3"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+check = ""
+build_output_contains = "must be between 0 and 3"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "99"
