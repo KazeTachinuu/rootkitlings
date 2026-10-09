@@ -108,8 +108,6 @@ One `READ_ONCE()` decides whether `root` is admitted.
 An admitted replacement may complete while another task disables future actions.
 `disable` is not a barrier that waits for an admitted write.
 
-The next lesson adds one-use authorization around this unchanged credential replacement function.
-
 ## Your task
 
 Edit only `privilege/credentials.c`.

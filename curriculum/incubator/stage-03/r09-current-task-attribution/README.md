@@ -20,7 +20,7 @@ An open descriptor can be inherited by another process or shared with another th
 Use `task_pid_nr(current)` for `reader_tid`.
 This reports the kernel thread ID of the executing task, so two threads in one process have distinct values.
 Do not use the process-wide TGID.
-The next lesson handles namespace-relative identity; this lesson deliberately uses `task_pid_nr()`.
+This exercise does not translate the ID into the proc opener's PID namespace.
 
 Use `get_task_comm()` to copy the command name into a local `char reader_comm[TASK_COMM_LEN]` array.
 Do not read `current->comm` directly.

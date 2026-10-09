@@ -36,7 +36,7 @@ worker_runs=7
 
 `timer_fires` counts timer callbacks whether actions are enabled or disabled.
 `worker_runs` counts actions completed by the kernel thread.
-In this milestone, one `worker_runs` increment is the complete observable action; later lessons can replace it with work that may block.
+One `worker_runs` increment is the complete observable action in this milestone.
 
 ## One pending request
 
@@ -117,7 +117,7 @@ Complete the marked integration points in:
 - `execution/worker.c`
 - `execution/scheduler.c`
 
-The function names, task name, timer interval, command grammar, and failure point are already scaffolded.
+The function names, task name, timer interval, command grammar, and failure point are supplied.
 Do not add allocation, delays, logging, context predicates, a workqueue, or another request path.
 
 Run:

@@ -25,7 +25,8 @@ If procfs publication fails after state creation, the init callback must destroy
 It publishes the entry with `proc_create_single()` and removes the entry with `proc_remove()`.
 
 The supplied show function returns one fixed line, `active`, so the read-only entry has real behavior from the moment it appears.
-This lesson owns publication and cleanup; the next lesson changes that fixed line into a bounded snapshot of module state.
+This lesson owns publication and cleanup.
+State snapshots are outside this exercise.
 
 ## Failure point 3
 

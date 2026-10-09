@@ -103,7 +103,7 @@ Later checkpoints must unwind acquired resources inside init before returning an
 R03 adds `include/rootkit.h` and `core/state.c` through additive inheritance.
 It immediately uses both files; neither is a scaffold for future work.
 
-The header exposes an incomplete type and the permanent state API:
+The header exposes an incomplete type and the stable state API:
 
 ```c
 struct rk_state;
@@ -133,7 +133,7 @@ The check requires the exact `-ENOMEM` loader failure, no module artifact, no ob
 ## R04: procfs entry publication and reverse rollback
 
 R04 additively introduces `interface/proc.c` and immediately links and calls it.
-The header gains the permanent publication API:
+The header gains the stable publication API:
 
 ```c
 __must_check int rk_proc_publish(void);
