@@ -117,7 +117,7 @@ if command -v busybox >/dev/null; then
 	for applet in bc cat chmod cmp cut dd diff dmesg echo find grep head hexdump id \
 		ifconfig insmod kill ls lsmod mkdir modinfo mount nc ping poweroff printf ps \
 		reboot rm rmdir rmmod sed setsid sh sha256sum sleep sort stat tail test touch tr \
-		uname unshare wc xxd od; do
+		uname unshare wc xargs xxd od; do
 		grep -qx "$applet" <<< "$busybox_applets" || missing_applets+=" $applet"
 	done
 	if [[ -z $missing_applets ]]; then
