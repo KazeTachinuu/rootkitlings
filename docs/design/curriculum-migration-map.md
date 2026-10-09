@@ -77,7 +77,7 @@ Course-entry diagnostic
 |
 +-- Stage 2: Control and resident execution
 |   +-- R05-R08
-|   `-- M00 Controlled resident core
+|   `-- M00 Unify timed and requested work
 |
 +-- Stage 3: Identity, authorization and observation
 |   +-- R09-R15
@@ -195,22 +195,30 @@ Knowledge already reached through one of those dependencies is not repeated.
 #### R06 - Enable and disable module actions through procfs
 
 - Teaches: bounded userspace copy, copy-validate-commit, exact `enable` and
-  `disable` commands, atomic state transitions, and choosing the invariant that
-  the switch protects.
+  `disable` commands, one-copy Boolean access with `READ_ONCE()` and
+  `WRITE_ONCE()`, and choosing the invariant that the switch protects.
 - Produces: a root-only control switch consumed by later module actions.
 - Requires: R05.
 - Defensive evidence: exact state reads before and after valid commands;
   rejection of empty, oversized, partial, trailing, embedded-NUL, and unknown
   inputs without state mutation; and concurrent toggles that preserve the
   binary state invariant.
-- Current sources: L11 supplies the userspace boundary, L20 supplies the atomic
-  scalar operation, and C00 supplies the fixed control use case.
+- Scope: the switch is independent Boolean state, so concurrent writers may use
+  last-writer-wins semantics without coupling it to another field.
+  `READ_ONCE()` and `WRITE_ONCE()` force one compiler-visible scalar access;
+  they are not atomic read-modify-write operations or a general ordering primitive.
+- Current sources: L11 supplies the userspace boundary and C00 supplies the fixed
+  control use case.
 
 #### R07 - Defer timer work to a worker
 
-- Teaches: timer callbacks cannot sleep; the callback reads only bounded atomic
-  state and queues work; the worker performs sleep-capable work; publication,
-  synchronous cancellation, and flush ordering close both lifetimes.
+- Teaches: timer callbacks cannot sleep; the callback reads the Boolean gate,
+  advances its single-writer `unsigned long` counter, and queues work; the worker
+  performs sleep-capable work and advances its own single-writer counter;
+  publication, synchronous cancellation, and flush ordering close both lifetimes.
+- Concurrency: readers use `READ_ONCE()` for the gate and counters.
+  No learner-authored atomic read-modify-write operation is needed because each
+  counter has exactly one writer.
 - Produces: a periodic sleep-capable scheduler.
 - Requires: R06.
 - Defensive evidence: measured ticks, no work after unload, and unload while work is
@@ -220,22 +228,27 @@ Knowledge already reached through one of those dependencies is not repeated.
 #### R08 - Run and stop an event-driven kernel thread
 
 - Teaches: thread creation and pointer errors, wait queues, condition-loop waiting,
-  publish-before-wake, stop checks, wakeup, join, and the local rule that the
-  thread may sleep between events.
+  the first genuine atomic read-modify-write operation, capacity-one event
+  admission, publish-before-wake, stop checks, wakeup, join, and the local rule
+  that the thread may sleep between events.
 - Produces: the resident worker.
 - Requires: R06.
-- Defensive evidence: task inventory, event consumption, stop while blocked, and
-  disappearance after unload.
-- Current sources: L19 and L23; L12's real pointer-error application is reinforced
-  here.
+- Defensive evidence: exactly one of two concurrent requests is admitted, the
+  other receives the declared busy result, one event is consumed, stop while
+  blocked completes, and the task disappears after unload.
+- Current sources: L19, L20, and L23; L12's real pointer-error application is
+  reinforced here.
 
-#### M00 - Controlled resident core
+#### M00 - Unify timed and requested work
 
 Merge the useful integration work of C00 and C01.
-The shared control switch gates the scheduler and resident worker.
-Periodic work updates status; the worker accepts a fixed wake event; both actions stop when disabled and unload cleanly.
+The Boolean control switch gates both producers.
+The timer callback and a fixed proc command submit to one capacity-one atomic request path, and the resident thread consumes admitted requests.
+The integrated result has no workqueue: L07 taught timer-to-workqueue deferral as an isolated callback-boundary mechanism, while M00 reuses the bounded timer producer and gives all sleep-capable work to the already-owned thread.
+Both producers stop when disabled and unload closes the timer, request, wake, and thread lifetimes cleanly.
 Requires R07 and R08 directly.
-This extends the cumulative R04 project, not a fresh scaffold.
+M00 starts from the learner's passed R04 cumulative snapshot.
+R06-R08 are separate practice workspaces, so the learner applies their mechanisms to that project; the engine does not merge those workspaces automatically.
 
 ### Stage 3: Identity, authorization and observation
 
@@ -603,12 +616,12 @@ This table is exhaustive.
 | L17 | Merge | R07 | Timer exists to motivate context deferral. |
 | L18 | Merge | R07 | Workqueue completes the timer/context mechanism. |
 | L19 | Merge | R08 | Resident thread plus wait/stop lifecycle is the meaningful unit. |
-| L20 | Merge | R06 | Atomic scalar state implements the action switch. |
+| L20 | Merge | R08 | Atomic read-modify-write implements capacity-one event admission. |
 | L21 | Optional | E04 | Completion is useful but has no required downstream consumer. |
 | L22 | Merge | R12 | Mutex protection is taught where a real multi-field one-use invariant needs it. |
 | L23 | Merge | R08 | Wait queue is part of the event-driven worker lifecycle. |
 | C00 | Merge | R06/M00 | Its bounded fixed control is taught in R06 and integrated with resident actions in M00. |
-| C01 | Merge | M00 | Scheduler belongs to the same controlled resident core. |
+| C01 | Merge | M00 | Timer scheduling feeds the unified capacity-one request path. |
 | C02 | Optional | E04 | Strong concurrency synthesis, but not consumed by the required route. |
 | L24 | Refactor | R09 | Caller attribution remains explicit before credentials. |
 | L25 | Refactor | R10 | Credential vocabulary and namespaces require their own contract. |

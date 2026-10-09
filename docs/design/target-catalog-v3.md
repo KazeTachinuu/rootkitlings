@@ -54,9 +54,9 @@ An unused general competency is omitted rather than attached to L00 as a course-
 | L02 | `owned-kernel-state` — Build and own private heap state | S1 | `precise-init-failure` | `multi-file-modules`, `component-ownership`, `kernel-allocation`, `error-pointers`, `pointer-invalidation` | `module-build`, `init-failure`, `errno-propagation`, `build-time-failure-injection`, `c-pointers-and-structs` | lifecycle, detection | L02, L07, L12 | adapt |
 | L03 | `proc-publication` — Publish and roll back a procfs entry | S1 | `owned-kernel-state` | `initialization-rollback`, `resource-ownership`, `proc-entry`, `proc-publication-lifetime` | `init-failure`, `errno-propagation`, `component-ownership`, `kernel-allocation`, `error-pointers`, `pointer-invalidation`, `build-time-failure-injection` | lifecycle, control, detection | L08, L09 | adapt |
 | L04 | `proc-read-contract` — Read module state through procfs | S2 | `proc-publication` | `proc-read`, `bounded-read-contract` | `proc-entry`, `component-ownership`, `proc-publication-lifetime` | control, detection | L10 | adapt |
-| L05 | `bounded-control-switch` — Enable and disable module actions through procfs | S2 | `proc-read-contract` | `proc-write`, `bounded-user-copy`, `copy-validate-commit`, `fixed-command-grammar`, `atomic-operations`, `state-invariant-selection`, `action-control-switch` | `proc-read`, `bounded-read-contract`, `component-ownership`, `proc-publication-lifetime` | control | L11, L20, C00 | adapt |
-| L06 | `timer-workqueue-scheduler` — Defer timer work to a worker | S2 | `bounded-control-switch` | `kernel-timers`, `workqueues`, `timer-to-worker-deferral`, `deferred-work-lifecycle` | `resource-ownership`, `atomic-operations`, `action-control-switch`, `state-invariant-selection` | execution, lifecycle | L17, L18 | adapt |
-| L07 | `event-driven-kernel-thread` — Run and stop an event-driven kernel thread | S2 | `bounded-control-switch` | `kernel-threads`, `wait-queues`, `worker-stop-lifecycle` | `error-pointers`, `action-control-switch`, `state-invariant-selection` | execution, lifecycle | L19, L23, part of L12 | adapt |
+| L05 | `bounded-control-switch` — Enable and disable module actions through procfs | S2 | `proc-read-contract` | `proc-write`, `bounded-user-copy`, `copy-validate-commit`, `fixed-command-grammar`, `read-once-write-once`, `state-invariant-selection`, `action-control-switch` | `proc-read`, `bounded-read-contract`, `component-ownership`, `proc-publication-lifetime` | control | L11, C00 | adapt |
+| L06 | `timer-workqueue-scheduler` — Defer timer work to a worker | S2 | `bounded-control-switch` | `kernel-timers`, `workqueues`, `timer-to-worker-deferral`, `deferred-work-lifecycle` | `resource-ownership`, `read-once-write-once`, `action-control-switch`, `state-invariant-selection` | execution, lifecycle | L17, L18 | adapt |
+| L07 | `event-driven-kernel-thread` — Run and stop an event-driven kernel thread | S2 | `bounded-control-switch` | `kernel-threads`, `wait-queues`, `atomic-operations`, `bounded-event-admission`, `worker-stop-lifecycle` | `error-pointers`, `read-once-write-once`, `action-control-switch`, `state-invariant-selection` | execution, lifecycle | L19, L20, L23, part of L12 | adapt |
 | L08 | `current-task-attribution` — Attribute an operation to the current task | S3 | `proc-read-contract` | `current-task`, `task-attribution` | `proc-read`, `linux-process-basics` | instrumentation, detection | L24 | adapt |
 | L09 | `linux-credential-model` — Interpret Linux credentials correctly | S3 | `current-task-attribution` | `task-credentials`, `namespace-id-translation` | `current-task`, `linux-identity-basics` | privilege, detection | L25 | adapt |
 | L10 | `transactional-credential-replacement` — Replace credentials transactionally | S3 | `bounded-control-switch`, `linux-credential-model` | `credential-replacement` | `kernel-allocation`, `copy-validate-commit`, `task-credentials` | privilege | L26 | adapt |
@@ -87,7 +87,7 @@ An unused general competency is omitted rather than attached to L00 as a course-
 
 | Alias | Stable ID / title | Stage | Direct prerequisites | Teaches | Requires | Tradecraft | Sources | Assets |
 |---|---|---|---|---|---|---|---|---|
-| M00 | `controlled-resident-core` — Controlled resident core | S2 | `timer-workqueue-scheduler`, `event-driven-kernel-thread` | `resident-core-integration` | `action-control-switch`, `atomic-operations`, `state-invariant-selection`, `fixed-command-grammar`, `deferred-work-lifecycle`, `worker-stop-lifecycle` | control, execution, lifecycle | C00, C01 | new |
+| M00 | `controlled-resident-core` — Unify timed and requested work | S2 | `timer-workqueue-scheduler`, `event-driven-kernel-thread` | `resident-core-integration` | `action-control-switch`, `read-once-write-once`, `fixed-command-grammar`, `kernel-timers`, `atomic-operations`, `bounded-event-admission`, `worker-stop-lifecycle` | control, execution, lifecycle | C00, C01 | new |
 | M01 | `authorized-actions-telemetry` — Authorized actions and telemetry | S3 | `controlled-resident-core`, `one-use-authorization`, `return-aware-syscall-telemetry` | `spinlocked-event-ring`, `authorized-telemetry-integration` | `resident-core-integration`, `one-use-authorization`, `return-correlation` | privilege, instrumentation, detection | C03, C04 | new |
 | M02 | `concealment-evidence-map` — Concealment with an evidence map | S4 | `authorized-actions-telemetry`, `packed-directory-filter` | `ghost-process-view`, `machine-readable-evidence-map` | `authorized-telemetry-integration`, `directory-filtering`, `cross-view-evidence` | concealment, detection | C05 | new |
 | M03 | `remote-resident-agent` — Remote resident agent | S5 | `concealment-evidence-map`, `tcp-framing-cancellation`, `guarded-file-transaction` | `remote-agent-integration`, `boot-load-persistence` | `machine-readable-evidence-map`, `connect-back-agent`, `kernel-file-transactions` | control, networking, persistence, lifecycle | C07, C08 | new |
@@ -96,6 +96,8 @@ An unused general competency is omitted rather than attached to L00 as a course-
 `proc-publication` is the cumulative project root.
 Milestone workspace parents are `proc-publication → M00 → M01 → M02 → M03 → C00`.
 Workspace inheritance is separate from knowledge prerequisites.
+M00 therefore starts from the learner's passed `proc-publication` tree, not from any L05-L07 lesson workspace.
+Those lessons practice mechanisms separately; M00 asks the learner to apply them together and does not imply an automatic workspace merge.
 
 ## Elective tracks
 
@@ -142,6 +144,8 @@ Add these genuinely new concepts:
 - `action-control-switch`
 - `bounded-typed-parsing`
 - `state-invariant-selection`
+- `read-once-write-once` — label: One-copy shared scalar access; first taught: L05
+- `bounded-event-admission` — label: Bounded event admission; first taught: L07
 - `timer-to-worker-deferral`
 - `netfilter-callback-constraints`
 - `kernel-socket-context-constraints`

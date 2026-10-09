@@ -47,7 +47,8 @@ Authorized lab
 |   +-- execution contexts
 |   +-- timers and workqueues
 |   +-- kernel threads
-|   +-- atomics, mutexes and spinlocks
+|   +-- one-copy scalar access
+|   +-- atomic read-modify-write, mutexes and spinlocks
 |   +-- wait queues and completions
 |   +-- memory ordering
 |   +-- shutdown and callback quiescence
@@ -351,8 +352,8 @@ SYNC-07  Sleepable versus non-sleepable APIs
 SYNC-08  Preemption and SMP concurrency
 SYNC-09  Data race versus logical invariant
 SYNC-10  Lifetime race
-SYNC-11  READ_ONCE and WRITE_ONCE limitations
-SYNC-12  Atomic read-modify-write
+SYNC-11  READ_ONCE and WRITE_ONCE scalar access and limitations
+SYNC-12  Atomic read-modify-write and bounded event admission
 SYNC-13  Atomics protect one scalar, not a transaction
 SYNC-14  Mutexes and sleepable critical sections
 SYNC-15  Spinlocks and no-sleep critical sections
@@ -654,12 +655,16 @@ rootkit_main
 |
 +-- control
 |   +-- parser
-|   +-- atomic action switch
+|   +-- Boolean action gate
 |   +-- authorization
 |
 +-- scheduler
 |   +-- timer
-|   +-- workqueue
+|   +-- bounded timer producer
+|
++-- request path
+|   +-- capacity-one atomic admission
+|   +-- proc producer
 |
 +-- worker
 |   +-- thread

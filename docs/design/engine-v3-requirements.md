@@ -105,6 +105,11 @@ R04 is the cumulative project root.
 The first milestone derives from that declared root; later milestones and the final capstone use `previous-milestone` so isolated lessons between integrations do not silently become cumulative providers.
 Arbitrary earlier completion parents are too permissive and duplicate route structure.
 
+For M00, L05-L07 are knowledge prerequisites, not workspace providers.
+The learner starts with their own passed R04 tree and applies the separately practiced control, timer, and thread mechanisms to it.
+The resulting design unifies timer and proc producers behind one capacity-one atomic request path consumed by the resident thread; it does not retain L06's practice workqueue.
+This is ordinary `cumulative-root` materialization, not an automatic merge of lesson workspaces or a new engine feature.
+
 Required course schema:
 
 ```toml
@@ -322,6 +327,8 @@ Tests:
 
 - M01 resolves to M00's passed snapshot.
 - M00 resolves to the course-level cumulative root's passed snapshot.
+- M00 materialization contains the passed R04 tree and declared M00 additions,
+  never files copied from L05-L07 workspaces.
 - A missing cumulative-root snapshot blocks the first milestone.
 - A missing previous-milestone snapshot blocks materialization.
 - An elective pass cannot affect the next required milestone baseline.
