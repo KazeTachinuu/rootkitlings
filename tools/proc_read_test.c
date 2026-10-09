@@ -88,7 +88,7 @@ static int verify_reads(int fd, const unsigned char *expected,
 {
 	static const size_t first_pattern[] = { 1, 3, 2, 7, 4, 11 };
 	static const size_t second_pattern[] = { 5, 2, 9, 1, 13, 3 };
-	unsigned char buffer[13];
+	unsigned char buffer[17];
 	const size_t *pattern = first_pattern;
 	size_t pattern_length = sizeof(first_pattern) / sizeof(first_pattern[0]);
 	size_t offset = 0;
@@ -98,10 +98,11 @@ static int verify_reads(int fd, const unsigned char *expected,
 	for (pass = 0; pass < 2; pass++) {
 		while (offset < expected_length) {
 			size_t requested = pattern[step % pattern_length];
+			size_t remaining = expected_length - offset;
 			ssize_t count;
 
-			if (requested > expected_length - offset)
-				requested = expected_length - offset;
+			if (remaining <= requested)
+				requested = remaining + 1;
 			do {
 				count = read(fd, buffer, requested);
 			} while (count < 0 && errno == EINTR);
@@ -114,6 +115,18 @@ static int verify_reads(int fd, const unsigned char *expected,
 				fprintf(stderr,
 					"proc_read_test: %s reached EOF at byte %zu, expected %zu bytes\n",
 					phase, offset, expected_length);
+				return -1;
+			}
+			if ((size_t)count > requested) {
+				fprintf(stderr,
+					"proc_read_test: %s read returned %zd bytes for a %zu-byte request\n",
+					phase, count, requested);
+				return -1;
+			}
+			if ((size_t)count > remaining) {
+				fprintf(stderr,
+					"proc_read_test: %s returned content beyond the expected %zu bytes\n",
+					phase, expected_length);
 				return -1;
 			}
 			if (memcmp(buffer, expected + offset, (size_t)count) != 0) {
