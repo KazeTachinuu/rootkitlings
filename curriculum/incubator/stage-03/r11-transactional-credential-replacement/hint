@@ -1,0 +1,1 @@
+Prepare one complete credential from `&init_task`, return `-ENOMEM` for `NULL`, keep the supplied pre-commit abort path, and give the prepared reference directly to `commit_creds()` on success.

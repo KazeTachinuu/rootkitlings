@@ -35,7 +35,7 @@ module:
 tools: $(GUEST_TOOLS)
 
 tools/cred_trigger_test: tools/cred_trigger_test.c
-	$(CC) -static -o $@ $<
+	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
 
 tools/credential_snapshot_test: tools/credential_snapshot_test.c
 	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<

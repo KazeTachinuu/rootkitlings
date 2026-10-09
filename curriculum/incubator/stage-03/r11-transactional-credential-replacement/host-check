@@ -1,0 +1,191 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 3 )) || die "usage: ${0##*/} SUCCESS_DIR SUCCESS_ARTIFACT CANCEL_DIR"
+success_dir=$(realpath -e -- "$1" 2>/dev/null) || die "success directory not found: $1"
+success_artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
+cancel_dir=$(realpath -e -- "$3" 2>/dev/null) || die "cancel directory not found: $3"
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+"$here/../../stage-02/r06-control-switch/host-check" \
+	"$success_dir" "$success_artifact"
+
+for path in privilege/credentials.c privilege/credentials.o; do
+	[[ -f $success_dir/$path && ! -L $success_dir/$path ]] ||
+		die "success build is missing regular file: $path"
+done
+[[ -f $cancel_dir/privilege/credentials.o &&
+	! -L $cancel_dir/privilege/credentials.o ]] ||
+	die "cancel build is missing privilege/credentials.o"
+
+success_undefined=$(nm -u "$success_dir/privilege/credentials.o")
+for symbol in commit_creds init_task prepare_kernel_cred; do
+	grep -Eq "[[:space:]]$symbol$" <<< "$success_undefined" ||
+		die "success credentials object has no $symbol dependency"
+done
+if grep -Eq '[[:space:]]prepare_creds$' <<< "$success_undefined"; then
+	die "use a complete init-task credential, not a partial current-credential copy"
+fi
+
+cancel_undefined=$(nm -u "$cancel_dir/privilege/credentials.o")
+for symbol in abort_creds init_task prepare_kernel_cred; do
+	grep -Eq "[[:space:]]$symbol$" <<< "$cancel_undefined" ||
+		die "cancellation credentials object has no $symbol dependency"
+done
+if grep -Eq '[[:space:]]commit_creds$' <<< "$cancel_undefined"; then
+	die "the injected cancellation path must abort before publication"
+fi
+
+credentials_source=$success_dir/privilege/credentials.c
+credentials_text=$(tr '\n' ' ' < "$credentials_source")
+grep -Eq 'prepare_kernel_cred[[:space:]]*\([[:space:]]*&[[:space:]]*init_task[[:space:]]*\)' \
+	<<< "$credentials_text" ||
+	die "prepare a complete credential from &init_task"
+[[ $(grep -Eo '\bprepare_kernel_cred[[:space:]]*\(' <<< "$credentials_text" | wc -l) -eq 1 ]] ||
+	die "prepare exactly one replacement credential"
+[[ $(grep -Eo '\bcommit_creds[[:space:]]*\(' <<< "$credentials_text" | wc -l) -eq 1 ]] ||
+	die "commit exactly one prepared credential"
+[[ $(grep -Eo '\babort_creds[[:space:]]*\(' <<< "$credentials_text" | wc -l) -eq 1 ]] ||
+	die "the injected cancellation path must abort exactly once"
+
+mapfile -t credential_vars < <(
+	grep -oE 'struct[[:space:]]+cred[[:space:]]*\*[[:space:]]*[[:alpha:]_][[:alnum:]_]*' \
+		<<< "$credentials_text" | sed -E 's/.*\*[[:space:]]*//'
+)
+(( ${#credential_vars[@]} == 1 )) ||
+	die "keep exactly one prepared credential pointer local to the replacement function"
+credential_var=${credential_vars[0]}
+grep -Eq "rk_credentials_replace_current[[:space:]]*\([^)]*\)[[:space:]]*\{[^}]*struct[[:space:]]+cred[[:space:]]*\*[[:space:]]*${credential_var}" \
+	<<< "$credentials_text" ||
+	die "declare the prepared credential inside rk_credentials_replace_current"
+grep -Eq "${credential_var}[[:space:]]*=[[:space:]]*prepare_kernel_cred" \
+	<<< "$credentials_text" || die "store the prepared credential in the local pointer"
+grep -Eq "![[:space:]]*${credential_var}|${credential_var}[[:space:]]*==[[:space:]]*NULL|NULL[[:space:]]*==[[:space:]]*${credential_var}" \
+	<<< "$credentials_text" || die "check preparation for NULL"
+grep -Eq "commit_creds[[:space:]]*\([[:space:]]*${credential_var}[[:space:]]*\)" \
+	<<< "$credentials_text" || die "commit the prepared credential"
+grep -Eq "abort_creds[[:space:]]*\([[:space:]]*${credential_var}[[:space:]]*\)" \
+	<<< "$credentials_text" || die "abort the prepared credential on cancellation"
+
+if grep -Eq '\bprepare_creds[[:space:]]*\(' "$credentials_source"; then
+	die "do not copy the caller and mutate only selected identity fields"
+fi
+if grep -Eq -- '->[[:space:]]*(uid|euid|suid|fsuid|gid|egid|sgid|fsgid|user|user_ns|ucounts|group_info|securebits|cap_[[:alnum:]_]+)[[:space:]]*=' \
+	"$credentials_source"; then
+	die "install the complete init-task credential without field mutation"
+fi
+if grep -Eq '\b(current_cred|current_real_cred|override_creds|revert_creds|get_task_cred)[[:space:]]*\(' \
+	"$credentials_source"; then
+	die "do not read, override, or retain a published credential"
+fi
+if grep -Eq '\bstatic[[:space:]]+struct[[:space:]]+cred[[:space:]]*\*' \
+	"$credentials_source"; then
+	die "do not retain a prepared credential in static storage"
+fi
+
+header_text=$(tr '\n' ' ' < "$success_dir/include/rootkit.h")
+grep -Eq '__must_check[[:space:]]+int[[:space:]]+rk_credentials_replace_current[[:space:]]*\([[:space:]]*void[[:space:]]*\)' \
+	<<< "$header_text" || die "rootkit.h must expose the checked replacement helper"
+if grep -Eq 'struct[[:space:]]+cred' "$success_dir/include/rootkit.h" \
+	"$success_dir/core/state.c"; then
+	die "module state and public headers must not retain credential pointers"
+fi
+
+proc_source=$success_dir/interface/proc.c
+proc_text=$(tr '\n' ' ' < "$proc_source")
+proc_undefined=$(nm -u "$success_dir/interface/proc.o")
+for symbol in const_current_task from_kuid_munged from_kgid_munged \
+	init_user_ns rk_credentials_replace_current seq_escape_mem; do
+	grep -Eq "[[:space:]]$symbol$" <<< "$proc_undefined" ||
+		die "interface/proc.o has no $symbol dependency"
+done
+grep -Eq '[[:space:]](sized_strscpy|strscpy_pad)$' <<< "$proc_undefined" ||
+	die "interface/proc.o has no bounded task-name copy dependency"
+
+if grep -Eq -- '->[[:space:]]*(pid|tgid|comm)([^[:alnum:]_]|$)' <<< "$proc_text"; then
+	die "use task_pid_nr() and get_task_comm(), not raw task fields"
+fi
+if grep -Eq 'task_(tgid|pid_vnr|tgid_vnr|pid_nr_ns|tgid_nr_ns)[[:space:]]*\(' \
+	<<< "$proc_text"; then
+	die "reader_tid must remain a task_pid_nr() snapshot"
+fi
+mapfile -t task_vars < <(
+	grep -oE 'struct[[:space:]]+task_struct[[:space:]]*\*[[:space:]]*[[:alpha:]_][[:alnum:]_]*' \
+		<<< "$proc_text" | sed -E 's/.*\*[[:space:]]*//'
+)
+(( ${#task_vars[@]} == 1 )) || die "declare exactly one local task pointer"
+task_var=${task_vars[0]}
+grep -Eq "(^|[^[:alnum:]_])${task_var}[[:space:]]*=[[:space:]]*current[[:space:]]*;" \
+	<<< "$proc_text" || die "copy current into the local task pointer"
+grep -Eq "task_pid_nr[[:space:]]*\([[:space:]]*${task_var}[[:space:]]*\)" \
+	<<< "$proc_text" || die "snapshot the local task with task_pid_nr()"
+grep -Eq "get_task_comm[[:space:]]*\([^,]+,[[:space:]]*${task_var}[[:space:]]*\)" \
+	<<< "$proc_text" || die "snapshot the same task with get_task_comm()"
+for token in seq_escape_mem ESCAPE_NAP ESCAPE_APPEND ESCAPE_HEX; do
+	grep -Fq "$token" "$proc_source" || die "quoted task names require $token"
+done
+
+mapfile -t current_cred_calls < <(
+	grep -Eo '\bcurrent_cred[[:space:]]*\(' <<< "$proc_text" || true
+)
+(( ${#current_cred_calls[@]} == 1 )) ||
+	die "take exactly one current_cred() snapshot"
+mapfile -t read_credential_vars < <(
+	grep -oE 'const[[:space:]]+struct[[:space:]]+cred[[:space:]]*\*[[:space:]]*[[:alpha:]_][[:alnum:]_]*' \
+		<<< "$proc_text" | sed -E 's/.*\*[[:space:]]*//'
+)
+(( ${#read_credential_vars[@]} == 1 )) ||
+	die "declare exactly one local const credential pointer in the reader"
+read_credential_var=${read_credential_vars[0]}
+grep -Eq "${read_credential_var}[[:space:]]*=[[:space:]]*current_cred[[:space:]]*\(" \
+	<<< "$proc_text" || die "store current_cred() in the local const pointer"
+mapfile -t namespace_vars < <(
+	grep -oE 'struct[[:space:]]+user_namespace[[:space:]]*\*[[:space:]]*[[:alpha:]_][[:alnum:]_]*' \
+		<<< "$proc_text" | sed -E 's/.*\*[[:space:]]*//'
+)
+(( ${#namespace_vars[@]} == 1 )) ||
+	die "declare exactly one opener user-namespace pointer"
+namespace_var=${namespace_vars[0]}
+grep -Eq "${namespace_var}[[:space:]]*=[[:space:]]*seq_user_ns[[:space:]]*\(" \
+	<<< "$proc_text" || die "obtain the opener namespace with seq_user_ns()"
+for field in uid euid suid fsuid; do
+	grep -Eq "from_kuid_munged[[:space:]]*\([[:space:]]*${namespace_var}[[:space:]]*,[[:space:]]*${read_credential_var}->${field}[[:space:]]*\)" \
+		<<< "$proc_text" || die "translate the snapshot's $field in the opener namespace"
+done
+for field in gid egid sgid fsgid; do
+	grep -Eq "from_kgid_munged[[:space:]]*\([[:space:]]*${namespace_var}[[:space:]]*,[[:space:]]*${read_credential_var}->${field}[[:space:]]*\)" \
+		<<< "$proc_text" || die "translate the snapshot's $field in the opener namespace"
+done
+grep -Eq "${read_credential_var}->user_ns[[:space:]]*==[[:space:]]*&init_user_ns" \
+	<<< "$proc_text" || die "report the credential capability namespace"
+for field in cap_permitted cap_effective; do
+	grep -Eq "\(unsigned[[:space:]]+long[[:space:]]+long\)[[:space:]]*${read_credential_var}->${field}\.val" \
+		<<< "$proc_text" || die "render $field as fixed-width hexadecimal"
+done
+mapfile -t capability_formats < <(
+	grep -Eo '%016llx' <<< "$proc_text" || true
+)
+(( ${#capability_formats[@]} == 2 )) ||
+	die "render exactly two fixed-width capability fields"
+if grep -Eq '\bseq_put_hex_ll[[:space:]]*\(' <<< "$proc_text"; then
+	die "seq_put_hex_ll is not exported to external modules"
+fi
+
+grep -Eq 'proc_create_data[[:space:]]*\([[:space:]]*"rootkitlings"[[:space:]]*,[[:space:]]*0*666' \
+	<<< "$proc_text" || die "publish the educational endpoint with mode 0666"
+[[ $(grep -Ec '\brk_credentials_replace_current[[:space:]]*\(' "$proc_source") -eq 1 ]] ||
+	die "the exact root command must have one credential replacement call"
+grep -Eq 'rk_state_actions_enabled[[:space:]]*\(' "$proc_source" ||
+	die "check the action switch before replacing credentials"
+if grep -Eq '\b(prepare_creds|prepare_kernel_cred|commit_creds|abort_creds)[[:space:]]*\(' \
+	"$proc_source"; then
+	die "keep credential ownership in privilege/credentials.c"
+fi
+for command in enable disable root; do
+	grep -Fq "\"$command\"" "$proc_source" ||
+		die "proc parser is missing the exact $command command"
+done
+
+printf '[+] complete init-task replacement, abort path, gate, and task-local ownership verified\n'
