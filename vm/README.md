@@ -30,7 +30,7 @@ The default guest has only loopback.
 For an experiment that must reach QEMU's user-network services, request the optional capability explicitly:
 
 ```bash
-./rootkitlings run --cap network L40
+./rootkitlings run --cap network L19
 ```
 
 The guest then uses `10.0.2.15`; the host-side QEMU alias is `10.0.2.2`.
@@ -50,7 +50,7 @@ Request only the tools an exercise needs.
 The option is repeatable and accepts either an executable filename or a repository-relative path under `vm/tools/`:
 
 ```bash
-./vm/boot --tool cred_trigger_test --tool vm/tools/ioctl_test path/to/module.ko
+./vm/boot --tool netfilter_udp_test path/to/module.ko
 ```
 
 Requested tools are built first and copied to `/bin` in the guest.

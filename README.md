@@ -1,90 +1,109 @@
 # Rootkitlings
 
-Learn Linux kernel engineering and rootkit tradecraft by building small, observable modules.
+Build a Linux kernel rootkit one mechanism at a time.
 
-A **ling** is a focused lesson; a **capstone** integrates mechanisms already learned.
-The catalog currently contains 54 lings and 11 capstones in one metadata-defined route.
+The course has 31 lessons (`L00`–`L30`), four integration milestones
+(`M00`–`M03`), and one final challenge (`C00`). Each exercise adds one bounded
+mechanism or combines mechanisms already completed. Modules are built against
+the course kernel and loaded only in a disposable QEMU guest, never into the
+host kernel.
 
-All modules run against Linux 7.2.x in a disposable QEMU guest.
-Do not load them on the host.
+## Requirements
 
-The course assumes working C, Unix shell, Linux process/file, and basic networking knowledge.
-Run `./rootkitlings prereq L00` for the canonical course-entry list.
+Use an x86-64 Linux host with:
+
+- at least 2 GiB of memory and 4 GiB of free disk space;
+- Python 3.11 or newer, GCC, binutils, GNU Make, and the kernel build tools;
+- a statically linked BusyBox, `cpio`, `gzip`, QEMU, GDB, OpenSSL, and libelf
+  development files.
+
+`make doctor` checks the exact tools, BusyBox applets, static-link support, and
+capacity. It prints package hints for Arch, Debian/Ubuntu, and Fedora/RHEL
+families. KVM is optional; QEMU uses slower TCG emulation when KVM is not
+available. The host kernel version and headers are not used. Every exercise uses
+the pinned Linux 7.2.9 x86-64 guest defined in [`vm/kernel.toml`](vm/kernel.toml).
 
 ## Start
 
 ```sh
 make doctor
 ./rootkitlings setup
+./rootkitlings prereq L00
 ./rootkitlings read L00
 ./rootkitlings start L00
-$EDITOR .rootkitlings/work/module-lifecycle/hello.c
+# Edit the paths printed by start.
 ./rootkitlings check L00
 ```
 
-`make doctor` reports missing kernel artifacts, tools, and module dependencies.
-`setup` prepares the pinned kernel and verifies the disposable guest boundary.
-KVM is optional.
+`setup` builds the pinned kernel and verifies the guest boundary. `prereq` lists
+the exercises and concepts needed directly by the selected exercise. `read`
+explains the mechanism and task. `start` creates or reopens the workspace and
+prints its editable paths. `check` builds the module and runs its declared host
+and guest checks.
 
-## Work
+Exercise commands accept a serial such as `L19`, a stable ID such as
+`netfilter-observer`, or an unambiguous prefix. With no exercise argument, most
+commands use the current exercise.
 
-```text
-read the contract -> edit the printed path -> check in a clean VM
-        ^                                      |
-        +---------------- fix -----------------+
+```sh
+./rootkitlings status
+./rootkitlings list
+./rootkitlings hint
+./rootkitlings solution
 ```
-
-`read` gives the context, expected behavior, and exact task.
-`start` creates an isolated workspace and prints its path.
-`check` builds with warnings enabled, boots a fresh guest, exercises live behavior, and verifies cleanup.
-
-If you get stuck, `hint` gives a conceptual nudge and `solution` shows the reference implementation.
-`restore` archives edits and restores an exercise's starting files without changing progress.
-`reset` is the separate, explicit command for resetting course progress; resetting everything requires `reset --all --yes`.
-Run `./rootkitlings help` for the complete command list and `./rootkitlings list` for the metadata-backed route.
 
 ## Course
 
-| Stage | Focus |
-|-------|-------|
-| [Foundation](lings/00_foundation/README.md) | Module lifecycle, builds, memory, and rollback |
-| [Procfs](lings/01_procfs/README.md) | Entry lifetime and bounded text interfaces |
-| [Interfaces](lings/02_interfaces/README.md) | Errors, lists, devices, ioctl, and userspace helpers |
-| [Concurrency](lings/03_concurrency/README.md) | Timers, workers, threads, waits, and shared state |
-| [Introspection](lings/04_introspection/README.md) | Tasks, credentials, symbols, and randomness |
-| [Instrumentation](lings/05_instrumentation/README.md) | Probes, arguments, and hook lifecycle |
-| [Visibility](lings/06_visibility/README.md) | Altered views and independent evidence |
-| [Networking](lings/07_networking/README.md) | Packet paths, sockets, channels, and DNS framing |
-| [File I/O](lings/08_file_io/README.md) | Bounded durable updates and rollback |
-| [Cryptography](lings/09_crypto/README.md) | Obfuscation, encryption, authentication, and rendezvous |
+| Stage | Exercises | Outcome |
+|---|---:|---|
+| Module core | L00–L03 | Build and unload a module, return precise initialization errors, own private state, and publish procfs state with complete rollback. |
+| Control and execution | L04–L07, M00 | Expose bounded procfs controls and stop timers, workqueues, and event-driven threads without leaving work behind. |
+| Identity and observation | L08–L13, M01 | Attribute work to tasks, replace credentials transactionally, authorize one action, and pair probe entry data with return results. |
+| Views and detection | L14–L16, M02 | Filter procfs, packed directory records, and bounded read results while preserving an independent evidence view. |
+| Network state | L17–L25, M03 | Validate packet bounds, access and mutate socket buffers, own sockets and framed sessions, encode DNS names, and update one owned boot request transactionally. |
+| Authenticated operations | L26–L30, C00 | Choose the required protection property, verify hashes, reject replay, use authenticated encryption, and independently verify an authenticated resident agent. |
 
-[Capstones](capstones/README.md) appear in the route after their prerequisite mechanisms.
-They combine ownership, failure handling, concurrency, and defensive observation across several source files.
+Milestones are cumulative workspaces. They integrate only mechanisms taught by
+the preceding lessons. Run `./rootkitlings list` for the live route and
+`./rootkitlings prereq EXERCISE` for the direct dependency list.
 
-## Workspace
+## Recovery
 
-```text
-course.toml              route and controlled vocabularies
-lings/                   focused lesson contracts and metadata
-capstones/               integration contracts and metadata
-curriculum/templates/    immutable starting code
-curriculum/support/      checks and progressive hints
-curriculum/solutions/    reference implementations
-.rootkitlings/work/      learner-owned working copies
-engine/ and scripts/     course engine and maintenance commands
-vm/                      guest runtime, checks, and verification tools
+`restore` and `reset` do different jobs:
+
+```sh
+./rootkitlings restore L12
+./rootkitlings reset L12
+./rootkitlings reset --all --yes
 ```
 
-The CLI derives paths, capabilities, tools, and checks from metadata; exercise files do not duplicate them.
-Learner state and workspaces stay under the ignored `.rootkitlings/` directory.
-Guest filesystems are discarded on exit, and networking remains disabled unless an exercise requests it.
+- `restore` archives the current edits and recreates that exercise's starting
+  workspace. Course progress is unchanged.
+- `reset` clears progress from the selected exercise onward and archives the
+  affected workspaces. Resetting the entire course requires `--all --yes`.
+- `clean` removes declared build outputs but keeps source edits and progress.
 
-## More
+## Repository layout
 
-- [Ling roadmap and engineering rules](lings/README.md)
-- [Capstone design and source layout](capstones/README.md)
-- [VM runtime details](vm/README.md)
-- [Linux kernel documentation](https://docs.kernel.org/)
+```text
+course.toml                         live route, concepts, tags, and tools
+curriculum/required/<stable-id>/   one exercise bundle
+  README.md                        lesson and task
+  hint                             focused hint
+  exercise.toml                    metadata, workspace, and checks
+  starter/                         optional sparse starting files
+  solution/                        reference files or sparse changes
+  checks/                          exercise-owned verification
+  fixtures/                        optional independent test inputs
+rootkitlings                       learner command
+engine/                            catalog, workspace, state, and verification
+vm/                                pinned guest runtime and shared guest tools
+.rootkitlings/                     ignored learner work, state, and archives
+```
 
-Run `make compile-db` to generate clangd compile commands.
-Run `make validate` to validate course structure, documentation, scripts, and reference builds.
+Learner edits belong under `.rootkitlings/`; files under
+`curriculum/required/` define the immutable course bundles.
+
+See [`vm/README.md`](vm/README.md) for the guest runtime. Run
+`./rootkitlings help` for all learner commands, `make compile-db` for clangd
+metadata, and `make validate` for repository maintenance checks.
