@@ -92,6 +92,7 @@ static void expect_success(const char *label, const unsigned char *packet,
 
 static void test_examples(unsigned char *packet)
 {
+	unsigned char *fixed_prefix;
 	unsigned char *unaligned;
 
 	make_packet(packet, 4, 5, 20, 0, 6);
@@ -105,6 +106,13 @@ static void test_examples(unsigned char *packet)
 
 	make_packet(packet, 4, 5, 20, 0, 6);
 	expect_success("capture padding", packet, 4096, 20, 20, 6);
+	fixed_prefix = malloc(20);
+	check(fixed_prefix != NULL, "fixed prefix", "allocation failed");
+	memcpy(fixed_prefix, packet, 20);
+	write_be16(fixed_prefix + 2, 0xffff);
+	expect_success("fixed prefix only", fixed_prefix, 0xffff, 20,
+		       0xffff, 6);
+	free(fixed_prefix);
 
 	make_packet(packet, 4, 5, 20, 0x4000, 6);
 	expect_success("do-not-fragment", packet, 20, 20, 20, 6);

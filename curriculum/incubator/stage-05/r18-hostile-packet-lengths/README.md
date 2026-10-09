@@ -46,6 +46,8 @@ Return the exact failure class:
 
 Do not change the output view on failure. Parse the two-byte fields from individual bytes; the input pointer need not be aligned. Validate a larger value before subtracting a smaller one.
 
+When `available` is at least 20, the input pointer must address the fixed 20-byte IPv4 prefix. The parser does not read options or payload bytes. It validates their declared boundaries so a later adapter can fetch those ranges through the storage-specific safe-copy API.
+
 Run:
 
 ```bash
