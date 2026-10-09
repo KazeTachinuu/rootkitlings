@@ -73,6 +73,8 @@ Probe callbacks cannot use ordinary `copy_from_user()` because it may resolve a 
 The supplied helper copies at most 64 bytes, one byte at a time, through the GPL-exported `copy_from_user_nofault()`.
 It stops at the first NUL byte and rejects a fault or a path that does not terminate inside the bound.
 Only a complete byte-for-byte match selects the watched path.
+This is an entry-time snapshot of the userspace bytes, not a resolved pathname or an immutable identity.
+If another thread changes that buffer before `rmdir()` performs its own pathname copy, the observation can differ from the pathname the system call eventually uses.
 
 Linux v7.2 also contains `strncpy_from_user_nofault()`, but the pinned build does not export it to external modules.
 The exercise therefore does not pretend that helper is available.
@@ -102,7 +104,8 @@ That exceeds the checker's bounded workload of eight concurrent callers.
 If all instances are occupied, the kernel increments `nmissed` and lets the function continue without calling either learner handler for that invocation.
 The status field `returns_missed` publishes that diagnostic.
 It does not count failed system calls.
-Zero means the observed workload fit the configured capacity; a nonzero value means the telemetry is incomplete.
+The allocation attempt happens before the entry handler reads the action switch, so a missed invocation can be one that the switch would have rejected.
+Zero means the observed workload fit the configured capacity; a nonzero value means some wrapper invocations could not reach the admission check, not necessarily that a selected result was lost.
 
 ## Lifetime and rollback
 

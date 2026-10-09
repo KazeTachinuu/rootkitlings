@@ -201,6 +201,49 @@ mv "$formatted/instrumentation/return_probe.c.new" \
 "$HERE/host-check" "$formatted" "$formatted/rootkitlings.ko" \
 	"$scratch/missing" > "$scratch/host-formatting.log"
 
+equivalent=$scratch/host-equivalent
+cp -a "$scratch/success" "$equivalent"
+sed -i \
+	-e 's/observation/sample/g' \
+	-e 's/syscall_registers/saved_registers/g' \
+	-e 's/\<user_path\>/pathname/g' \
+	-e 's/probe_state/telemetry_state/g' \
+	-e 's/\<destination\>/target/g' \
+	-e 's/\<source\>/origin/g' \
+	-e 's/\<capacity\>/limit/g' \
+	-e 's/\<index\>/offset/g' \
+	-e 's/\<path\>/copy/g' \
+	-e 's/\<length\>/copied/g' \
+	-e 's/const long result/long syscall_result/' \
+	-e 's/result == 0/!syscall_result/' \
+	-e 's/result < 0/syscall_result < 0/' \
+	-e 's/int error;/int registration_error;/' \
+	-e 's/error = register_kretprobe/registration_error = register_kretprobe/' \
+	-e 's/if (error)/if (registration_error != 0)/' \
+	-e 's/return error;/return registration_error;/' \
+	"$equivalent/instrumentation/return_probe.c"
+sed -i '/static int rk_rmdir_entry/i\
+static __always_inline const char __user *\
+rk_native_rmdir_path(struct pt_regs *frame)\
+{\
+\tconst struct pt_regs *saved;\
+\
+\tsaved = (const struct pt_regs *)regs_get_kernel_argument(frame, 0);\
+\treturn saved ? (const char __user *)saved->di : NULL;\
+}\
+' "$equivalent/instrumentation/return_probe.c"
+sed -i \
+	-e '/const struct pt_regs \*saved_registers;/d' \
+	-e '/saved_registers = (const struct pt_regs \*)/,+5c\
+\tpathname = rk_native_rmdir_path(registers);\
+\tif (pathname != NULL) {\
+\t\tsample->selected = rk_path_is_selected(pathname);\
+\t}' \
+	"$equivalent/instrumentation/return_probe.c"
+rebuild_host_fixture "$equivalent" equivalent
+"$HERE/host-check" "$equivalent" "$equivalent/rootkitlings.ko" \
+	"$scratch/missing" > "$scratch/host-equivalent.log"
+
 macro_copy=$scratch/host-macro-copy
 cp -a "$scratch/success" "$macro_copy"
 sed -i '/#define RK_MISSING_TARGET/a #define RK_COPY copy_from_user' \
@@ -248,6 +291,16 @@ sed -i '/observation->selected = false;/d' \
 	"$uninitialized_instance/instrumentation/return_probe.c"
 expect_host_rejection "$uninitialized_instance" uninitialized-per-instance-state
 
+misplaced_classifier=$scratch/host-misplaced-classifier
+cp -a "$scratch/success" "$misplaced_classifier"
+sed -i \
+	-e 's/observation->selected = rk_path_is_selected(user_path);/(void)user_path;/' \
+	-e '/const long result =/a\
+\t(void)rk_path_is_selected((const char __user *)1);' \
+	"$misplaced_classifier/instrumentation/return_probe.c"
+rebuild_host_fixture "$misplaced_classifier" misplaced-classifier
+expect_host_rejection "$misplaced_classifier" path-classification-outside-entry
+
 manual_unregister=$scratch/host-manual-unregister
 cp -a "$scratch/success" "$manual_unregister"
 sed -i '/#define RK_MISSING_TARGET/a #define RK_UNREGISTER unregister_kretprobe' \
@@ -282,6 +335,25 @@ cp -a "$scratch/success" "$global_scratch"
 sed -i '/static struct rk_state \*probe_state;/a static char path_scratch[64];' \
 	"$global_scratch/instrumentation/return_probe.c"
 expect_host_rejection "$global_scratch" global-correlation-scratch-storage
+
+global_selection=$scratch/host-global-selection
+cp -a "$scratch/success" "$global_selection"
+sed -i '/static struct rk_state \*probe_state;/a static bool selected_call;' \
+	"$global_selection/instrumentation/return_probe.c"
+expect_host_rejection "$global_selection" global-correlation-flag
+
+global_instance=$scratch/host-global-instance
+cp -a "$scratch/success" "$global_instance"
+sed -i '/static struct rk_state \*probe_state;/a static struct rk_rmdir_instance shared_instance;' \
+	"$global_instance/instrumentation/return_probe.c"
+expect_host_rejection "$global_instance" global-correlation-instance
+
+register_mutation=$scratch/host-register-mutation
+cp -a "$scratch/success" "$register_mutation"
+sed -i '/user_path = (const char __user \*)syscall_registers->di;/a\
+\t((struct pt_regs *)syscall_registers)->di = 0;' \
+	"$register_mutation/instrumentation/return_probe.c"
+expect_host_rejection "$register_mutation" saved-register-mutation
 
 wrong_capacity=$scratch/host-wrong-capacity
 cp -a "$scratch/success" "$wrong_capacity"

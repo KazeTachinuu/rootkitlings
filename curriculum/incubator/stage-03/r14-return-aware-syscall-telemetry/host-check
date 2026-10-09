@@ -29,11 +29,9 @@ source = sys.stdin.read()
 sys.stdout.write(re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.S))'
 }
 
-normalize_function()
+flatten_function()
 {
-	strip_c_comments | sed -E \
-		-e 's/\(void\)(instance|registers);//g' |
-		tr -d '[:space:]'
+	strip_c_comments | tr -d '[:space:]'
 }
 
 (( $# == 3 )) || die "usage: ${0##*/} SUCCESS_DIR SUCCESS_ARTIFACT MISSING_DIR"
@@ -56,7 +54,17 @@ done
 source_file=$success_dir/instrumentation/return_probe.c
 missing_source=$missing_dir/instrumentation/return_probe.c
 source_text=$(strip_c_comments < "$source_file" | tr '\n' ' ')
+source_flat=$(tr -d '[:space:]' <<< "$source_text")
 missing_text=$(strip_c_comments < "$missing_source" | tr '\n' ' ')
+
+mapfile -t state_declarations < <(
+	grep -E '^[[:space:]]*static[[:space:]]+struct[[:space:]]+rk_state[[:space:]]*\*[[:space:]]*[[:alnum:]_]+[[:space:]]*;' \
+		"$source_file"
+)
+(( ${#state_declarations[@]} == 1 )) ||
+	die "define exactly one private borrowed-state pointer"
+state_name=$(sed -E 's/.*\*[[:space:]]*([[:alnum:]_]+)[[:space:]]*;.*/\1/' \
+	<<< "${state_declarations[0]}")
 
 check_probe_object()
 {
@@ -132,33 +140,78 @@ start_body=$(extract_function "$source_file" rk_return_probe_start)
 stop_body=$(extract_function "$source_file" rk_return_probe_stop)
 [[ -n $entry_body && -n $return_body && -n $start_body && -n $stop_body ]] ||
 	die "return_probe.c must define both handlers and lifecycle operations"
-entry_flat=$(normalize_function <<< "$entry_body")
-return_flat=$(normalize_function <<< "$return_body")
-start_flat=$(normalize_function <<< "$start_body")
-stop_flat=$(normalize_function <<< "$stop_body")
+entry_flat=$(flatten_function <<< "$entry_body")
+return_flat=$(flatten_function <<< "$return_body")
+start_flat=$(flatten_function <<< "$start_body")
+stop_flat=$(flatten_function <<< "$stop_body")
 
-expected_entry='staticintrk_rmdir_entry(structkretprobe_instance*instance,structpt_regs*registers){structrk_rmdir_instance*observation=(void*)instance->data;conststructpt_regs*syscall_registers;constchar__user*user_path;observation->selected=false;if(!rk_state_actions_enabled(probe_state))return1;syscall_registers=(conststructpt_regs*)regs_get_kernel_argument(registers,0);if(!syscall_registers)return0;user_path=(constchar__user*)syscall_registers->di;observation->selected=rk_path_is_selected(user_path);return0;}'
-[[ $entry_flat == "$expected_entry" ]] ||
-	die "entry handler must initialize private data, gate once, and decode only the native path"
-expected_return='staticintrk_rmdir_return(structkretprobe_instance*instance,structpt_regs*registers){conststructrk_rmdir_instance*observation=(void*)instance->data;constlongresult=(long)regs_return_value(registers);if(!observation->selected)return0;if(result==0)rk_state_mark_selected_success(probe_state);elseif(result<0)rk_state_mark_selected_failure(probe_state);return0;}'
-[[ $return_flat == "$expected_return" ]] ||
-	die "return handler must associate the saved selection with its matching result"
-expected_start='__must_checkintrk_return_probe_start(structrk_state*state){interror;if(probe_state||!state)return-EINVAL;probe_state=state;error=register_kretprobe(&rmdir_probe);if(error)probe_state=NULL;returnerror;}'
-[[ $start_flat == "$expected_start" ]] ||
-	die "registration must publish state, register once, and clear state only on failure"
-expected_stop='voidrk_return_probe_stop(void){if(!probe_state)return;unregister_kretprobe(&rmdir_probe);probe_state=NULL;}'
-[[ $stop_flat == "$expected_stop" ]] ||
-	die "teardown must unregister once before releasing borrowed state"
+# Check the learner-visible invariants, not one official spelling.  Runtime
+# checks provide the behavioral oracle; these checks keep the implementation on
+# the intended bounded mechanism and reject unsafe operations before loading it.
+grep -Eq -- '->data' <<< "$entry_flat" ||
+	die "entry handler must use its Kretprobe instance data"
+grep -Eq -- "->selected=false;.*rk_state_actions_enabled\\(${state_name}\\)" \
+	<<< "$entry_flat" ||
+	die "entry handler must initialize private data before reading admission state"
+grep -Eq 'regs_get_kernel_argument\([^,]+,0\)' <<< "$source_flat" ||
+	die "decode kernel argument zero for the native syscall register frame"
+grep -Eq -- '->di' <<< "$source_flat" ||
+	die "decode the first native x86-64 syscall argument from di"
+grep -Eq 'rk_path_is_selected\(' <<< "$entry_flat" ||
+	die "entry handling must classify the decoded userspace path"
+grep -Eq 'return(-?[1-9][0-9]*|true);' <<< "$entry_flat" ||
+	die "disabled entry handling must skip the matching return callback"
+[[ $(grep -Eo 'return(-?[1-9][0-9]*|true);' <<< "$entry_flat" | wc -l) -eq 1 ]] ||
+	die "entry handler must have exactly one path that skips return handling"
+grep -Eq 'return0;' <<< "$entry_flat" ||
+	die "admitted entry handling must request a matching return callback"
+
+grep -Eq -- '->data' <<< "$return_flat" ||
+	die "return handler must use the matching Kretprobe instance data"
+grep -Eq -- '->selected' <<< "$return_flat" ||
+	die "return handler must consult the saved path classification"
+grep -Eq 'regs_return_value\(' <<< "$return_flat" ||
+	die "return handler must read the architecture return value"
+grep -Eq "(==0|0==|![[:alnum:]_]+).*rk_state_mark_selected_success\\(${state_name}\\)" \
+	<<< "$return_flat" ||
+	die "zero return values must mark selected success"
+grep -Eq "(<0|0>).*rk_state_mark_selected_failure\\(${state_name}\\)" \
+	<<< "$return_flat" ||
+	die "negative return values must mark selected failure"
+grep -Eq 'return0;' <<< "$return_flat" ||
+	die "return handler must preserve the probed return path"
+(( $(grep -Eo 'return0;' <<< "$return_flat" | wc -l) <= 2 )) ||
+	die "return handler has an unrelated early return"
+
+grep -Eq "${state_name}=[[:alnum:]_]+;.*register_kretprobe\\(&rmdir_probe\\)" \
+	<<< "$start_flat" ||
+	die "publish borrowed state before registering the Kretprobe"
+grep -Eq "register_kretprobe\\(&rmdir_probe\\).*${state_name}=NULL;" \
+	<<< "$start_flat" ||
+	die "clear borrowed state when Kretprobe registration fails"
+grep -Eq "unregister_kretprobe\\(&rmdir_probe\\).*${state_name}=NULL;" \
+	<<< "$stop_flat" ||
+	die "teardown must unregister before releasing borrowed state"
 
 copy_body=$(extract_function "$source_file" rk_copy_user_path_nofault)
 classifier_body=$(extract_function "$source_file" rk_path_is_selected)
-copy_flat=$(normalize_function <<< "$copy_body")
-classifier_flat=$(normalize_function <<< "$classifier_body")
-expected_copy="rk_copy_user_path_nofault(char*destination,constchar__user*source,size_tcapacity){size_tindex;for(index=0;index<capacity;index++){if(copy_from_user_nofault(destination+index,source+index,1))return-EFAULT;if(destination[index]=='\\0')returnindex+1;}return-ENAMETOOLONG;}"
-[[ $copy_flat == "$expected_copy" ]] ||
-	die "keep the supplied bounded bytewise no-fault copy helper"
-expected_classifier='static__always_inlineboolrk_path_is_selected(constchar__user*user_path){charpath[RK_USER_PATH_SIZE];longlength;length=rk_copy_user_path_nofault(path,user_path,sizeof(path));returnlength==sizeof(RK_SELECTED_PATH)&&memcmp(path,RK_SELECTED_PATH,sizeof(RK_SELECTED_PATH))==0;}'
-[[ $classifier_flat == "$expected_classifier" ]] ||
+copy_flat=$(flatten_function <<< "$copy_body")
+classifier_flat=$(flatten_function <<< "$classifier_body")
+grep -Eq 'for\([^;]+;[^;]+<[^;]+;[^)]+\+\+\)' <<< "$copy_flat" ||
+	die "the no-fault copy helper must remain bounded"
+grep -Eq 'copy_from_user_nofault\([^,]+\+[^,]+,[^,]+\+[^,]+,1\)' \
+	<<< "$copy_flat" ||
+	die "copy the userspace path one byte at a time without faults"
+grep -Eq "copy_from_user_nofault.*return-EFAULT;.*(=='\\\\0'|==0|if\\(![^)]+\\)).*return[^;]+\+1;.*return-ENAMETOOLONG;" \
+	<<< "$copy_flat" ||
+	die "the no-fault copy helper must distinguish fault, NUL, and overlength"
+grep -Eq 'char[[:alnum:]_]+\[RK_USER_PATH_SIZE\]' <<< "$classifier_flat" ||
+	die "classify paths in the supplied bounded local buffer"
+grep -Eq 'rk_copy_user_path_nofault\([^,]+,[^,]+,sizeof\([^)]+\)\)' \
+	<<< "$classifier_flat" ||
+	die "classify only a complete no-fault path copy"
+grep -Eq '(==sizeof\(RK_SELECTED_PATH\)|sizeof\(RK_SELECTED_PATH\)==).*(!?memcmp\([^,]+,RK_SELECTED_PATH,sizeof\(RK_SELECTED_PATH\)\)(==0)?)' \
+	<<< "$classifier_flat" ||
 	die "classify only one complete exact watched path"
 
 owned_sources=(
@@ -178,8 +231,14 @@ if grep -Eq '\b(pr_(info|notice|warn|err|debug)|printk|copy_from_user|strncpy_fr
 	<<< "$source_text"; then
 	die "probe telemetry must remain no-fault, bounded, non-sleeping, and silent"
 fi
-if grep -Eq 'static[[:space:]]+char[[:space:]]' <<< "$owned_text"; then
-	die "do not correlate calls through global path scratch storage"
+while IFS= read -r declaration; do
+	grep -Eq "^[[:space:]]*static[[:space:]]+struct[[:space:]]+rk_state[[:space:]]*\\*[[:space:]]*${state_name}[[:space:]]*;[[:space:]]*$" \
+		<<< "$declaration" ||
+		die "do not correlate calls through global scratch storage"
+done < <(grep -E '^[[:space:]]*static[[:space:]]+[^();]+;' "$source_file")
+if grep -Eq -- '->[[:space:]]*(ax|di|si|dx|r10|r8|r9)[[:space:]]*=[^=]' \
+	<<< "$source_text"; then
+	die "probe handlers must not modify saved registers"
 fi
 
 state_source=$success_dir/core/state.c
