@@ -200,8 +200,14 @@ static int pause_poll(void)
 	return 0;
 }
 
-static int wait_for_advance(const char *path, const char *field,
-			    uint64_t baseline, uint64_t timeout_ms)
+enum wait_mode {
+	WAIT_ADVANCE,
+	WAIT_EQUAL,
+};
+
+static int wait_for_counter(const char *path, const char *field,
+			    uint64_t target, uint64_t timeout_ms,
+			    enum wait_mode mode)
 {
 	uint64_t deadline;
 
@@ -214,17 +220,32 @@ static int wait_for_advance(const char *path, const char *field,
 
 		if (read_field(path, field, &value) < 0)
 			return -1;
-		if (value > baseline) {
+		if ((mode == WAIT_ADVANCE && value > target) ||
+		    (mode == WAIT_EQUAL && value == target)) {
 			printf("%" PRIu64 "\n", value);
 			return 0;
+		}
+		if (mode == WAIT_EQUAL && value > target) {
+			fprintf(stderr,
+				"status_field_test: %s advanced past %" PRIu64
+				" to %" PRIu64 "\n",
+				field, target, value);
+			return -1;
 		}
 		if (monotonic_ms(&now) < 0)
 			return -1;
 		if (now >= deadline) {
-			fprintf(stderr,
-				"status_field_test: %s stayed at %" PRIu64
-				" for %" PRIu64 " ms\n",
-				field, value, timeout_ms);
+			if (mode == WAIT_EQUAL)
+				fprintf(stderr,
+					"status_field_test: %s did not reach %" PRIu64
+					" within %" PRIu64
+					" ms; last value was %" PRIu64 "\n",
+					field, target, timeout_ms, value);
+			else
+				fprintf(stderr,
+					"status_field_test: %s stayed at %" PRIu64
+					" for %" PRIu64 " ms\n",
+					field, value, timeout_ms);
 			return -1;
 		}
 		if (pause_poll() < 0)
@@ -269,8 +290,9 @@ static void usage(const char *program)
 	fprintf(stderr,
 		"usage: %s read PATH FIELD\n"
 		"       %s advance PATH FIELD BASELINE TIMEOUT_MS\n"
+		"       %s equal PATH FIELD EXPECTED TIMEOUT_MS\n"
 		"       %s unchanged PATH FIELD VALUE DURATION_MS\n",
-		program, program, program);
+		program, program, program, program);
 }
 
 int main(int argc, char **argv)
@@ -292,7 +314,15 @@ int main(int argc, char **argv)
 		if (parse_unsigned(argv[4], UINT64_MAX, "baseline", &first) < 0 ||
 		    parse_unsigned(argv[5], MAX_WAIT_MS, "timeout", &second) < 0)
 			return 2;
-		return wait_for_advance(argv[2], argv[3], first, second) < 0;
+		return wait_for_counter(argv[2], argv[3], first, second,
+					WAIT_ADVANCE) < 0;
+	}
+	if (strcmp(argv[1], "equal") == 0 && argc == 6) {
+		if (parse_unsigned(argv[4], UINT64_MAX, "expected", &first) < 0 ||
+		    parse_unsigned(argv[5], MAX_WAIT_MS, "timeout", &second) < 0)
+			return 2;
+		return wait_for_counter(argv[2], argv[3], first, second,
+					WAIT_EQUAL) < 0;
 	}
 	if (strcmp(argv[1], "unchanged") == 0 && argc == 6) {
 		if (parse_unsigned(argv[4], UINT64_MAX, "value", &first) < 0 ||
