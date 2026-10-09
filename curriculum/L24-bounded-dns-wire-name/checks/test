@@ -30,7 +30,7 @@ if command -v shellcheck >/dev/null; then
 	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check"
 fi
 
-for tree in template solution; do
+for tree in starter solution; do
 	cmp -s "$HERE/../../L17-hostile-packet-lengths/solution/parser/ipv4.c" \
 		"$HERE/$tree/parser/ipv4.c" || {
 		printf '[x] %s parser differs from accepted L17\n' "$tree" >&2
@@ -45,7 +45,7 @@ done
 
 mapfile -t changed_files < <(
 	diff -qr "$HERE/../starter" "$HERE/../solution" |
-		sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p'
+		sed -nE 's#^Files .*/starter/(.*) and .*/solution/.* differ$#\1#p'
 )
 (( ${#changed_files[@]} == 1 )) || {
 	printf '[x] expected one learner-edited file, found %d\n' \

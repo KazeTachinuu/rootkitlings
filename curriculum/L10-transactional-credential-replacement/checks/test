@@ -49,7 +49,7 @@ make -s -C "$HERE/../../.." -B vm/tools/cred_trigger_test
 
 mapfile -t changed_files < <(
 	diff -qr "$HERE/../starter" "$HERE/../solution" |
-		sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p'
+		sed -nE 's#^Files .*/starter/(.*) and .*/solution/.* differ$#\1#p'
 )
 (( ${#changed_files[@]} == 1 )) || {
 	printf '[x] expected one learner-edited file, found %d\n' \
