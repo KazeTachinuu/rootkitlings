@@ -1,0 +1,98 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Authenticated DNS-shaped signal"
+capture=/tmp/rootkitlings-dns-query
+rm -f "$capture"
+ifconfig lo 127.0.0.1 up
+nc -u -l -p 5300 -s 127.0.0.1 >"$capture" 2>/dev/null &
+listener=$!
+sleep 1
+
+load rootkitlings.ko epoch=72623859790382856 sequence=1 status=3 transaction_id=4660
+attempt=0
+while [ "$attempt" -lt 30 ] && [ ! -s "$capture" ]; do
+	sleep 0.1
+	attempt=$((attempt + 1))
+done
+kill "$listener" 2>/dev/null || true
+wait "$listener" 2>/dev/null || true
+
+captured=$(wc -c <"$capture")
+if [ "$captured" -eq 116 ]; then
+	_ok "captured the exact 116-byte loopback datagram"
+else
+	_fail "captured $captured bytes instead of 116"
+fi
+header=$(dd if="$capture" bs=1 count=12 2>/dev/null | xxd -p)
+if [ "$header" = 123401000001000000000000 ]; then
+	_ok "independent decoder found one TXT query with transaction ID 0x1234"
+else
+	_fail "unexpected DNS header: $header"
+fi
+prefix=$(dd if="$capture" bs=1 skip=12 count=4 2>/dev/null | xxd -p)
+body=$(dd if="$capture" bs=1 skip=17 count=40 2>/dev/null)
+tag=$(dd if="$capture" bs=1 skip=58 count=32 2>/dev/null)
+tail=$(dd if="$capture" bs=1 skip=90 count=26 2>/dev/null | xxd -p)
+if [ "$prefix" = 03726b31 ]; then
+	_ok "protocol label decoded"
+else
+	_fail "invalid protocol label"
+fi
+if [ "$body" = 0101010203040506070800000000000000010300 ]; then
+	_ok "visible version, epoch, sequence, and status decoded"
+else
+	_fail "unexpected authenticated body: $body"
+fi
+if [ "$tail" = 0c726f6f746b69746c696e6773076578616d706c650000100001 ]; then
+	_ok "reserved suffix and TXT/IN question decoded"
+else
+	_fail "unexpected DNS question tail: $tail"
+fi
+
+key_hex=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+inner_pad=
+outer_pad=
+index=0
+while [ "$index" -lt 64 ]; do
+	position=$((index * 2))
+	if [ "$position" -lt "${#key_hex}" ]; then
+		start=$((position + 1))
+		end=$((position + 2))
+		byte=$(printf %s "$key_hex" | cut -c "$start-$end")
+	else
+		byte=00
+	fi
+	inner_pad="$inner_pad$(printf '%02x' $((0x$byte ^ 0x36)))"
+	outer_pad="$outer_pad$(printf '%02x' $((0x$byte ^ 0x5c)))"
+	index=$((index + 1))
+done
+inner=$(
+	{ printf %s "$inner_pad" | xxd -r -p; printf %s "$body" | xxd -r -p; } |
+		sha256sum | cut -d ' ' -f 1
+)
+expected=$(
+	{ printf %s "$outer_pad" | xxd -r -p; printf %s "$inner" | xxd -r -p; } |
+		sha256sum | cut -c 1-32
+)
+if [ "$tag" = "$expected" ]; then
+	_ok "independent HMAC oracle verified the captured tag"
+else
+	_fail "captured tag failed independent verification"
+fi
+if dmesg | grep -Eq 'rootkitlings: authenticated DNS signal passed: [1-9][0-9]* assertions; sent=116 id=4660'; then
+	_ok "kernel self-test covered authentication and replay rejection"
+else
+	_fail "kernel self-test completion is missing"
+fi
+
+unload rootkitlings
+assert_absent /sys/module/rootkitlings
+if dmesg | grep -Eq 'BUG:|WARNING:|Oops:|KASAN:|UBSAN:|hung task'; then
+	_fail "kernel log contains a fault report"
+else
+	_ok "kernel log is clean"
+fi
+rm -f "$capture"
+summary

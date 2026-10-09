@@ -1,0 +1,9 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Rejected out-of-range DNS signal status"
+assert_absent /sys/module/rootkitlings
+load_fail rootkitlings.ko status=259
+assert_absent /sys/module/rootkitlings
+summary

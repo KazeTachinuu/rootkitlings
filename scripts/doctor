@@ -64,6 +64,7 @@ for command in ld as ar nm objcopy objdump readelf; do check_command "$command" 
 check_command bison bison
 check_command flex flex
 check_command perl perl
+check_command openssl openssl
 check_command file file
 check_command modinfo kmod
 check_command gdb gdb

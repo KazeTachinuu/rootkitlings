@@ -1,0 +1,13 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Rejected unfinished authenticated DNS signal"
+assert_absent /sys/module/rootkitlings
+if module_load_test /rootkitlings/rootkitlings.ko 22; then
+	_ok "kernel self-test rejected the unfinished signal with EINVAL"
+else
+	_fail "module load did not return EINVAL"
+fi
+assert_absent /sys/module/rootkitlings
+summary

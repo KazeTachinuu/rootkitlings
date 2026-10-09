@@ -1,0 +1,4 @@
+obj-m += rootkitlings.o
+rootkitlings-y := core/main.o crypto/platform.o message/authenticated.o \
+	signal/authenticated_dns.o transport/udp.o wire/dns_query.o tests/selftest.o
+ccflags-y += -I$(src)/include

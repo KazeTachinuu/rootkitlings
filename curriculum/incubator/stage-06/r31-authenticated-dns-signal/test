@@ -1,0 +1,175 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$here/../../../../scripts/lesson-env"
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r31-test.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+[[ $(uname -m) == x86_64 ]] || {
+	printf '[x] this lesson requires x86_64\n' >&2
+	exit 1
+}
+for option in CONFIG_CC_IS_GCC=y CONFIG_CRYPTO_HMAC=y CONFIG_CRYPTO_SHA256=y; do
+	grep -qx "$option" "$KDIR/.config" || {
+		printf '[x] pinned kernel is missing %s\n' "$option" >&2
+		exit 1
+	}
+done
+for command in gcc make nm openssl; do
+	command -v "$command" >/dev/null || {
+		printf '[x] %s is required\n' "$command" >&2
+		exit 1
+	}
+done
+
+assert_clean_tree()
+{
+	local generated
+
+	generated=$(find "$here" -type f \( -name '*.o' -o -name '*.ko' -o \
+		-name '*.mod' -o -name '*.mod.c' -o -name Module.symvers -o \
+		-name modules.order -o -name '.*.cmd' \) -print -quit)
+	[[ -z $generated ]] || {
+		printf '[x] generated artifact stored in lesson: %s\n' \
+			"${generated#"$here/"}" >&2
+		exit 1
+	}
+}
+
+assert_clean_tree
+for script in test host-check success-check failure-check invalid-parameter-check; do
+	bash -n "$here/$script"
+done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$here/test" "$here/host-check"
+	shellcheck -x -s sh "$here/success-check" "$here/failure-check" \
+		"$here/invalid-parameter-check"
+fi
+
+mapfile -t changed < <(
+	diff -qr "$here/template" "$here/solution" |
+		sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p'
+)
+[[ ${#changed[@]} == 1 && ${changed[0]} == signal/authenticated_dns.c ]] || {
+	printf '[x] learner edit boundary is not signal/authenticated_dns.c\n' >&2
+	printf '    %s\n' "${changed[@]:-none}" >&2
+	exit 1
+}
+
+for tree in template solution; do
+	cmp -s "$here/../r29-authenticated-replay-safe-message/solution/crypto/platform.c" \
+		"$here/$tree/crypto/platform.c" || {
+		printf '[x] %s HMAC platform differs from accepted L28\n' "$tree" >&2
+		exit 1
+	}
+	cmp -s "$here/../r29-authenticated-replay-safe-message/solution/message/authenticated.c" \
+		"$here/$tree/message/authenticated.c" || {
+		printf '[x] %s replay receiver differs from accepted L28\n' "$tree" >&2
+		exit 1
+	}
+done
+
+build()
+{
+	local source=$1 destination=$2 log=$2.log
+
+	cp -a "$source" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 modules >"$log" 2>&1; then
+		cat "$log" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] %s builds with warnings\n' "${destination##*/}" >&2
+		exit 1
+	fi
+}
+
+build "$here/solution" "$scratch/solution"
+build "$here/template" "$scratch/template"
+"$here/host-check" "$scratch/solution" "$scratch/solution/rootkitlings.ko"
+if "$here/host-check" "$scratch/template" "$scratch/template/rootkitlings.ko" \
+	>"$scratch/template-host.log" 2>&1; then
+	printf '[x] host checker accepted unfinished learner file\n' >&2
+	exit 1
+fi
+
+cp -a "$here/solution" "$scratch/alternate-source"
+cp "$here/fixtures/alternate/authenticated_dns.c" \
+	"$scratch/alternate-source/signal/authenticated_dns.c"
+build "$scratch/alternate-source" "$scratch/alternate"
+"$here/host-check" "$scratch/alternate" "$scratch/alternate/rootkitlings.ko"
+
+mutant()
+{
+	local name=$1 edit=$2 source=$scratch/mutant-source-$1
+	local built=$scratch/mutant-$1
+
+	cp -a "$here/solution" "$source"
+	perl -0pi -e "$edit" "$source/signal/authenticated_dns.c"
+	! cmp -s "$here/solution/signal/authenticated_dns.c" \
+		"$source/signal/authenticated_dns.c" || {
+		printf '[x] mutant edit did not apply: %s\n' "$name" >&2
+		exit 1
+	}
+	build "$source" "$built"
+	if "$here/host-check" "$built" "$built/rootkitlings.ko" \
+		>"$scratch/$name-host.log" 2>&1; then
+		printf '[x] host checker accepted mutant: %s\n' "$name" >&2
+		exit 1
+	fi
+}
+
+mutant short-hmac 's/RK_AUTH_BODY_LENGTH, digest/RK_AUTH_BODY_LENGTH - 1, digest/'
+mutant short-tag 's/memcpy\(message \+ RK_AUTH_BODY_LENGTH, digest, RK_AUTH_TAG_LENGTH\)/memcpy(message + RK_AUTH_BODY_LENGTH, digest, RK_AUTH_TAG_LENGTH - 1)/'
+# $1 below is a Perl capture, not a shell parameter.
+# shellcheck disable=SC2016
+mutant publishes-before-success 's/(int error;\n)/$1\n\tpacket[0] = 0;\n/'
+mutant skips-receiver 's/error = rk_receiver_submit\(receiver, message, sizeof\(message\)\);/error = 0;/'
+# $1 below is a Perl capture, not a shell parameter.
+# shellcheck disable=SC2016
+mutant mutates-before-decode 's/(if \(!receiver \|\| !packet\)\n\t\treturn -EINVAL;)/$1\n\treceiver->accepted++;/'
+mutant fixed-sequence 's/rk_write_be64\(message \+ 10, sequence\);/rk_write_be64(message + 10, 1);/'
+mutant unauthenticated-status 's/message\[18\] = status;/message[18] = 0;/'
+mutant accepts-truncation 's@\tif \(!error\)\n\t\terror = rk_receiver_submit@\tif (error == -EMSGSIZE)\n\t\treturn 0;\n\tif (!error)\n\t\terror = rk_receiver_submit@'
+mutant accepts-bad-tag 's@\trk_platform_clear\(message, sizeof\(message\)\);@\tif (error == -EBADMSG)\n\t\terror = 0;\n\trk_platform_clear(message, sizeof(message));@g'
+mutant accepts-duplicate 's@\trk_platform_clear\(message, sizeof\(message\)\);@\tif (error == -EALREADY)\n\t\terror = 0;\n\trk_platform_clear(message, sizeof(message));@g'
+mutant accepts-old-epoch 's@\trk_platform_clear\(message, sizeof\(message\)\);@\tif (error == -ESTALE)\n\t\terror = 0;\n\trk_platform_clear(message, sizeof(message));@g'
+
+guest()
+{
+	local check=$1 module=$2 label=$3 output
+	shift 3
+	if ! output=$("$here/../../../../vm/boot" --check "$check" "$module" \
+		"$@" 2>&1); then
+		printf '%s\n[x] guest rejected %s\n' "$output" "$label" >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+	grep -Fq '[+] PASSED' <<<"$output" || exit 1
+}
+
+guest "$here/success-check" "$scratch/solution/rootkitlings.ko" solution
+guest "$here/success-check" "$scratch/alternate/rootkitlings.ko" alternate
+guest "$here/failure-check" "$scratch/template/rootkitlings.ko" template \
+	--tool tools/module_load_test
+guest "$here/invalid-parameter-check" "$scratch/solution/rootkitlings.ko" \
+	invalid-status
+
+for dependency in \
+	../../stage-05/r23-kernel-socket-ownership/test \
+	../../stage-05/r25-bounded-dns-wire-name/test \
+	../r29-authenticated-replay-safe-message/test; do
+	if git -C "$here" ls-files --error-unmatch "$dependency" >/dev/null 2>&1 &&
+		git -C "$here" diff --quiet -- "$dependency" &&
+		git -C "$here" diff --cached --quiet -- "$dependency"; then
+		"$here/$dependency"
+	else
+		printf '[*] prerequisite regression deferred: %s\n' "$dependency"
+	fi
+done
+
+assert_clean_tree
+printf '[+] R31 authenticated DNS signal passed\n'
