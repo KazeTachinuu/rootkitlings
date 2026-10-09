@@ -428,14 +428,21 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
 - Defensive evidence: exhaustive first-octet, Total Length, fragment-field, and protocol sweeps under address and undefined-behavior sanitizers; null, unaligned, truncation, maximum-IHL fixed-prefix, capture-padding, unchanged-output, result-precedence, and deliberately incorrect implementation cases; pinned-kernel build and guest lifecycle checks.
 - Accepted asset: `curriculum/incubator/stage-05/r18-hostile-packet-lengths/`, independently validated.
 
-#### R19 - Read an `sk_buff` without assuming linear storage
+#### R19 - Read packet bytes safely from an `sk_buff`
 
-- Teaches: data/head/tail/end geometry, header offsets, nonlinear/shared storage,
-  safe header access, and bounded copy helpers.
-- Produces: a safe packet-view adapter.
+- Teaches: signed network-header offsets, headroom and logical-length geometry,
+  nonlinear/shared storage, safe bounded header access, and transactional outputs.
+- Produces: one reusable allocation-free reader for 1 through 64
+  network-relative bytes plus a supplied fixed-prefix IPv4 adapter.
 - Requires: R18.
-- Defensive evidence: linear, nonlinear, truncated, and fragmented cases.
-- Current source: missing explicitly; current packet lessons hide part of this work.
+- Failure policy: reject invalid arguments and geometry, then unreadable fragments,
+  then a truncated requested range; leave both outputs unchanged on every failure.
+- Defensive evidence: every supported read length; positive and negative network
+  offsets; linear storage, every page-fragment split, `frag_list`, shared and cloned
+  buffers; nonzero transport offsets; helper arithmetic limits; unreadable storage;
+  hostile variants; packet immutability; and the complete R18 regression corpus.
+- Accepted asset: `curriculum/incubator/stage-05/r19-safe-skb-access/`,
+  independently validated.
 
 #### R20 - Observe local IPv4 traffic without changing it
 
