@@ -30,3 +30,4 @@ tools/cred_trigger_test
 tools/module_load_test
 tools/proc_read_test
 tools/proc_write_test
+tools/status_field_test
