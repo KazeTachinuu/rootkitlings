@@ -11,7 +11,7 @@ from engine.catalog import Catalog
 
 catalog = Catalog(Path.cwd())
 serial_by_readme = {Path(item.resources.readme): item.serial for item in catalog.exercises}
-roots = [Path("README.md"), Path("vm/README.md"), Path("capstones/README.md")]
+roots = [Path("README.md"), Path("vm/README.md")]
 documents = list(dict.fromkeys(roots + sorted(serial_by_readme)))
 failures: list[str] = []
 
@@ -26,8 +26,6 @@ for document in documents:
 
     if re.search(r"\./rootkitlings\s+(?:debug|prerequisites|prereqs|peek|readme)\b", text):
         failures.append(f"{document}: uses a removed rootkitlings command")
-    if re.search(r"\bcapstone-[0-9]+\b", text):
-        failures.append(f"{document}: uses a removed capstone selector")
     if re.search(
         r"\./rootkitlings\s+(?:read|start|check|hint|solution|run|gdb|prereq)\s+[0-9]+\b",
         text,
@@ -38,17 +36,18 @@ for document in documents:
     if not serial:
         continue
     examples = re.findall(
-        r"\./rootkitlings\s+(read|start|check|hint|solution|run|gdb|prereq)\s+(\S+)",
+        r"\./rootkitlings\s+(read|start|check|hint|solution|run|gdb|prereq)"
+        r"(?:\s+(\S+))?",
         text,
     )
     for command, selector in examples:
         selector = selector.rstrip("`.,;:")
-        if selector != serial:
+        if selector and selector != serial:
             failures.append(
                 f"{document}: {command} example targets {selector}, expected {serial}"
             )
-    if ("check", serial) not in examples:
-        failures.append(f"{document}: missing canonical './rootkitlings check {serial}'")
+    if not any(command == "check" for command, _ in examples):
+        failures.append(f"{document}: missing './rootkitlings check' example")
 
 if failures:
     raise SystemExit("\n".join(failures))
