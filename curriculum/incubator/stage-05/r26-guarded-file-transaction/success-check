@@ -197,6 +197,39 @@ fi
 
 reset_target
 load rootkitlings.ko
+chmod 0644 "$target"
+unload rootkitlings
+if cmp -s "$intended" "$target" && cmp -s "$original" "$sibling" &&
+	[ "$(stat -c %a "$target")" = 644 ]; then
+	_ok "foreign target metadata suppresses rollback"
+else
+	_fail "foreign target metadata was overwritten"
+fi
+
+reset_target
+load rootkitlings.ko
+rm -f "$target"
+unload rootkitlings
+if [ ! -e "$target" ] && cmp -s "$original" "$sibling"; then
+	_ok "foreign target removal suppresses rollback"
+else
+	_fail "foreign target removal was overwritten"
+fi
+
+reset_target
+load rootkitlings.ko
+rm -f "$target"
+printf 'replacement' > "$target"
+chmod 0600 "$target"
+unload rootkitlings
+if [ "$(cat "$target")" = replacement ] && cmp -s "$original" "$sibling"; then
+	_ok "foreign target replacement suppresses rollback"
+else
+	_fail "foreign target replacement was overwritten"
+fi
+
+reset_target
+load rootkitlings.ko
 chmod 0644 "$sibling"
 unload rootkitlings
 if cmp -s "$intended" "$target" && cmp -s "$original" "$sibling" &&
@@ -204,6 +237,26 @@ if cmp -s "$intended" "$target" && cmp -s "$original" "$sibling" &&
 	_ok "foreign sibling metadata suppresses rollback without data loss"
 else
 	_fail "foreign sibling metadata was overwritten"
+fi
+
+reset_target
+load rootkitlings.ko
+printf 'foreign' > "$sibling"
+unload rootkitlings
+if cmp -s "$intended" "$target" && [ "$(cat "$sibling")" = foreign ]; then
+	_ok "foreign sibling content suppresses rollback"
+else
+	_fail "foreign sibling content was overwritten"
+fi
+
+reset_target
+load rootkitlings.ko
+rm -f "$sibling"
+unload rootkitlings
+if cmp -s "$intended" "$target" && [ ! -e "$sibling" ]; then
+	_ok "foreign sibling removal suppresses rollback"
+else
+	_fail "foreign sibling removal was overwritten"
 fi
 
 reset_target
@@ -216,6 +269,28 @@ if cmp -s "$intended" "$target" && [ "$(cat "$sibling")" = replacement ]; then
 	_ok "foreign sibling replacement suppresses rollback"
 else
 	_fail "foreign sibling replacement was overwritten"
+fi
+
+reset_target
+load rootkitlings.ko
+ln "$target" "$extra"
+unload rootkitlings
+if cmp -s "$intended" "$target" && cmp -s "$intended" "$extra" &&
+	cmp -s "$original" "$sibling"; then
+	_ok "foreign target hard link suppresses rollback"
+else
+	_fail "foreign target hard link was overwritten"
+fi
+
+reset_target
+load rootkitlings.ko
+ln "$sibling" "$extra"
+unload rootkitlings
+if cmp -s "$intended" "$target" && cmp -s "$original" "$sibling" &&
+	cmp -s "$original" "$extra"; then
+	_ok "foreign sibling hard link suppresses rollback"
+else
+	_fail "foreign sibling hard link was overwritten"
 fi
 
 reset_target

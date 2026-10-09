@@ -19,6 +19,17 @@ if command -v shellcheck >/dev/null; then
 	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check"
 fi
 
+mapfile -t generated_files < <(
+	find "$HERE" -type f \( -name '*.o' -o -name '*.ko' -o \
+		-name '*.mod' -o -name '*.mod.c' -o -name '.*.cmd' -o \
+		-name Module.symvers -o -name modules.order \) -print
+)
+(( ${#generated_files[@]} == 0 )) || {
+	printf '[x] generated build artifact in lesson source: %s\n' \
+		"${generated_files[0]}" >&2
+	exit 1
+}
+
 mapfile -t changed_files < <(
 	diff -qr "$HERE/template" "$HERE/solution" |
 		sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p'
@@ -75,6 +86,21 @@ mutate_identity() { sed -i 's/current->identity != snapshot->retained.identity/f
 mutate_links() {
 	sed -i 's/current->links != snapshot->retained.links/false/; s/object->links != 1/false/' "$1"
 }
+mutate_mode() {
+	sed -i 's/current->mode != snapshot->retained.mode/false/; s/(object->mode & 0170000) != 0100000/false/; s/(object->mode & 07777) != 0600/false/' "$1"
+}
+mutate_owner() {
+	sed -i 's/current->uid != snapshot->retained.uid/false/; s/current->gid != snapshot->retained.gid/false/; s/object->uid != 0/false/; s/object->gid != 0/false/' "$1"
+}
+mutate_content() {
+	sed -i 's/return memcmp(bytes, snapshot->bytes, snapshot->length) ? -ESTALE : 0;/return 0;/' "$1"
+}
+mutate_candidate_sync() {
+	sed -i 's/error = rk_platform_sync_file(&transaction->candidate.retained);/error = 0;/' "$1"
+}
+mutate_directory_sync() {
+	sed -i 's/error = rk_platform_sync_directory(RK_STEP_SYNC_APPLY);/error = 0;/' "$1"
+}
 mutate_short_write() { sed -i '/transaction->candidate.length = position;/i\
 \t\tposition = sizeof(rk_intended);' "$1"; }
 mutate_late_exchange() {
@@ -85,6 +111,11 @@ mutate_late_exchange() {
 build_mutant rejects-256 mutate_size
 build_mutant ignores-identity mutate_identity
 build_mutant ignores-link-count mutate_links
+build_mutant ignores-mode mutate_mode
+build_mutant ignores-owner mutate_owner
+build_mutant ignores-content mutate_content
+build_mutant skips-candidate-sync mutate_candidate_sync
+build_mutant skips-directory-sync mutate_directory_sync
 build_mutant assumes-complete-write mutate_short_write
 build_mutant records-exchange-late mutate_late_exchange
 

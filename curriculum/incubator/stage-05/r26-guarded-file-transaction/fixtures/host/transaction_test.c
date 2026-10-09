@@ -28,6 +28,17 @@ static int strange_read;
 static int strange_write;
 static unsigned long assertions;
 
+enum foreign_change {
+	FOREIGN_CONTENT,
+	FOREIGN_LENGTH,
+	FOREIGN_IDENTITY,
+	FOREIGN_MODE,
+	FOREIGN_LINKS,
+	FOREIGN_UID,
+	FOREIGN_GID,
+	FOREIGN_REMOVAL,
+};
+
 #define CHECK(condition) do { \
 	assertions++; \
 	if (!(condition)) { \
@@ -105,8 +116,10 @@ int rk_platform_create_candidate(struct rk_object *object)
 	if (sibling)
 		return -EEXIST;
 	sibling = new_file(NULL, 0);
-	if (malformed_candidate)
+	if (malformed_candidate == 1)
 		sibling->mode = 0100644;
+	else if (malformed_candidate == 2)
+		sibling->length = 1;
 	fill_object(sibling, object);
 	return 0;
 }
@@ -136,6 +149,12 @@ long rk_platform_read(struct rk_object *object, u8 *buffer, size_t length,
 		return (long)length + 1;
 	if (strange_read == 2)
 		return length ? 1 : 0;
+	if (strange_read == 3) {
+		if (!length)
+			return 0;
+		*position += 2;
+		return 1;
+	}
 	if (*position >= file->length)
 		return 0;
 	count = file->length - *position;
@@ -160,6 +179,14 @@ long rk_platform_write(struct rk_object *object, const u8 *buffer,
 		return (long)length + 1;
 	if (strange_write == 2)
 		return length ? 1 : 0;
+	if (strange_write == 3) {
+		if (!length)
+			return 0;
+		file->bytes[*position] = *buffer;
+		file->length = *position + 1;
+		*position += 2;
+		return 1;
+	}
 	if (io_limit && count > io_limit)
 		count = io_limit;
 	memcpy(file->bytes + *position, buffer, count);
@@ -278,6 +305,14 @@ static void test_rejections(void)
 
 	memset(&transaction, 0, sizeof(transaction));
 	reset_files((const u8 *)"x", 1);
+	malformed_candidate = 2;
+	CHECK(rk_transaction_apply(&transaction) == -ESTALE);
+	CHECK(transaction.state == RK_TRANSACTION_PRESERVED);
+	CHECK(sibling && sibling->length == 1 && warned == 1);
+	rk_transaction_dispose(&transaction);
+
+	memset(&transaction, 0, sizeof(transaction));
+	reset_files((const u8 *)"x", 1);
 	sibling = new_file((const u8 *)"occupied", 8);
 	CHECK(rk_transaction_apply(&transaction) == -EEXIST);
 	CHECK(sibling && sibling->length == 8 &&
@@ -304,71 +339,98 @@ static void test_failures(void)
 	}
 }
 
+static void make_foreign_change(struct fake_file **name,
+				enum foreign_change change)
+{
+	struct fake_file *file = *name;
+
+	switch (change) {
+	case FOREIGN_CONTENT:
+		file->bytes[0] ^= 0xff;
+		break;
+	case FOREIGN_LENGTH:
+		file->length--;
+		break;
+	case FOREIGN_IDENTITY:
+		*name = new_file(file->bytes, file->length);
+		break;
+	case FOREIGN_MODE:
+		file->mode = 0100644;
+		break;
+	case FOREIGN_LINKS:
+		file->links = 2;
+		break;
+	case FOREIGN_UID:
+		file->uid = 1;
+		break;
+	case FOREIGN_GID:
+		file->gid = 1;
+		break;
+	case FOREIGN_REMOVAL:
+		*name = NULL;
+		break;
+	}
+}
+
 static void test_foreign_changes(void)
 {
-	struct rk_transaction transaction = { 0 };
+	struct rk_transaction transaction;
+	int which;
+	int change;
 
-	reset_files((const u8 *)"original", 8);
-	CHECK(rk_transaction_apply(&transaction) == 0);
-	target->bytes[0] ^= 0xff;
-	CHECK(rk_transaction_restore(&transaction) == -ESTALE);
-	CHECK(transaction.state == RK_TRANSACTION_PRESERVED && warned == 1);
-	CHECK(target && sibling);
-	rk_transaction_dispose(&transaction);
+	for (which = 0; which < 2; which++) {
+		for (change = FOREIGN_CONTENT; change <= FOREIGN_REMOVAL; change++) {
+			struct fake_file *target_after_change;
+			struct fake_file *sibling_after_change;
+			int error;
 
-	memset(&transaction, 0, sizeof(transaction));
-	reset_files((const u8 *)"original", 8);
-	CHECK(rk_transaction_apply(&transaction) == 0);
-	target = NULL;
-	CHECK(rk_transaction_restore(&transaction) == -ENOENT);
-	CHECK(transaction.state == RK_TRANSACTION_PRESERVED && warned == 1);
-	CHECK(sibling != NULL);
-	rk_transaction_dispose(&transaction);
-
-	memset(&transaction, 0, sizeof(transaction));
-	reset_files((const u8 *)"original", 8);
-	CHECK(rk_transaction_apply(&transaction) == 0);
-	target->uid = 1;
-	CHECK(rk_transaction_restore(&transaction) == -ESTALE);
-	CHECK(transaction.state == RK_TRANSACTION_PRESERVED && warned == 1);
-	CHECK(target && sibling);
-	rk_transaction_dispose(&transaction);
-
-	memset(&transaction, 0, sizeof(transaction));
-	reset_files((const u8 *)"original", 8);
-	CHECK(rk_transaction_apply(&transaction) == 0);
-	sibling->links = 2;
-	CHECK(rk_transaction_restore(&transaction) == -ESTALE);
-	CHECK(transaction.state == RK_TRANSACTION_PRESERVED && warned == 1);
-	CHECK(target && sibling);
-	rk_transaction_dispose(&transaction);
-
-	memset(&transaction, 0, sizeof(transaction));
-	reset_files((const u8 *)"original", 8);
-	CHECK(rk_transaction_apply(&transaction) == 0);
-	sibling = new_file((const u8 *)"original", 8);
-	CHECK(rk_transaction_restore(&transaction) == -ESTALE);
-	CHECK(transaction.state == RK_TRANSACTION_PRESERVED && warned == 1);
-	CHECK(target && sibling);
-	rk_transaction_dispose(&transaction);
+			memset(&transaction, 0, sizeof(transaction));
+			reset_files((const u8 *)"original", 8);
+			CHECK(rk_transaction_apply(&transaction) == 0);
+			make_foreign_change(which ? &sibling : &target, change);
+			target_after_change = target;
+			sibling_after_change = sibling;
+			error = rk_transaction_restore(&transaction);
+			CHECK(error == (change == FOREIGN_REMOVAL ?
+				      -ENOENT : -ESTALE));
+			CHECK(transaction.state == RK_TRANSACTION_PRESERVED);
+			CHECK(warned == 1);
+			CHECK(target == target_after_change);
+			CHECK(sibling == sibling_after_change);
+			rk_transaction_dispose(&transaction);
+		}
+	}
 }
 
 static void test_restore_failures(void)
 {
 	struct rk_transaction transaction;
-	int step;
+	static const enum rk_platform_step steps[] = {
+		RK_STEP_READ,
+		RK_STEP_REOPEN_TARGET,
+		RK_STEP_REOPEN_SIBLING,
+		RK_STEP_EXCHANGE_RESTORE,
+		RK_STEP_SYNC_RESTORE,
+		RK_STEP_UNLINK,
+		RK_STEP_SYNC_UNLINK,
+	};
+	size_t index;
 
-	for (step = RK_STEP_EXCHANGE_RESTORE;
-	     step <= RK_STEP_SYNC_UNLINK; step++) {
+	for (index = 0; index < sizeof(steps) / sizeof(steps[0]); index++) {
+		enum rk_platform_step step = steps[index];
+		int expected = step == RK_STEP_READ ? -ESTALE : -EIO;
+
 		memset(&transaction, 0, sizeof(transaction));
 		reset_files((const u8 *)"original", 8);
 		CHECK(rk_transaction_apply(&transaction) == 0);
 		fail_step = step;
 		fail_used = 0;
-		CHECK(rk_transaction_restore(&transaction) == -EIO);
+		CHECK(rk_transaction_restore(&transaction) == expected);
 		CHECK(transaction.state == RK_TRANSACTION_PRESERVED);
 		CHECK(target != NULL);
-		if (step == RK_STEP_EXCHANGE_RESTORE) {
+		if (step == RK_STEP_READ || step == RK_STEP_REOPEN_TARGET ||
+		    step == RK_STEP_REOPEN_SIBLING ||
+		    step == RK_STEP_EXCHANGE_RESTORE) {
 			CHECK(target->length == RK_INTENDED_LENGTH);
 			CHECK(sibling && sibling->length == 8);
 		} else {
@@ -410,6 +472,21 @@ static void test_impossible_io(void)
 	strange_write = 2;
 	CHECK(rk_transaction_apply(&transaction) == -EIO);
 	CHECK(!sibling);
+	rk_transaction_dispose(&transaction);
+
+	memset(&transaction, 0, sizeof(transaction));
+	reset_files((const u8 *)"original", 8);
+	strange_read = 3;
+	CHECK(rk_transaction_apply(&transaction) == -EIO);
+	CHECK(!sibling);
+	rk_transaction_dispose(&transaction);
+
+	memset(&transaction, 0, sizeof(transaction));
+	reset_files((const u8 *)"original", 8);
+	strange_write = 3;
+	CHECK(rk_transaction_apply(&transaction) == -EIO);
+	CHECK(transaction.state == RK_TRANSACTION_PRESERVED);
+	CHECK(sibling && sibling->length == 1 && warned == 1);
 	rk_transaction_dispose(&transaction);
 }
 

@@ -30,8 +30,8 @@ Your code owns the transaction:
 - on rollback, exchange only if both names still match their retained snapshots;
 - sync the restored directory, verify the candidate again, unlink it, and sync once more.
 
-Any changed, removed, replaced, relinked, or re-moded file suppresses rollback.
-Preserve both names and emit one warning instead of overwriting evidence.
+If either fixed name differs when it is reopened and compared, suppress rollback.
+Make no further change and emit one warning instead of overwriting the state that was found.
 
 Both apply and restore run in module load or unload process context.
 `/proc/rootkitlings` reports cached state only; reading it performs no file I/O.
@@ -46,7 +46,9 @@ The checker covers binary originals of 0, 1, and 256 bytes, rejects 257 bytes, f
 It also builds with `W=1` and runs the module against real files on the disposable guest's private `tmpfs`.
 
 `fsync` on `tmpfs` still checks call ordering and error handling, but it does not prove survival across reboot or power loss.
-The private directory gives this exercise exclusive ownership during the transaction; this is not a compare-and-swap API for cooperating writers.
+Mode `0700` excludes unprivileged processes, not other root processes.
+The exercise therefore assumes one owner of the private directory.
+Another privileged writer can race after a comparison, so this is not a compare-and-swap API for cooperating writers.
 
 ## References
 
@@ -54,3 +56,4 @@ The private directory gives this exercise exclusive ownership during the transac
 - [Linux 7.2 locked rename helpers and `vfs_rename()`](https://github.com/torvalds/linux/blob/v7.2/fs/namei.c)
 - [Linux 7.2 `RENAME_EXCHANGE` definition](https://github.com/torvalds/linux/blob/v7.2/include/uapi/linux/fs.h)
 - [Linux 7.2 tmpfs file operations](https://github.com/torvalds/linux/blob/v7.2/mm/shmem.c)
+- [Linux VFS directory-locking rules](https://docs.kernel.org/filesystems/directory-locking.html)
