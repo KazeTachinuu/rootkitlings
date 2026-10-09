@@ -81,7 +81,7 @@ Course-entry diagnostic
 |
 +-- Stage 3: Identity, authorization and observation
 |   +-- R09-R14
-|   `-- M01 Authorized actions and telemetry
+|   `-- M01 Record authorized actions and rmdir results
 |
 +-- Stage 4: Views, concealment and detection
 |   +-- R15-R18
@@ -350,7 +350,7 @@ R06-R08 are separate practice workspaces, so the learner applies their mechanism
   missed-instance reporting, missing-target rollback, and probe-registry cleanup.
 - Current sources: L30 and L32.
 
-#### M01 - Authorized actions and telemetry
+#### M01 - Record authorized actions and rmdir results
 
 Merge C03 and C04.
 Add the one-use same-caller privilege action and a bounded event ring for selected file activity.
