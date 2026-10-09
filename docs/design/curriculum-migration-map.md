@@ -179,15 +179,18 @@ Knowledge already reached through one of those dependencies is not repeated.
 
 ### Stage 2: Control and resident execution
 
-#### R05 - Expose a bounded procfs state snapshot
+#### R05 - Read module state through procfs
 
-- Teaches: read position, count, EOF, short reads, and `seq_file` where it removes
-  irrelevant boilerplate.
-- Produces: a bounded status channel.
-- Requires: R04.
-- Defensive evidence: repeated, partial, and seeked reads plus write rejection.
-- Current source: L10, refactored to teach the durable read contract rather than
-  only one helper call.
+- Teaches: advancing file position, short reads, EOF, rewind, and the bounded read contract supplied by `seq_file`.
+- Produces: a read-only `active=1` record derived from private module state.
+- Requires: R04, including the component boundary and proc-before-state teardown order.
+- Learner change: add one state accessor, pass the state pointer through `proc_create_single_data()`, and render one local value in the show callback.
+- Lifetime: the state pointer is borrowed.
+  `proc_remove()` prevents new callbacks, waits for active callbacks, and releases open sessions before state destruction.
+  The immutable value needs no lock.
+- Defensive evidence: byte-exact output including the newline; advancing partial reads; repeated EOF; rewind; rejected writes without mutation; unload with an open descriptor; path and inventory removal; and immediate reload.
+- Current source: L10 contributes read-contract tests only.
+  Its separate manual read callback is not carried into the cumulative `seq_file` design.
 
 #### R06 - Accept a bounded userspace write transaction
 

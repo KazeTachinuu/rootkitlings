@@ -142,7 +142,7 @@ void rk_proc_unpublish(void);
 
 `interface/proc.c` alone owns the proc entry.
 A supplied `proc_create_single()` show function returns the fixed line `active`, so the mode-`0444` entry is a working status endpoint rather than an unreadable marker.
-R05 replaces that fixed status with a bounded snapshot of module state.
+R05 passes the state pointer through `proc_create_single_data()`, reads its immutable active flag through the state owner's accessor, and renders the local value with `seq_file`.
 State exists before publication and outlives the proc entry so later operations never expose an interface backed by absent state.
 
 The concrete acquisition order is:
