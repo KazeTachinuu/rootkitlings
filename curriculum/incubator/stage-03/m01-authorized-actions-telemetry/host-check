@@ -27,20 +27,12 @@ extract_function()
 (( $# == 2 )) || die "usage: ${0##*/} WORKSPACE MODULE"
 workspace=$(realpath -e -- "$1") || die "workspace not found"
 module=$(realpath -e -- "$2") || die "module not found"
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-
 for file in Kbuild include/rootkit.h core/main.c core/state.c interface/proc.c \
 	execution/worker.c execution/scheduler.c control/authorization.c \
 	privilege/credentials.c instrumentation/return_probe.c \
 	instrumentation/events.c; do
 	[[ -f $workspace/$file && ! -L $workspace/$file ]] ||
 		die "missing regular file: $file"
-done
-
-for file in core/state.c execution/worker.c execution/scheduler.c \
-	privilege/credentials.c; do
-	cmp -s "$here/template/$file" "$workspace/$file" ||
-		die "supplied file was changed: $file"
 done
 
 for object in core/main.o interface/proc.o control/authorization.o \

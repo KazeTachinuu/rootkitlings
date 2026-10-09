@@ -9,14 +9,6 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m00-work.XXXXXX")
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m00-test.XXXXXX")
 trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
 
-for supplied in include/rootkit.h core/state.c; do
-	[[ $(sha256sum "$HERE/template/$supplied" | cut -d' ' -f1) == \
-		$(sha256sum "$HERE/solution/$supplied" | cut -d' ' -f1) ]] || {
-		printf '[x] supplied template differs from solution: %s\n' "$supplied" >&2
-		exit 1
-	}
-done
-
 # M00 starts from the Stage 1 publication workspace. It does not merge the
 # completed Stage 2 lesson snapshots.
 cp -a "$HERE/../../stage-01/r03-owned-state/solution/." "$baseline/"

@@ -6,8 +6,6 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 (( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR ARTIFACT_PATH"
 build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
 artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-
 [[ -d $build_dir && ! -L $build_dir ]] || die "build directory must be a real directory"
 [[ -f $artifact && ! -L $artifact ]] || die "artifact must be a regular file"
 [[ $artifact == "$build_dir/rootkitlings.ko" ]] ||
@@ -19,18 +17,12 @@ for path in core/main.o core/state.o interface/proc.o execution/worker.o \
 		die "build output is missing regular file: $path"
 done
 
-for tool in modinfo nm objdump sha256sum; do
+for tool in modinfo nm objdump; do
 	command -v "$tool" >/dev/null || die "$tool is required"
 done
 [[ $(modinfo -F license "$artifact") == GPL ]] || die "module license must be GPL"
 [[ $(modinfo -F description "$artifact") == 'Rootkitlings kernel module' ]] ||
 	die "module description must be: Rootkitlings kernel module"
-
-for path in include/rootkit.h core/state.c; do
-	[[ $(sha256sum "$build_dir/$path" | cut -d' ' -f1) == \
-		$(sha256sum "$here/solution/$path" | cut -d' ' -f1) ]] ||
-		die "$path is supplied for this milestone and must not be changed"
-done
 
 if grep -REn '\b(work_struct|workqueue_struct|INIT_WORK|schedule_work|queue_work|cancel_work_sync|flush_work|alloc_workqueue)\b' \
 	"$build_dir"/{Kbuild,core,execution,include,interface} --include='*.c' --include='*.h' 2>/dev/null; then

@@ -1,0 +1,34 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$here/../../../../scripts/lesson-env"
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR ARTIFACT_PATH"
+build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
+artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-learner-host.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+build_variant()
+{
+	local name=$1 point=$2 destination=$scratch/$1 log=$scratch/$1.log
+	cp -a "$build_dir" "$destination"
+	make -s -C "$KDIR" M="$destination" clean
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
+		cat "$log" >&2
+		die "$name build failed"
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		die "$name builds with warnings"
+	fi
+}
+
+build_variant "credential-prepare" "4"
+build_variant "credential-cancel" "5"
+"$here/host-check" "$build_dir" "$artifact" "$scratch/credential-prepare" "$scratch/credential-cancel"

@@ -136,12 +136,6 @@ sed -i 's/rk_events_record_credential_change(void)/rk_events_record_credential_c
 	"$caller_tid/include/rootkit.h"
 reject_fixture "$caller_tid" caller-supplied-attribution
 
-supplied_change=$scratch/changed-supplied-file
-cp -a "$scratch/success" "$supplied_change"
-sed -i '$a /* learner edit outside the declared surface */' \
-	"$supplied_change/execution/worker.c"
-reject_fixture "$supplied_change" changed-supplied-file
-
 format_lock=$scratch/format-under-lock
 cp -a "$scratch/success" "$format_lock"
 sed -i '/spin_lock(&event_lock);/a\

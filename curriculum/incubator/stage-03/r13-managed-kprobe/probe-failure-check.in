@@ -2,7 +2,9 @@
 # shellcheck source=/dev/null
 . /lib/check.sh
 
-begin "@LABEL@"
+expected_errno=${1:-@EXPECTED_ERRNO@}
+label=${2:-@LABEL@}
+begin "$label"
 
 endpoint=/proc/rootkitlings
 registry=/sys/kernel/debug/kprobes/list
@@ -55,8 +57,8 @@ trap cleanup EXIT INT TERM
 attempt=1
 while [ "$attempt" -le 2 ]; do
 	kmem_trace_start
-	if module_load_test /rootkitlings/rootkitlings.ko @EXPECTED_ERRNO@; then
-		_ok "attempt $attempt returned errno @EXPECTED_ERRNO@"
+	if module_load_test /rootkitlings/rootkitlings.ko "$expected_errno"; then
+		_ok "attempt $attempt returned errno $expected_errno"
 	else
 		_fail "attempt $attempt returned the wrong error"
 	fi
