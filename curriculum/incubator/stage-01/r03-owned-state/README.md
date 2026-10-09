@@ -62,8 +62,10 @@ The checker builds failure points 0, 1, and 2 without warnings and rejects an un
 In disposable guests, value 1 must return numeric `ECANCELED`, value 2 must return numeric `ENOMEM`, and both rejected loads must leave the module absent.
 Value 0 must load, unload, disappear from kernel inventory and sysfs, then load and unload again.
 
-The individual object-file symbol tables show that `core/state.o` defines the state functions and `core/main.o` calls them.
-The private layout is absent from the shared header, so another component cannot allocate, free, or reach into state directly.
+On the host, injected allocator and constructor results verify the exact object
+lifetime and error propagation without relying on source-text patterns.
+Object-file and header checks enforce only the component boundary: allocation
+and release belong to `core/state.c`, and the state layout stays private.
 
 ## Official references
 

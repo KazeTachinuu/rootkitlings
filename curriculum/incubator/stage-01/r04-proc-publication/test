@@ -43,6 +43,35 @@ build_variant allocation 2
 build_variant publication 3
 "$HERE/host-check" "$scratch/success" "$scratch/success/rootkitlings.ko"
 
+cp "$HERE/fixtures/reversed-exit-main.c" "$work/core/main.c"
+build_variant reversed-exit 0
+if output=$("$HERE/host-check" "$scratch/reversed-exit" \
+	"$scratch/reversed-exit/rootkitlings.ko" 2>&1); then
+	printf '%s\n[x] reversed-exit fixture unexpectedly passed\n' "$output" >&2
+	exit 1
+fi
+case $output in
+	*"exit must unpublish before destroying the acquired state"*) ;;
+	*) printf '%s\n[x] reversed-exit fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
+esac
+printf '[+] reversed-exit fixture rejected by lifecycle ordering\n'
+
+cp "$HERE/fixtures/collapsed-publish-error-main.c" "$work/core/main.c"
+build_variant collapsed-publish-error 0
+if output=$("$HERE/host-check" "$scratch/collapsed-publish-error" \
+	"$scratch/collapsed-publish-error/rootkitlings.ko" 2>&1); then
+	printf '%s\n[x] collapsed-publish-error fixture unexpectedly passed\n' \
+		"$output" >&2
+	exit 1
+fi
+case $output in
+	*"publication failure must preserve its error and roll state back"*) ;;
+	*) printf '%s\n[x] collapsed-error fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
+esac
+printf '[+] collapsed publication error rejected by injected component error\n'
+
+cp -p "$HERE/solution/core/main.c" "$work/core/main.c"
+
 cp -a "$work" "$scratch/unknown"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 ROOTKITLINGS_FAIL_POINT=99 \
 	modules >"$scratch/unknown.log" 2>&1; then

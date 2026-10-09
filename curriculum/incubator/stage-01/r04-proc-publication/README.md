@@ -61,10 +61,13 @@ Run:
 ```
 
 The checker builds failure points 0 through 3 without warnings and rejects an unknown value.
+A host fixture injects independent state and procfs operations to verify
+acquisition order, reverse-order cleanup, exact error propagation, and the
+publication API contract.
 A disposable guest verifies that `/proc/rootkitlings` exists with mode `0444` and content `active` only while the module is loaded.
 It also checks the exact errors for all three rejected loads.
 
-For failure point 3, kernel allocation trace events must show that a module allocation is passed to `kfree()` during rollback; object-file checks establish that `core/state.c` is the only learner component that allocates or frees state.
+For failure point 3, kernel allocation trace events must show that a module allocation is passed to `kfree()` during rollback; object-file checks enforce the component ownership boundary.
 Module logs are not accepted as cleanup evidence.
 
 ## Official references
