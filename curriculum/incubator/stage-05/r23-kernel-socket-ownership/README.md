@@ -30,9 +30,8 @@ Keep the original failure code.
 
 Shutdown changes connection state; it does not free the socket.
 `sock_release()` ends ownership.
-TCP may still retain a protocol-owned closing record, such as `TIME_WAIT`, after
-release.  The checker requires the captured tuple to leave `ESTABLISHED`; it
-does not claim that every trace of the TCP connection disappears immediately.
+TCP may still retain a protocol-owned closing record, such as `TIME_WAIT`, after release.
+The checker requires the captured tuple to leave `ESTABLISHED`; it does not claim that every trace of the TCP connection disappears immediately.
 
 ## Closing and reporting
 
