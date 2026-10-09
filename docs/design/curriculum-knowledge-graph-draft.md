@@ -430,7 +430,8 @@ TRACE-25  BPF-based observation as a defensive comparison
 ```
 
 Export status, kernel configuration, release and architecture are prerequisites of one managed-probe lesson, not a separate address-resolution product.
-The learner registers named Kprobes through `.symbol_name`, manages the complete hook set transactionally and retains no raw kernel address.
+The learner registers named Kprobes through `.symbol_name`, manages the complete hook set transactionally, and does not copy, call through, log, or publish the resolved address.
+The managed `struct kprobe` still contains the address that the Kprobe core resolved.
 This keeps the exercise tied to the pinned guest ABI without presenting internal symbols as a stable module interface.
 
 ## View manipulation and concealment

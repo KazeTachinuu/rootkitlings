@@ -320,7 +320,8 @@ R06-R08 are separate practice workspaces, so the learner applies their mechanism
   and architecture coupling, named Kprobe resolution, bounded handlers, managed
   hook-set lifetime, and rollback.
 - Produces: entry telemetry through the supported `.symbol_name` registration path;
-  it does not retain or publish raw kernel addresses.
+  learner code does not copy, call through, log, or publish the address retained
+  inside each managed `struct kprobe`.
 - Requires: R06, including proc publication, resource rollback, and one-copy shared
   scalar access.
 - Learner change: define two named entry probes in one instrumentation component,
@@ -333,7 +334,7 @@ R06-R08 are separate practice workspaces, so the learner applies their mechanism
   controlled calls preserve normal behavior and flip the matching flags; a real
   missing-second-symbol failure returns `-ENOENT` and leaves no first probe; proc
   publication failure removes the complete set; unload and immediate reload leave
-  no probe or address artifact.
+  no stale probe-registry entry or module-published address.
 - Current sources: L27 contributes the export-versus-internal distinction only;
   L29 and L33 contribute the real named-probe and hook-set lifecycle.
 
