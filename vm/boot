@@ -6,6 +6,8 @@ VM_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "$VM_DIR/.." && pwd)
 # shellcheck source=scripts/lib/ui.sh
 source "$ROOT_DIR/scripts/lib/ui.sh"
+# shellcheck source=scripts/lib/host.sh
+source "$ROOT_DIR/scripts/lib/host.sh"
 
 # -- arguments --
 
@@ -204,7 +206,7 @@ run_vm()
 
     case $ACCEL in
         kvm)
-            [[ -r /dev/kvm && -w /dev/kvm ]] || ui_die "KVM was requested but /dev/kvm is unavailable"
+            host_kvm_available || ui_die "KVM was requested but is unavailable"
             qemu_args=(-accel kvm -cpu host)
             ui_success "KVM acceleration selected"
             ;;
@@ -213,7 +215,7 @@ run_vm()
             ui_success "TCG emulation selected"
             ;;
         auto)
-            if [[ -r /dev/kvm && -w /dev/kvm ]]; then
+            if host_kvm_available; then
                 qemu_args=(-accel kvm -cpu host)
                 ui_success "KVM acceleration available"
             else

@@ -14,7 +14,7 @@ import tomllib
 from typing import Iterator, Mapping
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 
 
@@ -28,7 +28,6 @@ class ExerciseState:
     workspace_hash: str = ""
     passed_snapshot: str = ""
     attempts: int = 0
-    solution_revealed: bool = False
     baseline_provider: str = ""
 
 
@@ -234,7 +233,7 @@ def parse_state(content: str) -> LearnerState:
     exercises: dict[str, ExerciseState] = {}
     fields = {
         "baseline_hash", "baseline_provider", "workspace_hash",
-        "passed_snapshot", "attempts", "solution_revealed",
+        "passed_snapshot", "attempts",
     }
     for stable_id, raw in raw_exercises.items():
         if not isinstance(raw, dict) or set(raw) != fields:
@@ -244,18 +243,14 @@ def parse_state(content: str) -> LearnerState:
         )):
             raise StateError(f"exercise hashes must be strings for {stable_id}")
         attempts = raw["attempts"]
-        revealed = raw["solution_revealed"]
         if isinstance(attempts, bool) or not isinstance(attempts, int):
             raise StateError(f"attempts must be an integer for {stable_id}")
-        if not isinstance(revealed, bool):
-            raise StateError(f"solution_revealed must be boolean for {stable_id}")
         exercises[stable_id] = ExerciseState(
             baseline_hash=raw["baseline_hash"],
             baseline_provider=raw["baseline_provider"],
             workspace_hash=raw["workspace_hash"],
             passed_snapshot=raw["passed_snapshot"],
             attempts=attempts,
-            solution_revealed=revealed,
         )
     state = LearnerState(data["curriculum_revision"], saved_route, completed, exercises)
     _validate_structural_state(state)
@@ -312,7 +307,6 @@ def dump_state(state: LearnerState) -> str:
             f"workspace_hash = {_quote(item.workspace_hash)}",
             f"passed_snapshot = {_quote(item.passed_snapshot)}",
             f"attempts = {item.attempts}",
-            f"solution_revealed = {'true' if item.solution_revealed else 'false'}",
         ]
     return "\n".join(lines) + "\n"
 

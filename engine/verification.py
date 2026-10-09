@@ -7,9 +7,10 @@ from dataclasses import dataclass
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shlex
 import stat
 import tempfile
-from typing import Iterable, Iterator
+from typing import Callable, Iterable, Iterator
 
 from .catalog import VerificationCase
 from .build_env import module_build_environment
@@ -75,16 +76,40 @@ def _build_path(case_root: Path, relative: str) -> Path:
     return resolved
 
 
-def _artifact(path: Path, case: VerificationCase) -> Path:
+def _build_transcript(output: str) -> str:
+    text = output.rstrip()
+    if not text:
+        text = "(build command produced no output)"
+    return f"Build output\n{text}"
+
+
+def _failure_detail(command: list[str], output: str, reported: bool) -> str:
+    if reported:
+        return ""
+    return f"\nCommand\n$ {shlex.join(command)}\n{_build_transcript(output)}"
+
+
+def _artifact(
+    path: Path,
+    case: VerificationCase,
+    command: list[str],
+    output: str,
+    reported: bool,
+) -> Path:
     try:
         mode = path.lstat().st_mode
     except FileNotFoundError as exc:
         raise VerificationError(
-            f"verification case {case.id!r} produced no artifact: {path.name}"
+            f"Build for {case.label} did not create {path.name}.\n"
+            "The build completed successfully, so inspect the module declarations "
+            "in Kbuild."
+            f"{_failure_detail(command, output, reported)}"
         ) from exc
     if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
         raise VerificationError(
-            f"verification case {case.id!r} artifact is not a regular file: {path.name}"
+            f"Build for {case.label} created an unsafe artifact: {path.name} is not "
+            "a regular file."
+            f"{_failure_detail(command, output, reported)}"
         )
     return path
 
@@ -100,6 +125,10 @@ def build_verification_cases(
     timeout_seconds: int,
     *,
     kernel_build_dir: Path,
+    before_build: Callable[
+        [int, int, VerificationCase, tuple[str, ...]], None
+    ] | None = None,
+    after_build: Callable[[VerificationCase, str, int | None], None] | None = None,
 ) -> Iterator[VerificationRun]:
     """Build every case in isolation and retain its tree for the context lifetime."""
     repository_root = _real_directory(repository_root, "repository root")
@@ -137,7 +166,7 @@ def build_verification_cases(
                 "workspace changed while verification files were being frozen; rerun check"
             )
         outcomes = []
-        for case in case_values:
+        for index, case in enumerate(case_values, 1):
             try:
                 case_root = materialize(
                     frozen_source, case_parent, case.id, declared_values
@@ -154,12 +183,14 @@ def build_verification_cases(
                     f"{artifact_basename}"
                 )
             command = [
-                "make", "-C", os.fspath(repository_root),
+                "make", "--no-print-directory", "-C", os.fspath(repository_root),
                 f"KDIR={kernel_build_dir}",
                 f"MODULE_DIR={build_root}", "W=1",
                 *(f"{name}={value}" for name, value in case.build_variables),
                 "module",
             ]
+            if before_build is not None:
+                before_build(index, len(case_values), case, tuple(command))
             try:
                 result = run_process(
                     command,
@@ -168,28 +199,39 @@ def build_verification_cases(
                     env=module_build_environment(),
                 )
             except ProcessTimeout as exc:
+                if after_build is not None:
+                    after_build(case, exc.output, None)
                 raise VerificationError(
-                    f"verification case {case.id!r} {exc}"
+                    f"Build for {case.label} timed out after {timeout_seconds} seconds."
+                    f"{_failure_detail(command, exc.output, after_build is not None)}"
                 ) from exc
             except ProcessError as exc:
+                if after_build is not None:
+                    after_build(case, "", None)
                 raise VerificationError(
-                    f"cannot execute verification case {case.id!r}: {exc}"
+                    f"Could not start the build for {case.label}: {exc}"
                 ) from exc
             output = result.stdout or ""
+            if after_build is not None:
+                after_build(case, output, result.returncode)
+            reported = after_build is not None
             if case.build_output_contains and case.build_output_contains not in output:
                 raise VerificationError(
-                    f"verification case {case.id!r} output lacks required marker "
-                    f"{case.build_output_contains!r}\n{output}"
+                    f"Build for {case.label} did not print the required marker "
+                    f"{case.build_output_contains!r}."
+                    f"{_failure_detail(command, output, reported)}"
                 )
             if case.expect_build == "fail":
                 if result.returncode == 0:
                     raise VerificationError(
-                        f"verification case {case.id!r} unexpectedly built successfully"
+                        f"Build for {case.label} succeeded, but this case must be rejected."
+                        f"{_failure_detail(command, output, reported)}"
                     )
                 if artifact.exists() or artifact.is_symlink():
                     raise VerificationError(
-                        f"verification case {case.id!r} failed but left an artifact: "
-                        f"{artifact_basename}"
+                        f"Rejected build for {case.label} left an artifact: "
+                        f"{artifact_basename}."
+                        f"{_failure_detail(command, output, reported)}"
                     )
                 outcomes.append(VerificationOutcome(case, build_root, None, output))
                 continue
@@ -199,13 +241,20 @@ def build_verification_cases(
                 )
             if result.returncode != 0:
                 raise VerificationError(
-                    f"verification case {case.id!r} unexpectedly failed to build\n{output}"
+                    f"Build for {case.label} failed."
+                    f"{_failure_detail(command, output, reported)}"
                 )
             if WARNING_RE.search(output):
                 raise VerificationError(
-                    f"verification case {case.id!r} built with warnings\n{output}"
+                    f"Build for {case.label} produced warnings."
+                    f"{_failure_detail(command, output, reported)}"
                 )
             outcomes.append(
-                VerificationOutcome(case, build_root, _artifact(artifact, case), output)
+                VerificationOutcome(
+                    case,
+                    build_root,
+                    _artifact(artifact, case, command, output, reported),
+                    output,
+                )
             )
         yield VerificationRun(frozen_source, frozen_hash, tuple(outcomes))

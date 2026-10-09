@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import difflib
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -106,16 +105,16 @@ def cmd_setup(a):
         [str(ROOT / 'scripts/doctor')],
         timeout=DOCTOR_TIMEOUT,
         capture=True,
+        visible=True,
     )
     if doctor.returncode:
-        if doctor.stdout:
-            UI.raw_block(doctor.stdout, error=True)
         die('Setup failed: scripts/doctor did not pass')
     UI.success('Host tools ready')
-    UI.progress('Preparing the pinned course kernel')
+    UI.progress('Preparing the pinned course kernel; the first build may be quiet for several minutes')
     kernel = run(
         [str(ROOT / 'scripts/kernel'), 'ensure'],
         timeout=KERNEL_PREP_TIMEOUT,
+        visible=True,
     )
     if kernel.returncode:
         die('Setup failed: course kernel preparation did not pass')
@@ -128,10 +127,9 @@ def cmd_setup(a):
         ],
         timeout=SETUP_PROBE_TIMEOUT,
         capture=True,
+        visible=True,
     )
     if containment.returncode:
-        if containment.stdout:
-            UI.raw_block(containment.stdout, error=True)
         die('Setup failed: disposable guest containment check did not pass')
     UI.success('Guest boundary verified')
     UI.success('Setup ready')
@@ -266,18 +264,34 @@ def none(a, command):
         die(f'Usage: ./rootkitlings {command}')
 
 
-def run(cmd, timeout=None, capture=False, env=None):
+def run(cmd, timeout=None, capture=False, env=None, visible=False):
+    if visible:
+        UI.transcript(cmd)
     try:
-        return run_process(
+        result = run_process(
             cmd,
             cwd=ROOT,
             timeout=timeout,
             capture=capture,
             env=env,
         )
+        if visible and capture:
+            UI.process_output(result.stdout or '', error=bool(result.returncode))
+        if visible:
+            UI.process_result(result.returncode)
+        return result
     except ProcessTimeout as error:
+        if visible and capture:
+            UI.process_output(error.output, error=True)
+        if visible:
+            UI.process_result(None)
+            raise CLIError(f'Command timed out after {error.timeout} seconds') from error
         raise CLIError(str(error)) from error
     except ProcessError as error:
+        if visible and capture:
+            UI.process_output('', error=True)
+        if visible:
+            UI.process_result(None)
         raise CLIError(str(error)) from error
 
 
@@ -313,23 +327,7 @@ def cmd_read(a):
     with STORE.read_locked() as s:
         x = resolve(one(a, 'read'), s)
     p = ROOT / x.resources.readme
-    viewer = shutil.which('glow') or shutil.which('bat') or shutil.which('batcat')
-    if viewer and Path(viewer).name == 'glow':
-        width = UI.terminal_width()
-        viewed = run([viewer, '-w', str(width), str(p)])
-    elif viewer:
-        viewed = run([
-            viewer,
-            '--style=plain',
-            '--paging=never',
-            '--language=markdown',
-            str(p),
-        ])
-    else:
-        UI.raw(p.read_text())
-        viewed = None
-    if viewed is not None and viewed.returncode:
-        die(f'Could not render {label(x)} lesson text')
+    UI.raw(p.read_text())
     workspace = wp(x)
     if workspace.is_dir() and not workspace.is_symlink():
         UI.section('Next')
@@ -357,8 +355,6 @@ def cmd_solution(a):
         completed = set(s.completed)
     output = solution_output(x, completed)
     UI.raw(output)
-    with STORE.locked() as s:
-        s.exercise(x.id).solution_revealed = True
     UI.section('Try again')
     UI.command(f'./rootkitlings check {label(x)}')
     UI.section('Restore starting files')
@@ -386,7 +382,6 @@ def solution_output(x, completed):
             f'{UI.style("[!]", "warning")} Complete reference files for '
             f'{label(x)}: {x.title}\n'
         )
-        lines.append('Viewing this reference is recorded.\n')
         for relative, solution_file in sorted(tree.items()):
             text = solution_text(solution_file.data, relative)
             lines.append(f'\n--- {relative} ---\n')
@@ -400,7 +395,6 @@ def solution_output(x, completed):
         f'{UI.style("[!]", "warning")} Reference changes for '
         f'{label(x)}: {x.title}\n'
     )
-    lines.append('Viewing this reference is recorded.\n')
     lines.append(f'Compared with {label(provider)}: {provider.title}\n')
     if provider.id not in completed:
         lines.append(
@@ -453,7 +447,7 @@ def build_workspace(x):
         'W=1',
         '--quiet',
         'module',
-    ], env=module_build_environment())
+    ], capture=True, env=module_build_environment(), visible=True)
     if r.returncode:
         die(f'Build failed for {label(x)}')
     if artifact.is_symlink() or not artifact.is_file():
@@ -481,7 +475,7 @@ def run_host_check(x, build_directory, artifact, timeout):
         str(ROOT / x.resources.host_check),
         str(build_directory),
         str(artifact),
-    ], timeout=timeout, capture=True)
+    ], timeout=timeout, capture=True, visible=True)
 
 
 def cmd_build(a):
@@ -615,8 +609,31 @@ def cmd_check(a):
         die(f'{label(x)} has no recorded starting snapshot')
     starting_snapshot = snap(baseline_hash)
     timeout = check_timeout(x)
+    cases = CAT.verification_cases(x)
+    UI.heading(f'Check {label(x)}: {x.title}')
+    UI.field('Cases', str(len(cases)))
+    UI.field('Timeout', f'{timeout} seconds')
+    UI.section('Build cases')
+
+    def before_build(index, total, case, command):
+        UI.heading(f'{index}/{total} {case.label}')
+        expected = (
+            'module artifact'
+            if case.expect_build == 'pass'
+            else 'rejected build'
+        )
+        UI.field('Expected', expected)
+        UI.transcript(command)
+
+    def after_build(case, output, returncode):
+        unexpected_failure = returncode not in (0, None) and case.expect_build == 'pass'
+        UI.process_output(output, error=unexpected_failure)
+        UI.process_result(
+            returncode,
+            expected_nonzero=case.expect_build == 'fail',
+        )
+
     try:
-        cases = CAT.verification_cases(x)
         with build_verification_cases(
             ROOT,
             workspace,
@@ -626,6 +643,8 @@ def cmd_check(a):
             cases,
             timeout,
             kernel_build_dir=course_kernel_build_dir(),
+            before_build=before_build,
+            after_build=after_build,
         ) as verification:
             verify_edit_boundary(
                 x,
@@ -634,23 +653,25 @@ def cmd_check(a):
             )
             outcomes = verification.outcomes
             host_check_pending = bool(x.resources.host_check)
+            UI.section('Behavior checks')
             for index, outcome in enumerate(outcomes, 1):
-                UI.progress(f'Case {index} of {len(outcomes)}  {outcome.case.label}')
+                UI.heading(f'{index}/{len(outcomes)} {outcome.case.label}')
                 if outcome.artifact is None:
                     UI.success('Build rejected as required')
                     continue
+                UI.field('Artifact', shown(outcome.artifact))
                 if host_check_pending:
+                    UI.heading('Source and artifact')
                     host = run_host_check(
                         x,
                         outcome.build_root,
                         outcome.artifact,
                         timeout,
                     )
-                    if host.stdout:
-                        UI.raw_block(host.stdout, error=bool(host.returncode))
                     if host.returncode:
                         die(f'Source and artifact checks failed for {label(x)}')
                     host_check_pending = False
+                UI.heading('Guest behavior')
                 result = run(
                     [
                         str(ROOT / 'vm/boot'),
@@ -668,9 +689,8 @@ def cmd_check(a):
                     ],
                     timeout=timeout,
                     capture=True,
+                    visible=True,
                 )
-                if result.stdout:
-                    UI.raw_block(result.stdout, error=bool(result.returncode))
                 if result.returncode:
                     die(f'Guest check failed: {outcome.case.label}')
             if host_check_pending:
@@ -732,7 +752,7 @@ def cmd_run(a, gdb=False):
         *extra,
         str(build_workspace(x)),
     ]
-    raise SystemExit(run(command).returncode)
+    raise SystemExit(run(command, visible=True).returncode)
 
 
 def cmd_status(a):
@@ -908,7 +928,10 @@ def cmd_clean(a):
         x = resolve(one(a, 'clean'), s)
     need(x)
     k = course_kernel_build_dir()
-    if run(['make', '-C', str(k), f'M={bd(x)}', 'clean']).returncode:
+    if run(
+        ['make', '-C', str(k), f'M={bd(x)}', 'clean'],
+        visible=True,
+    ).returncode:
         die(f'Could not clean {label(x)}')
     UI.success(f'Cleaned {label(x)} build outputs')
 
@@ -981,6 +1004,10 @@ def main(a):
     if requested in {'-h', '--help'}:
         none(arguments, requested)
         usage()
+        return 0
+    if requested in {'-V', '--version'}:
+        none(arguments, requested)
+        UI.line(f'rootkitlings curriculum {CAT.revision}')
         return 0
     matches = [command for command in CMDS if command.startswith(requested)]
     if not matches:

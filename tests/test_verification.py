@@ -34,7 +34,7 @@ module:
 \t  symlink) ln -s main.c \"$(MODULE_DIR)/test.ko\" ;; \\
 \t  special) mkfifo \"$(MODULE_DIR)/test.ko\" ;; \\
 \t  timeout) sleep 2 ;; \\
-\t  fail) exit 2 ;; \\
+\t  fail) printf '%s\\n' 'core/main.c:7: error: expected declaration'; exit 2 ;; \\
 \t  fail-artifact) printf module > "$(MODULE_DIR)/test.ko"; exit 2 ;; \\
 \t  *) exit 3 ;; \\
 \tesac
@@ -113,14 +113,14 @@ module:
             self.assertIn("expected marker", outcomes[0].output)
 
     def test_required_marker_must_appear(self) -> None:
-        with self.assertRaisesRegex(VerificationError, "lacks required marker"):
+        with self.assertRaisesRegex(VerificationError, "did not print the required marker"):
             with self.builds((self.case("bad", "reject-other", expect="fail", marker="wanted"),)):
                 pass
 
     def test_unexpected_pass_and_failure_are_rejected(self) -> None:
         for case, message in (
-            (self.case("pass", "pass", expect="fail"), "unexpectedly built"),
-            (self.case("fail", "fail"), "unexpectedly failed"),
+            (self.case("pass", "pass", expect="fail"), "must be rejected"),
+            (self.case("fail", "fail"), "Build for fail failed"),
         ):
             with self.subTest(case=case.id):
                 with self.assertRaisesRegex(VerificationError, message):
@@ -128,16 +128,62 @@ module:
                         pass
 
     def test_successful_build_with_warning_is_rejected(self) -> None:
-        with self.assertRaisesRegex(VerificationError, "built with warnings"):
+        with self.assertRaisesRegex(VerificationError, "produced warnings"):
             with self.builds((self.case("warning", "warning"),)):
                 pass
 
     def test_missing_symlink_and_special_artifacts_are_rejected(self) -> None:
-        for mode in ("missing", "symlink", "special"):
+        with self.assertRaisesRegex(VerificationError, "did not create test.ko") as caught:
+            with self.builds((self.case("missing", "missing"),)):
+                pass
+        self.assertIn("$ make --no-print-directory -C", str(caught.exception))
+        self.assertIn("(build command produced no output)", str(caught.exception))
+        for mode in ("symlink", "special"):
             with self.subTest(mode=mode):
-                with self.assertRaisesRegex(VerificationError, "artifact"):
+                with self.assertRaisesRegex(VerificationError, "unsafe artifact"):
                     with self.builds((self.case(mode, mode),)):
                         pass
+
+    def test_callbacks_receive_each_exact_command_and_complete_output(self) -> None:
+        commands = []
+        results = []
+
+        def before(index, total, case, command):
+            commands.append((index, total, case.id, command))
+
+        def after(case, output, returncode):
+            results.append((case.id, output, returncode))
+
+        case = self.case("marked", "reject", expect="fail", marker="expected marker")
+        with build_verification_cases(
+            self.repository,
+            self.source,
+            ("Kbuild", "main.c"),
+            ".",
+            "test.ko",
+            (case,),
+            5,
+            kernel_build_dir=self.kernel_build,
+            before_build=before,
+            after_build=after,
+        ):
+            pass
+        self.assertEqual(commands[0][:3], (1, 1, "marked"))
+        self.assertEqual(
+            commands[0][3][0:4],
+            ("make", "--no-print-directory", "-C", str(self.repository)),
+        )
+        self.assertEqual(results[0][0], "marked")
+        self.assertIn("expected marker\n", results[0][1])
+        self.assertEqual(results[0][2], 2)
+
+    def test_failed_build_error_preserves_raw_output_without_callbacks(self) -> None:
+        with self.assertRaises(VerificationError) as caught:
+            with self.builds((self.case("fail", "fail"),)):
+                pass
+        message = str(caught.exception)
+        self.assertIn("core/main.c:7: error: expected declaration", message)
+        self.assertIn("$ make --no-print-directory -C", message)
 
     def test_timeout_is_rejected_and_tree_is_cleaned(self) -> None:
         before = set(Path(tempfile.gettempdir()).glob("rootkitlings-cases-*"))

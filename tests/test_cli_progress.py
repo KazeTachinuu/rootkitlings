@@ -222,6 +222,17 @@ class LearnerCLITests(unittest.TestCase):
                     self.assertEqual(self.globals["main"]([flag]), 0)
                 self.assertIn("./rootkitlings <COMMAND> [EXERCISE]", output.getvalue())
 
+    def test_standard_version_flags_show_the_catalog_revision(self) -> None:
+        for flag in ("-V", "--version"):
+            with self.subTest(flag=flag):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    self.assertEqual(self.globals["main"]([flag]), 0)
+                self.assertEqual(
+                    output.getvalue(),
+                    f"rootkitlings curriculum {self.globals['CAT'].revision}\n",
+                )
+
     def test_prereq_shows_only_assumptions_the_exercise_uses(self) -> None:
         output = io.StringIO()
         with redirect_stdout(output), redirect_stderr(io.StringIO()):
@@ -345,7 +356,10 @@ class LearnerCLITests(unittest.TestCase):
             self.globals["run"] = original_run
         command, kwargs = calls[0]
         self.assertEqual(command[-2:], [str(workspace), str(artifact)])
-        self.assertEqual(kwargs, {"timeout": 17, "capture": True})
+        self.assertEqual(
+            kwargs,
+            {"timeout": 17, "capture": True, "visible": True},
+        )
 
     def test_check_runs_each_declarative_case_and_records_one_attempt(self) -> None:
         exercise = self.globals["CAT"].ordered()[0]
@@ -434,9 +448,9 @@ class LearnerCLITests(unittest.TestCase):
                 self.globals["cmd_check"]([exercise.serial])
         finally:
             self.globals.update(originals)
-        self.assertIn("[*] Case 1 of 3  Normal load", output.getvalue())
-        self.assertIn("[*] Case 2 of 3  Second load", output.getvalue())
-        self.assertIn("[*] Case 3 of 3  Invalid build setting", output.getvalue())
+        self.assertIn("1/3 Normal load", output.getvalue())
+        self.assertIn("2/3 Second load", output.getvalue())
+        self.assertIn("3/3 Invalid build setting", output.getvalue())
         self.assertIn("Build rejected as required", output.getvalue())
         self.assertEqual(len(host_runs), 1)
         self.assertEqual(len(guest_runs), 2)
@@ -544,7 +558,7 @@ class LearnerCLITests(unittest.TestCase):
         finally:
             self.globals["CAT"] = original_catalog
         self.assertIn("Complete reference files", output)
-        self.assertIn("Viewing this reference is recorded", output)
+        self.assertNotIn("recorded", output)
         headings = (
             "--- Kbuild ---",
             "--- core/main.c ---",
@@ -623,7 +637,7 @@ class LearnerCLITests(unittest.TestCase):
         self.assertIn("--- main.c ---", output)
         self.assertNotIn("--- a/main.c", output)
 
-    def test_solution_disclosure_records_only_after_render(self) -> None:
+    def test_solution_view_does_not_mutate_learner_state(self) -> None:
         exercise = self.globals["CAT"].ordered()[0]
         original_output = self.globals["solution_output"]
         try:
@@ -638,12 +652,14 @@ class LearnerCLITests(unittest.TestCase):
             with self.globals["STORE"].read_locked() as state:
                 self.assertNotIn(exercise.id, state.exercises)
 
+            state_path = self.globals["STATE"]
+            before = state_path.read_bytes() if state_path.exists() else None
             future = self.globals["CAT"].ordered()[-1]
             self.globals["solution_output"] = lambda *_args: "rendered\n"
             with redirect_stdout(io.StringIO()):
                 self.globals["cmd_solution"]([future.serial])
-            with self.globals["STORE"].read_locked() as state:
-                self.assertTrue(state.exercises[future.id].solution_revealed)
+            after = state_path.read_bytes() if state_path.exists() else None
+            self.assertEqual(after, before)
         finally:
             self.globals["solution_output"] = original_output
 
@@ -889,9 +905,8 @@ class LearnerCLITests(unittest.TestCase):
         state_path = self.globals["STATE"]
         state_before = state_path.read_bytes() if state_path.exists() else None
         output = io.StringIO()
-        with mock.patch.object(self.globals["shutil"], "which", return_value=None):
-            with redirect_stdout(output):
-                self.globals["cmd_read"]([])
+        with redirect_stdout(output):
+            self.globals["cmd_read"]([])
         read_text = output.getvalue()
         self.assertIn("# Build, load, inspect, and unload a kernel module", read_text)
         self.assertIn("./rootkitlings start L00", read_text)
@@ -909,9 +924,8 @@ class LearnerCLITests(unittest.TestCase):
         with redirect_stdout(io.StringIO()):
             self.globals["cmd_start"](["L00"])
         output = io.StringIO()
-        with mock.patch.object(self.globals["shutil"], "which", return_value=None):
-            with redirect_stdout(output):
-                self.globals["cmd_read"](["L00"])
+        with redirect_stdout(output):
+            self.globals["cmd_read"](["L00"])
         self.assertIn("./rootkitlings check L00", output.getvalue())
         self.assertNotIn("./rootkitlings start L00", output.getvalue())
 
@@ -1126,7 +1140,6 @@ class LearnerCLITests(unittest.TestCase):
         with self.globals["STORE"].locked() as state:
             record = state.exercise(exercise.id)
             record.attempts = 4
-            record.solution_revealed = True
             state.completed.add(exercise.id)
         with redirect_stdout(io.StringIO()):
             self.globals["cmd_restore"]([exercise.serial])
@@ -1135,7 +1148,6 @@ class LearnerCLITests(unittest.TestCase):
         with self.globals["STORE"].read_locked() as state:
             record = state.exercises[exercise.id]
             self.assertEqual(record.attempts, 4)
-            self.assertTrue(record.solution_revealed)
             self.assertIn(exercise.id, state.completed)
 
 

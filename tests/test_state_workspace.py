@@ -72,7 +72,7 @@ class StateTests(unittest.TestCase):
             )
             with store.locked() as state:
                 state.completed.add("module-core")
-                state.exercises["proc-status"] = ExerciseState(attempts=2, solution_revealed=True)
+                state.exercises["proc-status"] = ExerciseState(attempts=2)
             first = path.read_bytes()
             loaded = load_state(
                 path, IDS, ROUTE, REVISION, PREREQUISITES,

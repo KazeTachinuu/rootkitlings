@@ -24,6 +24,23 @@ ShellCheck adds shell diagnostics to `make validate` but is not required to run 
 The host kernel version and headers are not used.
 Every exercise uses the pinned Linux 7.2.9 x86-64 guest defined in [`vm/kernel.toml`](vm/kernel.toml).
 
+### Host compatibility
+
+| Host | Support | Use |
+|---|---|---|
+| x86-64 Linux | Supported | Clone normally and follow the start commands below. |
+| x86-64 Windows with WSL2 | Expected compatible; not yet acceptance-tested | Clone from inside WSL into `~/rootkitlings`; do not use `/mnt/c`. KVM is optional and TCG works without nested virtualization. |
+| Native Windows or WSL1 | Unsupported | Install an x86-64 WSL2 distribution. |
+| macOS | Unsupported | Use an x86-64 Linux VM or remote Linux host. Apple Silicon users should prefer a remote x86-64 host. |
+| ARM64 Linux or Windows on ARM | Unsupported | The course teaches x86-64 kernel mechanisms and ABI details. |
+
+On Windows, open the WSL terminal and run `git clone` there.
+Do not clone with Windows Git and then open the checkout through WSL: the Windows-mounted filesystem is substantially slower for kernel builds and may alter executable scripts.
+The repository enforces LF line endings, but the Linux filesystem and executable modes are still required.
+
+QEMU itself running on macOS is not enough.
+The build also requires Linux ELF tools, static Linux guest binaries, and Linux host interfaces.
+
 ## Start
 
 ```sh

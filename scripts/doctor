@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 # shellcheck disable=SC1091 # /etc/os-release is a runtime host file.
 set -u
 export LC_ALL=C LANG=C
@@ -6,7 +6,47 @@ export LC_ALL=C LANG=C
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 # shellcheck source=scripts/lib/ui.sh
 source "$ROOT_DIR/scripts/lib/ui.sh"
+# shellcheck source=scripts/lib/host.sh
+source "$ROOT_DIR/scripts/lib/host.sh"
 missing=0
+
+ui_heading 'Host'
+host_system=$(uname -s)
+if [[ $host_system != Linux ]]; then
+	ui_item fail 'operating system' "$host_system is unsupported; use an x86-64 Linux host"
+	ui_item note macOS 'use an x86-64 Linux VM or remote Linux host'
+	exit 1
+fi
+
+kernel_release=$(uname -r)
+wsl_version=0
+if [[ -n ${WSL_INTEROP:-}${WSL_DISTRO_NAME:-} || $kernel_release == *Microsoft* || $kernel_release == *microsoft* ]]; then
+	case $kernel_release in
+		*WSL2*|*wsl2*) wsl_version=2 ;;
+		*) wsl_version=1 ;;
+	esac
+fi
+
+case $ROOT_DIR in
+	*[!A-Za-z0-9._+/-]*)
+		ui_item fail 'repository path' 'use only ASCII letters, digits, /, ., _, +, and -'
+		missing=$((missing + 1))
+		;;
+	*) ui_item pass 'repository path' "$ROOT_DIR" ;;
+esac
+if (( wsl_version == 1 )); then
+	ui_item fail environment 'WSL1 is unsupported; convert the distribution to WSL2'
+	exit 1
+elif (( wsl_version == 2 )); then
+	ui_item pass environment 'WSL2'
+	case $ROOT_DIR in
+		/mnt/[A-Za-z]|/mnt/[A-Za-z]/*)
+			ui_item fail 'repository location' 'clone inside the WSL filesystem, for example ~/rootkitlings'
+			missing=$((missing + 1))
+			;;
+	esac
+fi
+
 family=unknown
 if [[ -r /etc/os-release ]]; then
 	. /etc/os-release
@@ -76,7 +116,6 @@ check_command()
 	fi
 }
 
-ui_heading 'Host'
 ui_item pass distribution "${PRETTY_NAME:-unknown}"
 if [[ $(uname -m) == x86_64 ]]; then
 	ui_item pass architecture supported
@@ -220,7 +259,7 @@ fi
 
 printf '\n'
 ui_heading 'Acceleration'
-if [[ -r /dev/kvm && -w /dev/kvm ]]; then
+if host_kvm_available; then
 	ui_item pass KVM available
 else
 	ui_item note KVM 'unavailable; tests use slower TCG emulation'

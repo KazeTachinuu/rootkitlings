@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shlex
 import shutil
 import sys
 from typing import TextIO
@@ -101,7 +102,11 @@ class Console:
         error: bool = False,
     ) -> None:
         stream = self._stream(error)
-        print(_styled(text, style, stream) if style else text, file=stream)
+        print(
+            _styled(text, style, stream) if style else text,
+            file=stream,
+            flush=True,
+        )
 
     def raw(self, text: str, *, error: bool = False) -> None:
         stream = self._stream(error)
@@ -132,7 +137,7 @@ class Console:
         stream = self._stream()
         shown_label = _styled(f"{label:<{width}}", "dim", stream)
         shown_value = _styled(value, value_style, stream) if value_style else value
-        print(f"{shown_label}{shown_value}", file=stream)
+        print(f"{shown_label}{shown_value}", file=stream, flush=True)
 
     def row(
         self,
@@ -146,13 +151,41 @@ class Console:
         column = f"{left:<{width}}"
         if left_style:
             column = _styled(column, left_style, stream)
-        print(f"  {column}{right}", file=stream)
+        print(f"  {column}{right}", file=stream, flush=True)
 
     def bullet(self, text: str) -> None:
         self.line(f"- {text}")
 
     def command(self, value: str, *, error: bool = False) -> None:
         self.line(f"  {value}", style="command", error=error)
+
+    def transcript(self, command: list[object] | tuple[object, ...]) -> None:
+        self.line(f"$ {shlex.join(str(value) for value in command)}", style="dim")
+
+    def process_output(self, text: str, *, error: bool = False) -> None:
+        if text:
+            self.raw_block(text, error=error)
+        else:
+            self.line("(command produced no output)", style="dim", error=error)
+
+    def process_result(
+        self,
+        returncode: int | None,
+        *,
+        expected_nonzero: bool = False,
+    ) -> None:
+        if returncode is None:
+            self.field("Exit", "not available", value_style="error")
+            return
+        matched = returncode != 0 if expected_nonzero else returncode == 0
+        value = str(returncode)
+        if expected_nonzero:
+            value += " (expected non-zero)"
+        self.field(
+            "Exit",
+            value,
+            value_style="success" if matched else "error",
+        )
 
     def progress(self, message: str) -> None:
         self.log.info(message, extra={"console_kind": "progress"})

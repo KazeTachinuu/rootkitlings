@@ -76,6 +76,36 @@ class ConsoleTests(unittest.TestCase):
             self.console.success("ready")
         self.assertEqual(stdout.getvalue(), "last line\n[+] ready\n")
 
+    def test_transcript_shell_quotes_each_argument(self) -> None:
+        stdout = Stream(False)
+        with mock.patch.object(sys, "stdout", stdout):
+            self.console.transcript(("make", "VALUE=two words", "$literal"))
+        self.assertEqual(
+            stdout.getvalue(),
+            "$ make 'VALUE=two words' '$literal'\n",
+        )
+
+    def test_process_output_never_hides_an_empty_result(self) -> None:
+        stdout = Stream(False)
+        with mock.patch.object(sys, "stdout", stdout):
+            self.console.process_output("")
+        self.assertEqual(stdout.getvalue(), "(command produced no output)\n")
+
+    def test_process_result_distinguishes_success_rejection_and_no_exit(self) -> None:
+        stdout = Stream(False)
+        with mock.patch.object(sys, "stdout", stdout):
+            self.console.process_result(0)
+            self.console.process_result(2, expected_nonzero=True)
+            self.console.process_result(None)
+        self.assertEqual(
+            stdout.getvalue().splitlines(),
+            [
+                "Exit       0",
+                "Exit       2 (expected non-zero)",
+                "Exit       not available",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
