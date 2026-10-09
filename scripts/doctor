@@ -10,10 +10,18 @@ missing=0
 family=unknown
 if [[ -r /etc/os-release ]]; then
 	. /etc/os-release
-	case " ${ID:-} ${ID_LIKE:-} " in
-		*' arch '*) family=arch ;;
-		*' debian '*|*' ubuntu '*) family=debian ;;
-		*' fedora '*|*' rhel '*) family=fedora ;;
+	case "${ID:-}" in
+		arch) family=arch ;;
+		debian|ubuntu) family=debian ;;
+		fedora) family=fedora ;;
+		rhel|centos|rocky|almalinux) family=unknown ;;
+		*)
+			case " ${ID_LIKE:-} " in
+				*' arch '*) family=arch ;;
+				*' debian '*|*' ubuntu '*) family=debian ;;
+				*' fedora '*) family=fedora ;;
+			esac
+			;;
 	esac
 fi
 
@@ -22,12 +30,21 @@ package_name()
 	case "$family:$1" in
 		arch:build|arch:compiler|arch:binutils) printf base-devel ;;
 		debian:build|debian:compiler) printf build-essential ;;
+		arch:python) printf python ;;
+		arch:static-libc) printf glibc ;;
 		debian:libelf) printf libelf-dev ;;
+		debian:libcrypto) printf libssl-dev ;;
 		debian:static-libc) printf libc6-dev ;;
 		fedora:build) printf make ;;
 		fedora:compiler) printf gcc ;;
 		fedora:libelf) printf elfutils-libelf-devel ;;
+		fedora:libcrypto) printf openssl-devel ;;
 		fedora:static-libc) printf glibc-static ;;
+		arch:libcrypto) printf openssl ;;
+		arch:clangd) printf clang ;;
+		arch:clang|debian:clang|fedora:clang) printf clang ;;
+		debian:clangd) printf clangd ;;
+		fedora:clangd) printf clang-tools-extra ;;
 		*:binutils) printf binutils ;;
 		debian:busybox) printf busybox-static ;;
 		fedora:qemu) printf qemu-system-x86-core ;;
@@ -35,6 +52,16 @@ package_name()
 		*:python) printf python3 ;;
 		*) printf '%s' "$1" ;;
 	esac
+}
+
+check_optional_command()
+{
+	local command=$1 package=$2 purpose=$3
+	if command -v "$command" >/dev/null; then
+		ui_item pass "$command" "$(command -v "$command")"
+	else
+		ui_item note "$command" "$purpose (optional package: $(package_name "$package"))"
+	fi
 }
 
 check_command()
@@ -64,6 +91,7 @@ ui_heading 'Build and verification tools'
 check_command bash bash
 check_command make build
 check_command gcc compiler
+check_command clang clang
 for command in ld as ar nm objcopy objdump readelf; do check_command "$command" binutils; done
 check_command bison bison
 check_command flex flex
@@ -71,7 +99,6 @@ check_command perl perl
 check_command openssl openssl
 check_command file file
 check_command modinfo kmod
-check_command gdb gdb
 check_command python3 python
 check_command busybox busybox
 check_command cpio cpio
@@ -80,14 +107,15 @@ check_command qemu-system-x86_64 qemu
 check_command timeout coreutils
 
 if command -v python3 >/dev/null; then
-	if python3 - <<'PY'
+	if python3 - 2>/dev/null <<'PY'
 import sys, tarfile
+import lzma, ssl
 raise SystemExit(not (sys.version_info >= (3, 11) and hasattr(tarfile, "data_filter")))
 PY
 	then
-		ui_item pass Python 'maintained 3.11+ with safe tar filters'
+		ui_item pass Python '3.11+ with safe tar, XZ, and TLS support'
 	else
-		ui_item fail Python 'requires maintained 3.11+ with safe tar filters'
+		ui_item fail Python 'requires 3.11+ with safe tar, XZ, and TLS support'
 		missing=$((missing + 1))
 	fi
 fi
@@ -99,14 +127,28 @@ if command -v gcc >/dev/null; then
 		ui_item fail 'libelf development' "missing (package: $(package_name libelf))"
 		missing=$((missing + 1))
 	fi
-	probe=$(mktemp "${TMPDIR:-/tmp}/rootkitlings-cc.XXXXXX")
-	if printf 'int main(void) { return 0; }\n' | gcc -static -x c -o "$probe" - >/dev/null 2>&1; then
-		ui_item pass 'static C linking' available
+	if printf '#include <openssl/evp.h>\nint main(void) { return EVP_aes_256_gcm() == 0; }\n' | gcc -x c -o /dev/null - -lcrypto >/dev/null 2>&1; then
+		ui_item pass 'OpenSSL development' available
 	else
-		ui_item fail 'static C linking' "unavailable (package: $(package_name static-libc))"
+		ui_item fail 'OpenSSL development' "missing (package: $(package_name libcrypto))"
 		missing=$((missing + 1))
 	fi
-	rm -f -- "$probe"
+	probe=$(mktemp "${TMPDIR:-/tmp}/rootkitlings-cc.XXXXXX") || {
+		ui_item fail 'static C linking' 'could not create a temporary probe'
+		missing=$((missing + 1))
+		probe=
+	}
+	trap 'test -z "${probe:-}" || rm -f -- "$probe"' EXIT
+	if [[ -n $probe ]]; then
+		if printf 'int main(void) { return 0; }\n' | gcc -static -x c -o "$probe" - >/dev/null 2>&1; then
+			ui_item pass 'static C linking' available
+		else
+			ui_item fail 'static C linking' "unavailable (package: $(package_name static-libc))"
+			missing=$((missing + 1))
+		fi
+	fi
+	[[ -z $probe ]] || rm -f -- "$probe"
+	probe=
 fi
 
 if command -v busybox >/dev/null; then
@@ -141,6 +183,13 @@ if command -v qemu-system-x86_64 >/dev/null; then
 fi
 
 printf '\n'
+ui_heading 'Optional developer tools'
+check_optional_command bear bear 'needed only by make compile-db'
+check_optional_command clangd clangd 'uses compile_commands.json for editor diagnostics'
+check_optional_command shellcheck shellcheck 'adds shell diagnostics to make validate'
+check_optional_command gdb gdb 'needed only for ./rootkitlings gdb'
+
+printf '\n'
 ui_heading 'Capacity'
 memory_kib=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
 if (( memory_kib >= 2 * 1024 * 1024 )); then
@@ -161,7 +210,9 @@ ui_item pass processors "$cpus logical (4 recommended)"
 
 printf '\n'
 ui_heading 'Course kernel'
-if "$ROOT_DIR/scripts/kernel" status >/dev/null; then
+if ! command -v python3 >/dev/null; then
+	ui_item note 'pinned kernel' 'status unavailable until Python is installed'
+elif "$ROOT_DIR/scripts/kernel" status >/dev/null; then
 	ui_item pass 'pinned kernel' ready
 else
 	ui_item note 'pinned kernel' 'setup will build it from the pinned source'

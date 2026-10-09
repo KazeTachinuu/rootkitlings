@@ -6,7 +6,7 @@ begin "Record authorized actions and rmdir results"
 
 mode=${1:-authorized-actions}
 case $mode in
-	authorized-actions|remote-agent) ;;
+	authorized-actions|remote-agent|authenticated-agent) ;;
 	*) _fail "unknown cumulative check mode: $mode" ;;
 esac
 
@@ -135,7 +135,7 @@ cleanup()
 		rmmod rootkitlings 2>/dev/null || true
 	fi
 	rm -rf "$fixtures" "$selected" 2>/dev/null || true
-	if test "$mode" = remote-agent; then
+	if test "$mode" != authorized-actions; then
 		umount /etc/modules-load.d 2>/dev/null || true
 	fi
 }
@@ -143,7 +143,10 @@ trap cleanup EXIT INT TERM
 
 load_cumulative()
 {
-	if test "$mode" = remote-agent; then
+	if test "$mode" = authenticated-agent; then
+		load rootkitlings.ko peer_port=47023 retry_base_ms=5000 \
+			retry_max_ms=5000 session_id=72623859790382856 signal_id=4660
+	elif test "$mode" = remote-agent; then
 		load rootkitlings.ko peer_port=47023 retry_base_ms=5000 \
 			retry_max_ms=5000
 	else
@@ -151,7 +154,7 @@ load_cumulative()
 	fi
 }
 
-if test "$mode" = remote-agent; then
+if test "$mode" != authorized-actions; then
 	mkdir -p /etc/modules-load.d
 	mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs \
 		/etc/modules-load.d

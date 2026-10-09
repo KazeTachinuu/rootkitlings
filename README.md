@@ -11,13 +11,16 @@ Modules are built against the course kernel and loaded only in a disposable QEMU
 Use an x86-64 Linux host with:
 
 - at least 2 GiB of memory and 4 GiB of free disk space;
-- Python 3.11 or newer, GCC, binutils, GNU Make, and the kernel build tools;
-- a statically linked BusyBox, `cpio`, `gzip`, QEMU, GDB, OpenSSL, and libelf
-  development files.
+- Python 3.11 or newer, GCC, Clang, binutils, GNU Make, and the kernel build tools;
+- a statically linked BusyBox, `cpio`, `gzip`, QEMU, OpenSSL, and the libelf
+  and OpenSSL development files.
 
 `make doctor` checks the exact tools, BusyBox applets, static-link support, and capacity.
-It prints package hints for Arch, Debian/Ubuntu, and Fedora/RHEL families.
+It prints package hints for Arch, Debian/Ubuntu, and Fedora.
 KVM is optional; QEMU uses slower TCG emulation when KVM is not available.
+GDB is needed only for `./rootkitlings gdb`.
+Bear and clangd are needed only for editor metadata from `make compile-db`.
+ShellCheck adds shell diagnostics to `make validate` but is not required to run the course.
 The host kernel version and headers are not used.
 Every exercise uses the pinned Linux 7.2.9 x86-64 guest defined in [`vm/kernel.toml`](vm/kernel.toml).
 
@@ -58,7 +61,7 @@ With no exercise argument, most commands use the current exercise.
 | Identity and observation | L08–L13, M01 | Attribute work to tasks, replace credentials transactionally, authorize one action, and pair probe entry data with return results. |
 | Views and detection | L14–L16, M02 | Filter procfs, packed directory records, and bounded read results while preserving an independent evidence view. |
 | Network state | L17–L25, M03 | Validate packet bounds, access and mutate socket buffers, own sockets and framed sessions, encode DNS names, and update one owned boot request transactionally. |
-| Authenticated operations | L26–L30, C00 | Choose the required protection property, verify hashes, reject replay, use authenticated encryption, and independently verify an authenticated resident agent. |
+| Authenticated operations | L26–L30, C00 | Choose the required protection property, reject replay, add authenticated encryption and signaling, then complete and verify the course rootkit. |
 
 Milestones are cumulative workspaces.
 They integrate only mechanisms taught by the preceding lessons.

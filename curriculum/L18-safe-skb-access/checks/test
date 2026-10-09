@@ -15,7 +15,7 @@ grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
 	printf '[x] pinned kernel build is not configured for GCC\n' >&2
 	exit 1
 }
-for command in make nm python3 rg; do
+for command in make nm python3; do
 	command -v "$command" >/dev/null || {
 		printf '[x] %s is required\n' "$command" >&2
 		exit 1

@@ -885,6 +885,259 @@ class LearnerCLITests(unittest.TestCase):
                     starting,
                 )
 
+    def test_read_and_hint_use_the_current_exercise_without_changing_state(self) -> None:
+        state_path = self.globals["STATE"]
+        state_before = state_path.read_bytes() if state_path.exists() else None
+        output = io.StringIO()
+        with mock.patch.object(self.globals["shutil"], "which", return_value=None):
+            with redirect_stdout(output):
+                self.globals["cmd_read"]([])
+        read_text = output.getvalue()
+        self.assertIn("# Build, load, inspect, and unload a kernel module", read_text)
+        self.assertIn("./rootkitlings start L00", read_text)
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.globals["cmd_hint"]([])
+        hint_text = output.getvalue()
+        self.assertIn("Hint for L00", hint_text)
+        self.assertIn("./rootkitlings check L00", hint_text)
+        self.assertIn("./rootkitlings solution L00", hint_text)
+        state_after = state_path.read_bytes() if state_path.exists() else None
+        self.assertEqual(state_after, state_before)
+
+        with redirect_stdout(io.StringIO()):
+            self.globals["cmd_start"](["L00"])
+        output = io.StringIO()
+        with mock.patch.object(self.globals["shutil"], "which", return_value=None):
+            with redirect_stdout(output):
+                self.globals["cmd_read"](["L00"])
+        self.assertIn("./rootkitlings check L00", output.getvalue())
+        self.assertNotIn("./rootkitlings start L00", output.getvalue())
+
+    def test_list_and_status_cover_started_advanced_and_complete_states(self) -> None:
+        original_ready = self.globals["course_kernel_ready"]
+        try:
+            self.globals["course_kernel_ready"] = lambda: True
+            with redirect_stdout(io.StringIO()):
+                self.globals["cmd_start"](["L00"])
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.globals["cmd_status"]([])
+            status = output.getvalue()
+            self.assertIn("Files to edit", status)
+            self.assertIn("./rootkitlings check L00", status)
+
+            with self.globals["STORE"].locked() as state:
+                state.completed.add(self.globals["ROUTE"][0])
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.globals["cmd_list"]([])
+            listing = output.getvalue()
+            self.assertRegex(listing, r"passed\s+L00")
+            self.assertRegex(listing, r"current\s+L01")
+            self.assertRegex(listing, r"locked\s+L02")
+            self.assertIn("./rootkitlings read L01", listing)
+
+            with self.globals["STORE"].locked() as state:
+                state.completed.update(self.globals["ROUTE"])
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.globals["cmd_status"]([])
+            complete = output.getvalue()
+            self.assertIn("Course complete", complete)
+            self.assertNotIn("\nNext\n", complete)
+        finally:
+            self.globals["course_kernel_ready"] = original_ready
+
+    def test_run_gdb_and_clean_forward_exact_workspace_arguments(self) -> None:
+        exercise = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
+        with redirect_stdout(io.StringIO()):
+            self.globals["cmd_start"]([exercise.serial])
+        artifact = self.globals["bd"](exercise) / self.globals["CAT"].module_artifact(exercise)
+        artifact.write_bytes(b"module")
+        kernel = Path(self.temporary.name) / "kernel"
+        kernel.mkdir()
+        original_build = self.globals["build_workspace"]
+        original_kernel = self.globals["course_kernel_build_dir"]
+        original_run = self.globals["run"]
+        calls = []
+        try:
+            self.globals["build_workspace"] = lambda _exercise: artifact
+            self.globals["course_kernel_build_dir"] = lambda: kernel
+            self.globals["run"] = (
+                lambda command, **kwargs: calls.append((command, kwargs))
+                or SimpleNamespace(returncode=7, stdout="")
+            )
+            state_before = self.globals["STATE"].read_bytes()
+            with self.assertRaises(SystemExit) as stopped:
+                self.globals["cmd_run"]([exercise.serial, "--cap", "network"])
+            self.assertEqual(stopped.exception.code, 7)
+            run_command = calls[-1][0]
+            self.assertEqual(run_command[0], str(ROOT / "vm/boot"))
+            self.assertNotIn("--gdb", run_command)
+            self.assertIn("--cap", run_command)
+            self.assertIn("network", run_command)
+            self.assertEqual(run_command[-1], str(artifact))
+
+            with self.assertRaises(SystemExit):
+                self.globals["cmd_run"]([exercise.serial], gdb=True)
+            self.assertIn("--gdb", calls[-1][0])
+            self.assertEqual(self.globals["STATE"].read_bytes(), state_before)
+
+            self.globals["run"] = (
+                lambda command, **kwargs: calls.append((command, kwargs))
+                or SimpleNamespace(returncode=0, stdout="")
+            )
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.globals["cmd_clean"]([exercise.serial])
+            clean_command = calls[-1][0]
+            self.assertEqual(clean_command[:3], ["make", "-C", str(kernel)])
+            self.assertIn(f"M={self.globals['bd'](exercise)}", clean_command)
+            self.assertEqual(clean_command[-1], "clean")
+            self.assertIn("Cleaned L00", output.getvalue())
+        finally:
+            self.globals["build_workspace"] = original_build
+            self.globals["course_kernel_build_dir"] = original_kernel
+            self.globals["run"] = original_run
+
+    def test_run_argument_errors_and_command_prefixes_are_unambiguous(self) -> None:
+        for arguments, message in (
+            (["--cap"], "--cap requires"),
+            (["--unknown"], "Unknown option"),
+            (["L00", "L01"], "at most one exercise"),
+        ):
+            with self.subTest(arguments=arguments):
+                with self.assertRaisesRegex(self.globals["CLIError"], message):
+                    self.globals["cmd_run"](arguments)
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(self.globals["main"](["prer", "L00"]), 0)
+        self.assertIn("Prerequisites for L00", output.getvalue())
+        with self.assertRaisesRegex(self.globals["CLIError"], "Ambiguous command"):
+            self.globals["main"](["st"])
+        with self.assertRaisesRegex(self.globals["CLIError"], "Unknown command"):
+            self.globals["main"](["not-a-command"])
+        with self.assertRaisesRegex(self.globals["CLIError"], "rootkitlings help"):
+            self.globals["main"](["help", "extra"])
+
+    def test_locked_required_lesson_opens_only_after_current_completion(self) -> None:
+        first_id, second_id = self.globals["ROUTE"][:2]
+        first = self.globals["CAT"].by_id[first_id]
+        second = self.globals["CAT"].by_id[second_id]
+        with self.globals["STORE"].read_locked() as state:
+            with self.assertRaisesRegex(self.globals["CLIError"], "L01 is locked"):
+                self.globals["available"](second, state)
+        with self.globals["STORE"].locked() as state:
+            state.completed.add(first.id)
+        with self.globals["STORE"].read_locked() as state:
+            self.globals["available"](second, state)
+            self.globals["available"](first, state)
+
+    def test_build_on_fresh_workspace_records_baseline_and_reopen_is_idempotent(self) -> None:
+        exercise = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
+        original_build = self.globals["build_workspace"]
+        try:
+            self.globals["build_workspace"] = lambda item: (
+                self.globals["bd"](item) / self.globals["CAT"].module_artifact(item)
+            )
+            with redirect_stdout(io.StringIO()):
+                self.globals["cmd_build"]([exercise.serial])
+            with self.globals["STORE"].read_locked() as state:
+                record = state.exercises[exercise.id]
+                baseline = record.baseline_hash
+                workspace_hash = record.workspace_hash
+                self.assertTrue(baseline)
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.globals["cmd_start"]([exercise.serial])
+            self.assertIn("Workspace already exists", output.getvalue())
+            with self.globals["STORE"].read_locked() as state:
+                record = state.exercises[exercise.id]
+                self.assertEqual(record.baseline_hash, baseline)
+                self.assertEqual(record.workspace_hash, workspace_hash)
+        finally:
+            self.globals["build_workspace"] = original_build
+
+    def test_successful_check_records_snapshot_and_advances_the_route(self) -> None:
+        exercise = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
+        with redirect_stdout(io.StringIO()):
+            self.globals["cmd_start"]([exercise.serial])
+        workspace = self.globals["WORK"] / exercise.id
+        artifact = self.globals["bd"](exercise) / self.globals["CAT"].module_artifact(exercise)
+        artifact.write_bytes(b"module")
+        case = SimpleNamespace(
+            id="success",
+            label="Complete behavior",
+            check=exercise.resources.check,
+            check_arguments=(),
+        )
+        outcome = SimpleNamespace(case=case, build_root=workspace, artifact=artifact)
+
+        @contextmanager
+        def successful_build(*_args, **_kwargs):
+            source_hash = self.globals["canonical_tree_hash"](
+                workspace,
+                exercise.workspace.files,
+            )
+            yield SimpleNamespace(
+                outcomes=(outcome,),
+                frozen_source=workspace,
+                source_hash=source_hash,
+            )
+
+        originals = {
+            name: self.globals[name]
+            for name in (
+                "build_verification_cases", "course_kernel_build_dir",
+                "run_host_check", "run",
+            )
+        }
+        try:
+            self.globals["build_verification_cases"] = successful_build
+            self.globals["course_kernel_build_dir"] = lambda: workspace
+            self.globals["run_host_check"] = (
+                lambda *_args: SimpleNamespace(returncode=0, stdout="")
+            )
+            self.globals["run"] = (
+                lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout="")
+            )
+            with redirect_stdout(io.StringIO()):
+                self.globals["cmd_check"]([exercise.serial])
+        finally:
+            self.globals.update(originals)
+        with self.globals["STORE"].read_locked() as state:
+            record = state.exercises[exercise.id]
+            self.assertEqual(record.attempts, 1)
+            self.assertTrue(record.passed_snapshot)
+            self.assertIn(exercise.id, state.completed)
+            self.assertEqual(state.current, self.globals["ROUTE"][1])
+
+    def test_restore_archives_edits_without_changing_progress_fields(self) -> None:
+        exercise = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
+        with redirect_stdout(io.StringIO()):
+            self.globals["cmd_start"]([exercise.serial])
+        editable = self.globals["WORK"] / exercise.id / exercise.workspace.editable[0]
+        original = editable.read_bytes()
+        editable.write_bytes(original + b"\nchanged\n")
+        with self.globals["STORE"].locked() as state:
+            record = state.exercise(exercise.id)
+            record.attempts = 4
+            record.solution_revealed = True
+            state.completed.add(exercise.id)
+        with redirect_stdout(io.StringIO()):
+            self.globals["cmd_restore"]([exercise.serial])
+        self.assertEqual(editable.read_bytes(), original)
+        self.assertEqual(len(tuple(self.globals["ARCHIVE"].iterdir())), 1)
+        with self.globals["STORE"].read_locked() as state:
+            record = state.exercises[exercise.id]
+            self.assertEqual(record.attempts, 4)
+            self.assertTrue(record.solution_revealed)
+            self.assertIn(exercise.id, state.completed)
+
 
 if __name__ == "__main__":
     unittest.main()

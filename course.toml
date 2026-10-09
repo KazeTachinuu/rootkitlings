@@ -261,10 +261,6 @@ id = "action-control-switch"
 label = "Action control switch"
 
 [[concepts]]
-id = "adversarial-validation"
-label = "Adversarial validation"
-
-[[concepts]]
 id = "aead-plaintext-gating"
 label = "AEAD plaintext gating"
 
@@ -351,6 +347,10 @@ label = "Checksum repair"
 [[concepts]]
 id = "compare-before-rollback"
 label = "Compare before rollback"
+
+[[concepts]]
+id = "complete-rootkit-integration"
+label = "Complete rootkit integration"
 
 [[concepts]]
 id = "component-ownership"

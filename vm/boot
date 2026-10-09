@@ -43,7 +43,10 @@ while (( $# )); do
     esac
 done
 if (( ${#CHECK_ARGS[@]} )) && [[ -z $CHECK ]]; then
-    ui_die "--check-arg requires --check"
+	ui_die "--check-arg requires --check"
+fi
+if [[ -n $GDB ]] && ! command -v pwndbg >/dev/null && ! command -v gdb >/dev/null; then
+	ui_die "GDB not found; install gdb or run make doctor for the package name"
 fi
 if [[ -n $CHECK ]]; then
 	export ROOTKITLINGS_QUIET=1

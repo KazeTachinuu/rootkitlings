@@ -75,7 +75,11 @@ def source_argument(arguments: list[str], original: Path) -> int:
     return candidates[0]
 
 
-def source_include_directories(source: Path, root: Path = ROOT) -> tuple[Path, ...]:
+def source_include_directories(
+    source: Path,
+    root: Path = ROOT,
+    catalog: Catalog | None = None,
+) -> tuple[Path, ...]:
     try:
         relative = source.resolve().relative_to((root / "curriculum").resolve())
     except ValueError as error:
@@ -85,8 +89,33 @@ def source_include_directories(source: Path, root: Path = ROOT) -> tuple[Path, .
     bundle = root / "curriculum" / relative.parts[0]
     own_tree = relative.parts[1]
     other_tree = "solution" if own_tree == "starter" else "starter"
-    candidates = (bundle / own_tree / "include", bundle / other_tree / "include")
-    return tuple(path.resolve() for path in candidates if path.is_dir())
+    candidates = [bundle / own_tree / "include", bundle / other_tree / "include"]
+    if catalog is not None:
+        item = next(
+            (
+                candidate
+                for candidate in catalog.by_id.values()
+                if (catalog.root / candidate.path).resolve() == bundle.resolve()
+            ),
+            None,
+        )
+        if item is None:
+            raise CompileDatabaseError(f"source bundle is absent from the catalog: {bundle}")
+        provider = catalog.solution_provider(item)
+        while provider is not None:
+            provider_roots = [catalog.root / provider.resources.solution]
+            if provider.workspace.additions:
+                provider_roots.append(catalog.root / provider.workspace.additions)
+            if provider.workspace.source:
+                provider_roots.append(catalog.root / provider.workspace.source)
+            candidates.extend(path / "include" for path in provider_roots)
+            provider = catalog.solution_provider(provider)
+    result: list[Path] = []
+    for path in candidates:
+        resolved = path.resolve()
+        if path.is_dir() and resolved not in result:
+            result.append(resolved)
+    return tuple(result)
 
 
 def source_defines(source: Path, root: Path = ROOT) -> tuple[str, ...]:
@@ -108,6 +137,7 @@ def expanded_entry(
     base: dict[str, object],
     source: Path,
     root: Path = ROOT,
+    catalog: Catalog | None = None,
 ) -> dict[str, object]:
     if "arguments" in base:
         arguments = [str(value) for value in base["arguments"]]
@@ -138,7 +168,7 @@ def expanded_entry(
     existing_includes = {
         argument[2:] for argument in cleaned if argument.startswith("-I")
     }
-    for include in source_include_directories(source, root):
+    for include in source_include_directories(source, root, catalog):
         value = os.fspath(include)
         if value not in existing_includes:
             cleaned.append(f"-I{value}")
@@ -214,7 +244,10 @@ def captured_database(catalog: Catalog, temporary_root: Path) -> list[dict[str, 
         if relative.endswith(".c")
     }
     base = base_compile_entry(captured, reference_sources)
-    return [expanded_entry(base, source) for source in sorted(bundle_source_files())]
+    return [
+        expanded_entry(base, source, catalog.root, catalog)
+        for source in sorted(bundle_source_files(catalog.root))
+    ]
 
 
 def write_database(database: list[dict[str, object]], path: Path = DATABASE) -> None:

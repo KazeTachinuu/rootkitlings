@@ -1,6 +1,7 @@
-KDIR ?= $(shell scripts/kernel build-dir)
+KDIR ?=
 MODULE_DIR ?=
 TOOL_OUT ?= vm/tools
+ROOTKITLINGS_FAIL_POINT ?= 0
 GUEST_TOOL_NAMES := \
 	agent_fixture \
 	cred_trigger_test \
@@ -43,11 +44,19 @@ help:
 
 module:
 	@test -n "$(MODULE_DIR)" || { echo 'MODULE_DIR is required' >&2; exit 2; }
-	$(MAKE) -C "$(KDIR)" M="$(MODULE_DIR)" W=1 modules
+	@kdir="$(KDIR)"; \
+	if test -z "$$kdir"; then \
+		kdir="$$("$(CURDIR)/scripts/kernel" build-dir)" || exit; \
+	fi; \
+	env -i PATH="$$PATH" LC_ALL=C LANG=C TZ=UTC \
+		make -C "$$kdir" M="$(MODULE_DIR)" W=1 ARCH=x86_64 CC=gcc HOSTCC=gcc \
+		ROOTKITLINGS_FAIL_POINT="$(ROOTKITLINGS_FAIL_POINT)" modules
 
 tools: $(GUEST_TOOLS)
 
 tool-output-directory:
+	@test -n "$(strip $(TOOL_OUT))" && test "$(TOOL_OUT)" != / || \
+		{ echo 'TOOL_OUT must name a directory' >&2; exit 2; }
 	mkdir -p "$(TOOL_OUT)"
 
 $(TOOL_OUT)/agent_fixture: vm/tools/agent_fixture.c | tool-output-directory
@@ -111,6 +120,8 @@ $(TOOL_OUT)/tcp_session_fixture: vm/tools/tcp_session_fixture.c | tool-output-di
 	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
 
 clean:
+	@test "$(TOOL_OUT)" = vm/tools || \
+		{ echo 'clean does not accept TOOL_OUT' >&2; exit 2; }
 	$(RM) $(GUEST_TOOLS)
 
 doctor:

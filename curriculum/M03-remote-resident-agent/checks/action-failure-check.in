@@ -4,6 +4,11 @@
 
 expected_errno=${1:-@EXPECTED_ERRNO@}
 label=${2:-@LABEL@}
+mode=${3:-remote-agent}
+case $mode in
+	remote-agent|authenticated-agent) ;;
+	*) _fail "unknown cumulative check mode: $mode" ;;
+esac
 begin "$label"
 
 root=/etc/modules-load.d
@@ -28,10 +33,18 @@ chmod 0700 "$root"
 printf 'operator-original\n' > "$target"
 chmod 0600 "$target"
 cp "$target" "$original"
+if test "$mode" = authenticated-agent; then
+	ifconfig lo 127.0.0.1 up
+fi
 
 attempt=1
 while test "$attempt" -le 2; do
-	load rootkitlings.ko peer_port=47023 retry_base_ms=200 retry_max_ms=200
+	if test "$mode" = authenticated-agent; then
+		load rootkitlings.ko peer_port=47023 retry_base_ms=200 retry_max_ms=200 \
+			session_id=72623859790382856 signal_id=4660
+	else
+		load rootkitlings.ko peer_port=47023 retry_base_ms=200 retry_max_ms=200
+	fi
 	printf enable > "$control"
 	token=$(sed -n 's/^token=//p' "$control")
 	if run_as 65534 65534 cred_trigger_test token-race "$control" \

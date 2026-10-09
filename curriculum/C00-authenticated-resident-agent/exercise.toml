@@ -1,6 +1,6 @@
 schema_version = 2
 id = "authenticated-resident-agent"
-title = "Authenticate and independently verify the resident agent"
+title = "Complete and verify the course rootkit"
 stage = "authenticated-operations"
 kind = "capstone"
 status = "required"
@@ -22,15 +22,14 @@ prerequisites = [
   "authenticated-encryption",
   "authenticated-dns-signal",
 ]
-teaches = ["adversarial-validation"]
+teaches = ["complete-rootkit-integration"]
 requires = [
+  "resident-core-integration",
+  "authorized-telemetry-integration",
+  "namespace-aware-process-view-filtering",
+  "boot-load-persistence",
   "remote-agent-integration",
-  "tcp-length-framing",
-  "blocked-io-cancellation",
-  "fixed-command-grammar",
-  "compare-before-rollback",
   "authenticated-encryption",
-  "aead-plaintext-gating",
   "replay-resistant-state",
   "sensitive-state-zeroization",
   "authenticated-dns-signals",
@@ -108,17 +107,178 @@ solution = "curriculum/C00-authenticated-resident-agent/solution"
 [verification]
 timeout_seconds = 600
 capabilities = []
-tools = ["secure-agent-fixture", "module-load-params"]
+tools = [
+  "secure-agent-fixture",
+  "module-load-params",
+  "getdents64-test",
+  "event-stream-test",
+  "status-field-test",
+  "proc-write-test",
+  "proc-read-test",
+  "credential-trigger-test",
+  "rmdir-telemetry-test",
+  "run-as",
+]
 cleanup_required = true
 
 [[verification.cases]]
-id = "authenticated-agent"
-label = "Authenticated resident agent and status signal"
+id = "complete-rootkit"
+label = "Complete course rootkit"
 expect_build = "pass"
 check = "curriculum/C00-authenticated-resident-agent/checks/success-check"
 build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "concealment-evidence-regression"
+label = "Process view, evidence, and local control"
+expect_build = "pass"
+check = "curriculum/M02-concealment-evidence-map/checks/success-check"
+check_arguments = ["authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "authorized-actions-regression"
+label = "Credential action and syscall telemetry"
+expect_build = "pass"
+check = "curriculum/M01-authorized-actions-telemetry/checks/success-check"
+check_arguments = ["authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "preflight-rejection"
+label = "Preflight rejection"
+expect_build = "pass"
+check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
+check_arguments = ["125", "Preflight", "authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "1"
+
+[[verification.cases]]
+id = "allocation-rejection"
+label = "State allocation rejection"
+expect_build = "pass"
+check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
+check_arguments = ["12", "Allocation", "authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "2"
+
+[[verification.cases]]
+id = "control-publication-rejection"
+label = "Control publication rejection"
+expect_build = "pass"
+check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
+check_arguments = ["12", "Control publication", "authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "3"
+
+[[verification.cases]]
+id = "worker-start-rejection"
+label = "Worker start rejection"
+expect_build = "pass"
+check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
+check_arguments = ["4", "Worker", "authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "4"
+
+[[verification.cases]]
+id = "authorization-start-rejection"
+label = "Authorization startup rejection"
+expect_build = "pass"
+check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
+check_arguments = ["4", "Authorization startup", "authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "5"
+
+[[verification.cases]]
+id = "missing-return-target"
+label = "Missing rmdir target"
+expect_build = "pass"
+check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
+check_arguments = ["2", "Missing rmdir target", "authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "6"
+
+[[verification.cases]]
+id = "events-publication-rejection"
+label = "Events publication rejection"
+expect_build = "pass"
+check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
+check_arguments = ["12", "Events publication", "authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "7"
+
+[[verification.cases]]
+id = "credential-prepare-rejection"
+label = "Credential preparation rejection"
+expect_build = "pass"
+check = "curriculum/M03-remote-resident-agent/checks/action-failure-check.in"
+check_arguments = ["12", "Credential preparation", "authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "8"
+
+[[verification.cases]]
+id = "credential-cancel-rejection"
+label = "Credential cancellation"
+expect_build = "pass"
+check = "curriculum/M03-remote-resident-agent/checks/action-failure-check.in"
+check_arguments = ["125", "Credential cancellation", "authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "9"
+
+[[verification.cases]]
+id = "missing-iterate-target"
+label = "Missing iterate_dir target"
+expect_build = "pass"
+check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
+check_arguments = ["2", "Missing iterate_dir target", "authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "10"
+
+[[verification.cases]]
+id = "evidence-publication-rejection"
+label = "Evidence publication rejection"
+expect_build = "pass"
+check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
+check_arguments = ["12", "Evidence publication", "authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "11"
+
+[[verification.cases]]
+id = "agent-worker-rejection"
+label = "Agent worker creation rejection"
+expect_build = "pass"
+check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
+check_arguments = ["4", "Agent worker creation", "authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "12"
+
+[[verification.cases]]
+id = "agent-status-publication-rejection"
+label = "Agent status publication rejection"
+expect_build = "pass"
+check = "curriculum/M03-remote-resident-agent/checks/failure-check.in"
+check_arguments = ["12", "Agent status publication", "authenticated-agent"]
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "13"
 
 [[verification.cases]]
 id = "status-signal-rollback"

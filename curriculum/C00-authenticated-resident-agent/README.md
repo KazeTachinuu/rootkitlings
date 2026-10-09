@@ -1,26 +1,33 @@
-# Authenticate and independently verify the resident agent
+# Complete and verify the course rootkit
 
-This capstone extends your remote resident agent milestone.
-The agent still connects only to a loopback TCP listener and still accepts only `PING`, `INFO`, `MARK label`, and `QUIT`.
+This final challenge completes one module with:
+
+- bounded local control and resident work;
+- one-use credential replacement;
+- syscall-result telemetry;
+- process-view filtering with an independent evidence view;
+- a guarded boot-load request;
+- an authenticated, replay-safe loopback control channel;
+- an authenticated DNS-shaped ready signal;
+- rollback for every startup step and complete unload cleanup.
+
+The remote agent accepts only `PING`, `INFO`, `MARK label`, and `QUIT`.
 It does not run shell text or arbitrary commands.
+The supplied keys are test fixtures, not a key-provisioning design.
 
-The starting workspace is your completed remote resident agent plus the new crypto, signal, and `security/control.c` files.
-Make seven focused changes:
+Edit:
 
-- implement `rk_secure_channel_start()`, `rk_secure_channel_stop()`,
-  `rk_secure_open_request()`, and `rk_secure_seal_reply()` in
-  `security/control.c`;
-- add the secure-channel state and start parameters in `include/agent.h`;
-- open requests before parsing and seal replies before framing in
-  `network/agent.c`;
-- expose the shared host types in `include/framing.h` and the HMAC operations in
-  `include/platform.h`;
-- start the channel with a nonzero session, send the separate status signal,
-  and unwind both failure and unload paths in `core/main.c`;
-- compile the new components in `Kbuild`.
+- `Kbuild`
+- `core/main.c`
+- `include/agent.h`
+- `include/framing.h`
+- `include/platform.h`
+- `network/agent.c`
+- `security/control.c`
 
-The authenticated envelope is the new mechanism.
-The other six files connect it to the supplied resident-agent, AES-256-GCM, and authenticated-signal components; do not reimplement those components.
+Implement the four secure-channel operations in `security/control.c`.
+Store the channel state in the agent, authenticate each request before parsing, authenticate each reply before framing, send the ready signal only after every resource is available, and release resources in reverse order on failure and unload.
+Compile the supplied AES-256-GCM and authenticated-signal components without reimplementing them.
 
 Run:
 
@@ -67,8 +74,6 @@ Seal into private storage first.
 Publish the envelope and advance the reply sequence only after AES-GCM succeeds.
 Clear private plaintext, envelope, nonce, and channel key storage after use.
 
-The supplied keys are test fixtures, not a key-provisioning design.
-
 ## Separate status signal
 
 After every resident-agent resource and endpoint is ready, the module sends one DNS-shaped status datagram from the authenticated DNS signal lesson to `127.0.0.1:5300`.
@@ -80,20 +85,21 @@ The checker captures the datagram and verifies its structure and HMAC independen
 
 ## Evidence
 
-The checker:
+The checks run against your completed C00 module.
+They:
 
-- uses OpenSSL as an independent AES-GCM oracle;
-- changes every byte of an authenticated request and verifies no plaintext or
+- use OpenSSL as an independent AES-GCM oracle;
+- change every byte of an authenticated request and verify no plaintext or
   replay state is released;
-- checks wrong-key, truncation, duplicate, gap, crypto-failure, exhaustion, and
+- check wrong-key, truncation, duplicate, gap, crypto-failure, exhaustion, and
   cleanup behavior;
-- exercises the real loopback agent, rejected replay and tamper, reconnect,
+- exercise the real loopback agent, rejected replay and tamper, reconnect,
   blocked-receive cancellation, boot-request rollback, and the captured status
   signal in Linux 7.2.9;
-- forces the final signal step to fail and verifies the complete resident-agent
-  graph rolls back;
-- reruns the full resident-agent, authenticated-encryption, and
-  authenticated-signal regression suites.
+- exercise local control, credential replacement, syscall telemetry,
+  process-view filtering, and the evidence view;
+- force every startup failure point from 1 through 14 and verify rollback;
+- reject an unknown failure point at build time.
 
 ## References
 

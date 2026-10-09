@@ -3,16 +3,29 @@ from __future__ import annotations
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from engine.compile_database import (
     CompileDatabaseError,
     base_compile_entry,
     bundle_source_files,
+    captured_database,
     expanded_entry,
+    source_include_directories,
 )
+from engine.catalog import Catalog
 
 
 class CompileDatabaseTests(unittest.TestCase):
+    def test_missing_bear_has_one_direct_optional_dependency_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch("engine.compile_database.shutil.which", return_value=None):
+                with self.assertRaisesRegex(
+                    CompileDatabaseError,
+                    "Bear is required; install the 'bear' package",
+                ):
+                    captured_database(mock.Mock(), Path(directory))
+
     def test_discovers_only_manifest_owned_starter_and_solution_sources(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -91,6 +104,16 @@ class CompileDatabaseTests(unittest.TestCase):
             self.assertIn("-DROOTKITLINGS_FAIL_POINT=0", arguments)
             self.assertIn('-DKBUILD_BASENAME="main"', arguments)
             self.assertEqual(arguments[-2:], ["-c", str(source.resolve())])
+
+    def test_cumulative_source_includes_provider_headers(self) -> None:
+        root = Path(__file__).resolve().parent.parent
+        catalog = Catalog(root)
+        source = root / "curriculum/C00-authenticated-resident-agent/solution/security/control.c"
+        expected = root / "curriculum/M03-remote-resident-agent/starter/include"
+
+        includes = source_include_directories(source, root, catalog)
+
+        self.assertIn(expected.resolve(), includes)
 
 
 if __name__ == "__main__":
