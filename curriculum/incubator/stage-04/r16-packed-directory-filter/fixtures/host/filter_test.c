@@ -228,7 +228,10 @@ static void random_valid_cases(void)
 		struct arena arena = {0};
 		unsigned char original[sizeof(arena.bytes)];
 		char expected_names[32][40];
+		char target[40];
 		int64_t source_cookies[32];
+		size_t source_offsets[32];
+		size_t source_lengths[32];
 		bool removed[32];
 		size_t count = 1 + next_random() % 32;
 		size_t kept = 0;
@@ -236,39 +239,59 @@ static void random_valid_cases(void)
 		size_t index;
 		size_t offset;
 
+		snprintf(target, sizeof(target), "target-%08x", next_random());
 		for (index = 0; index < count; index++) {
 			removed[index] = (next_random() % 4) == 0;
 			if (removed[index])
-				strcpy(expected_names[index], TARGET);
+				strcpy(expected_names[index], target);
 			else {
 				snprintf(expected_names[index], sizeof(expected_names[index]),
 					 "entry-%zu-%08x", index, next_random());
 				kept++;
 			}
 			source_cookies[index] = (int64_t)(1000 + index);
-			add_record(&arena, expected_names[index], source_cookies[index],
-				   (unsigned char)next_random());
+			source_offsets[index] = arena.length;
+			source_lengths[index] = add_record(
+				&arena, expected_names[index], source_cookies[index],
+				(unsigned char)next_random());
 		}
 		memcpy(original, arena.bytes, arena.length);
 		if (kept == 0 || kept == count) {
-			expect_unchanged(&arena, RK_DIRENT_FILTER_UNCHANGED);
+			size_t unchanged_output = SIZE_MAX;
+
+			assert(rk_filter_dirents64(
+				arena.bytes, arena.length, target, strlen(target),
+				&unchanged_output) == RK_DIRENT_FILTER_UNCHANGED);
+			assert(unchanged_output == arena.length);
+			assert(memcmp(original, arena.bytes, arena.length) == 0);
 			continue;
 		}
-		assert(rk_filter_dirents64(arena.bytes, arena.length, TARGET,
-					   sizeof(TARGET) - 1, &output) ==
+		assert(rk_filter_dirents64(arena.bytes, arena.length, target,
+					   strlen(target), &output) ==
 		       RK_DIRENT_FILTER_CHANGED);
 		offset = 0;
 		for (index = 0; index < count; index++) {
+			unsigned char expected_record[128];
 			size_t next = index + 1;
+			size_t record_length;
+			int64_t expected_cookie;
+
 			if (removed[index])
 				continue;
-			assert(strcmp((char *)arena.bytes + offset + NAME_OFFSET,
-				      expected_names[index]) == 0);
 			while (next < count && removed[next])
 				next++;
-			assert(cookie_at(arena.bytes, offset) ==
-			       source_cookies[next - 1]);
-			offset += reclen_at(arena.bytes, offset);
+			record_length = source_lengths[index];
+			assert(record_length <= sizeof(expected_record));
+			memcpy(expected_record, original + source_offsets[index],
+			       record_length);
+			expected_cookie = source_cookies[next - 1];
+			memcpy(expected_record +
+			       offsetof(struct linux_dirent64, d_off),
+			       &expected_cookie, sizeof(expected_cookie));
+			assert(reclen_at(arena.bytes, offset) == record_length);
+			assert(memcmp(arena.bytes + offset, expected_record,
+				      record_length) == 0);
+			offset += record_length;
 		}
 		assert(offset == output);
 		assert(output < arena.length);

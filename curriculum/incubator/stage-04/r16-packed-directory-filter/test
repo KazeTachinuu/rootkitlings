@@ -92,12 +92,18 @@ expect_mutation_rejected one-pass-partial \
 	's/matches++;/memmove(bytes, bytes + record_length, remaining - record_length); matches++;/' semantic
 expect_mutation_rejected prefix-match \
 	's/name_length == target_length &&/name_length <= target_length \&\&/; s/memcmp(name, target, target_length)/memcmp(name, target, name_length)/g' semantic
+expect_mutation_rejected hard-coded-target \
+	'/\*output_length = length;/i\
+\ttarget = "rootkitlings_hidden"; target_length = sizeof("rootkitlings_hidden") - 1;' semantic
 expect_mutation_rejected missing-output-length \
 	's/\*output_length = write_offset;/\/\* missing length \*\//' semantic
 expect_mutation_rejected all-match-zero \
 	's/return RK_DIRENT_FILTER_UNCHANGED;/\* hostile all-match \*\/ *output_length = 0; return RK_DIRENT_FILTER_CHANGED;/' semantic
 expect_mutation_rejected missing-cookie \
 	's/memcpy(bytes + previous_retained/if (0) memcpy(bytes + previous_retained/' semantic
+expect_mutation_rejected corrupt-retained-record \
+	'/previous_retained = write_offset;/i\
+\t\t\tbytes[write_offset + offsetof(struct linux_dirent64, d_type)] ^= 1;' semantic
 
 render_failure()
 {
