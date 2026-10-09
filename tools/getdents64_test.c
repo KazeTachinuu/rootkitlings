@@ -4,9 +4,9 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <sched.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,26 +24,84 @@ struct linux_dirent64 {
 
 struct reuse_context {
 	int target;
-	int proc_source;
-	int ordinary_source;
+	const char *proc_path;
+	const char *ordinary_path;
 	atomic_bool stop;
+	atomic_int startup;
+	atomic_bool start_race;
+	atomic_ulong cycles;
 };
+
+static int replace_descriptor(int target, const char *path)
+{
+	int source = open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	int result = 0;
+
+	if (source < 0)
+		return -1;
+	if (dup2(source, target) < 0)
+		result = -1;
+	close(source);
+	return result;
+}
 
 static void *reuse_descriptors(void *argument)
 {
 	struct reuse_context *context = argument;
 
+	if (replace_descriptor(context->target, context->ordinary_path) < 0) {
+		atomic_store_explicit(&context->startup, -1,
+				      memory_order_release);
+		return (void *)1;
+	}
+	atomic_store_explicit(&context->startup, 1, memory_order_release);
+	while (
+	    !atomic_load_explicit(&context->start_race, memory_order_acquire) &&
+	    !atomic_load_explicit(&context->stop, memory_order_relaxed))
+		sched_yield();
 	while (!atomic_load_explicit(&context->stop, memory_order_relaxed)) {
-		if (lseek(context->ordinary_source, 0, SEEK_SET) < 0 ||
-		    dup2(context->ordinary_source, context->target) < 0)
+		if (replace_descriptor(context->target,
+				       context->ordinary_path) < 0)
 			return (void *)1;
 		sched_yield();
-		if (lseek(context->proc_source, 0, SEEK_SET) < 0 ||
-		    dup2(context->proc_source, context->target) < 0)
+		if (replace_descriptor(context->target, context->proc_path) < 0)
 			return (void *)1;
+		atomic_fetch_add_explicit(&context->cycles, 1,
+					  memory_order_relaxed);
 		sched_yield();
 	}
 	return NULL;
+}
+
+static int inspect_chunk(const char *buffer, size_t count, const char *target,
+			 bool *ordinary_marker, bool *target_seen)
+{
+	size_t offset = 0;
+
+	*ordinary_marker = false;
+	*target_seen = false;
+	while (offset < count) {
+		const struct linux_dirent64 *entry =
+		    (const void *)(buffer + offset);
+		size_t name_capacity;
+
+		if (count - offset <
+			offsetof(struct linux_dirent64, d_name) + 1 ||
+		    entry->d_reclen <
+			offsetof(struct linux_dirent64, d_name) + 1 ||
+		    entry->d_reclen > count - offset)
+			return -1;
+		name_capacity =
+		    entry->d_reclen - offsetof(struct linux_dirent64, d_name);
+		if (!memchr(entry->d_name, '\0', name_capacity))
+			return -1;
+		if (strcmp(entry->d_name, "ordinary_marker") == 0)
+			*ordinary_marker = true;
+		if (strcmp(entry->d_name, target) == 0)
+			*target_seen = true;
+		offset += entry->d_reclen;
+	}
+	return offset == count ? 0 : -1;
 }
 
 static int fd_reuse_stress(const char *proc_path, const char *ordinary_path,
@@ -55,66 +113,84 @@ static int fd_reuse_stress(const char *proc_path, const char *ordinary_path,
 	void *thread_result;
 	unsigned long iteration;
 	unsigned long ordinary_chunks = 0;
+	unsigned long cycles;
+	int startup;
 	int result = 0;
 
-	context.proc_source = open(proc_path, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-	context.ordinary_source =
-		open(ordinary_path, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-	if (context.proc_source < 0 || context.ordinary_source < 0)
-		return 2;
-	context.target = dup(context.proc_source);
+	context.proc_path = proc_path;
+	context.ordinary_path = ordinary_path;
+	context.target = open(proc_path, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 	if (context.target < 0)
 		return 2;
 	atomic_init(&context.stop, false);
-	if (pthread_create(&thread, NULL, reuse_descriptors, &context) != 0)
+	atomic_init(&context.startup, 0);
+	atomic_init(&context.start_race, false);
+	atomic_init(&context.cycles, 0);
+	if (pthread_create(&thread, NULL, reuse_descriptors, &context) != 0) {
+		close(context.target);
 		return 2;
-	for (iteration = 0; iteration < iterations; iteration++) {
+	}
+	do {
+		startup = atomic_load_explicit(&context.startup,
+					       memory_order_acquire);
+		if (startup == 0)
+			sched_yield();
+	} while (startup == 0);
+	if (startup < 0) {
+		pthread_join(thread, &thread_result);
+		close(context.target);
+		return 2;
+	}
+	if (lseek(context.target, 0, SEEK_SET) < 0) {
+		result = 2;
+	} else {
+		long count = syscall(SYS_getdents64, context.target, buffer,
+				     sizeof(buffer));
+		bool ordinary_marker;
+		bool target_seen;
+
+		if (count <= 0 ||
+		    inspect_chunk(buffer, (size_t)count, target,
+				  &ordinary_marker, &target_seen) < 0)
+			result = 3;
+		else if (!ordinary_marker || !target_seen)
+			result = 4;
+		else
+			ordinary_chunks++;
+	}
+	atomic_store_explicit(&context.start_race, true, memory_order_release);
+	for (iteration = 0; result == 0 && iteration < iterations;
+	     iteration++) {
 		long count;
-		size_t offset = 0;
-		bool ordinary_marker = false;
-		bool target_seen = false;
+		bool ordinary_marker;
+		bool target_seen;
 
 		(void)lseek(context.target, 0, SEEK_SET);
-		count = syscall(SYS_getdents64, context.target, buffer, sizeof(buffer));
+		count = syscall(SYS_getdents64, context.target, buffer,
+				sizeof(buffer));
 		if (count <= 0)
 			continue;
-		while (offset < (size_t)count) {
-			struct linux_dirent64 *entry = (void *)(buffer + offset);
-			if ((size_t)count - offset <
-			    offsetof(struct linux_dirent64, d_name) + 1 ||
-			    entry->d_reclen <
-			    offsetof(struct linux_dirent64, d_name) + 1 ||
-			    entry->d_reclen > (size_t)count - offset ||
-			    !memchr(entry->d_name, '\0', entry->d_reclen -
-				     offsetof(struct linux_dirent64, d_name))) {
-				result = 3;
-				break;
-			}
-			if (strcmp(entry->d_name, "ordinary_marker") == 0)
-				ordinary_marker = true;
-			if (strcmp(entry->d_name, target) == 0)
-				target_seen = true;
-			offset += entry->d_reclen;
-		}
-		if (result != 0 || (ordinary_marker && !target_seen)) {
-			result = result != 0 ? result : 4;
+		if (inspect_chunk(buffer, (size_t)count, target,
+				  &ordinary_marker, &target_seen) < 0) {
+			result = 3;
 			break;
 		}
-		if (ordinary_marker)
+		if (ordinary_marker && target_seen)
 			ordinary_chunks++;
+		sched_yield();
 	}
 	atomic_store_explicit(&context.stop, true, memory_order_relaxed);
 	pthread_join(thread, &thread_result);
 	if (thread_result)
 		result = 5;
-	if (result == 0 && ordinary_chunks == 0)
+	cycles = atomic_load_explicit(&context.cycles, memory_order_relaxed);
+	if (result == 0 && cycles == 0)
 		result = 6;
 	close(context.target);
-	close(context.ordinary_source);
-	close(context.proc_source);
 	if (result == 0)
-		printf("fd_reuse_iterations=%lu ordinary_chunks=%lu\n",
-		       iterations, ordinary_chunks);
+		printf("fd_reuse_iterations=%lu ordinary_chunks=%lu "
+		       "replacement_cycles=%lu\n",
+		       iterations, ordinary_chunks, cycles);
 	return result;
 }
 
@@ -135,7 +211,8 @@ static int enumerate(const char *path, size_t capacity, const char *target,
 		return 2;
 	}
 	for (;;) {
-		long count = syscall(SYS_getdents64, descriptor, buffer, capacity);
+		long count =
+		    syscall(SYS_getdents64, descriptor, buffer, capacity);
 		size_t offset = 0;
 
 		if (count < 0) {
@@ -148,18 +225,20 @@ static int enumerate(const char *path, size_t capacity, const char *target,
 		chunks++;
 		while (offset < (size_t)count) {
 			struct linux_dirent64 *entry =
-				(void *)(buffer + offset);
+			    (void *)(buffer + offset);
 			size_t name_capacity;
 
-			if ((size_t)count - offset < offsetof(struct linux_dirent64, d_name) + 1 ||
-			    entry->d_reclen < offsetof(struct linux_dirent64, d_name) + 1 ||
+			if ((size_t)count - offset <
+				offsetof(struct linux_dirent64, d_name) + 1 ||
+			    entry->d_reclen <
+				offsetof(struct linux_dirent64, d_name) + 1 ||
 			    entry->d_reclen > (size_t)count - offset) {
 				free(buffer);
 				close(descriptor);
 				return 3;
 			}
 			name_capacity = entry->d_reclen -
-				offsetof(struct linux_dirent64, d_name);
+					offsetof(struct linux_dirent64, d_name);
 			if (!memchr(entry->d_name, '\0', name_capacity)) {
 				free(buffer);
 				close(descriptor);
@@ -214,14 +293,16 @@ static int isolate_all_match(const char *path, const char *control,
 	if (directory < 0)
 		return 2;
 	for (;;) {
-		long count = syscall(SYS_getdents64, directory, buffer, sizeof(buffer));
+		long count =
+		    syscall(SYS_getdents64, directory, buffer, sizeof(buffer));
 		size_t offset = 0;
 		if (count <= 0) {
 			close(directory);
 			return 3;
 		}
 		while (offset < (size_t)count) {
-			struct linux_dirent64 *entry = (void *)(buffer + offset);
+			struct linux_dirent64 *entry =
+			    (void *)(buffer + offset);
 			if (strcmp(entry->d_name, target) == 0) {
 				target_cookie = preceding_cookie;
 				target_length = entry->d_reclen;
@@ -245,16 +326,20 @@ found:
 		return 5;
 	}
 	{
-		long count = syscall(SYS_getdents64, directory, buffer, target_length);
+		long count =
+		    syscall(SYS_getdents64, directory, buffer, target_length);
 		struct linux_dirent64 *entry = (void *)buffer;
 		if (count <= 0 || count != target_length ||
 		    strcmp(entry->d_name, target) != 0) {
 			close(directory);
 			return 6;
 		}
-		count = syscall(SYS_getdents64, directory, buffer, sizeof(buffer));
-		if (count < 0 || (count > 0 &&
-		    strcmp(((struct linux_dirent64 *)buffer)->d_name, target) == 0)) {
+		count =
+		    syscall(SYS_getdents64, directory, buffer, sizeof(buffer));
+		if (count < 0 ||
+		    (count > 0 &&
+		     strcmp(((struct linux_dirent64 *)buffer)->d_name,
+			    target) == 0)) {
 			close(directory);
 			return 7;
 		}
