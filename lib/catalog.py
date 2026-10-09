@@ -36,7 +36,13 @@ DIFFICULTIES = {"intro", "standard", "advanced", "challenge"}
 KINDS = {"lesson", "milestone", "capstone"}
 STATUSES = {"required", "elective", "retired"}
 WORKSPACE_MODES = {"cumulative", "single-file", "project"}
-BASELINES = {"template", "completion", "previous-required", "previous-milestone"}
+BASELINES = {
+    "template",
+    "completion",
+    "cumulative-root",
+    "previous-required",
+    "previous-milestone",
+}
 TOP_FIELDS = {
     "schema_version", "id", "title", "stage", "kind", "status",
     "tradecraft", "difficulty", "prerequisites", "teaches", "requires",
@@ -196,6 +202,7 @@ class Catalog:
     def __init__(self, root: Path):
         self.root = root.resolve()
         (self.revision, self.default_module_artifact, self.exercise_roots,
+         self.cumulative_root,
          self.required_route, raw_tracks, self.tradecraft_tags,
          self.capabilities, self.tools, self.assumptions, self.sections,
          self.concepts) = self._read_course()
@@ -248,7 +255,11 @@ class Catalog:
             "tradecraft_tags", "capabilities", "tools", "assumptions",
             "sections", "concepts",
         }
-        expected = required | ({"elective_tracks"} if "elective_tracks" in data else set())
+        expected = required
+        if "elective_tracks" in data:
+            expected.add("elective_tracks")
+        if "cumulative_root" in data:
+            expected.add("cumulative_root")
         _exact_fields(data, expected, Path("course.toml"))
         if data["schema_version"] != 2 or isinstance(data["schema_version"], bool):
             raise CatalogError("course.toml: schema_version must be integer 2")
@@ -261,6 +272,9 @@ class Catalog:
             if not (self.root / root).is_dir():
                 raise CatalogError(f"course.toml: exercise root must be a directory: {root}")
         route = tuple(_id_list(data, "required_route", Path("course.toml")))
+        cumulative_root = data.get("cumulative_root", "")
+        if cumulative_root:
+            _identifier(cumulative_root, Path("course.toml"))
         elective_tracks = tuple(_elective_track_rows(data))
         assumptions = tuple(_rows(data, "assumptions", {"concept", "competency"}, Assumption, "concept"))
         sections = tuple(_rows(data, "sections", {"id", "label"}, Section, "id"))
@@ -271,7 +285,8 @@ class Catalog:
             allow_empty=True,
         ))
         tools = tuple(_tool_rows(data, self.root))
-        return (revision, default_module_artifact, roots, route, elective_tracks,
+        return (revision, default_module_artifact, roots, cumulative_root,
+                route, elective_tracks,
                 tradecraft_tags,
                 capabilities, tools, assumptions, sections, concepts)
 
@@ -371,7 +386,9 @@ class Catalog:
             if source or not parent:
                 raise CatalogError(f"{path}: completion baseline requires parent and forbids source")
             _identifier(parent, path)
-        elif baseline in {"previous-required", "previous-milestone"}:
+        elif baseline in {
+            "cumulative-root", "previous-required", "previous-milestone",
+        }:
             if source or parent:
                 raise CatalogError(
                     f"{path}: derived baseline forbids source and parent"
@@ -493,6 +510,7 @@ class Catalog:
             raise CatalogError(f"required_route mismatch (missing={sorted(required-route)}, unknown={sorted(route-required)})")
         if set(self.aliases.values()) != route:
             raise CatalogError("generated serial aliases must cover the required route")
+        self._validate_cumulative_route()
         self._validate_elective_tracks(actual)
         section_ids = {item.id for item in self.sections}
         if len(section_ids) != len(self.sections):
@@ -630,6 +648,69 @@ class Catalog:
                 f"unknown={sorted(set(track_members)-electives)})"
             )
 
+    def _validate_cumulative_route(self) -> None:
+        """Validate the one declared cumulative project lineage, when present."""
+        milestones = [
+            self.by_id[exercise_id]
+            for exercise_id in self.required_route
+            if self.by_id[exercise_id].kind == "milestone"
+        ]
+        capstones = [
+            self.by_id[exercise_id]
+            for exercise_id in self.required_route
+            if self.by_id[exercise_id].kind == "capstone"
+        ]
+        if not self.cumulative_root:
+            if any(
+                item.workspace.baseline == "cumulative-root"
+                for item in self.exercises
+            ):
+                raise CatalogError(
+                    "course.toml: cumulative-root baseline requires cumulative_root"
+                )
+            return
+        if self.cumulative_root not in self.required_route:
+            raise CatalogError(
+                "course.toml: cumulative_root must name a required-route exercise"
+            )
+        root = self.by_id[self.cumulative_root]
+        if root.kind != "lesson" or root.workspace.mode != "cumulative":
+            raise CatalogError(
+                "course.toml: cumulative_root must name a cumulative lesson"
+            )
+        if len(milestones) != 4 or len(capstones) != 1:
+            raise CatalogError(
+                "course.toml: cumulative route requires exactly four milestones "
+                "and one capstone"
+            )
+        root_position = self.required_route.index(root.id)
+        first_position = self.required_route.index(milestones[0].id)
+        if root_position >= first_position:
+            raise CatalogError(
+                "course.toml: cumulative_root must precede the first milestone"
+            )
+        if milestones[0].workspace.baseline != "cumulative-root":
+            raise CatalogError(
+                f"{milestones[0].path}: first milestone must use cumulative-root"
+            )
+        for item in milestones[1:]:
+            if item.workspace.baseline != "previous-milestone":
+                raise CatalogError(
+                    f"{item.path}: later milestone must use previous-milestone"
+                )
+        if capstones[0].workspace.baseline != "previous-milestone":
+            raise CatalogError(
+                f"{capstones[0].path}: final capstone must use previous-milestone"
+            )
+        allowed = {item.id for item in milestones} | {capstones[0].id}
+        for item in self.exercises:
+            if (
+                item.workspace.baseline == "cumulative-root"
+                and item.id not in allowed
+            ):
+                raise CatalogError(
+                    f"{item.path}: cumulative-root is reserved for the first milestone"
+                )
     def _validate_paths(self, item):
         required_files = [item.resources.readme, item.resources.hint]
         if not item.verification.cases:
@@ -807,6 +888,26 @@ class Catalog:
                 raise CatalogError(
                     f"{item.path}: unknown completion parent {item.workspace.parent!r}"
                 ) from exc
+        if baseline == "cumulative-root":
+            if item.id not in self.required_route:
+                raise CatalogError(
+                    f"{item.path}: cumulative-root is only valid on the required route"
+                )
+            if not self.cumulative_root:
+                raise CatalogError(
+                    f"{item.path}: course has no cumulative_root"
+                )
+            try:
+                provider = self.by_id[self.cumulative_root]
+            except KeyError as exc:
+                raise CatalogError(
+                    f"course.toml: unknown cumulative_root {self.cumulative_root!r}"
+                ) from exc
+            if self.required_route.index(provider.id) >= self.required_route.index(item.id):
+                raise CatalogError(
+                    f"{item.path}: cumulative_root must be earlier in required_route"
+                )
+            return provider
         if item.id not in self.required_route:
             raise CatalogError(
                 f"{item.path}: {baseline} is only valid on the required route"

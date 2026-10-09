@@ -367,7 +367,42 @@ class DerivedBaselineTests(unittest.TestCase):
         catalog.exercises = list(route) + list(extras)
         catalog.by_id = {item.id: item for item in catalog.exercises}
         catalog.default_module_artifact = "hello.ko"
+        catalog.cumulative_root = ""
         return catalog
+
+    def test_cumulative_root_resolves_the_declared_project_lesson(self) -> None:
+        root = _exercise("project-root", "template")
+        practice = _exercise("practice", "template")
+        first = _exercise("first-milestone", "cumulative-root", kind="milestone")
+        catalog = self.catalog((root, practice, first))
+        catalog.cumulative_root = root.id
+        self.assertEqual(catalog.baseline_provider(first), root)
+        self.assertEqual(catalog.completion_dependencies(first), (root.id,))
+
+    def test_declared_cumulative_route_has_one_root_and_fixed_milestone_chain(self) -> None:
+        root = _exercise("project-root", "template")
+        milestones = (
+            _exercise("m0", "cumulative-root", kind="milestone"),
+            _exercise("m1", "previous-milestone", kind="milestone"),
+            _exercise("m2", "previous-milestone", kind="milestone"),
+            _exercise("m3", "previous-milestone", kind="milestone"),
+        )
+        capstone = _exercise("final", "previous-milestone", kind="capstone")
+        catalog = self.catalog((root, *milestones, capstone))
+        catalog.cumulative_root = root.id
+        catalog._validate_cumulative_route()
+
+        wrong = Exercise(**{
+            **milestones[0].__dict__,
+            "workspace": Workspace(**{
+                **milestones[0].workspace.__dict__,
+                "baseline": "previous-required",
+            }),
+        })
+        catalog = self.catalog((root, wrong, *milestones[1:], capstone))
+        catalog.cumulative_root = root.id
+        with self.assertRaisesRegex(CatalogError, "first milestone"):
+            catalog._validate_cumulative_route()
 
     def test_previous_required_is_immediate_required_route_item(self) -> None:
         first = _exercise("first", "template")
