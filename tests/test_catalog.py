@@ -36,6 +36,28 @@ class GeneratedSerialTests(unittest.TestCase):
             self.assertEqual(exercise, self.catalog.resolve(expected))
             counters[exercise.kind] += 1
 
+    def test_required_bundle_paths_match_derived_serials(self) -> None:
+        for exercise in self.catalog.exercises:
+            self.assertEqual(
+                Path("curriculum") / f"{exercise.serial}-{exercise.id}",
+                exercise.path,
+            )
+
+    def test_required_bundle_path_rejects_wrong_serial_or_nesting(self) -> None:
+        exercise = self.catalog.resolve("L00")
+        self.catalog._validate_bundle_path(exercise)
+        for path in (
+            Path("curriculum/L01-module-build-lifecycle"),
+            Path("curriculum/nested/L00-module-build-lifecycle"),
+        ):
+            with self.subTest(path=path):
+                misplaced = Exercise(**{**exercise.__dict__, "path": path})
+                with self.assertRaisesRegex(
+                    CatalogError,
+                    "required bundle path must be",
+                ):
+                    self.catalog._validate_bundle_path(misplaced)
+
     def test_discovery_order_does_not_define_serials(self) -> None:
         route_positions = {
             stable_id: position

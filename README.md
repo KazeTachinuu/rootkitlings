@@ -84,7 +84,7 @@ Run `./rootkitlings list` for the live route and `./rootkitlings prereq EXERCISE
 
 ```text
 course.toml                         live route, concepts, tags, and tools
-curriculum/required/<stable-id>/   one exercise bundle
+curriculum/<serial>-<stable-id>/   one exercise bundle
   README.md                        lesson and task
   hint                             focused hint
   exercise.toml                    metadata, workspace, and checks
@@ -98,7 +98,7 @@ vm/                                pinned guest runtime and shared guest tools
 .rootkitlings/                     ignored learner work, state, and archives
 ```
 
-Learner edits belong under `.rootkitlings/`; files under `curriculum/required/` define the immutable course bundles.
+Learner edits belong under `.rootkitlings/`; files under `curriculum/` define the immutable course bundles.
 
 See [`vm/README.md`](vm/README.md) for the guest runtime.
 Run `./rootkitlings help` for all learner commands, `make compile-db` for clangd metadata, and `make validate` for repository maintenance checks.

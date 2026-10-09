@@ -13,7 +13,7 @@ class ExpandCompileDatabaseTests(unittest.TestCase):
         discover = namespace["bundle_source_files"]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            bundle = root / "curriculum/required/example"
+            bundle = root / "curriculum/L99-example"
             (bundle / "starter").mkdir(parents=True)
             (bundle / "solution").mkdir()
             (bundle / "fixtures").mkdir()
@@ -25,7 +25,7 @@ class ExpandCompileDatabaseTests(unittest.TestCase):
             solution.write_text("int solution;\n")
             fixture.write_text("int fixture;\n")
 
-            unowned = root / "curriculum/required/unowned/starter"
+            unowned = root / "curriculum/unowned/starter"
             unowned.mkdir(parents=True)
             (unowned / "ignored.c").write_text("int ignored;\n")
 

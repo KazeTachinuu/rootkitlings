@@ -1,0 +1,40 @@
+schema_version = 2
+id = "guarded-file-transaction"
+title = "Replace one owned file and restore it conditionally"
+stage = "network-state"
+kind = "lesson"
+status = "required"
+tradecraft = ["persistence", "lifecycle", "detection"]
+difficulty = "advanced"
+prerequisites = ["proc-publication"]
+teaches = ["bounded-kernel-file-io", "exclusive-staging-file", "atomic-file-exchange", "file-and-directory-fsync", "file-identity-guard", "compare-before-rollback", "kernel-file-context-constraints"]
+requires = ["kernel-allocation", "resource-ownership", "linux-file-permission-basics"]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "core/main.c", "include/interface.h", "include/platform.h", "include/transaction.h", "interface/proc.c", "persistence/platform.c", "persistence/transaction.c"]
+editable = ["persistence/transaction.c"]
+build = "."
+baseline = "template"
+source = "curriculum/L25-guarded-file-transaction/starter"
+
+[resources]
+readme = "curriculum/L25-guarded-file-transaction/README.md"
+check = "curriculum/L25-guarded-file-transaction/checks/success-check"
+host_check = "curriculum/L25-guarded-file-transaction/checks/host-check"
+hint = "curriculum/L25-guarded-file-transaction/hint"
+solution = "curriculum/L25-guarded-file-transaction/solution"
+
+[verification]
+timeout_seconds = 360
+capabilities = []
+tools = ["module-load-test"]
+cleanup_required = true
+
+[[verification.cases]]
+id = "guarded-transaction"
+label = "Guarded file transaction and rollback"
+expect_build = "pass"
+check = "curriculum/L25-guarded-file-transaction/checks/success-check"
+build_output_contains = ""
+[verification.cases.build_variables]

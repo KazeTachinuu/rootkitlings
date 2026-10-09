@@ -1,0 +1,61 @@
+schema_version = 2
+id = "precise-init-failure"
+title = "Reject initialization with a precise error"
+stage = "module-core"
+kind = "lesson"
+status = "required"
+tradecraft = ["lifecycle", "detection"]
+difficulty = "standard"
+prerequisites = ["module-build-lifecycle"]
+teaches = ["init-failure", "errno-propagation", "build-time-failure-injection"]
+requires = ["module-lifecycle", "c-preprocessor"]
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "core/main.c"]
+editable = ["Kbuild", "core/main.c"]
+build = "."
+baseline = "previous-required"
+
+[resources]
+readme = "curriculum/L01-precise-init-failure/README.md"
+check = "curriculum/L00-module-build-lifecycle/checks/module-lifecycle-check"
+host_check = "curriculum/L00-module-build-lifecycle/checks/host-check"
+hint = "curriculum/L01-precise-init-failure/hint"
+solution = "curriculum/L01-precise-init-failure/solution"
+
+[verification]
+timeout_seconds = 120
+capabilities = []
+tools = ["module-load-test"]
+cleanup_required = true
+
+[[verification.cases]]
+id = "normal-lifecycle"
+label = "Normal load and unload"
+expect_build = "pass"
+check = "curriculum/L00-module-build-lifecycle/checks/module-lifecycle-check"
+build_output_contains = ""
+
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "precise-rejection"
+label = "Injected initialization rejection"
+expect_build = "pass"
+check = "curriculum/L01-precise-init-failure/checks/failed-guest-check"
+build_output_contains = ""
+
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "1"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+check = ""
+build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "99"

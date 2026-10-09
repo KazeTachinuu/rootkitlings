@@ -28,7 +28,7 @@ The exact graph is metadata, not prose:
 
 - `course.toml` defines the route, controlled vocabularies, entry knowledge,
   tools, stages, and tradecraft tags.
-- Each `curriculum/required/<stable-id>/exercise.toml` defines direct exercise
+- Each `curriculum/<serial>-<stable-id>/exercise.toml` defines direct exercise
   prerequisites, concepts taught, knowledge used, workspace composition, and
   verification cases.
 - L, M, and C serials are generated presentation labels.

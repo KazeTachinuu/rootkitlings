@@ -1,7 +1,7 @@
 schema_version = 2
 revision = "2026.10-core-route"
 default_module_artifact = "rootkitlings.ko"
-exercise_roots = ["curriculum/required"]
+exercise_roots = ["curriculum"]
 cumulative_root = "proc-publication"
 capabilities = []
 

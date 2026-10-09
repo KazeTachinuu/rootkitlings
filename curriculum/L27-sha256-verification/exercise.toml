@@ -1,0 +1,60 @@
+schema_version = 2
+id = "sha256-verification"
+title = "Compute and verify SHA-256 correctly"
+stage = "authenticated-operations"
+kind = "lesson"
+status = "required"
+tradecraft = ["cryptography", "detection"]
+difficulty = "advanced"
+prerequisites = ["owned-kernel-state", "protection-property-selection"]
+teaches = ["kernel-crypto-api", "sha256-verification"]
+requires = ["kernel-allocation", "protection-property-selection"]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "core/main.c", "crypto/platform.c", "crypto/sha256.c", "include/selftest.h", "include/sha256.h", "tests/selftest.c"]
+editable = ["crypto/sha256.c"]
+build = "."
+baseline = "template"
+source = "curriculum/L27-sha256-verification/starter"
+
+[resources]
+readme = "curriculum/L27-sha256-verification/README.md"
+check = "curriculum/L27-sha256-verification/checks/success-check"
+host_check = "curriculum/L27-sha256-verification/checks/host-check"
+hint = "curriculum/L27-sha256-verification/hint"
+solution = "curriculum/L27-sha256-verification/solution"
+
+[verification]
+timeout_seconds = 300
+capabilities = []
+tools = ["module-load-test"]
+cleanup_required = true
+
+[[verification.cases]]
+id = "sha256-lifecycle"
+label = "SHA-256 lifecycle and verification"
+expect_build = "pass"
+check = "curriculum/L27-sha256-verification/checks/success-check"
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "transform-allocation-failure"
+label = "SHA-256 transform allocation failure"
+expect_build = "pass"
+check = "curriculum/L27-sha256-verification/checks/failure-check.in"
+build_output_contains = ""
+check_arguments = ["4", "SHA-256 transform allocation failure"]
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "1"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+check = ""
+build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "99"

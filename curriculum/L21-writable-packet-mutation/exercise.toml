@@ -1,0 +1,71 @@
+schema_version = 2
+id = "writable-packet-mutation"
+title = "Mutate a writable packet and repair checksum state"
+stage = "network-state"
+kind = "lesson"
+status = "required"
+tradecraft = ["networking"]
+difficulty = "advanced"
+prerequisites = ["validated-packet-classification"]
+teaches = ["packet-redirection", "packet-copy-on-write", "checksum-repair"]
+requires = ["packet-classification", "udp-datagram-boundaries", "skb-safe-access", "netfilter-callback-constraints", "network-byte-order-decoding"]
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "access/skb_access.c", "classifier/udp.c", "core/main.c", "include/ipv4_parser.h", "include/rootkit.h", "include/skb_access.h", "include/udp_classifier.h", "include/udp_redirect.h", "include/writable.h", "instrumentation/netfilter_observer.c", "interface/proc.c", "mutation/udp_redirect.c", "mutation/writable.c", "parser/ipv4.c", "tests/selftest.c"]
+editable = ["mutation/udp_redirect.c"]
+build = "."
+baseline = "scaffold"
+source = "curriculum/L21-writable-packet-mutation/starter"
+parent = "validated-packet-classification"
+
+[resources]
+readme = "curriculum/L21-writable-packet-mutation/README.md"
+check = "curriculum/L21-writable-packet-mutation/checks/success-check"
+host_check = "curriculum/L21-writable-packet-mutation/checks/host-check"
+hint = "curriculum/L21-writable-packet-mutation/hint"
+solution = "curriculum/L21-writable-packet-mutation/solution"
+
+[verification]
+timeout_seconds = 360
+capabilities = []
+tools = ["module-load-test", "proc-read-test", "packet-mutation-test"]
+cleanup_required = true
+
+[[verification.cases]]
+id = "writable-udp-mutation"
+label = "Writable UDP destination mutation"
+expect_build = "pass"
+check = "curriculum/L21-writable-packet-mutation/checks/success-check"
+build_output_contains = ""
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "registration-rollback"
+label = "Netfilter registration failure rollback"
+expect_build = "pass"
+check = "curriculum/L21-writable-packet-mutation/checks/failure-check.in"
+build_output_contains = ""
+check_arguments = ["97", "Netfilter registration failure rollback"]
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "1"
+
+[[verification.cases]]
+id = "publication-rollback"
+label = "Proc publication failure rollback"
+expect_build = "pass"
+check = "curriculum/L21-writable-packet-mutation/checks/failure-check.in"
+build_output_contains = ""
+check_arguments = ["12", "Proc publication failure rollback"]
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "2"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+check = ""
+build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "99"

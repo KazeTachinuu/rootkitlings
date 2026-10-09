@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def bundle_source_files(root: Path = ROOT) -> set[Path]:
     """Return physical kernel sources owned by manifest-bearing bundles."""
     sources: set[Path] = set()
-    for manifest in sorted((root / 'curriculum/required').glob('*/exercise.toml')):
+    for manifest in sorted((root / 'curriculum').glob('*/exercise.toml')):
         bundle = manifest.parent
         for directory in ('starter', 'solution'):
             sources.update((bundle / directory).glob('**/*.c'))

@@ -561,6 +561,7 @@ class Catalog:
         teachers = {}
         route_positions = {exercise_id: i for i, exercise_id in enumerate(self.required_route)}
         for item in self.exercises:
+            self._validate_bundle_path(item)
             if item.stage not in section_ids or item.kind not in KINDS or item.status not in STATUSES:
                 raise CatalogError(f"{item.path}: invalid stage, kind, or status")
             if item.serial.startswith("L") and item.kind != "lesson":
@@ -638,6 +639,18 @@ class Catalog:
         used_tools = {value for item in self.exercises for value in item.verification.tools}
         if used_tools != tool_ids:
             raise CatalogError(f"course.toml: tool registry usage mismatch: {sorted(tool_ids-used_tools)}")
+
+    def _validate_bundle_path(self, item: Exercise) -> None:
+        """Keep required bundle names tied to route-derived serials."""
+        if item.status != "required":
+            return
+        expected_name = f"{item.serial}-{item.id}"
+        roots = tuple(Path(root) for root in self.exercise_roots)
+        if item.path.parent not in roots or item.path.name != expected_name:
+            expected = roots[0] / expected_name
+            raise CatalogError(
+                f"{item.path}: required bundle path must be {expected}"
+            )
 
     def _validate_elective_tracks(self, exercise_ids: set[str]) -> None:
         _unique_registry(
