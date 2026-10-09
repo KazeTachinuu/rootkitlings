@@ -4,9 +4,11 @@
 
 #ifdef __KERNEL__
 #include <linux/stddef.h>
+#include <linux/string.h>
 #include <linux/types.h>
 #else
 #include <stddef.h>
+#include <string.h>
 #endif
 
 enum {

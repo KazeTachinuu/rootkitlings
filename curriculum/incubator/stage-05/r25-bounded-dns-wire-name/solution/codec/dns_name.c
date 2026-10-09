@@ -1,10 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0
-#ifdef __KERNEL__
-#include <linux/string.h>
-#else
-#include <string.h>
-#endif
-
 #include "dns_name.h"
 
 enum rk_dns_name_result

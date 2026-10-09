@@ -74,6 +74,7 @@ Run:
 The checker uses address and undefined-behavior sanitizers.
 It covers every first length byte, every ordinary label length, both maximum-size name shapes, every truncation and output capacity, binary label data, unaligned input, overlap, failure precedence, reserved label types, and compression markers at valid label boundaries.
 It also builds the module with `W=1`, runs its kernel self-test in the disposable guest, and reruns the accepted IPv4-boundary lesson.
+The learner file uses one unconditional header include, so the same C implementation is checked in user space and in the kernel.
 
 ## Scope
 

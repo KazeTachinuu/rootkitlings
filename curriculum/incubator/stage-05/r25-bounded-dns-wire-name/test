@@ -149,6 +149,41 @@ mutate_early_destination()
 }
 build_mutant writes-before-commit mutate_early_destination
 
+mutate_kernel_branch()
+{
+	sed -i '/#include "dns_name.h"/a\
+#ifdef __KERNEL__\
+#define RK_DNS_NAME_OK RK_DNS_NAME_INVALID_ARGUMENT\
+#endif' "$1"
+}
+build_mutant kernel-only-behavior mutate_kernel_branch
+
+mutate_early_view()
+{
+	sed -i '/struct rk_dns_name_view parsed = { 0 };/a\
+\tview->consumed = 0;' "$1"
+}
+build_mutant writes-view-before-success mutate_early_view
+
+mutate_capacity()
+{
+	sed -i 's/if (capacity < length)/if (capacity + 1 < length)/' "$1"
+}
+build_mutant accepts-short-destination mutate_capacity
+
+mutate_root()
+{
+	sed -i 's/if (!length) {/if (!length \&\& offset) {/' "$1"
+}
+build_mutant rejects-root-name mutate_root
+
+cp -a "$HERE/solution" "$scratch/alternate"
+cp "$HERE/fixtures/alternate/dns_name.c" \
+	"$scratch/alternate/codec/dns_name.c"
+build_tree "$scratch/alternate" "$scratch/alternate-build"
+"$HERE/host-check" "$scratch/alternate-build" \
+	"$scratch/alternate-build/rootkitlings.ko"
+
 run_guest()
 {
 	local check=$1 module=$2 label=$3 output
@@ -167,6 +202,8 @@ run_guest()
 }
 
 run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" solution
+run_guest "$HERE/success-check" \
+	"$scratch/alternate-build/rootkitlings.ko" alternate
 run_guest "$HERE/failure-check" "$scratch/template/rootkitlings.ko" template \
 	--tool tools/module_load_test
 

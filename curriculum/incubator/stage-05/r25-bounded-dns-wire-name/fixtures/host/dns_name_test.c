@@ -291,16 +291,52 @@ static void test_binary_unaligned_and_overlap(void)
 
 	memset(storage, 0xcc, sizeof(storage));
 	memcpy(storage + 100, "first", 5);
-	memcpy(storage + 20, "second", 6);
+	memcpy(storage + 2, "second", 6);
 	overlap[0].data = storage + 100;
 	overlap[0].length = 5;
-	overlap[1].data = storage + 20;
+	overlap[1].data = storage + 2;
 	overlap[1].length = 6;
 	CHECK(rk_dns_name_encode(overlap, 2, storage, sizeof(storage), &used) ==
 	      RK_DNS_NAME_OK);
 	CHECK(used == 14 && storage[0] == 5 &&
 	      !memcmp(storage + 1, "first", 5) && storage[6] == 6 &&
 	      !memcmp(storage + 7, "second", 6) && storage[13] == 0);
+}
+
+static void test_every_label_pair(void)
+{
+	unsigned char first[RK_DNS_LABEL_MAX];
+	unsigned char second[RK_DNS_LABEL_MAX];
+	unsigned char wire[2 * RK_DNS_LABEL_MAX + 3];
+	struct rk_dns_label labels[2] = {
+		{ first, 1 }, { second, 1 },
+	};
+	struct rk_dns_name_view view;
+	size_t first_length;
+	size_t second_length;
+	size_t used;
+
+	memset(first, 0x00, sizeof(first));
+	memset(second, 0xff, sizeof(second));
+	for (first_length = 1; first_length <= RK_DNS_LABEL_MAX;
+	     first_length++) {
+		labels[0].length = first_length;
+		for (second_length = 1; second_length <= RK_DNS_LABEL_MAX;
+		     second_length++) {
+			labels[1].length = second_length;
+			used = 0;
+			CHECK(rk_dns_name_encode(labels, 2, wire, sizeof(wire),
+						 &used) == RK_DNS_NAME_OK);
+			CHECK(used == first_length + second_length + 3);
+			CHECK(rk_dns_name_parse(wire, used, &view) ==
+			      RK_DNS_NAME_OK);
+			CHECK(view.label_count == 2 && view.consumed == used &&
+			      view.data_offsets[0] == 1 &&
+			      view.lengths[0] == first_length &&
+			      view.data_offsets[1] == first_length + 2 &&
+			      view.lengths[1] == second_length);
+		}
+	}
 }
 
 static void test_type_markers_at_boundaries(void)
@@ -363,6 +399,7 @@ int main(void)
 	test_maximum_names_and_truncation();
 	test_capacities_and_encode_failures();
 	test_binary_unaligned_and_overlap();
+	test_every_label_pair();
 	test_type_markers_at_boundaries();
 	test_missing_root_and_precedence();
 

@@ -9,7 +9,7 @@ attempt=1
 while [ "$attempt" -le 2 ]; do
 	load rootkitlings.ko
 	assert_loaded rootkitlings
-	if dmesg | grep -q 'rootkitlings: dns name codec self-tests passed: 6 assertions'; then
+	if dmesg | grep -q 'rootkitlings: dns name codec self-tests passed: 1183 assertions'; then
 		_ok "kernel self-test completion is recorded"
 	else
 		_fail "kernel self-test completion is missing"
