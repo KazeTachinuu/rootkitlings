@@ -289,13 +289,28 @@ static int expect_offset_errno(const char *path, const struct fixture *fixture,
 	ssize_t count;
 	int saved_errno;
 	int fd = open_endpoint(path);
+	off_t positioned;
 
 	if (fd < 0)
 		return -1;
 	do {
-		errno = 0;
-		count = pwrite(fd, fixture->data, fixture->length, offset);
-	} while (count < 0 && errno == EINTR);
+		positioned = lseek(fd, offset, SEEK_SET);
+	} while (positioned < 0 && errno == EINTR);
+	if (positioned < 0) {
+		fprintf(stderr, "proc_write_test: seek %s to offset %jd: %s\n",
+			path, (intmax_t)offset, strerror(errno));
+		close(fd);
+		return -1;
+	}
+	if (positioned != offset) {
+		fprintf(stderr,
+			"proc_write_test: seek %s returned offset %jd, expected %jd\n",
+			path, (intmax_t)positioned, (intmax_t)offset);
+		close(fd);
+		return -1;
+	}
+	errno = 0;
+	count = write_retry(fd, fixture->data, fixture->length);
 	saved_errno = errno;
 	if (close(fd) < 0) {
 		fprintf(stderr, "proc_write_test: close %s: %s\n", path,
@@ -304,13 +319,13 @@ static int expect_offset_errno(const char *path, const struct fixture *fixture,
 	}
 	if (count >= 0) {
 		fprintf(stderr,
-			"proc_write_test: pwrite %s at offset %jd returned %zd, expected errno=%d\n",
+			"proc_write_test: write %s at offset %jd returned %zd, expected errno=%d\n",
 			path, (intmax_t)offset, count, expected_errno);
 		return -1;
 	}
 	if (saved_errno != expected_errno) {
 		fprintf(stderr,
-			"proc_write_test: pwrite %s at offset %jd returned errno=%d, expected errno=%d\n",
+			"proc_write_test: write %s at offset %jd returned errno=%d, expected errno=%d\n",
 			path, (intmax_t)offset, saved_errno, expected_errno);
 		return -1;
 	}
