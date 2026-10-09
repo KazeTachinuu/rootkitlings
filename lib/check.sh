@@ -35,6 +35,128 @@ begin() {
     dmesg -c > /dev/null 2>&1
 }
 
+# -- scoped allocation tracing ----------------------------------------------
+
+kmem_trace_setup() {
+    local format
+
+    _kmem_trace_root=/sys/kernel/tracing
+    _kmem_kmalloc_enable=$_kmem_trace_root/events/kmem/kmalloc/enable
+    _kmem_kfree_enable=$_kmem_trace_root/events/kmem/kfree/enable
+    _kmem_old_tracing=$(cat "$_kmem_trace_root/tracing_on")
+    _kmem_old_kmalloc=$(cat "$_kmem_kmalloc_enable")
+    _kmem_old_kfree=$(cat "$_kmem_kfree_enable")
+    _kmem_trace_copy=/tmp/rootkitlings-kmem-trace
+    _kmem_allocs=/tmp/rootkitlings-kmem-allocs
+    _kmem_frees=/tmp/rootkitlings-kmem-frees
+
+    for format in \
+        "$_kmem_trace_root/events/kmem/kmalloc/format" \
+        "$_kmem_trace_root/events/kmem/kfree/format"; do
+        if grep -q 'field:.* call_site;' "$format" &&
+           grep -q 'field:.* ptr;' "$format"; then
+            _ok "$(basename "$(dirname "$format")") trace fields are available"
+        else
+            _fail "$format lacks call_site or ptr"
+        fi
+    done
+}
+
+kmem_trace_disable() {
+    printf 0 > "$_kmem_trace_root/tracing_on"
+    printf 0 > "$_kmem_kmalloc_enable"
+    printf 0 > "$_kmem_kfree_enable"
+}
+
+kmem_trace_start() {
+    kmem_trace_disable
+    : > "$_kmem_trace_root/trace"
+    printf 1 > "$_kmem_kmalloc_enable"
+    printf 1 > "$_kmem_kfree_enable"
+    printf 1 > "$_kmem_trace_root/tracing_on"
+}
+
+kmem_trace_stop() {
+    kmem_trace_disable
+    cat "$_kmem_trace_root/trace" > "$_kmem_trace_copy"
+}
+
+assert_one_loader_allocation_freed() {
+    local label line kind field value call_site ptr matched alloc_count free_count
+    local alloc_ptr free_ptr
+
+    label=$1
+    : > "$_kmem_allocs"
+    : > "$_kmem_frees"
+    while IFS= read -r line; do
+        case "$line" in
+            *module_load_tes-*' kmalloc: '*) kind=alloc ;;
+            *module_load_tes-*' kfree: '*) kind=free ;;
+            *) continue ;;
+        esac
+        call_site=
+        ptr=
+        for field in $line; do
+            case "$field" in
+                call_site=*)
+                    value=${field#call_site=}
+                    case "$value" in
+                        0x*) call_site=$value ;;
+                        ''|*[!0-9a-fA-F]*) ;;
+                        *) call_site=0x$value ;;
+                    esac
+                    ;;
+                ptr=*)
+                    value=${field#ptr=}
+                    case "$value" in
+                        0x*) ptr=${value#0x} ;;
+                        ''|*[!0-9a-fA-F]*) ;;
+                        *) ptr=$value ;;
+                    esac
+                    ;;
+            esac
+        done
+        [ -n "$call_site" ] && [ -n "$ptr" ] || continue
+        case "$kind" in
+            alloc) printf '%s %s\n' "$ptr" "$call_site" >> "$_kmem_allocs" ;;
+            free) printf '%s %s\n' "$ptr" "$call_site" >> "$_kmem_frees" ;;
+        esac
+    done < "$_kmem_trace_copy"
+
+    matched=
+    alloc_count=$(wc -l < "$_kmem_allocs")
+    free_count=$(wc -l < "$_kmem_frees")
+    if [ "$alloc_count" -eq 1 ] && [ "$free_count" -eq 1 ]; then
+        read -r alloc_ptr _ < "$_kmem_allocs"
+        read -r free_ptr _ < "$_kmem_frees"
+        if [ "$alloc_ptr" = "$free_ptr" ] &&
+           [ "$alloc_ptr" != 0000000000000000 ]; then
+            matched=$alloc_ptr
+        fi
+    fi
+
+    if [ -n "$matched" ]; then
+        _ok "$label"
+    else
+        _fail "$label: expected one matching non-null allocation and free"
+        printf '    parsed allocations:\n'
+        head -n 12 "$_kmem_allocs"
+        printf '    parsed frees:\n'
+        head -n 12 "$_kmem_frees"
+        printf '    raw trace:\n'
+        head -n 30 "$_kmem_trace_copy"
+    fi
+}
+
+kmem_trace_restore() {
+    kmem_trace_disable
+    : > "$_kmem_trace_root/trace"
+    printf '%s' "$_kmem_old_kmalloc" > "$_kmem_kmalloc_enable"
+    printf '%s' "$_kmem_old_kfree" > "$_kmem_kfree_enable"
+    printf '%s' "$_kmem_old_tracing" > "$_kmem_trace_root/tracing_on"
+    rm -f "$_kmem_trace_copy" "$_kmem_allocs" "$_kmem_frees"
+}
+
 summary() {
     local log
 

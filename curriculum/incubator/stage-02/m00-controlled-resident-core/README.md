@@ -36,6 +36,7 @@ worker_runs=7
 
 `timer_fires` counts timer callbacks whether actions are enabled or disabled.
 `worker_runs` counts actions completed by the kernel thread.
+In this milestone, one `worker_runs` increment is the complete observable action; later lessons can replace it with work that may block.
 
 ## One pending request
 

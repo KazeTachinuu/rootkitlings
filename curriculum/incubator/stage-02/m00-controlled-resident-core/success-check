@@ -205,6 +205,22 @@ check_disabled_timer()
 	disabled_timer=$status_timer
 }
 
+settle_worker_runs()
+{
+	settled=0
+	settle_attempt=1
+	while [ "$settle_attempt" -le 3 ]; do
+		settled_runs=$(status_field_test read "$endpoint" worker_runs)
+		if status_field_test unchanged "$endpoint" worker_runs \
+			"$settled_runs" 300 > /dev/null 2>&1; then
+			settled=1
+			break
+		fi
+		settle_attempt=$((settle_attempt + 1))
+	done
+	[ "$settled" -eq 1 ]
+}
+
 check_manual_and_periodic_requests()
 {
 	if proc_write_test write "$endpoint" "$fixtures/enable" > /dev/null; then
@@ -221,8 +237,19 @@ check_manual_and_periodic_requests()
 		_fail "enabled periodic requests produced no action"
 	fi
 
+	if proc_write_test write "$endpoint" "$fixtures/disable" > /dev/null &&
+	   settle_worker_runs; then
+		_ok "worker_runs settles before the admission accounting window"
+	else
+		_fail "worker_runs did not settle before admission accounting"
+	fi
 	before_timer=$(status_field_test read "$endpoint" timer_fires)
-	before_runs=$(status_field_test read "$endpoint" worker_runs)
+	before_runs=$settled_runs
+	if proc_write_test write "$endpoint" "$fixtures/enable" > /dev/null; then
+		_ok "actions are enabled for concurrent requests"
+	else
+		_fail "could not enable actions for concurrent requests"
+	fi
 	pids=
 	writer=1
 	while [ "$writer" -le 4 ]; do
@@ -264,31 +291,21 @@ check_manual_and_periodic_requests()
 		_fail "manual outcomes: success=$ok_count EAGAIN=$again_count"
 	fi
 
-	after_timer=$(status_field_test read "$endpoint" timer_fires)
 	if proc_write_test write "$endpoint" "$fixtures/disable-lf" > /dev/null; then
 		_ok "disable with newline returns its full byte count"
 	else
 		_fail "disable with newline failed"
 	fi
-	settled=0
-	settle_attempt=1
-	while [ "$settle_attempt" -le 3 ]; do
-		final_runs=$(status_field_test read "$endpoint" worker_runs)
-		if status_field_test unchanged "$endpoint" worker_runs \
-			"$final_runs" 300 > /dev/null 2>&1; then
-			settled=1
-			break
-		fi
-		settle_attempt=$((settle_attempt + 1))
-	done
-	if [ "$settled" -eq 1 ]; then
+	if settle_worker_runs; then
 		_ok "worker_runs settles after disable"
 	else
 		_fail "worker_runs did not settle after disable"
 	fi
+	final_runs=$settled_runs
+	final_timer=$(status_field_test read "$endpoint" timer_fires)
 	worker_delta=$((final_runs - before_runs))
-	timer_delta=$((after_timer - before_timer))
-	maximum_runs=$((ok_count + timer_delta + 2))
+	timer_delta=$((final_timer - before_timer))
+	maximum_runs=$((ok_count + timer_delta))
 	if [ "$worker_delta" -ge 0 ] && [ "$worker_delta" -le "$maximum_runs" ]; then
 		_ok "the capacity-one path does not invent completed actions"
 	else

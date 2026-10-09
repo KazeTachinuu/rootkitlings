@@ -250,8 +250,9 @@ Merge the useful integration work of C00 and C01.
 The Boolean control switch gates both producers.
 The timer callback and a fixed proc command submit to one capacity-one atomic request path, and the resident thread consumes admitted requests.
 This deliberately refactors R08's counted non-coalescing queue: a periodic producer must coalesce demand instead of accumulating a growing work backlog.
-The integrated result has no workqueue: L07 taught timer-to-workqueue deferral as an isolated callback-boundary mechanism, while M00 reuses the bounded timer producer and gives all sleep-capable work to the already-owned thread.
-Both producers stop when disabled and unload closes the timer, request, wake, and thread lifetimes cleanly.
+The integrated result has no workqueue: L06 taught timer-to-workqueue deferral as an isolated callback-boundary mechanism, while M00 reuses the bounded timer producer and gives all sleep-capable work to the already-owned thread.
+A request that observes disabled is not admitted: procfs `run` returns `EACCES`, while timer callbacks continue to be counted and ignore the same error.
+Unload closes the timer, request, wake, and thread lifetimes cleanly.
 Requires R07 and R08 directly.
 M00 starts from the learner's passed R04 cumulative snapshot.
 R06-R08 are separate practice workspaces, so the learner applies their mechanisms to that project; the engine does not merge those workspaces automatically.

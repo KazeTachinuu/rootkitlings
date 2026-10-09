@@ -1,6 +1,6 @@
 # Stage 2 implementation slice
 
-Status: control boundary complete through target L05; resident execution and M00 remain pending.
+Status: incubation implementation complete and validated through M00; public route migration pending.
 Nothing here changes the public course route yet.
 
 ## Implemented checkpoints
@@ -9,9 +9,13 @@ Nothing here changes the public course route yet.
 |---|---|---|---|
 | L04 `proc-read-contract` | R05 `r05-proc-read` | Connect the proc entry to private state through one accessor | Exact state record, partial reads, EOF, rewind, rejected writes, safe held-descriptor unload |
 | L05 `bounded-control-switch` | R06 `r06-control-switch` | Add one private Boolean gate and a strict procfs write boundary | Exact `enable`/`disable` commands, precise errors, state preservation, concurrent complete reads, permissions, unload and reset |
+| L06 `timer-workqueue-scheduler` | R07 `r07-timer-workqueue` | Connect a preallocated timer to one non-reentrant work item | Bounded timer callback, gated worker runs, exact counters, timer and work teardown |
+| L07 `event-driven-kernel-thread` | R08 `r08-event-thread` | Add counted requests, a wait queue and one resident thread | Exact accepted-request accounting, bounded saturation, idle sleep, stop and join |
+| M00 `controlled-resident-core` | M00 `m00-controlled-resident-core` | Integrate the learned mechanisms into the Stage 1 module | Timer and proc producers share one capacity-one request slot and resident thread |
 
-Both checkpoints are sparse overlays over the Stage 1 module.
+The four lessons are sparse overlays over the Stage 1 module.
 They preserve all Stage 1 build-time failure points, rollback evidence, component ownership, and proc-before-state teardown.
+M00 starts from the learner's passed R04 snapshot and asks the learner to reapply the Stage 2 mechanisms in one integrated module.
 
 ## Accepted control design
 
@@ -29,23 +33,33 @@ Concurrent valid writers use last-writer-wins semantics, and readers must observ
 The first genuine atomic read-modify-write operation appears in L07, where it bounds a counted pending-event queue at `INT_MAX` without coalescing successful requests.
 The first real multi-field invariant will introduce its mutex at one-use authorization, and the first real list consumer will introduce kernel list mechanics at module-view suppression.
 
+L06 uses a timer callback only to record a firing, submit one preallocated work item, and rearm the timer.
+The normal workqueue callback owns the observable action and is the first sleep-capable execution boundary.
+Unload removes procfs, shuts down the timer, cancels the work item synchronously, and only then destroys state.
+
+L07 uses a counted atomic pending queue because concurrent successful `run` writes must not merge.
+The wait queue only blocks the resident thread; it does not store work.
+Stop takes priority over pending work, and `kthread_stop()` joins the task before state destruction.
+
+M00 deliberately changes the manual lesson's counted queue to one capacity-one slot.
+The periodic and manual producers call the same nonblocking request function, and the resident thread is the only action owner.
+This keeps periodic demand bounded and removes the now-redundant workqueue from the integrated design.
+
 ## Runtime evidence
 
 The R05 matrix builds every inherited failure variant and verifies exact reads, terminal short reads, repeated EOF, rewind, write rejection, two held-descriptor unloads, reload, and a clean kernel log.
 
 The R06 matrix builds the same variants and checks all four accepted command forms; exact `EINVAL`, `E2BIG`, and `EFAULT` paths; bounds before user access; nonzero offsets; repeated writes on one descriptor; mode and ownership; unprivileged denial; concurrent old-or-new records; two held-descriptor unloads; reset on reload; and a clean kernel log.
 
-## Remaining Stage 2 work
+The R07 matrix proves bounded timer callbacks, one-writer counters, disabled and enabled behavior, workqueue non-reentrance, synchronous timer and work shutdown, two load cycles, and a clean kernel log.
 
-- L06 `timer-workqueue-scheduler`: keep the timer callback bounded, use one writer per `unsigned long` counter, defer sleep-capable work to a worker, and close both lifetimes on unload.
-- L07 `event-driven-kernel-thread`: admit counted events with `atomic_add_unless(..., INT_MAX)`, report `EOVERFLOW` only at saturation, consume one with each successful `atomic_dec_if_positive()`, and preserve exact sequential, burst, and concurrent success accounting until stop or unload.
-- M00 `controlled-resident-core`: unify the timer and proc producers through one capacity-one request path consumed by the resident thread, without retaining a redundant workqueue.
+The R08 matrix proves exact sequential, burst, concurrent, and switch-race accounting; bounded saturation; an idle sleeping task; creation and publication rollback; held-descriptor unload; two load cycles; and a clean kernel log.
 
-M00 intentionally changes L07's non-coalescing counted admission to capacity one.
-A periodic producer must coalesce demand rather than accumulate work faster than the resident thread can consume it.
+The M00 matrix proves that both producers share one capacity-one admission point, validates `EACCES` and `EAGAIN`, derives its completion bound from observed admissions and timer firings, exercises blocked and active unload, traces state cleanup on failures, checks two load cycles, and leaves no worker or kernel warning.
 
-M00 starts from the learner's passed R04 cumulative snapshot.
-L05-L07 are separate practice workspaces: their completion proves the prerequisite knowledge, but the learner applies those mechanisms again in M00.
-No automatic workspace merge or additional engine feature is implied.
+The three checks that trace state rollback share one allocation-tracing helper in `lib/check.sh`; the event lessons do not carry copied trace parsers.
 
-The target route remains private until these assets, metadata, state migration, and cumulative snapshot checks can be adopted atomically.
+## Public adoption boundary
+
+Stage 2 remains private only because the target catalog, metadata, state migration, and cumulative snapshot path must be adopted together after the remaining stages are implemented.
+There is no unfinished Stage 2 mechanism hidden behind that boundary.
