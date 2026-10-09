@@ -8,6 +8,7 @@ The target has an unscored authorization and containment setup gate followed by 
 - `curriculum-migration-map.md` maps every current exercise to the proposed cumulative curriculum.
 - `target-catalog-v3.md` defines the exact target lessons, milestones, capstone, and elective tracks.
 - `engine-v3-requirements.md` records the engine changes required before route adoption.
+- `repository-cutover.md` fixes the final root layout and the safe atomic removal order for the live v2 trees.
 - `stage-01-architecture.md` fixes the cumulative source, ownership, failure, tracing, and snapshot contracts.
 - `stage-01-implementation.md` defines the setup-gate acceptance contract and tracks the Stage 1 implementation slice.
 - `stage-02-implementation.md` records the validated control, scheduling, resident-thread, and M00 integration slice.
