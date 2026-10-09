@@ -1,0 +1,8 @@
+Validate the buffer's length fields before calling helpers that subtract them.
+Keep the network-header offset signed: a negative value may name bytes in headroom.
+Reject INT_MIN before negation, then prove the magnitude fits in skb_headroom().
+For a nonnegative offset, prove it is no larger than skb->len.
+Validate the requested network-relative range by checking before subtracting.
+Add that offset to the signed skb offset in s64, then prove the result fits int.
+Only after geometry and fragment readability are known should you call
+skb_header_pointer_careful() and commit local output values.
