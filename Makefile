@@ -1,5 +1,11 @@
 KDIR ?= /lib/modules/$(shell uname -r)/build
 MODULE_DIR ?=
+GUEST_TOOLS := \
+	tools/cred_trigger_test \
+	tools/icmp_send \
+	tools/ioctl_test \
+	tools/module_load_test \
+	tools/proc_read_test
 
 .PHONY: all help module clean compile-db test-solutions doctor validate validate-quick tools
 
@@ -22,7 +28,7 @@ module:
 	@test -n "$(MODULE_DIR)" || { echo 'MODULE_DIR is required' >&2; exit 2; }
 	$(MAKE) -C "$(KDIR)" M="$(MODULE_DIR)" W=1 modules
 
-tools: tools/cred_trigger_test tools/icmp_send tools/ioctl_test tools/module_load_test
+tools: $(GUEST_TOOLS)
 
 tools/cred_trigger_test: tools/cred_trigger_test.c
 	$(CC) -static -o $@ $<
@@ -36,8 +42,11 @@ tools/ioctl_test: tools/ioctl_test.c
 tools/module_load_test: tools/module_load_test.c
 	$(CC) -static -o $@ $<
 
+tools/proc_read_test: tools/proc_read_test.c
+	$(CC) -static -o $@ $<
+
 clean:
-	$(RM) tools/cred_trigger_test tools/icmp_send tools/ioctl_test tools/module_load_test
+	$(RM) $(GUEST_TOOLS)
 
 doctor:
 	@"$(CURDIR)/scripts/doctor"
