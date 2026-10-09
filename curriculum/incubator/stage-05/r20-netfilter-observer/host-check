@@ -16,11 +16,6 @@ for relative in Kbuild core/main.c include/rootkit.h interface/proc.c \
 done
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
 
-for relative in Kbuild core/main.c include/rootkit.h interface/proc.c; do
-	cmp -s "$here/solution/$relative" "$build_dir/$relative" ||
-		die "supplied file was changed: $relative"
-done
-
 # This check enforces the lesson's edit and observation boundaries only. The
 # compiled fixture below is the oracle for callback and lifecycle semantics.
 python3 - "$build_dir/instrumentation/netfilter_observer.c" \

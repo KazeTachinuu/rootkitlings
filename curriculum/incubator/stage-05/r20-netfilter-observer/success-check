@@ -9,10 +9,7 @@ fixtures=/tmp/rootkitlings-netfilter
 actual=$fixtures/actual
 expected=$fixtures/expected
 mkdir -p "$fixtures"
-helper=$fixtures/udp_loopback_test
-sed -n '/^__ROOTKITLINGS_UDP_HELPER__$/,$p' /check |
-	sed '1d' | busybox base64 -d | busybox gzip -d > "$helper"
-chmod 0755 "$helper"
+helper=netfilter_udp_test
 
 callbacks()
 {

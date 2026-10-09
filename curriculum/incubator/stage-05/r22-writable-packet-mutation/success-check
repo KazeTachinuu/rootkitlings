@@ -9,10 +9,7 @@ fixtures=/tmp/rootkitlings-mutation
 actual=$fixtures/actual
 expected=$fixtures/expected
 mkdir -p "$fixtures"
-helper=$fixtures/traffic_test
-sed -n '/^__ROOTKITLINGS_TRAFFIC_HELPER__$/,$p' /check |
-	sed '1d' | busybox base64 -d | busybox gzip -d > "$helper"
-chmod 0755 "$helper"
+helper=packet_mutation_test
 
 field()
 {
@@ -132,7 +129,7 @@ assert_delta callbacks "$before" 0 "IPv6 does not cross the IPv4 hook"
 
 before=$(field callbacks)
 if busybox unshare -n sh -c \
-	'ifconfig lo 127.0.0.1 up && /tmp/rootkitlings-mutation/traffic_test direct 47021 47022' \
+	'ifconfig lo 127.0.0.1 up && packet_mutation_test direct 47021 47022' \
 	>/dev/null 2>&1; then
 	_ok "child network namespace UDP positive control completed"
 else

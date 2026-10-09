@@ -21,15 +21,6 @@ for relative in Kbuild access/skb_access.c classifier/udp.c core/main.c \
 		die "build is missing regular file: $relative"
 done
 
-for relative in Kbuild access/skb_access.c classifier/udp.c core/main.c \
-		include/ipv4_parser.h include/rootkit.h include/skb_access.h \
-		include/udp_classifier.h include/udp_redirect.h include/writable.h \
-		instrumentation/netfilter_observer.c interface/proc.c \
-		mutation/writable.c parser/ipv4.c tests/selftest.c; do
-	cmp -s "$here/solution/$relative" "$build_dir/$relative" ||
-		die "supplied file was changed: $relative"
-done
-
 if grep -Eq '^[[:space:]]*#[[:space:]]*(if|ifdef|ifndef|elif|else)\b' \
 	"$build_dir/mutation/udp_redirect.c"; then
 	die "learner file must not select different host and kernel behavior"

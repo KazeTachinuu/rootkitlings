@@ -21,7 +21,7 @@ grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
 	printf '[x] pinned kernel build is not configured for GCC\n' >&2
 	exit 1
 }
-for command in base64 gcc gzip make nm perl; do
+for command in gcc make nm perl; do
 	command -v "$command" >/dev/null || {
 		printf '[x] %s is required\n' "$command" >&2
 		exit 1
@@ -188,13 +188,6 @@ if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
 	exit 1
 fi
 
-gcc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -static \
-	-o "$scratch/traffic_test" "$HERE/fixtures/host/traffic_test.c"
-cp "$HERE/success-check" "$scratch/success-check"
-printf '\n__ROOTKITLINGS_TRAFFIC_HELPER__\n' >> "$scratch/success-check"
-gzip -c "$scratch/traffic_test" | base64 -w 76 >> "$scratch/success-check"
-chmod 0755 "$scratch/success-check"
-
 sed -e 's/@EXPECTED_ERRNO@/22/g' \
 	-e 's/@LABEL@/Unfinished mutator rejection/g' \
 	"$HERE/failure-check.in" > "$scratch/template-failure-check"
@@ -223,8 +216,8 @@ run_guest()
 	}
 }
 
-run_guest "$scratch/success-check" "$scratch/solution/rootkitlings.ko" \
-	solution --tool tools/proc_read_test
+run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" \
+	solution --tool tools/proc_read_test --tool tools/packet_mutation_test
 run_guest "$scratch/template-failure-check" \
 	"$scratch/template/rootkitlings.ko" template --tool tools/module_load_test
 run_guest "$scratch/register-failure-check" \

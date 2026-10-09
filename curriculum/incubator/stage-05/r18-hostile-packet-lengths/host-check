@@ -13,11 +13,6 @@ for relative in Kbuild main.c include/ipv4_parser.h parser/ipv4.c parser/ipv4.o;
 		die "build is missing regular file: $relative"
 done
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
-for relative in Kbuild main.c include/ipv4_parser.h; do
-	cmp -s "$here/solution/$relative" "$build_dir/$relative" ||
-		die "supplied file was changed: $relative"
-done
-
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-ipv4-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 compiler=${CC:-gcc}

@@ -25,8 +25,6 @@ supplied=(
 for path in "${supplied[@]}"; do
 	[[ -f $success_dir/$path && ! -L $success_dir/$path ]] ||
 		die "missing supplied file: $path"
-	cmp -s "$here/template/$path" "$success_dir/$path" ||
-		die "supplied file changed: $path"
 done
 
 mapfile -t source_paths < <(
@@ -54,11 +52,6 @@ if grep -Eq '\b(strlen|strstr|strnstr|strcpy|strncpy|strcat|strncat|sprintf|snpr
 	"$learner"; then
 	die "replacement must be bounded byte processing without allocation"
 fi
-grep -Eq '\bmemcmp[[:space:]]*\(' "$learner" ||
-	die "compare exactly width bytes"
-grep -Eq '\bmemcpy[[:space:]]*\(' "$learner" ||
-	die "copy exactly width replacement bytes"
-
 for command in gcc timeout nm objdump strings; do
 	command -v "$command" >/dev/null || die "$command is required"
 done

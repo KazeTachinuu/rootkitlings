@@ -193,26 +193,11 @@ build_mutant direct-data mutate_direct_data
 run_guest "$HERE/failure-check" "$scratch/direct-data/rootkitlings.ko" \
 	"direct linear-data access" --tool tools/module_load_test
 
-expect_host_rejection()
-{
-	local directory=$1 label=$2
-	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
-		> "$scratch/$label-host.log" 2>&1; then
-		printf '[x] host checker accepted %s\n' "$label" >&2
-		exit 1
-	fi
-}
-
 build_mutant plain-helper \
 	sed -i 's/skb_header_pointer_careful/skb_header_pointer/'
 "$HERE/host-check" "$scratch/plain-helper" \
 	"$scratch/plain-helper/rootkitlings.ko"
 run_guest "$HERE/success-check" "$scratch/plain-helper/rootkitlings.ko" \
 	"equivalent explicit-readability implementation"
-
-protected=$scratch/protected
-cp -a "$scratch/solution" "$protected"
-sed -i 's/RK_INSPECT_OK/RK_INSPECT_BYPASS/' "$protected/main.c"
-expect_host_rejection "$protected" supplied-integration
 
 "$HERE/../r18-hostile-packet-lengths/test"

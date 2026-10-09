@@ -9,10 +9,7 @@ fixtures=/tmp/rootkitlings-classifier
 actual=$fixtures/actual
 expected=$fixtures/expected
 mkdir -p "$fixtures"
-helper=$fixtures/traffic_test
-sed -n '/^__ROOTKITLINGS_TRAFFIC_HELPER__$/,$p' /check |
-	sed '1d' | busybox base64 -d | busybox gzip -d > "$helper"
-chmod 0755 "$helper"
+helper=packet_classifier_test
 
 field()
 {

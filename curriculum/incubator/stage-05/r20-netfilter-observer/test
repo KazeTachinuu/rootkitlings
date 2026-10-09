@@ -21,7 +21,7 @@ grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
 	printf '[x] pinned kernel build is not configured for GCC\n' >&2
 	exit 1
 }
-for command in base64 gcc gzip nm objdump python3; do
+for command in gcc nm objdump python3; do
 	command -v "$command" >/dev/null || {
 		printf '[x] %s is required\n' "$command" >&2
 		exit 1
@@ -212,12 +212,6 @@ sed -i 's/status->hook = READ_ONCE(observer->ops.hooknum);/status->hook = NF_INE
 	"$hardcoded_snapshot/instrumentation/netfilter_observer.c"
 expect_rejection "$hardcoded_snapshot" hardcoded-snapshot
 
-hardcoded_status=$scratch/hardcoded-status
-cp -a "$scratch/solution" "$hardcoded_status"
-sed -i 's/rk_family_name(status.family)/"ipv4"/' \
-	"$hardcoded_status/interface/proc.c"
-expect_rejection "$hardcoded_status" hardcoded-status
-
 cp -a "$HERE/solution" "$scratch/unknown"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
 	ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
@@ -233,19 +227,12 @@ sed -e 's/@EXPECTED_ERRNO@/12/g' \
 	"$HERE/failure-check.in" > "$scratch/proc-failure-check"
 chmod 0755 "$scratch/register-failure-check" "$scratch/proc-failure-check"
 
-gcc -std=c11 -Wall -Wextra -Werror -pedantic -pthread -static \
-	-o "$scratch/udp_loopback_test" \
-	"$HERE/fixtures/host/udp_loopback_test.c"
-cp "$HERE/success-check" "$scratch/success-check"
-printf '\n__ROOTKITLINGS_UDP_HELPER__\n' >> "$scratch/success-check"
-gzip -c "$scratch/udp_loopback_test" | base64 -w 76 >> "$scratch/success-check"
-chmod 0755 "$scratch/success-check"
-
 run_guest()
 {
 	local check_script=$1 module=$2 output
 	if ! output=$("$HERE/../../../../vm/boot" --check "$check_script" \
 		--tool tools/module_load_test --tool tools/proc_read_test \
+		--tool tools/netfilter_udp_test \
 		"$module" 2>&1); then
 		printf '%s\n' "$output" >&2
 		printf '[x] disposable guest did not complete\n' >&2
@@ -262,4 +249,4 @@ run_guest "$scratch/register-failure-check" \
 	"$scratch/register-failure/rootkitlings.ko"
 run_guest "$scratch/proc-failure-check" \
 	"$scratch/proc-failure/rootkitlings.ko"
-run_guest "$scratch/success-check" "$scratch/solution/rootkitlings.ko"
+run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko"

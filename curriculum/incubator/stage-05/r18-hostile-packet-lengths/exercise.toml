@@ -1,0 +1,41 @@
+schema_version = 2
+id = "hostile-packet-lengths"
+title = "Parse packet lengths before touching payload"
+stage = "network-state"
+kind = "lesson"
+status = "required"
+tradecraft = ["networking", "detection"]
+difficulty = "standard"
+prerequisites = []
+teaches = ["packet-length-validation", "network-byte-order-decoding", "ipv4-fragment-policy"]
+requires = ["ipv4-packet-basics"]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "include/ipv4_parser.h", "main.c", "parser/ipv4.c"]
+editable = ["parser/ipv4.c"]
+build = "."
+baseline = "template"
+module_artifact = "rootkitlings.ko"
+source = "curriculum/incubator/stage-05/r18-hostile-packet-lengths/template"
+
+[resources]
+readme = "curriculum/incubator/stage-05/r18-hostile-packet-lengths/README.md"
+check = "curriculum/incubator/stage-05/r18-hostile-packet-lengths/success-check"
+host_check = "curriculum/incubator/stage-05/r18-hostile-packet-lengths/host-check"
+hint = "curriculum/incubator/stage-05/r18-hostile-packet-lengths/hint"
+solution = "curriculum/incubator/stage-05/r18-hostile-packet-lengths/solution"
+
+[verification]
+timeout_seconds = 180
+capabilities = []
+tools = []
+cleanup_required = true
+
+[[verification.cases]]
+id = "bounded-ipv4-parser"
+label = "Bounded IPv4 parser"
+expect_build = "pass"
+check = "curriculum/incubator/stage-05/r18-hostile-packet-lengths/success-check"
+build_output_contains = ""
+[verification.cases.build_variables]
