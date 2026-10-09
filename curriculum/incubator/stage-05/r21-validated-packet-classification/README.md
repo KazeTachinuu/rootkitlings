@@ -71,9 +71,10 @@ Run:
 
 The checker accepts equivalent bounded C implementations.
 Every non-null IPv4 view in the corpus is produced by the accepted L17 parser.
-The host corpus exercises every 16-bit UDP length, source port, and destination port under AddressSanitizer and UndefinedBehaviorSanitizer.
-It checks unaligned input and unchanged failure outputs, and rejects implementations that confuse the eight-byte buffer extent with a packet length.
-The disposable Linux 7.2 guest also covers IPv4 options, malformed lengths, surplus bytes, checksum-independent classification, UDP GSO, fragments, concurrent status reads, rollback, unload during traffic, and reload.
+The host corpus exercises every 16-bit UDP length, source port, destination port, and checksum field under AddressSanitizer and UndefinedBehaviorSanitizer.
+It checks all valid IPv4 header lengths, unaligned input, result precedence, a guarded buffer for non-UDP traffic, and unchanged failure outputs.
+It rejects implementations that confuse the eight-byte buffer extent with a packet length.
+The disposable Linux 7.2 guest also covers IPv4 options, malformed lengths, surplus bytes, checksum-independent classification, UDP GSO, fragments, IPv6 and child-network-namespace controls, concurrent status reads, rollback, unload during traffic, and reload.
 
 ## References
 

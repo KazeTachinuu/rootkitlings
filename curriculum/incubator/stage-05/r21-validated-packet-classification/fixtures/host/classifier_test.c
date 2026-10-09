@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #include "udp_classifier.h"
 
@@ -17,21 +19,23 @@ static int expect(int condition, const char *label)
 	return 1;
 }
 
-static struct rk_ipv4_view ipv4_view(size_t payload_length,
-				     unsigned char protocol)
+static struct rk_ipv4_view ipv4_view_with_header(size_t header_length,
+					 size_t payload_length,
+					 unsigned char protocol)
 {
 	static unsigned char packet[65535];
 	struct rk_ipv4_view view;
 	size_t packet_length;
 
-	if (payload_length > sizeof(packet) - 20) {
+	if (header_length < 20 || header_length > 60 || header_length % 4 ||
+	    payload_length > sizeof(packet) - header_length) {
 		fprintf(stderr, "invalid test IPv4 payload length: %zu\n",
 			payload_length);
 		exit(EXIT_FAILURE);
 	}
-	packet_length = 20 + payload_length;
-	memset(packet, 0, 20);
-	packet[0] = 0x45;
+	packet_length = header_length + payload_length;
+	memset(packet, 0, packet_length);
+	packet[0] = 0x40 | (header_length / 4);
 	packet[2] = packet_length >> 8;
 	packet[3] = packet_length;
 	packet[9] = protocol;
@@ -41,6 +45,12 @@ static struct rk_ipv4_view ipv4_view(size_t payload_length,
 	}
 
 	return view;
+}
+
+static struct rk_ipv4_view ipv4_view(size_t payload_length,
+				     unsigned char protocol)
+{
+	return ipv4_view_with_header(20, payload_length, protocol);
 }
 
 static void make_udp(unsigned char header[8], unsigned int source,
@@ -75,6 +85,8 @@ static int test_precedence(void)
 	unsigned char udp[8];
 	struct rk_ipv4_view ipv4 = ipv4_view(8, 17);
 	struct rk_udp_view view;
+	long page_size;
+	void *guard;
 	unsigned int protocol;
 	size_t length;
 
@@ -92,6 +104,38 @@ static int test_precedence(void)
 					NULL) == RK_UDP_MALFORMED,
 		   "null output view is malformed"))
 		return 1;
+	ipv4 = ipv4_view(8, 6);
+	if (expect(rk_classify_ipv4_udp(&ipv4, udp, sizeof(udp), 65536,
+					&view) == RK_UDP_MALFORMED,
+		   "invalid target precedes the protocol check") ||
+	    expect(rk_classify_ipv4_udp(&ipv4, udp, sizeof(udp), 47021,
+					NULL) == RK_UDP_MALFORMED,
+		   "null output precedes the protocol check"))
+		return 1;
+
+	page_size = sysconf(_SC_PAGESIZE);
+	if (page_size <= 0) {
+		perror("sysconf pagesize");
+		return 1;
+	}
+	guard = mmap(NULL, (size_t)page_size, PROT_NONE,
+		     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (guard == MAP_FAILED) {
+		perror("mmap guard page");
+		return 1;
+	}
+	fill_sentinel(&view);
+	if (expect(rk_classify_ipv4_udp(&ipv4, guard, 8, 47021, &view) ==
+		   RK_UDP_OTHER_PROTOCOL,
+		   "other protocols do not inspect the UDP buffer") ||
+	    expect(unchanged(&view), "guarded other protocol leaves output")) {
+		munmap(guard, (size_t)page_size);
+		return 1;
+	}
+	if (munmap(guard, (size_t)page_size)) {
+		perror("munmap guard page");
+		return 1;
+	}
 
 	for (protocol = 0; protocol <= 255; protocol++) {
 		if (protocol == 17)
@@ -117,7 +161,11 @@ static int test_precedence(void)
 
 	ipv4 = ipv4_view(8, 17);
 	fill_sentinel(&view);
-	if (expect(rk_classify_ipv4_udp(&ipv4, NULL, 8, 47021, &view) ==
+	if (expect(rk_classify_ipv4_udp(&ipv4, NULL, 0, 47021, &view) ==
+		   RK_UDP_MALFORMED,
+		   "null UDP buffer precedes its zero extent") ||
+	    expect(unchanged(&view), "null zero-length buffer leaves output") ||
+	    expect(rk_classify_ipv4_udp(&ipv4, NULL, 8, 47021, &view) ==
 		   RK_UDP_MALFORMED, "null UDP buffer is malformed") ||
 	    expect(unchanged(&view), "null buffer leaves output"))
 		return 1;
@@ -189,12 +237,20 @@ static int test_lengths(void)
 		   "oversize UDP length precedes port mismatch") ||
 	    expect(unchanged(&view), "oversize UDP length leaves output"))
 		return 1;
+	make_udp(udp, 1, 47021, 7, 0);
+	fill_sentinel(&view);
+	if (expect(rk_classify_ipv4_udp(&ipv4, udp, 8, 1, &view) ==
+		   RK_UDP_MALFORMED,
+		   "short UDP length precedes port mismatch") ||
+	    expect(unchanged(&view), "short UDP length leaves output"))
+		return 1;
 	return 0;
 }
 
 static int test_ports_checksum_and_view(void)
 {
-	unsigned char udp[8];
+	unsigned char storage[9];
+	unsigned char *udp = storage + 1;
 	struct rk_ipv4_view ipv4 = ipv4_view(12, 17);
 	struct rk_udp_view view;
 	unsigned int value;
@@ -225,6 +281,16 @@ static int test_ports_checksum_and_view(void)
 			   "source and destination ports remain distinct"))
 			return 1;
 	}
+	for (value = 0; value <= 65535; value++) {
+		make_udp(udp, 0x1234, 47021, 8, value);
+		if (expect(rk_classify_ipv4_udp(&ipv4, udp, 8, 47021,
+						&view) == RK_UDP_MATCH,
+			   "every checksum field has the same structural result") ||
+		    expect(view.source_port == 0x1234 &&
+			   view.destination_port == 47021,
+			   "checksum bytes do not alter decoded ports"))
+			return 1;
+	}
 
 	make_udp(udp, 1, 2, 8, 0xffff);
 	fill_sentinel(&view);
@@ -239,9 +305,36 @@ static int test_ports_checksum_and_view(void)
 	return 0;
 }
 
+static int test_ipv4_header_lengths(void)
+{
+	unsigned char storage[9];
+	unsigned char *udp = storage + 1;
+	struct rk_ipv4_view ipv4;
+	struct rk_udp_view view;
+	size_t header_length;
+
+	make_udp(udp, 0x1234, 47021, 9, 0);
+	for (header_length = 20; header_length <= 60; header_length += 4) {
+		ipv4 = ipv4_view_with_header(header_length, 13, 17);
+		if (expect(rk_classify_ipv4_udp(&ipv4, udp, 8, 47021,
+						&view) == RK_UDP_MATCH,
+			   "every valid IPv4 header length composes") ||
+		    expect(view.datagram_offset == header_length &&
+			   view.payload_offset == header_length + 8,
+			   "UDP offsets follow the validated IPv4 view") ||
+		    expect(view.datagram_length == 9 &&
+			   view.payload_length == 1 &&
+			   view.trailing_length == 4,
+			   "lengths remain relative to the IPv4 payload"))
+			return 1;
+	}
+	return 0;
+}
+
 int main(void)
 {
-	if (test_precedence() || test_lengths() || test_ports_checksum_and_view())
+	if (test_precedence() || test_lengths() || test_ports_checksum_and_view() ||
+	    test_ipv4_header_lengths())
 		return 1;
 	printf("[+] classifier host tests passed: %lu assertions\n", assertions);
 	return 0;
