@@ -60,6 +60,11 @@ static inline bool skb_is_gso(const struct sk_buff *skb)
 	return skb->gso;
 }
 
+static inline bool skb_csum_is_sctp(const struct sk_buff *skb)
+{
+	return skb->csum_not_inet;
+}
+
 static inline void *skb_nfct(const struct sk_buff *skb)
 {
 	return skb->nfct ? (void *)skb : NULL;

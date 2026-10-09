@@ -54,7 +54,7 @@ rk_redirect_ipv4_udp(struct sk_buff *skb, const struct rk_udp_view *view,
 	if (skb_is_gso(skb) && skb->ip_summed != CHECKSUM_PARTIAL)
 		return RK_UDP_REDIRECT_UNSUPPORTED_STATE;
 	if (skb->ip_summed == CHECKSUM_PARTIAL &&
-	    (udp_offset > INT_MAX || skb->csum_not_inet ||
+	    (udp_offset > INT_MAX || skb_csum_is_sctp(skb) ||
 	     skb_checksum_start_offset(skb) != (int)udp_offset ||
 	     skb->csum_offset != offsetof(struct udphdr, check)))
 		return RK_UDP_REDIRECT_UNSUPPORTED_STATE;
