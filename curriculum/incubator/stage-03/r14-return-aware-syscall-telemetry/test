@@ -1,0 +1,346 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "$HERE/../../../.." && pwd)
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r14-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r14-work.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r14-test.XXXXXX")
+trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
+
+cp -a "$HERE/../../stage-01/r03-owned-state/solution/." "$baseline/"
+cp -a "$HERE/../../stage-01/r04-proc-publication/solution/." "$baseline/"
+cp -a "$HERE/../../stage-02/r05-proc-read/solution/." "$baseline/"
+cp -a "$HERE/../../stage-02/r06-control-switch/solution/." "$baseline/"
+cp -a "$baseline/." "$work/"
+while IFS= read -r -d '' source; do
+	relative=${source#"$HERE/template/"}
+	mkdir -p "$work/$(dirname "$relative")"
+	cp -p "$source" "$work/$relative"
+done < <(find "$HERE/template" -type f -print0)
+while IFS= read -r -d '' source; do
+	relative=${source#"$HERE/solution/"}
+	mkdir -p "$work/$(dirname "$relative")"
+	cp -p "$source" "$work/$relative"
+done < <(find "$HERE/solution" -type f -print0)
+
+KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
+[[ -d $KDIR ]] || {
+	printf '[x] kernel build directory not found: %s\n' "$KDIR" >&2
+	exit 1
+}
+[[ $(uname -m) == x86_64 ]] || {
+	printf '[x] this lesson requires x86_64\n' >&2
+	exit 1
+}
+case $(uname -r) in
+	7.2.*|7.2-*) ;;
+	*) printf '[x] this lesson requires Linux 7.2.x\n' >&2; exit 1 ;;
+esac
+for option in X86_64 IKCONFIG_PROC KPROBES KRETPROBES \
+	KRETPROBE_ON_RETHOOK KPROBES_ON_FTRACE KALLSYMS KALLSYMS_ALL \
+	DEBUG_FS ARCH_HAS_SYSCALL_WRAPPER MODULES MODULE_UNLOAD; do
+	grep -qx "CONFIG_$option=y" "$KDIR/.config" || {
+		printf '[x] this lesson requires CONFIG_%s=y\n' "$option" >&2
+		exit 1
+	}
+done
+
+symvers=$KDIR/Module.symvers
+system_map=$KDIR/System.map
+[[ -f $symvers && -f $system_map ]] || {
+	printf '[x] pinned kernel symbol manifests are unavailable\n' >&2
+	exit 1
+}
+if awk '$2 == "__x64_sys_rmdir" { found = 1 } END { exit !found }' \
+	"$symvers"; then
+	printf '[x] __x64_sys_rmdir unexpectedly appears in Module.symvers\n' >&2
+	exit 1
+fi
+awk '$3 == "__x64_sys_rmdir" && $2 ~ /^[Tt]$/ { found = 1 }
+	END { exit !found }' "$system_map" || {
+	printf '[x] pinned kernel lacks __x64_sys_rmdir\n' >&2
+	exit 1
+}
+for symbol in register_kretprobe unregister_kretprobe copy_from_user_nofault; do
+	awk -v symbol="$symbol" '$2 == symbol && $4 == "EXPORT_SYMBOL_GPL" {
+		found = 1
+	} END { exit !found }' "$symvers" || {
+		printf '[x] pinned kernel must GPL-export %s\n' "$symbol" >&2
+		exit 1
+	}
+done
+if awk '$2 == "strncpy_from_user_nofault" { found = 1 }
+	END { exit !found }' "$symvers"; then
+	printf '[x] unexported strncpy_from_user_nofault appeared in Module.symvers\n' >&2
+	exit 1
+fi
+awk '$3 == "strncpy_from_user_nofault" { found = 1 }
+	END { exit !found }' "$system_map" || {
+	printf '[x] pinned kernel lacks the internal string helper used by the lesson explanation\n' >&2
+	exit 1
+}
+awk '$3 == "__x64_sys_rmdir" { found = 1 } END { exit !found }' \
+	/proc/kallsyms || {
+	printf '[x] running kernel lacks __x64_sys_rmdir\n' >&2
+	exit 1
+}
+
+mapfile -t changed_files < <(
+	diff -qr "$HERE/template" "$HERE/solution" |
+		sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p'
+)
+(( ${#changed_files[@]} == 1 )) || {
+	printf '[x] expected one learner-edited file, found %d\n' \
+		"${#changed_files[@]}" >&2
+	exit 1
+}
+[[ ${changed_files[0]} == instrumentation/return_probe.c ]] || {
+	printf '[x] learner edit surface is %s, expected instrumentation/return_probe.c\n' \
+		"${changed_files[0]}" >&2
+	exit 1
+}
+
+build_variant()
+{
+	local name=$1 point=$2 destination=$scratch/$1 log=$scratch/$1.log
+	cp -a "$work" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] %s build failed\n' "$name" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] %s builds with warnings\n' "$name" >&2
+		exit 1
+	fi
+}
+
+template_build=$scratch/template
+cp -a "$baseline" "$template_build"
+cp -a "$HERE/template/." "$template_build/"
+if ! make -s -C "$KDIR" M="$template_build" W=1 \
+	ROOTKITLINGS_FAIL_POINT=0 modules >"$scratch/template.log" 2>&1; then
+	cat "$scratch/template.log" >&2
+	printf '[x] template build failed\n' >&2
+	exit 1
+fi
+if grep -q 'warning:' "$scratch/template.log"; then
+	cat "$scratch/template.log" >&2
+	printf '[x] template builds with warnings\n' >&2
+	exit 1
+fi
+
+build_variant success 0
+build_variant preflight 1
+build_variant allocation 2
+build_variant publication 3
+build_variant missing 4
+"$HERE/host-check" "$scratch/success" \
+	"$scratch/success/rootkitlings.ko" "$scratch/missing"
+
+rebuild_host_fixture()
+{
+	local directory=$1 label=$2 log=$scratch/host-$2-build.log
+
+	if ! make -s -C "$KDIR" M="$directory" W=1 \
+		ROOTKITLINGS_FAIL_POINT=0 modules > "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] %s fixture did not build\n' "$label" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] %s fixture builds with warnings\n' "$label" >&2
+		exit 1
+	fi
+}
+
+expect_host_rejection()
+{
+	local directory=$1 label=$2
+
+	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+		"$scratch/missing" > "$scratch/host-$label.log" 2>&1; then
+		printf '[x] host checker accepted %s\n' "$label" >&2
+		exit 1
+	fi
+}
+
+formatted=$scratch/host-formatting
+cp -a "$scratch/success" "$formatted"
+sed -i '/observation->selected = false;/i\
+\t/* Per-instance state is initialized before admission. */\
+\t(void)instance;\
+\t(void)registers;' "$formatted/instrumentation/return_probe.c"
+awk '
+	/probe_state = state;/ {
+		print "\tprobe_state"
+		print "\t\t= state;"
+		next
+	}
+	/error = register_kretprobe\(&rmdir_probe\);/ {
+		print "\terror = register_kretprobe("
+		print "\t\t&rmdir_probe"
+		print "\t);"
+		next
+	}
+	/unregister_kretprobe\(&rmdir_probe\);/ {
+		print "\tunregister_kretprobe("
+		print "\t\t&rmdir_probe"
+		print "\t);"
+		next
+	}
+	{ print }
+' "$formatted/instrumentation/return_probe.c" \
+	> "$formatted/instrumentation/return_probe.c.new"
+mv "$formatted/instrumentation/return_probe.c.new" \
+	"$formatted/instrumentation/return_probe.c"
+"$HERE/host-check" "$formatted" "$formatted/rootkitlings.ko" \
+	"$scratch/missing" > "$scratch/host-formatting.log"
+
+macro_copy=$scratch/host-macro-copy
+cp -a "$scratch/success" "$macro_copy"
+sed -i '/#define RK_MISSING_TARGET/a #define RK_COPY copy_from_user' \
+	"$macro_copy/instrumentation/return_probe.c"
+sed -i 's/copy_from_user_nofault(destination/RK_COPY(destination/' \
+	"$macro_copy/instrumentation/return_probe.c"
+rebuild_host_fixture "$macro_copy" macro-copy
+expect_host_rejection "$macro_copy" a-macro-hidden-ordinary-user-copy
+
+sleeping_handler=$scratch/host-sleeping-handler
+cp -a "$scratch/success" "$sleeping_handler"
+sed -i '/#include <linux\/errno.h>/a #include <linux/delay.h>' \
+	"$sleeping_handler/instrumentation/return_probe.c"
+sed -i '/observation->selected = false;/a\
+\tusleep_range(10, 20);' "$sleeping_handler/instrumentation/return_probe.c"
+rebuild_host_fixture "$sleeping_handler" sleeping-handler
+expect_host_rejection "$sleeping_handler" a-sleeping-entry-handler
+
+early_return=$scratch/host-early-return
+cp -a "$scratch/success" "$early_return"
+sed -i '/observation->selected = false;/i\
+\tif (registers == NULL)\
+\t\treturn 1;' "$early_return/instrumentation/return_probe.c"
+expect_host_rejection "$early_return" an-extra-nonzero-entry-return
+
+return_early=$scratch/host-return-early
+cp -a "$scratch/success" "$return_early"
+sed -i '/const long result =/i\
+\tif (registers != NULL)\
+\t\treturn 0;' "$return_early/instrumentation/return_probe.c"
+expect_host_rejection "$return_early" an-extra-early-return
+
+wrong_association=$scratch/host-wrong-association
+cp -a "$scratch/success" "$wrong_association"
+sed -i \
+	-e 's/rk_state_mark_selected_success(probe_state)/rk_state_mark_swap(probe_state)/' \
+	-e 's/rk_state_mark_selected_failure(probe_state)/rk_state_mark_selected_success(probe_state)/' \
+	-e 's/rk_state_mark_swap(probe_state)/rk_state_mark_selected_failure(probe_state)/' \
+	"$wrong_association/instrumentation/return_probe.c"
+expect_host_rejection "$wrong_association" swapped-success-and-failure-markers
+
+uninitialized_instance=$scratch/host-uninitialized-instance
+cp -a "$scratch/success" "$uninitialized_instance"
+sed -i '/observation->selected = false;/d' \
+	"$uninitialized_instance/instrumentation/return_probe.c"
+expect_host_rejection "$uninitialized_instance" uninitialized-per-instance-state
+
+manual_unregister=$scratch/host-manual-unregister
+cp -a "$scratch/success" "$manual_unregister"
+sed -i '/#define RK_MISSING_TARGET/a #define RK_UNREGISTER unregister_kretprobe' \
+	"$manual_unregister/instrumentation/return_probe.c"
+sed -i '/unregister_kretprobe(&rmdir_probe);/a\
+\tRK_UNREGISTER(&rmdir_probe);' \
+	"$manual_unregister/instrumentation/return_probe.c"
+rebuild_host_fixture "$manual_unregister" manual-unregister
+expect_host_rejection "$manual_unregister" macro-hidden-double-unregister
+
+address_alias=$scratch/host-address-alias
+cp -a "$scratch/success" "$address_alias"
+sed -i '/#define RK_MISSING_TARGET/a #define RK_ADDR addr' \
+	"$address_alias/instrumentation/return_probe.c"
+sed -i '/static struct rk_state \*probe_state;/a static kprobe_opcode_t *saved_address;' \
+	"$address_alias/instrumentation/return_probe.c"
+sed -i '/error = register_kretprobe/a\
+\tif (!error)\
+\t\tWRITE_ONCE(saved_address, rmdir_probe.kp.RK_ADDR);' \
+	"$address_alias/instrumentation/return_probe.c"
+rebuild_host_fixture "$address_alias" address-alias
+expect_host_rejection "$address_alias" a-macro-hidden-copied-probe-address
+
+wrong_target=$scratch/host-wrong-target
+cp -a "$scratch/success" "$wrong_target"
+sed -i 's/"__x64_sys_rmdir"/"__x64_sys_unlink"/' \
+	"$wrong_target/instrumentation/return_probe.c"
+expect_host_rejection "$wrong_target" the-wrong-syscall-target
+
+global_scratch=$scratch/host-global-scratch
+cp -a "$scratch/success" "$global_scratch"
+sed -i '/static struct rk_state \*probe_state;/a static char path_scratch[64];' \
+	"$global_scratch/instrumentation/return_probe.c"
+expect_host_rejection "$global_scratch" global-correlation-scratch-storage
+
+wrong_capacity=$scratch/host-wrong-capacity
+cp -a "$scratch/success" "$wrong_capacity"
+sed -i 's/#define RK_RETURN_CAPACITY 16/#define RK_RETURN_CAPACITY 1/' \
+	"$wrong_capacity/include/rootkit.h"
+expect_host_rejection "$wrong_capacity" an-undersized-return-capacity
+
+reset_flag=$scratch/host-reset-flag
+cp -a "$scratch/success" "$reset_flag"
+sed -i '/WRITE_ONCE(state->selected_success_seen, true);/a\
+\tWRITE_ONCE(state->selected_success_seen, false);' \
+	"$reset_flag/core/state.c"
+expect_host_rejection "$reset_flag" a-non-monotonic-observation-flag
+
+cp -a "$work" "$scratch/unknown"
+if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
+	ROOTKITLINGS_FAIL_POINT=99 modules >"$scratch/unknown.log" 2>&1; then
+	printf '[x] unknown failure-point value compiled successfully\n' >&2
+	exit 1
+fi
+
+bash -n "$HERE/test" "$HERE/host-check"
+sh -n "$HERE/success-check" "$HERE/probe-failure-check.in"
+make -s -C "$ROOT" tools/rmdir_telemetry_test
+
+sed -e 's/@EXPECTED_ERRNO@/12/g' \
+	-e 's/@LABEL@/Probe cleanup after procfs publication failure/g' \
+	"$HERE/probe-failure-check.in" > "$scratch/publication-check"
+sed -e 's/@EXPECTED_ERRNO@/2/g' \
+	-e 's/@LABEL@/Missing Kretprobe target cleanup/g' \
+	"$HERE/probe-failure-check.in" > "$scratch/missing-check"
+chmod 0755 "$scratch/publication-check" "$scratch/missing-check"
+
+run_guest()
+{
+	local check_script=$1 module=$2 output
+	shift 2
+	if ! output=$("$ROOT/vm/boot" --check "$check_script" "$@" \
+		"$module" 2>&1); then
+		printf '%s\n' "$output" >&2
+		printf '[x] disposable guest did not complete\n' >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+	grep -Fq '[+] PASSED' <<< "$output" || {
+		printf '[x] guest checks did not pass\n' >&2
+		exit 1
+	}
+}
+
+run_guest "$HERE/../../stage-01/r04-proc-publication/failure-ecanceled-check" \
+	"$scratch/preflight/rootkitlings.ko" --tool tools/module_load_test
+run_guest "$HERE/../../stage-01/r04-proc-publication/failure-enomem-check" \
+	"$scratch/allocation/rootkitlings.ko" --tool tools/module_load_test
+run_guest "$scratch/publication-check" \
+	"$scratch/publication/rootkitlings.ko" --tool tools/module_load_test
+run_guest "$scratch/missing-check" \
+	"$scratch/missing/rootkitlings.ko" --tool tools/module_load_test
+run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
+	--tool tools/rmdir_telemetry_test
+
+printf '[+] return-aware syscall telemetry lesson passed\n'

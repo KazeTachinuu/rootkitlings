@@ -1,0 +1,56 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "@LABEL@"
+
+endpoint=/proc/rootkitlings
+registry=/sys/kernel/debug/kprobes/list
+
+probe_count()
+{
+	awk '
+		$2 == "r" {
+			split($3, name, "+")
+			if (name[1] == "__x64_sys_rmdir")
+				count++
+		}
+		END { print count + 0 }
+	' "$registry"
+}
+
+assert_clean()
+{
+	label=$1
+	assert_absent /sys/module/rootkitlings
+	assert_absent "$endpoint"
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_fail "$label left rootkitlings in /proc/modules"
+	else
+		_ok "$label leaves no loaded module"
+	fi
+	if [ "$(probe_count)" -eq "$probe_before" ]; then
+		_ok "$label leaves no target return probe"
+	else
+		_fail "$label changed the target return-probe count"
+	fi
+}
+
+test -r "$registry" || {
+	_fail "Kprobe registry is not readable"
+	summary
+}
+probe_before=$(probe_count)
+
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	if module_load_test /rootkitlings/rootkitlings.ko @EXPECTED_ERRNO@; then
+		_ok "attempt $attempt returned errno @EXPECTED_ERRNO@"
+	else
+		_fail "attempt $attempt returned the wrong error"
+	fi
+	assert_clean "attempt $attempt"
+	attempt=$((attempt + 1))
+done
+
+summary

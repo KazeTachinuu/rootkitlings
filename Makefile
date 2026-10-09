@@ -8,6 +8,7 @@ GUEST_TOOLS := \
 	tools/module_load_test \
 	tools/proc_read_test \
 	tools/proc_write_test \
+	tools/rmdir_telemetry_test \
 	tools/status_field_test \
 	tools/task_attribution_test
 
@@ -54,6 +55,9 @@ tools/proc_read_test: tools/proc_read_test.c
 
 tools/proc_write_test: tools/proc_write_test.c
 	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
+
+tools/rmdir_telemetry_test: tools/rmdir_telemetry_test.c
+	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
 
 tools/status_field_test: tools/status_field_test.c
 	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
