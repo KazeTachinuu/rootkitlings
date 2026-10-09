@@ -14,12 +14,12 @@ It is not successful merely because the learner has sampled many kernel APIs.
 
 The target curriculum contains:
 
-- 37 required mechanism lessons.
+- 34 required mechanism lessons.
 - 4 cumulative integration milestones.
 - 1 final capstone.
 - 8 optional depth tracks.
 
-This produces 42 required checkpoints.
+This produces 39 required checkpoints.
 The number is a consequence of the dependency graph, not a quota.
 It may change if implementation proves that two units cannot be taught or tested independently.
 
@@ -76,23 +76,23 @@ Course-entry diagnostic
 |   `-- R01-R04
 |
 +-- Stage 2: Control and resident execution
-|   +-- R05-R12
-|   `-- M00 Configurable resident core
+|   +-- R05-R09
+|   `-- M00 Controlled resident core
 |
 +-- Stage 3: Identity, authorization and observation
-|   +-- R13-R19
+|   +-- R10-R16
 |   `-- M01 Authorized actions and telemetry
 |
 +-- Stage 4: Views, concealment and detection
-|   +-- R20-R23
+|   +-- R17-R20
 |   `-- M02 Concealment with an evidence map
 |
 +-- Stage 5: Networking and durable state
-|   +-- R24-R32
+|   +-- R21-R29
 |   `-- M03 Remote resident agent
 |
 `-- Stage 6: Authenticated operations
-    +-- R33-R37
+    +-- R30-R34
     `-- C00 Operation Glasshouse
 ```
 
@@ -192,46 +192,21 @@ Knowledge already reached through one of those dependencies is not repeated.
 - Current source: L10 contributes read-contract tests only.
   Its separate manual read callback is not carried into the cumulative `seq_file` design.
 
-#### R06 - Accept a bounded userspace write transaction
+#### R06 - Enable and disable module actions through procfs
 
-- Teaches: `__user` pointers, bounds before copy, local termination,
-  copy-validate-commit, and rejection without mutation.
-- Produces: a root-only control ingress.
-- Requires: R04.
-- Defensive evidence: empty, oversized, malformed, embedded-NUL, and valid inputs.
-- Current source: L11.
+- Teaches: bounded userspace copy, copy-validate-commit, exact `enable` and
+  `disable` commands, atomic state transitions, and choosing the invariant that
+  the switch protects.
+- Produces: a root-only control switch consumed by later module actions.
+- Requires: R05.
+- Defensive evidence: exact state reads before and after valid commands;
+  rejection of empty, oversized, partial, trailing, embedded-NUL, and unknown
+  inputs without state mutation; and concurrent toggles that preserve the
+  binary state invariant.
+- Current sources: L11 supplies the userspace boundary, L20 supplies the atomic
+  scalar operation, and C00 supplies the fixed control use case.
 
-#### R07 - Parse a fixed command grammar
-
-- Teaches: enumerated verbs, bounded typed arguments, exact matching, and unknown
-  command rejection.
-- Produces: a fixed-function control plane; never arbitrary command execution.
-- Requires: R06.
-- Defensive evidence: rejected prefixes, trailing data, overflow, and invalid
-  state transitions.
-- Current source: parsing work currently embedded in C00 and several later
-  projects.
-
-#### R08 - Store owned configuration records
-
-- Teaches: intrusive lists, allocation ownership, iteration, bounded growth, safe
-  deletion, and complete purge.
-- Produces: the rootkit configuration registry.
-- Requires: R06.
-- Defensive evidence: insertion order, capacity bound, rejection without partial
-  insertion, and empty state after unload.
-- Current source: L13.
-
-#### R09 - Protect the correct state invariant
-
-- Teaches: atomic scalar operations versus mutex-protected multi-field invariants,
-  lock scope, and unlock on every exit.
-- Produces: race-safe configuration and counters.
-- Requires: R08.
-- Defensive evidence: deterministic stress result and invariant-preserving errors.
-- Current sources: L20 and L22.
-
-#### R10 - Choose a legal execution context
+#### R07 - Choose a legal execution context
 
 - Teaches: process, timer/softirq, probe, and other atomic contexts; sleepability;
   faultability; allocation flags; and legal synchronization.
@@ -241,36 +216,38 @@ Knowledge already reached through one of those dependencies is not repeated.
 - Current source: missing as an explicit lesson; fragments exist across concurrency,
   instrumentation, and networking scaffolds.
 
-#### R11 - Defer timer work into process context
+#### R08 - Defer timer work into process context
 
 - Teaches: minimal timer callbacks, workqueues, publish-before-queue, synchronous
   cancel, and flush ordering.
 - Produces: a periodic sleep-capable scheduler.
-- Requires: R09 and R10.
+- Requires: R06 and R07.
 - Defensive evidence: measured ticks, no work after unload, and unload while work is
   pending.
 - Current sources: L17 and L18.
 
-#### R12 - Run and stop an event-driven kernel thread
+#### R09 - Run and stop an event-driven kernel thread
 
 - Teaches: thread creation and pointer errors, wait queues, condition-loop waiting,
   publish-before-wake, stop checks, wakeup, and join.
 - Produces: the resident worker.
-- Requires: R09 and R10.
+- Requires: R06 and R07.
 - Defensive evidence: task inventory, event consumption, stop while blocked, and
   disappearance after unload.
 - Current sources: L19 and L23; L12's real pointer-error application is reinforced
   here.
 
-#### M00 - Configurable resident core
+#### M00 - Controlled resident core
 
 Merge the useful integration work of C00 and C01.
-The shared control plane manages configuration records and scheduler interval; periodic work updates status; the resident worker accepts a fixed wake event and stops cleanly.
+The shared control switch gates the scheduler and resident worker.
+Periodic work updates status; the worker accepts a fixed wake event; both actions stop when disabled and unload cleanly.
+Requires R08 and R09 directly.
 This extends the cumulative R04 project, not a fresh scaffold.
 
 ### Stage 3: Identity, authorization and observation
 
-#### R13 - Attribute an operation to the current task
+#### R10 - Attribute an operation to the current task
 
 - Teaches: `current`, stable snapshots of PID and command name, and why the process
   executing a callback is the caller.
@@ -279,59 +256,60 @@ This extends the cumulative R04 project, not a fresh scaffold.
 - Defensive evidence: independent comparison with the actual reader or writer.
 - Current source: L24.
 
-#### R14 - Interpret Linux credentials correctly
+#### R11 - Interpret Linux credentials correctly
 
 - Teaches: real, effective, saved, and filesystem IDs; capabilities; namespace-aware
   ID translation; and read-only credential access.
 - Produces: an authorization-context snapshot.
-- Requires: R13.
+- Requires: R10.
 - Defensive evidence: reads under distinct users and namespaces.
 - Current source: L25.
 
-#### R15 - Replace credentials transactionally
+#### R12 - Replace credentials transactionally
 
 - Teaches: prepare, populate, commit, abort, and same-caller effect.
 - Produces: one bounded privilege action.
-- Requires: R06 and R14.
+- Requires: R06 and R11.
 - Defensive evidence: wrong command has no effect; the exact writing process changes;
   failed preparation leaves credentials unchanged.
 - Current source: L26.
 
-#### R16 - Authorize a one-use action with fresh state
+#### R13 - Authorize a one-use action with fresh state
 
 - Teaches: kernel randomness, unpredictability, authorization versus authentication,
-  rotation, erasure limits, and replay rejection.
-- Produces: a one-use challenge protecting R15.
-- Requires: R09 and R15.
+  rotation, erasure limits, replay rejection, bounded typed parsing, and a mutex
+  protecting the multi-field one-use invariant.
+- Produces: a one-use challenge protecting R12.
+- Requires: R12.
 - Defensive evidence: malformed, stale, reused, and current values are distinguished.
 - Current sources: L28 and the state machine in C03.
 
-#### R17 - Resolve symbols under a pinned ABI contract
+#### R14 - Resolve symbols under a pinned ABI contract
 
 - Teaches: exported versus internal symbols, configuration gates, architecture call
   ABI, kernel-version coupling, and the narrow temporary-probe resolver.
 - Produces: an explicit compatibility boundary for later instrumentation.
-- Requires: R10.
+- Requires: R07.
 - Defensive evidence: resolved address, configuration/version manifest, and absence
   of the temporary probe afterward.
 - Current source: L27, moved from general introspection to immediately before probes.
 
-#### R18 - Observe function entry with a managed kprobe
+#### R15 - Observe function entry with a managed kprobe
 
 - Teaches: registration, bounded handlers, per-hook ownership, unregister-before-free,
   and rollback of a partially registered hook set.
 - Produces: entry telemetry.
-- Requires: R17.
+- Requires: R14.
 - Defensive evidence: probe registry, event counter, forced second-hook failure, and
   complete removal.
 - Current sources: L29 and L33.
 
-#### R19 - Correlate function return and decode syscall arguments
+#### R16 - Correlate function return and decode syscall arguments
 
 - Teaches: kretprobe entry/return state, `maxactive` and missed instances, syscall
   wrapper registers, no-fault bounded copying, and architecture limitations.
 - Produces: attributable syscall telemetry.
-- Requires: R06 and R18.
+- Requires: R06 and R15.
 - Defensive evidence: success/failure return classes, exact matching argument,
   ordinary calls unchanged, and missed-instance reporting.
 - Current sources: L30 and L32.
@@ -344,40 +322,40 @@ Spinlock ownership and ring overwrite semantics must be taught before or within 
 
 ### Stage 4: Views, concealment and detection
 
-#### R20 - Distinguish an object from a rendered view
+#### R17 - Distinguish an object from a rendered view
 
 - Teaches: underlying object, enumeration path, direct lookup, positive and negative
   controls, cross-view comparison, and independent evidence.
 - Produces: the evidence model used by every concealment mechanism.
-- Requires: R05 and R18.
+- Requires: R05 and R15.
 - Defensive evidence: a view can disagree while the object continues to exist.
 - Current source: currently implicit across L34-L39; make it explicit.
 
-#### R21 - Alter one module view without claiming invisibility
+#### R18 - Alter one module view without claiming invisibility
 
 - Teaches: module-list membership, sysfs/kobject artifacts, reversible unlink/relink,
-  and exact restoration.
+  intrusive kernel lists, and exact restoration.
 - Produces: controlled module enumeration suppression.
-- Requires: R08 and R20.
+- Requires: R17.
 - Defensive evidence: module inventory disagrees with sysfs and other artifacts.
 - Current sources: L34 and the useful evidence/lifecycle part of L35.
 
-#### R22 - Filter packed directory records safely
+#### R19 - Filter packed directory records safely
 
 - Teaches: validation of minimum and full record extent, name termination, forward
   progress, overlap-safe compaction, and returned-length correction.
 - Produces: reusable directory-enumeration filtering.
-- Requires: R19 and R20.
+- Requires: R16 and R17.
 - Defensive evidence: direct lookup, unrelated directories, malformed records, and
   restoration after unload.
 - Current source: L36.
 
-#### R23 - Filter a bounded rendered result
+#### R20 - Filter a bounded rendered result
 
 - Teaches: one general read-result/row-filtering invariant and why each reporting
   path is only one view.
 - Produces: a reusable bounded content filter.
-- Requires: R19 and R20.
+- Requires: R16 and R17.
 - Defensive evidence: underlying bytes or object remain independently visible.
 - Current source: L37 as the required implementation; L38 and L39 become comparative
   optional labs.
@@ -390,87 +368,87 @@ The milestone produces a machine-readable evidence card stating which view chang
 
 ### Stage 5: Networking and durable state
 
-#### R24 - Parse hostile packet lengths before touching payload
+#### R21 - Parse hostile packet lengths before touching payload
 
 - Teaches: network byte order, IPv4 IHL and total length, fragment policy, transport
   boundaries, overflow-safe arithmetic, and truncation.
 - Produces: host-tested protocol parsers and fixtures.
-- Requires: R10.
+- Requires: R07.
 - Defensive evidence: malformed and truncated fixture corpus.
 - Current sources: concepts are spread across L41, L42, L44, and L46 scaffolds.
 
-#### R25 - Read an `sk_buff` without assuming linear storage
+#### R22 - Read an `sk_buff` without assuming linear storage
 
 - Teaches: data/head/tail/end geometry, header offsets, nonlinear/shared storage,
   safe header access, and bounded copy helpers.
 - Produces: a safe packet-view adapter.
-- Requires: R24.
+- Requires: R21.
 - Defensive evidence: linear, nonlinear, truncated, and fragmented cases.
 - Current source: missing explicitly; current packet lessons hide part of this work.
 
-#### R26 - Register a non-disruptive Netfilter observer
+#### R23 - Register a non-disruptive Netfilter observer
 
 - Teaches: hook points, namespaces, priorities, verdicts, registration lifetime, and
   accept-by-default behavior.
 - Produces: a packet observation point.
-- Requires: R25.
+- Requires: R22.
 - Defensive evidence: hook inventory/counters, unchanged traffic, and removal.
 - Current source: L40.
 
-#### R27 - Classify only fully validated packets
+#### R24 - Classify only fully validated packets
 
 - Teaches: layered protocol predicates, exact matching, fragment policy, and
   malformed-input state preservation.
 - Produces: bounded IPv4 and ICMP/transport classification.
-- Requires: R26.
+- Requires: R23.
 - Defensive evidence: matching, nonmatching, truncated, fragmented, and unrelated
   traffic.
 - Current sources: L41 and the predicate work of L42.
 
-#### R28 - Mutate a writable packet and repair its checksum state
+#### R25 - Mutate a writable packet and repair its checksum state
 
 - Teaches: copy-on-write, reacquiring pointers, length consistency, checksum and
   offload metadata, and narrow scope.
 - Produces: one controlled packet redirection.
-- Requires: R27.
+- Requires: R24.
 - Defensive evidence: exact target is redirected; unrelated traffic is unchanged.
 - Current source: L44.
 
-#### R29 - Own a kernel socket from creation through release
+#### R26 - Own a kernel socket from creation through release
 
 - Teaches: namespace-aware creation, connect/send/receive errors, datagram exactness,
   shutdown, release, and visibility in socket tables.
 - Produces: a kernel-owned endpoint.
-- Requires: R10.
+- Requires: R07.
 - Defensive evidence: socket inventory and disappearance after failure or unload.
 - Current source: L43, refactored so the title and implementation agree on the
   actual socket family and type.
 
-#### R30 - Frame and cancel a TCP client correctly
+#### R27 - Frame and cancel a TCP client correctly
 
 - Teaches: byte-stream framing, partial I/O, oversize-frame draining, retry/backoff,
   blocked-I/O cancellation, and one socket owner.
 - Produces: the fixed-function resident agent transport.
-- Requires: R12 and R29.
+- Requires: R09 and R26.
 - Defensive evidence: split/coalesced frames, reconnects, malformed commands,
   unload while blocked, and socket cleanup.
 - Current source: the transport work in C07.
 
-#### R31 - Encode and decode a bounded DNS wire name
+#### R28 - Encode and decode a bounded DNS wire name
 
 - Teaches: length-prefixed labels, terminal root, exact 63/255 bounds, compression
   policy, and failure without prior-output mutation.
 - Produces: a DNS-shaped message component.
-- Requires: R24.
+- Requires: R21.
 - Defensive evidence: boundary vectors and malformed names.
 - Current source: L47.
 
-#### R32 - Apply and conditionally roll back a file transaction
+#### R29 - Apply and conditionally roll back a file transaction
 
 - Teaches: exact original image, bounded kernel file I/O, foreign-file ownership,
   compare-before-restore, and context/deadlock constraints.
 - Produces: a guarded durable boot-request edit.
-- Requires: R10.
+- Requires: R07.
 - Defensive evidence: byte-for-byte restoration, sentinel protection, preservation
   of newer foreign content, and file-integrity monitoring.
 - Current source: L48.
@@ -483,51 +461,51 @@ This milestone does not expose a general shell.
 
 ### Stage 6: Authenticated operations
 
-#### R33 - Choose the protection property before the primitive
+#### R30 - Choose the protection property before the primitive
 
 - Teaches: encoding, XOR obfuscation, confidentiality, integrity, authentication,
   freshness, replay, and traffic-analysis limits.
 - Produces: a threat-to-primitive decision table.
-- Requires: R31.
+- Requires: R28.
 - Defensive evidence: plaintext recovery and static/runtime artifact comparison.
 - Current source: L49 becomes one demonstration inside this lesson, not a claim of
   cryptographic protection.
 
-#### R34 - Compute and verify SHA-256 correctly
+#### R31 - Compute and verify SHA-256 correctly
 
 - Teaches: Kernel Crypto API `shash` lifecycle, descriptor sizing, known-answer
   vectors, comparison, and why a public digest is not authentication.
 - Produces: integrity verification against a trusted fingerprint.
-- Requires: R33.
+- Requires: R30.
 - Defensive evidence: known-answer accept/reject cases and keyless forgery model.
 - Current source: L51.
 
-#### R35 - Authenticate a message and reject replay
+#### R32 - Authenticate a message and reject replay
 
 - Teaches: HMAC, key ownership, tag truncation budget, constant-time comparison,
   sequence/challenge state, and fail-closed updates.
 - Produces: authenticated fixed commands.
-- Requires: R16 and R34.
+- Requires: R13 and R31.
 - Defensive evidence: known-answer tags, tampering, wrong key, stale sequence,
   duplicate sequence, and state unchanged on failure.
 - Current source: L52 plus missing replay policy.
 
-#### R36 - Use AEAD without releasing unauthenticated plaintext
+#### R33 - Use AEAD without releasing unauthenticated plaintext
 
 - Teaches: transform/request/scatterlist lifetime, AAD, unique nonces, tag layout,
   asynchronous completion, `-EBADMSG`, and secret-erasure limits.
 - Produces: an optional confidential transport envelope.
-- Requires: R35.
+- Requires: R32.
 - Defensive evidence: known-answer vector, nonce discipline, tag/ciphertext tamper,
   and no plaintext consumption on failure.
 - Current source: L50, moved after the simpler hash and MAC property progression.
 
-#### R37 - Emit an authenticated DNS-shaped signal
+#### R34 - Emit an authenticated DNS-shaped signal
 
 - Teaches: composition of bounded DNS encoding, HMAC/freshness, socket ownership,
   and a paired detection hypothesis.
 - Produces: one local authenticated status signal, not a general command tunnel.
-- Requires: R20, R29, and R35.
+- Requires: R17, R26, and R32.
 - Defensive evidence: independent packet decode and tag verification, replay
   rejection, and documented DNS anomaly indicators.
 - Current sources: C09 and the bounded keyed-label idea from L53.
@@ -600,7 +578,7 @@ Optional work never blocks the required route and never silently mutates the req
 - Static XOR artifact analysis, AEAD confidentiality upgrade, keyed time-bucket
   labels, NXDOMAIN behavior, sinkholing, and defender detection.
 - Current sources: L49, L50, and L53 after their core concepts are introduced in
-  R33, R36, and R37.
+  R30, R33, and R34.
 
 ## Disposition of every current item
 
@@ -615,70 +593,70 @@ This table is exhaustive.
 | L02 | Merge | R03 | Composite linking and the private header are taught with the heap state that uses them. |
 | L03 | Optional | E01 | High-value tool, but not a rootkit capability dependency. |
 | L04 | Refactor | R02 | Preserve exact failed-init semantics before rollback. |
-| L05 | Merge | M00 configuration | Parameter state is useful only when attached to a real scheduler/config subsystem. |
-| L06 | Merge | M00 configuration | Callback completes the same live-parameter mechanism. |
+| L05 | Retire | — | Module-parameter state has no required downstream consumer; R06 owns the action switch. |
+| L06 | Retire | — | Parameter callbacks duplicate the validated state transition taught through the required procfs control path. |
 | L07 | Merge | R03 | Heap ownership belongs with real allocation error contracts. |
 | L08 | Merge | R04 | Reverse rollback is taught through the real procfs resource that needs it. |
 | L09 | Refactor | R04 | Publication lifetime supplies the concrete second-resource lifecycle. |
 | L10 | Refactor | R05 | Teach the complete read contract, preferably with framework support. |
 | L11 | Keep/refactor | R06 | Critical userspace trust-boundary transaction. |
-| L12 | Merge | R03/R12 | Pointer errors are taught where allocation and kthread creation return them. |
-| L13 | Keep/refactor | R08 | Required configuration-store substrate. |
+| L12 | Merge | R03/R09 | Pointer errors are taught where allocation and kthread creation return them. |
+| L13 | Merge | R18 | Only the intrusive-list mechanics survive, where module-list manipulation consumes them. |
 | L14 | Merge | E02 | Device registration alone is an incomplete optional ABI. |
 | L15 | Merge | E02 | Valuable alternate typed control plane, not required for the proc-based core. |
 | L16 | Move/optional | E03 | Unique boundary; current proc prerequisite is false for its task. |
-| L17 | Merge | R11 | Timer exists to motivate context deferral. |
-| L18 | Merge | R11 | Workqueue completes the timer/context mechanism. |
-| L19 | Merge | R12 | Resident thread plus wait/stop lifecycle is the meaningful unit. |
-| L20 | Merge | R09 | Contrast atomic scalar state with mutex-protected invariants. |
+| L17 | Merge | R08 | Timer exists to motivate context deferral. |
+| L18 | Merge | R08 | Workqueue completes the timer/context mechanism. |
+| L19 | Merge | R09 | Resident thread plus wait/stop lifecycle is the meaningful unit. |
+| L20 | Merge | R06 | Atomic scalar state implements the action switch. |
 | L21 | Optional | E04 | Completion is useful but has no required downstream consumer. |
-| L22 | Merge | R09 | Main invariant-protection lesson. |
-| L23 | Merge | R12 | Wait queue is part of the event-driven worker lifecycle. |
-| C00 | Merge | M00 | Configuration store is part of the resident core milestone. |
-| C01 | Merge | M00 | Scheduler belongs to the same configurable resident core. |
+| L22 | Merge | R13 | Mutex protection is taught where a real multi-field one-use invariant needs it. |
+| L23 | Merge | R09 | Wait queue is part of the event-driven worker lifecycle. |
+| C00 | Merge | R06/M00 | Its bounded fixed control is taught in R06 and integrated with resident actions in M00. |
+| C01 | Merge | M00 | Scheduler belongs to the same controlled resident core. |
 | C02 | Optional | E04 | Strong concurrency synthesis, but not consumed by the required route. |
-| L24 | Refactor | R13 | Caller attribution remains explicit before credentials. |
-| L25 | Refactor | R14 | Credential vocabulary and namespaces require their own contract. |
-| L26 | Refactor | R15 | Transactional same-caller credential change is core. |
-| L27 | Move/refactor | R17 | Belongs immediately before instrumentation and must state version/ABI fragility. |
-| L28 | Merge | R16 | Randomness is taught through the one-use authorization state that needs it. |
+| L24 | Refactor | R10 | Caller attribution remains explicit before credentials. |
+| L25 | Refactor | R11 | Credential vocabulary and namespaces require their own contract. |
+| L26 | Refactor | R12 | Transactional same-caller credential change is core. |
+| L27 | Move/refactor | R14 | Belongs immediately before instrumentation and must state version/ABI fragility. |
+| L28 | Merge | R13 | Randomness is taught through the one-use authorization state that needs it. |
 | C03 | Merge | M01 | Integrates privilege and one-use authorization into the cumulative rootkit. |
-| L29 | Merge | R18 | Entry probe and hook-set rollback form one managed lifecycle. |
-| L30 | Merge | R19 | Return correlation remains required for later view filters. |
+| L29 | Merge | R15 | Entry probe and hook-set rollback form one managed lifecycle. |
+| L30 | Merge | R16 | Return correlation remains required for later view filters. |
 | L31 | Optional | E05 | Fprobe is an alternate instrumentation API, not a new capability. |
-| L32 | Merge | R19 | Syscall ABI and no-fault argument copying complete return-aware probing. |
-| L33 | Merge | R18 | Partial hook rollback is essential but too thin as a separate task. |
+| L32 | Merge | R16 | Syscall ABI and no-fault argument copying complete return-aware probing. |
+| L33 | Merge | R15 | Partial hook rollback is essential but too thin as a separate task. |
 | C04 | Merge | M01 | Telemetry joins the authorized-action milestone. |
-| L34 | Refactor | R21 | Precise one-view suppression with independent evidence. |
-| L35 | Merge | R21 | Sysfs artifacts provide the necessary cross-view and lifecycle evidence. |
-| L36 | Refactor | R22 | Central variable-record filter reused by process concealment. |
-| L37 | Refactor | R23 | Representative required rendered-result filter. |
+| L34 | Refactor | R18 | Precise one-view suppression with independent evidence. |
+| L35 | Merge | R18 | Sysfs artifacts provide the necessary cross-view and lifecycle evidence. |
+| L36 | Refactor | R19 | Central variable-record filter reused by process concealment. |
+| L37 | Refactor | R20 | Representative required rendered-result filter. |
 | L38 | Optional | E06 | Comparative read-view variant with no core consumer. |
 | L39 | Optional | E06 | Comparative seq-table variant with no core consumer. |
 | C05 | Refactor | M02 | Strong cumulative concealment and cross-view milestone. |
 | C06 | Optional | E06 | Duplicates control storage, filtering, and trigger mechanisms. |
-| L40 | Refactor | R26 | Netfilter lifecycle remains explicit after skb preparation. |
-| L41 | Merge | R27 | Classification is the useful result of packet observation. |
-| L42 | Merge/optional | R27/E07 | Predicate is core parsing; ICMP channel variant is optional. |
-| L43 | Refactor/split | R29/E07 | Generic socket ownership is core; raw ICMP specificity is optional. |
-| L44 | Refactor | R28 | Distinct active mutation and checksum invariant. |
+| L40 | Refactor | R23 | Netfilter lifecycle remains explicit after skb preparation. |
+| L41 | Merge | R24 | Classification is the useful result of packet observation. |
+| L42 | Merge/optional | R24/E07 | Predicate is core parsing; ICMP channel variant is optional. |
+| L43 | Refactor/split | R26/E07 | Generic socket ownership is core; raw ICMP specificity is optional. |
+| L44 | Refactor | R25 | Distinct active mutation and checksum invariant. |
 | L45 | Optional | E07 | Fixed-function agent is safer and pedagogically richer than a required shell. |
 | L46 | Optional | E07 | Alternate ICMP carrier after required validated parsing. |
-| L47 | Refactor | R31 | Strong bounded protocol encoder used by authenticated signaling. |
-| C07 | Refactor | R30/M03 | Transport mechanics become a lesson; integration extends the learner's project. |
-| L48 | Refactor | R32 | Guarded reversible file transaction remains core. |
+| L47 | Refactor | R28 | Strong bounded protocol encoder used by authenticated signaling. |
+| C07 | Refactor | R27/M03 | Transport mechanics become a lesson; integration extends the learner's project. |
+| L48 | Refactor | R29 | Guarded reversible file transaction remains core. |
 | C08 | Merge | M03 | Boot request joins the remote resident milestone; do not claim a reboot test that does not run. |
-| L49 | Merge/optional | R33/E08 | XOR is an honest obfuscation demonstration, never encryption. |
-| L50 | Move/refactor | R36/E08 | AEAD follows hash and HMAC property progression. |
-| L51 | Refactor | R34 | Public digest precedes keyed authentication. |
-| L52 | Refactor | R35 | Add replay state and fail-closed update semantics. |
-| L53 | Merge/optional | R37/E08 | Keyed time-bucket label is applied to the authenticated signal and defender analysis. |
-| C09 | Refactor | R37 | Required bounded authenticated signal; no general DNS command tunnel. |
+| L49 | Merge/optional | R30/E08 | XOR is an honest obfuscation demonstration, never encryption. |
+| L50 | Move/refactor | R33/E08 | AEAD follows hash and HMAC property progression. |
+| L51 | Refactor | R31 | Public digest precedes keyed authentication. |
+| L52 | Refactor | R32 | Add replay state and fail-closed update semantics. |
+| L53 | Merge/optional | R34/E08 | Keyed time-bucket label is applied to the authenticated signal and defender analysis. |
+| C09 | Refactor | R34 | Required bounded authenticated signal; no general DNS command tunnel. |
 | C10 | Refactor | C00 | Only final capstone; reuse the learner's cumulative implementation. |
 
 ## Concepts currently missing or under-taught
 
-These gaps explain why migrating the current 65 items directly into 37 mechanism lessons would be incomplete.
+These gaps explain why migrating the current 65 items directly into 34 mechanism lessons would be incomplete.
 They must be added, made explicit, or consciously excluded.
 
 - Execution-context and sleepability matrix.
@@ -855,7 +833,7 @@ Publish rounded quartile ranges only after a meaningful cohort has completed the
    from the single registry.
 4. Implement the mandatory unscored authorized-lab setup gate before exposing
    the required route.
-5. Build R01-R12 and M00 first; validate the complete novice-to-resident-core
+5. Build R01-R09 and M00 first; validate the complete novice-to-resident-core
    journey before migrating later stages.
 6. Migrate identity, probes, and visibility with explicit context and cross-view
    contracts.

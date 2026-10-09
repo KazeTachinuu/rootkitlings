@@ -94,7 +94,7 @@ Authorized lab
 |   +-- Kernel Crypto API
 |
 +-- Rootkit subsystems
-|   +-- configuration and command registry
+|   +-- bounded action control switch
 |   +-- scheduler and resident worker
 |   +-- privileged action
 |   +-- telemetry and event capture
@@ -654,7 +654,7 @@ rootkit_main
 |
 +-- control
 |   +-- parser
-|   +-- configuration registry
+|   +-- atomic action switch
 |   +-- authorization
 |
 +-- scheduler
