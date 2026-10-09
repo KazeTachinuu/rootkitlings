@@ -202,6 +202,14 @@ sed -i 's/owner->local_port = ntohs(local.sin_port);/owner->local_port = 12345;/
 	"$hardcoded_endpoint/network/socket_owner.c"
 expect_rejection "$hardcoded_endpoint" hardcoded-endpoint
 
+swapped_ports=$scratch/swapped-ports
+cp -a "$scratch/solution" "$swapped_ports"
+sed -i \
+	-e 's/owner->local_port = ntohs(local.sin_port);/owner->local_port = ntohs(peer.sin_port);/' \
+	-e 's/owner->peer_port = ntohs(peer.sin_port);/owner->peer_port = ntohs(local.sin_port);/' \
+	"$swapped_ports/network/socket_owner.c"
+expect_rejection "$swapped_ports" swapped-captured-ports
+
 unlocked_snapshot=$scratch/unlocked-snapshot
 cp -a "$scratch/solution" "$unlocked_snapshot"
 sed -i '/mutex_lock(\&owner->lock);/,/status->owned/ { /mutex_lock(\&owner->lock);/d; }' \
