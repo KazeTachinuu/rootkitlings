@@ -1,0 +1,1 @@
+Own the worker's TGID as a struct pid. Translate it through each proc mount's PID namespace only after selecting the actual proc-root directory file. Reuse the supplied packed-record filter; the remaining work is identity, scope, evidence, and lifetime.

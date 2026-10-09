@@ -1,0 +1,234 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "$HERE/../../../.." && pwd)
+M01=$HERE/../../stage-03/m01-authorized-actions-telemetry
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m02.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
+
+[[ -d $KDIR ]] || { printf '[x] kernel build directory not found: %s\n' "$KDIR" >&2; exit 1; }
+[[ $(uname -m) == x86_64 ]] || { printf '[x] M02 requires x86_64\n' >&2; exit 1; }
+case $(uname -r) in 7.2.*|7.2-*) ;; *) printf '[x] M02 requires Linux 7.2.x\n' >&2; exit 1 ;; esac
+for option in X86_64 KPROBES KRETPROBES KRETPROBE_ON_RETHOOK \
+	KPROBES_ON_FTRACE KALLSYMS KALLSYMS_ALL DEBUG_FS \
+	ARCH_HAS_SYSCALL_WRAPPER MODULES MODULE_UNLOAD MULTIUSER USER_NS PID_NS \
+	CRYPTO_LIB_UTILS; do
+	grep -qx "CONFIG_$option=y" "$KDIR/.config" || {
+		printf '[x] M02 requires CONFIG_%s=y\n' "$option" >&2; exit 1;
+	}
+done
+grep -Eqx '(CONFIG_PREEMPT_RT=n|# CONFIG_PREEMPT_RT is not set)' \
+	"$KDIR/.config" || {
+	printf '[x] M02 requires CONFIG_PREEMPT_RT=n\n' >&2; exit 1;
+}
+
+for supplied in Kbuild include/rootkit.h include/dirent_filter.h core/state.c \
+	interface/proc.c execution/scheduler.c control/authorization.c \
+	privilege/credentials.c instrumentation/return_probe.c \
+	instrumentation/events.c instrumentation/dirent_filter.c; do
+	cmp -s "$HERE/template/$supplied" "$HERE/solution/$supplied" || {
+		printf '[x] supplied file differs: %s\n' "$supplied" >&2; exit 1;
+	}
+done
+mapfile -t changed < <(diff -qr "$HERE/template" "$HERE/solution" |
+	sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p')
+expected=(core/main.c execution/worker.c instrumentation/getdents_probe.c \
+	interface/evidence.c)
+[[ ${changed[*]} == "${expected[*]}" ]] || {
+	printf '[x] learner edit surface differs\nexpected: %s\nactual: %s\n' \
+		"${expected[*]}" "${changed[*]}" >&2; exit 1;
+}
+
+for script in test host-check success-check m01-regression-check \
+	failure-check.in action-failure-check.in; do
+	bash -n "$HERE/$script"
+done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
+	shellcheck -x -s sh "$HERE/success-check" "$HERE/m01-regression-check" \
+		"$HERE/failure-check.in" "$HERE/action-failure-check.in"
+fi
+make -s -C "$ROOT" -B tools/getdents64_test tools/event_stream_test \
+	tools/cred_trigger_test tools/module_load_test tools/status_field_test \
+	tools/proc_write_test tools/proc_read_test tools/rmdir_telemetry_test
+
+build_variant()
+{
+	local name=$1 point=$2 directory log
+	directory=$scratch/$name
+	log=$scratch/$name.log
+	cp -a "$HERE/solution/." "$directory/"
+	if ! make -s -C "$KDIR" M="$directory" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
+		cat "$log" >&2; printf '[x] %s build failed\n' "$name" >&2; exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2; printf '[x] %s builds with warnings\n' "$name" >&2; exit 1
+	fi
+}
+
+build_variant success 0
+for point in {1..11}; do build_variant "failure-$point" "$point"; done
+"$HERE/host-check" "$scratch/success" "$scratch/success/rootkitlings.ko"
+
+# Re-run M01's structural checks against the inherited source and built objects.
+m01_view=$scratch/m01-view
+mkdir -p "$m01_view"/{control,core,execution,include,instrumentation,interface,privilege}
+for file in Kbuild include/rootkit.h core/main.c core/state.c interface/proc.c \
+	execution/scheduler.c control/authorization.c privilege/credentials.c \
+	instrumentation/return_probe.c instrumentation/events.c; do
+	cp "$scratch/success/$file" "$m01_view/$file"
+done
+cp "$M01/solution/execution/worker.c" "$m01_view/execution/worker.c"
+for object in rootkitlings.ko core/main.o core/state.o interface/proc.o \
+	execution/worker.o execution/scheduler.o control/authorization.o \
+	privilege/credentials.o instrumentation/return_probe.o \
+	instrumentation/events.o; do
+	cp "$scratch/success/$object" "$m01_view/$object"
+done
+"$M01/host-check" "$m01_view" "$m01_view/rootkitlings.ko"
+
+rebuild_fixture()
+{
+	local directory=$1 label=$2 log=$scratch/$2-build.log
+	if ! make -s -C "$KDIR" M="$directory" W=1 \
+		ROOTKITLINGS_FAIL_POINT=0 modules >"$log" 2>&1; then
+		cat "$log" >&2; printf '[x] %s fixture did not build\n' "$label" >&2; exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2; printf '[x] %s fixture warns\n' "$label" >&2; exit 1
+	fi
+}
+
+reject_fixture()
+{
+	local directory=$1 label=$2
+	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+		>"$scratch/$label-host.log" 2>&1; then
+		printf '[x] host checker accepted %s\n' "$label" >&2; exit 1
+	fi
+}
+
+numeric_pid=$scratch/numeric-pid
+cp -a "$scratch/success" "$numeric_pid"
+sed -i 's/return get_task_pid(worker_task, PIDTYPE_TGID);/return find_get_pid(task_tgid_nr(worker_task));/' \
+	"$numeric_pid/execution/worker.c"
+rebuild_fixture "$numeric_pid" numeric-pid
+reject_fixture "$numeric_pid" numeric-pid
+
+missing_release=$scratch/missing-pid-release
+cp -a "$scratch/success" "$missing_release"
+sed -i '0,/put_pid(target_pid);/{/put_pid(target_pid);/d;}' \
+	"$missing_release/instrumentation/getdents_probe.c"
+if make -s -C "$KDIR" M="$missing_release" W=1 ROOTKITLINGS_FAIL_POINT=0 \
+	modules >"$scratch/missing-release-build.log" 2>&1; then
+	reject_fixture "$missing_release" missing-pid-release
+fi
+
+global_text=$scratch/global-pid-text
+cp -a "$scratch/success" "$global_text"
+sed -i '/static struct pid \*target_pid;/a static char target_pid_text[RK_PID_TEXT_CAPACITY] __maybe_unused;' \
+	"$global_text/instrumentation/getdents_probe.c"
+rebuild_fixture "$global_text" global-pid-text
+reject_fixture "$global_text" global-pid-text
+
+wrong_namespace=$scratch/wrong-namespace
+cp -a "$scratch/success" "$wrong_namespace"
+sed -i '/static pid_t rk_target_number/,/^}/c\
+static pid_t rk_target_number(const struct file *file)\
+{\
+\treturn pid_vnr(target_pid);\
+}' "$wrong_namespace/instrumentation/getdents_probe.c"
+rebuild_fixture "$wrong_namespace" wrong-namespace
+reject_fixture "$wrong_namespace" wrong-namespace
+
+false_claim=$scratch/false-evidence-claim
+cp -a "$scratch/success" "$false_claim"
+sed -i '/map_role=declared-filter-scope/a\
+\tseq_puts(output, "hidden=1\\n");' "$false_claim/interface/evidence.c"
+rebuild_fixture "$false_claim" false-evidence-claim
+reject_fixture "$false_claim" false-evidence-claim
+
+wrong_order=$scratch/wrong-lifetime-order
+cp -a "$scratch/success" "$wrong_order"
+sed -i '/rk_getdents_probe_stop();/{N;s/rk_getdents_probe_stop();\n\trk_return_probe_stop();/rk_return_probe_stop();\n\trk_getdents_probe_stop();/;}' \
+	"$wrong_order/core/main.c"
+rebuild_fixture "$wrong_order" wrong-lifetime-order
+reject_fixture "$wrong_order" wrong-lifetime-order
+
+disabled_consistency=$scratch/disabled-private-state-check
+cp -a "$scratch/success" "$disabled_consistency"
+sed -i 's/if (!rk_result_is_consistent/if (false \&\& !rk_result_is_consistent/' \
+	"$disabled_consistency/instrumentation/getdents_probe.c"
+reject_fixture "$disabled_consistency" disabled-private-state-check
+
+changed_worker_loop=$scratch/changed-worker-loop
+cp -a "$scratch/success" "$changed_worker_loop"
+sed -i 's/"rkling_core"/"wrong_core"/' \
+	"$changed_worker_loop/execution/worker.c"
+reject_fixture "$changed_worker_loop" changed-worker-loop
+
+changed_evidence_ops=$scratch/changed-evidence-ops
+cp -a "$scratch/success" "$changed_evidence_ops"
+sed -i 's/\.proc_lseek = seq_lseek/\.proc_lseek = noop_llseek/' \
+	"$changed_evidence_ops/interface/evidence.c"
+reject_fixture "$changed_evidence_ops" changed-evidence-ops
+
+changed_helper=$scratch/changed-canonical-helper
+cp -a "$scratch/success" "$changed_helper"
+sed -i '$a /* duplicate fork */' "$changed_helper/instrumentation/dirent_filter.c"
+rebuild_fixture "$changed_helper" changed-canonical-helper
+reject_fixture "$changed_helper" changed-canonical-helper
+
+cp -a "$HERE/solution/." "$scratch/unknown/"
+if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
+	ROOTKITLINGS_FAIL_POINT=99 modules >"$scratch/unknown.log" 2>&1; then
+	printf '[x] unknown failure point compiled\n' >&2; exit 1
+fi
+
+run_guest()
+{
+	local check=$1 module=$2 output
+	shift 2
+	if ! output=$("$ROOT/vm/boot" --check "$check" "$@" "$module" 2>&1); then
+		printf '%s\n' "$output" >&2; exit 1
+	fi
+	printf '%s\n' "$output"
+	grep -Fq '[+] PASSED' <<< "$output" || exit 1
+}
+
+declare -a labels=(unused Preflight Allocation 'Control publication' Worker \
+	'Authorization startup' 'Missing rmdir target' 'Events publication' \
+	unused unused 'Missing iterate_dir target' 'Evidence publication')
+declare -a errnos=(0 125 12 12 4 4 2 12 0 0 2 12)
+for point in 1 2 3 4 5 6 7 10 11; do
+	sed -e "s/@LABEL@/${labels[$point]}/g" \
+		-e "s/@EXPECTED_ERRNO@/${errnos[$point]}/g" \
+		-e "s/@EXPECT_ALLOCATION@/$((point >= 3 ? 1 : 0))/g" \
+		"$HERE/failure-check.in" > "$scratch/check-$point"
+	chmod 0755 "$scratch/check-$point"
+	run_guest "$scratch/check-$point" \
+		"$scratch/failure-$point/rootkitlings.ko" \
+		--tool tools/module_load_test
+done
+for specification in '8 12 Credential preparation' '9 125 Credential cancellation'; do
+	read -r point expected label_rest <<< "$specification"
+	sed -e "s/@LABEL@/$label_rest/g" -e "s/@EXPECTED_ERRNO@/$expected/g" \
+		"$HERE/action-failure-check.in" > "$scratch/action-$point"
+	chmod 0755 "$scratch/action-$point"
+	run_guest "$scratch/action-$point" \
+		"$scratch/failure-$point/rootkitlings.ko" \
+		--tool tools/cred_trigger_test
+done
+
+run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
+	--tool tools/getdents64_test --tool tools/status_field_test \
+	--tool tools/proc_write_test --tool tools/proc_read_test
+run_guest "$HERE/m01-regression-check" "$scratch/success/rootkitlings.ko" \
+	--tool tools/event_stream_test --tool tools/status_field_test \
+	--tool tools/proc_write_test --tool tools/proc_read_test \
+	--tool tools/cred_trigger_test --tool tools/rmdir_telemetry_test
+
+printf '[+] omit the resident worker and map the affected view milestone passed\n'

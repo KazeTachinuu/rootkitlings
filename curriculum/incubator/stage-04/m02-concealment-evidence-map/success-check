@@ -1,0 +1,316 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Omit the resident worker and map the affected view"
+
+control=/proc/rootkitlings
+events=/proc/rootkitlings_events
+evidence=/proc/rootkitlings_evidence
+registry=/sys/kernel/debug/kprobes/list
+fixtures=/tmp/rootkitlings-m02
+ordinary=$fixtures/ordinary
+mkdir -p "$ordinary"
+: > "$ordinary/ordinary_marker"
+printf enable > "$fixtures/enable"
+printf disable > "$fixtures/disable"
+
+probe_count()
+{
+	kind=$1
+	target=$2
+	awk -v kind="$kind" -v target="$target" '
+		$2 == kind { split($3, name, "+"); if (name[1] == target) count++ }
+		END { print count + 0 }
+	' "$registry"
+}
+
+assert_registry_delta()
+{
+	delta=$1
+	label=$2
+	if test "$(probe_count r __x64_sys_rmdir)" -eq $((rmdir_before + delta)) &&
+	   test "$(probe_count k filldir64)" -eq $((filldir_before + delta)) &&
+	   test "$(probe_count r iterate_dir)" -eq $((iterate_before + delta)); then
+		_ok "$label has exactly the expected probes"
+	else
+		_fail "$label has an unexpected probe set"
+	fi
+}
+
+write_expected_evidence()
+{
+	target=$1
+	missed=$2
+	{
+		printf 'evidence_map_version=1\n'
+		printf 'map_role=declared-filter-scope\n'
+		printf 'target_kind=resident-worker-pid\n'
+		printf 'target_pid=%s\n' "$target"
+		printf 'filter_gate=actions-enabled-at-iterate-dir-entry\n'
+		printf 'filter_view=proc-root-getdents64-result\n'
+		printf 'filter_match=exact-target-pid-name\n'
+		printf 'filter_nonmatch=retain\n'
+		printf 'outside_filter_scope=proc-pid-direct-lookup\n'
+		printf 'outside_filter_scope=proc-pid-comm\n'
+		printf 'outside_filter_scope=scheduler-task-execution\n'
+		printf 'outside_filter_scope=proc-modules-content\n'
+		printf 'outside_filter_scope=sys-module-tree\n'
+		printf 'outside_filter_scope=non-proc-directories\n'
+		printf 'filter_kernel_abi=linux-7.2-x86_64\n'
+		printf 'filter_chunk_capacity=32768\n'
+		printf 'filter_oversize=leave-unchanged\n'
+		printf 'filter_all_match=leave-unchanged\n'
+		printf 'filter_return_capacity=16\n'
+		printf 'filter_returns_missed=%s\n' "$missed"
+	} > "$fixtures/evidence-expected"
+}
+
+read_target()
+{
+	sed -n 's/^target_pid=//p' "$evidence"
+}
+
+read_missed()
+{
+	sed -n 's/^filter_returns_missed=//p' "$evidence"
+}
+
+assert_evidence()
+{
+	target=$(read_target)
+	missed=$(read_missed)
+	write_expected_evidence "$target" "$missed"
+	if test "$target" -gt 0 2>/dev/null &&
+	   test "$missed" -ge 0 2>/dev/null &&
+	   cmp -s "$fixtures/evidence-expected" "$evidence"; then
+		_ok "$1 returns the exact declared-scope record"
+	else
+		_fail "$1 returned malformed or unstable evidence"
+	fi
+}
+
+assert_worker_direct_views()
+{
+	pid=$1
+	if test -d "/proc/$pid" && test "$(cat "/proc/$pid/comm")" = rkling_core;
+	then
+		_ok "$2 keeps direct PID lookup and comm visible"
+	else
+		_fail "$2 lost a direct worker view"
+	fi
+	if kill -0 "$pid" 2>/dev/null; then
+		_ok "$2 keeps the worker present to the scheduler"
+	else
+		_fail "$2 lost the worker task"
+	fi
+	if grep -q '^rootkitlings ' /proc/modules && test -d /sys/module/rootkitlings;
+	then
+		_ok "$2 keeps both module views visible"
+	else
+		_fail "$2 changed a module view"
+	fi
+}
+
+assert_named_views()
+{
+	pid=$1
+	expectation=$2
+	label=$3
+	if getdents64_test "$expectation" /proc 32768 "$pid" > "$fixtures/raw";
+	then
+		_ok "$label has the expected proc-root enumeration result"
+	else
+		_fail "$label has the wrong proc-root enumeration result"
+	fi
+	if getdents64_test visible /proc 32768 self > /dev/null; then
+		_ok "$label retains /proc/self"
+	else
+		_fail "$label omitted /proc/self"
+	fi
+	if getdents64_test visible /proc 32768 thread-self > /dev/null; then
+		_ok "$label retains /proc/thread-self"
+	else
+		_fail "$label omitted /proc/thread-self"
+	fi
+	if kill -0 1 2>/dev/null &&
+	   getdents64_test visible /proc 32768 1 > /dev/null; then
+		_ok "$label retains an unrelated live numeric PID"
+	else
+		_fail "$label omitted unrelated live PID 1"
+	fi
+	if getdents64_test visible "$ordinary" 32768 "$pid" > /dev/null; then
+		_ok "$label leaves a matching ordinary-directory name visible"
+	else
+		_fail "$label altered an ordinary directory"
+	fi
+}
+
+enumerate_many()
+{
+	pid=$1
+	i=0
+	while test "$i" -lt 40; do
+		getdents64_test either /proc 32768 "$pid" > /dev/null || return 1
+		i=$((i + 1))
+	done
+}
+
+toggle_many()
+{
+	i=0
+	while test "$i" -lt 32; do
+		proc_write_test write "$control" "$fixtures/disable" > /dev/null || return 1
+		proc_write_test write "$control" "$fixtures/enable" > /dev/null || return 1
+		i=$((i + 1))
+	done
+}
+
+assert_concurrency()
+{
+	pid=$1
+	pids=
+	i=0
+	while test "$i" -lt 8; do
+		enumerate_many "$pid" &
+		pids="$pids $!"
+		i=$((i + 1))
+	done
+	toggle_many &
+	pids="$pids $!"
+	ok=1
+	for child in $pids; do wait "$child" || ok=0; done
+	if test "$ok" -eq 1; then
+		_ok "concurrent toggles and enumerations return complete records"
+	else
+		_fail "concurrent toggles or enumerations failed"
+	fi
+	if test "$(read_missed)" = 0; then
+		_ok "bounded concurrency misses no process-view return instance"
+	else
+		_fail "process-view return capacity was exceeded"
+	fi
+}
+
+cleanup()
+{
+	if test -d /sys/module/rootkitlings; then
+		rmmod rootkitlings 2>/dev/null || true
+	fi
+	rm -rf "$fixtures" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+case $(uname -r) in 7.2.*|7.2-*) _ok "guest runs Linux 7.2.x" ;; *) _fail "wrong kernel" ;; esac
+if test "$(uname -m)" = x86_64; then
+	_ok "guest uses native x86-64"
+else
+	_fail "wrong architecture"
+fi
+test -r "$registry" || { _fail "Kprobe registry is unavailable"; summary; }
+rmdir_before=$(probe_count r __x64_sys_rmdir)
+filldir_before=$(probe_count k filldir64)
+iterate_before=$(probe_count r iterate_dir)
+assert_registry_delta 0 "unloaded state"
+
+attempt=1
+while test "$attempt" -le 2; do
+	load rootkitlings.ko
+	assert_loaded rootkitlings
+	assert_exists "$control"
+	assert_exists "$events"
+	assert_exists "$evidence"
+	if test "$(stat -c '%a:%u:%g' "$control")" = 622:0:0 &&
+	   test "$(stat -c '%a:%u:%g' "$events")" = 400:0:0 &&
+	   test "$(stat -c '%a:%u:%g' "$evidence")" = 400:0:0; then
+		_ok "control, events, and evidence have exact ownership and modes"
+	else
+		_fail "a proc endpoint has the wrong ownership or mode"
+	fi
+	assert_registry_delta 1 "loaded state"
+	assert_evidence "fresh load"
+	pid=$(read_target)
+	: > "$ordinary/$pid"
+	assert_worker_direct_views "$pid" "disabled state"
+	assert_named_views "$pid" visible "disabled state"
+	if proc_read_test "$evidence" "$fixtures/evidence-expected"; then
+		_ok "evidence supports tiny reads, EOF, seek, and rewind"
+	else
+		_fail "evidence seq-file behavior is wrong"
+	fi
+	if /bin/busybox unshare -pf --mount-proc sh -c \
+		"grep -Fxq 'target_pid=0' /proc/rootkitlings_evidence";
+	then
+		_ok "a separate proc PID namespace receives its translated target"
+	else
+		_fail "evidence PID namespace translation failed"
+	fi
+
+	proc_write_test write "$control" "$fixtures/enable" > /dev/null ||
+		_fail "could not enable actions"
+	assert_named_views "$pid" hidden "enabled state"
+	assert_worker_direct_views "$pid" "enabled state"
+	if getdents64_test fdreuse /proc "$ordinary" 2000 "$pid" > /dev/null;
+	then
+		_ok "descriptor reuse cannot apply proc filtering to an ordinary result"
+	else
+		_fail "descriptor reuse altered or failed to exercise an ordinary result"
+	fi
+	before_runs=$(status_field_test read "$control" worker_runs)
+	request=1
+	while test "$request" -le 10; do
+		if printf run > "$control" 2>/dev/null; then break; fi
+		request=$((request + 1))
+	done
+	if test "$request" -le 10 &&
+	   status_field_test advance "$control" worker_runs "$before_runs" 1200 > /dev/null;
+	then
+		_ok "the omitted worker still executes admitted work"
+	else
+		_fail "the worker did not execute admitted work"
+	fi
+	if getdents64_test visible /proc 65536 "$pid" > /dev/null; then
+		_ok "an oversized request remains unchanged"
+	else
+		_fail "an oversized request was filtered"
+	fi
+	if getdents64_test cookies /proc 32768 "$pid" > /dev/null; then
+		_ok "retained proc directory cookies remain seekable"
+	else
+		_fail "a retained proc directory cookie is invalid"
+	fi
+
+	proc_write_test write "$control" "$fixtures/disable" > /dev/null ||
+		_fail "could not disable before the all-match test"
+	if getdents64_test isolate /proc "$control" "$pid" > /dev/null; then
+		_ok "an all-target chunk remains positive and makes progress"
+	else
+		_fail "all-target handling produced false EOF or repeated the record"
+	fi
+	assert_concurrency "$pid"
+	proc_write_test write "$control" "$fixtures/disable" > /dev/null ||
+		_fail "could not restore disabled state"
+	assert_named_views "$pid" visible "restored disabled state"
+	assert_evidence "pre-unload"
+	if proc_read_test "$evidence" "$fixtures/evidence-expected" rootkitlings;
+	then
+		_ok "a held evidence descriptor is safe across unload"
+	else
+		_fail "held evidence descriptor teardown failed"
+	fi
+	assert_absent "$control"
+	assert_absent "$events"
+	assert_absent "$evidence"
+	assert_absent "/proc/$pid"
+	assert_registry_delta 0 "unloaded state"
+	rm -f "$ordinary/$pid"
+	attempt=$((attempt + 1))
+done
+
+if dmesg | grep -Eqi '(BUG:|WARNING:|Oops:|KASAN:|use-after-free|general protection fault)'; then
+	_fail "kernel log contains a fault signature"
+else
+	_ok "kernel log contains no fault signature"
+fi
+
+summary

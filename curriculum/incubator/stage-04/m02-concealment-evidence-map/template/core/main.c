@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: GPL-2.0
+#include <linux/err.h>
+#include <linux/errno.h>
+#include <linux/init.h>
+#include <linux/module.h>
+
+#include "rootkit.h"
+
+#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 11
+#error "unknown ROOTKITLINGS_FAIL_POINT"
+#endif
+
+static struct rk_state *state;
+
+static int __init rk_init(void)
+{
+	int error;
+
+	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT)
+		return -ECANCELED;
+
+	state = rk_state_create();
+	if (IS_ERR(state)) {
+		error = PTR_ERR(state);
+		state = NULL;
+		return error;
+	}
+
+	rk_events_reset();
+	error = rk_worker_start(state);
+	if (error)
+		goto destroy_state;
+	error = rk_authorization_start();
+	if (error)
+		goto stop_worker;
+	error = rk_return_probe_start(state);
+	if (error)
+		goto stop_authorization;
+	/* TODO: start the process view here. */
+	error = rk_events_publish();
+	if (error)
+		goto stop_probe;
+	/* TODO: publish evidence before the control endpoint. */
+	error = rk_proc_publish(state);
+	if (error)
+		goto unpublish_events;
+
+	rk_scheduler_start(state);
+	return 0;
+
+unpublish_events:
+	rk_events_unpublish();
+stop_probe:
+	rk_return_probe_stop();
+stop_authorization:
+	rk_authorization_stop();
+stop_worker:
+	rk_worker_stop();
+destroy_state:
+	rk_state_destroy(state);
+	state = NULL;
+	return error;
+}
+
+static void __exit rk_exit(void)
+{
+	rk_proc_unpublish();
+	/* TODO: unpublish evidence and stop the process view in reverse order. */
+	rk_events_unpublish();
+	rk_scheduler_stop();
+	rk_return_probe_stop();
+	rk_authorization_stop();
+	rk_worker_stop();
+	rk_state_destroy(state);
+	state = NULL;
+}
+
+module_init(rk_init);
+module_exit(rk_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Rootkitlings kernel module");

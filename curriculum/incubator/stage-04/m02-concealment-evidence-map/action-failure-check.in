@@ -1,0 +1,66 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "@LABEL@"
+control=/proc/rootkitlings
+events=/proc/rootkitlings_events
+
+cleanup()
+{
+	if test -d /sys/module/rootkitlings; then rmmod rootkitlings 2>/dev/null || true; fi
+}
+trap cleanup EXIT INT TERM
+
+attempt=1
+while test "$attempt" -le 2; do
+	load rootkitlings.ko
+	printf enable > "$control"
+	token=$(sed -n 's/^token=//p' "$control")
+	if chpst -u 65534:65534 cred_trigger_test token-race "$control" \
+		"$token" 24 @EXPECTED_ERRNO@ >/dev/null; then
+		_ok "attempt $attempt admits exactly one failing writer"
+	else
+		_fail "attempt $attempt violated one-use failure admission"
+	fi
+	if test "$(sed -n 's/^completed_actions=//p' "$control")" = 0; then
+		_ok "attempt $attempt does not count a failed action"
+	else
+		_fail "attempt $attempt counted a failed action"
+	fi
+	if test "$(sed -n 's/^retained=//p' "$events")" = 0 &&
+	   test "$(sed -n 's/^overwritten=//p' "$events")" = 0; then
+		_ok "attempt $attempt appends no event"
+	else
+		_fail "attempt $attempt appended an event"
+	fi
+	replacement=$(sed -n 's/^token=//p' "$control")
+	if test "$replacement" != "$token"; then
+		_ok "attempt $attempt consumes and rotates its token"
+	else
+		_fail "attempt $attempt retained its token"
+	fi
+	if chpst -u 65534:65534 cred_trigger_test token-unchanged \
+		"$control" "$token" 13 >/dev/null; then
+		_ok "attempt $attempt rejects the consumed token"
+	else
+		_fail "attempt $attempt accepted or mishandled stale replay"
+	fi
+	if chpst -u 65534:65534 cred_trigger_test token-unchanged \
+		"$control" "$replacement" @EXPECTED_ERRNO@ >/dev/null; then
+		_ok "attempt $attempt propagates the action error again"
+	else
+		_fail "attempt $attempt changed credentials or returned the wrong error"
+	fi
+	second=$(sed -n 's/^token=//p' "$control")
+	if test "$second" != "$replacement" &&
+	   test "$(sed -n 's/^completed_actions=//p' "$control")" = 0 &&
+	   test "$(sed -n 's/^retained=//p' "$events")" = 0; then
+		_ok "attempt $attempt preserves failure accounting across retries"
+	else
+		_fail "attempt $attempt retry corrupted token, action, or event state"
+	fi
+	unload rootkitlings
+	attempt=$((attempt + 1))
+done
+summary
