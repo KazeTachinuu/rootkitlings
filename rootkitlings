@@ -669,6 +669,13 @@ def cmd_check(a):
                         *bootargs(x),
                         '--check',
                         str(ROOT / outcome.case.check),
+                        *(
+                            value
+                            for argument in getattr(
+                                outcome.case, 'check_arguments', ()
+                            )
+                            for value in ('--check-arg', argument)
+                        ),
                         str(outcome.artifact),
                     ],
                     timeout=timeout,

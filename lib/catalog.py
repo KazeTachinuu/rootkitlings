@@ -135,6 +135,7 @@ class VerificationCase:
     expect_build: str
     check: str
     build_output_contains: str
+    check_arguments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -457,7 +458,10 @@ class Catalog:
         case_path = path / "verification" / "cases" / str(index)
         if not isinstance(value, dict):
             raise CatalogError(f"{case_path}: verification case must be a table")
-        _exact_fields(value, VERIFICATION_CASE_FIELDS, case_path)
+        expected = VERIFICATION_CASE_FIELDS | (
+            {"check_arguments"} if "check_arguments" in value else set()
+        )
+        _exact_fields(value, expected, case_path)
         case_id = _identifier(value["id"], case_path)
         label = _bounded_printable(value["label"], "label", case_path, empty=False)
         if label != label.strip():
@@ -494,8 +498,32 @@ class Catalog:
             raise CatalogError(
                 f"{case_path}: failed case forbids a guest check"
             )
+        raw_arguments = value.get("check_arguments", [])
+        if not isinstance(raw_arguments, list) or len(raw_arguments) > 16:
+            raise CatalogError(
+                f"{case_path}: check_arguments must be an array of at most 16 strings"
+            )
+        check_arguments = tuple(
+            _bounded_printable(
+                argument,
+                f"check_arguments.{argument_index}",
+                case_path,
+                empty=True,
+            )
+            for argument_index, argument in enumerate(raw_arguments)
+        )
+        if expect_build == "fail" and check_arguments:
+            raise CatalogError(
+                f"{case_path}: failed case forbids check_arguments"
+            )
         return VerificationCase(
-            case_id, label, tuple(sorted(normalized)), expect_build, check, output
+            case_id,
+            label,
+            tuple(sorted(normalized)),
+            expect_build,
+            check,
+            output,
+            check_arguments,
         )
 
     def validate(self) -> None:

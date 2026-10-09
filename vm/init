@@ -44,7 +44,11 @@ fi
 
 if [ "${_check:-}" = 1 ]; then
 	printf '[*] Check mode\n'
-	/check
+	if [ -f /check.args ]; then
+		xargs -0 /check < /check.args
+	else
+		/check
+	fi
 	_rc=$?
 	if [ "$_rc" -eq 0 ]; then
 		printf '[+] PASSED\n'

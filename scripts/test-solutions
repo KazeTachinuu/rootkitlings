@@ -85,6 +85,13 @@ def verify_item(
                 *arguments,
                 "--check",
                 str(ROOT / outcome.case.check),
+                *(
+                    value
+                    for argument in getattr(
+                        outcome.case, "check_arguments", ()
+                    )
+                    for value in ("--check-arg", argument)
+                ),
                 str(outcome.artifact),
             ], timeout)
             if guest.stdout:

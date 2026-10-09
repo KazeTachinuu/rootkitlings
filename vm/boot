@@ -25,10 +25,11 @@ CHECK=
 GDB=
 NETWORK=
 ACCEL=auto
-declare -a TOOLS=() TOOL_PATHS=()
+declare -a TOOLS=() TOOL_PATHS=() CHECK_ARGS=()
 while (( $# )); do
     case $1 in
         --check) CHECK=${2:?--check requires an argument}; shift 2 ;;
+        --check-arg) CHECK_ARGS+=("${2:?--check-arg requires an argument}"); shift 2 ;;
         --gdb)   GDB=1; shift ;;
         --tool)  TOOLS+=("${2:?--tool requires an argument}"); shift 2 ;;
         --accel)
@@ -51,6 +52,9 @@ while (( $# )); do
             ;;
     esac
 done
+if (( ${#CHECK_ARGS[@]} )) && [[ -z $CHECK ]]; then
+    die "--check-arg requires --check"
+fi
 
 # -- self-cleaning temp --
 
@@ -153,7 +157,7 @@ build_rootfs()
 		hexdump id \
 		ifconfig insmod kill ls lsmod mkdir modinfo mount nc ping poweroff \
 		printf ps reboot rm rmdir rmmod sed setsid sh sha256sum sleep sort stat \
-        tail test touch tr uname wc xxd od; do
+		tail test touch tr uname wc xargs xxd od; do
         ln -s busybox "$ROOTFS/bin/$applet"
     done
     cp "$VM_DIR/init" "$ROOTFS/init"
@@ -166,6 +170,9 @@ build_rootfs()
         cp "$ROOT_DIR/lib/check.sh" "$ROOTFS/lib/check.sh"
         cp "$CHECK" "$ROOTFS/check"
         chmod 755 "$ROOTFS/check"
+        if (( ${#CHECK_ARGS[@]} )); then
+            printf '%s\0' "${CHECK_ARGS[@]}" > "$ROOTFS/check.args"
+        fi
         ok "Check script copied to /check"
     fi
     for tool in "${TOOL_PATHS[@]}"; do

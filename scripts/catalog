@@ -142,6 +142,7 @@ def main() -> int:
                                 "expect_build": case.expect_build,
                                 "check": case.check,
                                 "build_output_contains": case.build_output_contains,
+                                "check_arguments": list(case.check_arguments),
                             }
                             for case in catalog.verification_cases(item)
                         ],
@@ -150,6 +151,7 @@ def main() -> int:
             print(json.dumps({
                 "revision": catalog.revision,
                 "default_module_artifact": catalog.default_module_artifact,
+                "cumulative_root": catalog.cumulative_root or None,
                 "elective_tracks": [
                     {
                         "id": track.id,

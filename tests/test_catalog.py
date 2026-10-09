@@ -91,8 +91,10 @@ class GeneratedSerialTests(unittest.TestCase):
                 "expect_build": "pass",
                 "check": data["exercises"][0]["resources"]["check"],
                 "build_output_contains": "",
+                "check_arguments": [],
             }],
         )
+        self.assertIsNone(data["cumulative_root"])
 
 
 class ElectiveTrackTests(unittest.TestCase):
@@ -206,6 +208,7 @@ class VerificationCaseTests(unittest.TestCase):
                 "build_variables": {"RK_FAIL_POINT": "0"},
                 "expect_build": "pass", "check": "checks/normal",
                 "build_output_contains": "",
+                "check_arguments": ["125", "Preflight failure"],
             },
             {
                 "id": "unknown", "label": "Unknown value",
@@ -215,6 +218,10 @@ class VerificationCaseTests(unittest.TestCase):
             },
         ])
         self.assertEqual(verification.cases[0].build_variables, (("RK_FAIL_POINT", "0"),))
+        self.assertEqual(
+            verification.cases[0].check_arguments,
+            ("125", "Preflight failure"),
+        )
         self.assertEqual(verification.cases[1].expect_build, "fail")
 
     def test_implicit_default_case_preserves_existing_manifests(self) -> None:
@@ -248,6 +255,22 @@ class VerificationCaseTests(unittest.TestCase):
             with self.subTest(variables=variables):
                 with self.assertRaises(CatalogError):
                     self.parse([{**base, "build_variables": variables}])
+
+    def test_rejects_invalid_guest_check_arguments(self) -> None:
+        base = {
+            "id": "normal", "label": "Normal", "build_variables": {},
+            "expect_build": "pass", "check": "check",
+            "build_output_contains": "",
+        }
+        for arguments in (
+            "not-an-array",
+            ["line\nbreak"],
+            ["x" * 257],
+            [str(index) for index in range(17)],
+        ):
+            with self.subTest(arguments=arguments):
+                with self.assertRaises(CatalogError):
+                    self.parse([{**base, "check_arguments": arguments}])
 
     def test_enforces_success_and_failure_contracts(self) -> None:
         cases = (
