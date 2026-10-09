@@ -440,7 +440,7 @@ class DerivedBaselineTests(unittest.TestCase):
         consumer = _exercise(
             "consumer",
             "scaffold",
-            files=("Kbuild", "main.c", "new.c"),
+            files=("Kbuild", "main.c", "new.c", "supplied.c"),
         )
         consumer = Exercise(**{
             **consumer.__dict__,
@@ -465,6 +465,7 @@ class DerivedBaselineTests(unittest.TestCase):
                 "consumer-template": {
                     "main.c": "int todo;\n",
                     "new.c": "int new_todo;\n",
+                    "supplied.c": "int supplied;\n",
                 },
                 "consumer-solution": {
                     "main.c": "int solved;\n",
@@ -490,6 +491,10 @@ class DerivedBaselineTests(unittest.TestCase):
             self.assertEqual(
                 catalog.solution_tree(consumer)["new.c"].data,
                 b"int new_solved;\n",
+            )
+            self.assertEqual(
+                catalog.solution_tree(consumer)["supplied.c"].data,
+                b"int supplied;\n",
             )
             work = root / "work"
             work.mkdir()

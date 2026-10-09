@@ -897,7 +897,22 @@ class Catalog:
             return dict(cache[item.id])
         solution = self.root / item.resources.solution
         provider = self.solution_provider(item)
-        if provider is None or item.workspace.baseline == "completion":
+        if item.workspace.baseline == "scaffold":
+            assert provider is not None
+            provider_tree = self.solution_tree(provider, cache)
+            starter = overlay_solution_tree(
+                provider_tree,
+                self.root / item.workspace.source,
+                provider.workspace.files,
+                item.workspace.files,
+            )
+            result = overlay_solution_tree(
+                starter,
+                solution,
+                item.workspace.files,
+                item.workspace.files,
+            )
+        elif provider is None or item.workspace.baseline == "completion":
             # Migration boundary: v2's six explicit-parent completions still
             # store full trees. Delete this branch with those assets during the
             # atomic 65-to-target route migration. New derived baselines never
