@@ -46,8 +46,10 @@ The checker uses the second view as independent evidence.
 It also executes both target operations and checks both observation flags.
 The omitted `filename_rmdir` row therefore coexists with a registered probe and a live handler.
 
-The deliberately nonexistent failure symbol is a negative control.
+The registered rows and observed target calls are positive controls: they prove that each evidence source can find an object known to exist.
+The deliberately nonexistent failure symbol is a negative control: it proves that the same checks do not report an object known to be absent.
 It must appear in neither view.
+Without both controls, an empty result could mean either "absent" or "the check did not work."
 
 There is no supported userspace command here for directly looking up one registered Kprobe.
 The evidence comes from comparing inventories and behavior, not from claiming a direct object lookup.
