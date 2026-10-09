@@ -1,0 +1,18 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "@LABEL@"
+
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	if module_load_test /rootkitlings/rootkitlings.ko @ERRNO@; then
+		_ok "attempt $attempt returned errno @ERRNO@"
+	else
+		_fail "attempt $attempt returned the wrong error"
+	fi
+	assert_absent /sys/module/rootkitlings
+	attempt=$((attempt + 1))
+done
+
+summary

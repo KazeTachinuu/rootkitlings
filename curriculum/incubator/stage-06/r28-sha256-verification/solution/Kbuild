@@ -1,0 +1,4 @@
+obj-m += rootkitlings.o
+rootkitlings-y := core/main.o crypto/platform.o crypto/sha256.o tests/selftest.o
+ccflags-y += -I$(src)/include
+ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(or $(ROOTKITLINGS_FAIL_POINT),0)

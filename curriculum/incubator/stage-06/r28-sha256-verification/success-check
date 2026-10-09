@@ -1,0 +1,22 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "SHA-256 verification"
+
+assert_absent /sys/module/rootkitlings
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	load rootkitlings.ko
+	assert_loaded rootkitlings
+	if dmesg | grep -q 'rootkitlings: sha256 self-tests passed: 35 assertions'; then
+		_ok "Linux SHA-256 vectors and comparisons passed"
+	else
+		_fail "SHA-256 self-test completion is missing"
+	fi
+	unload rootkitlings
+	assert_absent /sys/module/rootkitlings
+	attempt=$((attempt + 1))
+done
+
+summary

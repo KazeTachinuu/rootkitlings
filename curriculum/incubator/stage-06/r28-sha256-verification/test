@@ -1,0 +1,170 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r28-test.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
+[[ -d $KDIR ]] || { printf '[x] kernel build directory not found: %s\n' "$KDIR" >&2; exit 1; }
+case $(uname -r) in
+	7.2.*|7.2-*) ;;
+	*) printf '[x] this lesson requires Linux 7.2.x\n' >&2; exit 1 ;;
+esac
+[[ $(uname -m) == x86_64 ]] || { printf '[x] this lesson requires x86_64\n' >&2; exit 1; }
+for option in CRYPTO CRYPTO_HASH CRYPTO_SHA256; do
+	grep -qx "CONFIG_$option=y" "$KDIR/.config" || {
+		printf '[x] this lesson requires CONFIG_%s=y\n' "$option" >&2
+		exit 1
+	}
+done
+grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
+	printf '[x] pinned kernel build is not configured for GCC\n' >&2
+	exit 1
+}
+for command in gcc make nm; do
+	command -v "$command" >/dev/null || { printf '[x] %s is required\n' "$command" >&2; exit 1; }
+done
+for symbol in crypto_alloc_shash crypto_shash_digest crypto_destroy_tfm \
+		__crypto_memneq; do
+	awk -v symbol="$symbol" '$2 == symbol { found = 1 } END { exit !found }' \
+		"$KDIR/Module.symvers" || {
+		printf '[x] pinned kernel does not export %s\n' "$symbol" >&2
+		exit 1
+	}
+done
+
+for script in test host-check success-check failure-check.in; do
+	bash -n "$HERE/$script"
+done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
+	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check.in"
+fi
+
+mapfile -t changed_files < <(
+	diff -qr "$HERE/template" "$HERE/solution" |
+		sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p'
+)
+(( ${#changed_files[@]} == 1 )) || {
+	printf '[x] expected one learner-edited file, found %d\n' "${#changed_files[@]}" >&2
+	exit 1
+}
+[[ ${changed_files[0]} == crypto/sha256.c ]] || {
+	printf '[x] learner edit surface is %s\n' "${changed_files[0]}" >&2
+	exit 1
+}
+
+build_tree()
+{
+	local source=$1 destination=$2 point=${3:-0}
+	local log=$destination.log
+	cp -a "$source" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] build failed: %s\n' "${destination##*/}" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] build warned: %s\n' "${destination##*/}" >&2
+		exit 1
+	fi
+}
+
+build_tree "$HERE/template" "$scratch/template"
+build_tree "$HERE/solution" "$scratch/solution"
+build_tree "$HERE/solution" "$scratch/api-failure" 1
+"$HERE/host-check" "$scratch/solution" "$scratch/solution/rootkitlings.ko"
+if "$HERE/host-check" "$scratch/template" "$scratch/template/rootkitlings.ko" \
+	> "$scratch/template-host.log" 2>&1; then
+	printf '[x] host checker accepted the unfinished implementation\n' >&2
+	exit 1
+fi
+
+expect_rejection()
+{
+	local directory=$1 label=$2
+	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+		> "$scratch/$label-host.log" 2>&1; then
+		printf '[x] host checker accepted mutant: %s\n' "$label" >&2
+		exit 1
+	fi
+}
+
+build_mutant()
+{
+	local name=$1 expression=$2
+	local directory=$scratch/$name
+	cp -a "$HERE/solution" "$directory"
+	sed -i "$expression" "$directory/crypto/sha256.c"
+	build_tree "$directory" "$scratch/$name-build"
+	expect_rejection "$scratch/$name-build" "$name"
+}
+
+build_mutant early-commit \
+	'/^\tapi->free_descriptor(desc, context);/i\
+\tmemcpy(output, candidate, sizeof(candidate));'
+build_mutant wrong-algorithm 's/"sha256"/"sha1"/'
+build_mutant no-size-check \
+	's/if (api->crypto_shash_digestsize/if (false \&\& api->crypto_shash_digestsize/'
+build_mutant wrapped-descriptor \
+	's/if (context_size > SIZE_MAX - sizeof(\*desc))/if (false)/'
+build_mutant short-descriptor \
+	's/sizeof(\*desc) + context_size/context_size/'
+build_mutant first-byte-compare 's/sizeof(digest),/1,/'
+build_mutant descriptor-leak '/api->free_descriptor(desc, context);/d'
+build_mutant transform-leak '/api->crypto_free_shash(tfm, context);/d'
+
+kernel_only=$scratch/kernel-only
+cp -a "$HERE/solution" "$kernel_only"
+sed -i '/\t\*matches =/i\
+#ifdef __KERNEL__\
+\treturn 0;\
+#endif' "$kernel_only/crypto/sha256.c"
+build_tree "$kernel_only" "$scratch/kernel-only-build"
+expect_rejection "$scratch/kernel-only-build" kernel-only
+
+cp -a "$HERE/solution" "$scratch/alternate-source"
+cp "$HERE/fixtures/alternate/sha256.c" \
+	"$scratch/alternate-source/crypto/sha256.c"
+build_tree "$scratch/alternate-source" "$scratch/alternate"
+"$HERE/host-check" "$scratch/alternate" "$scratch/alternate/rootkitlings.ko"
+
+sed -e 's/@LABEL@/Rejected unfinished SHA-256 implementation/' \
+	-e 's/@ERRNO@/95/' "$HERE/failure-check.in" > "$scratch/template-check"
+sed -e 's/@LABEL@/SHA-256 API allocation rollback/' \
+	-e 's/@ERRNO@/4/' "$HERE/failure-check.in" > "$scratch/api-failure-check"
+sed -e 's/@LABEL@/Rejected kernel-only SHA-256 implementation/' \
+	-e 's/@ERRNO@/22/' "$HERE/failure-check.in" > "$scratch/kernel-only-check"
+chmod 0755 "$scratch/template-check" "$scratch/api-failure-check" \
+	"$scratch/kernel-only-check"
+
+run_guest()
+{
+	local check=$1 module=$2 label=$3 output
+	if ! output=$("$HERE/../../../../vm/boot" --check "$check" "$module" \
+		--tool tools/module_load_test 2>&1); then
+		printf '%s\n' "$output" >&2
+		printf '[x] disposable guest rejected %s\n' "$label" >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+	grep -Fq '[+] PASSED' <<< "$output" || {
+		printf '[x] guest did not pass %s\n' "$label" >&2
+		exit 1
+	}
+}
+
+run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" solution
+run_guest "$HERE/success-check" "$scratch/alternate/rootkitlings.ko" alternate
+run_guest "$scratch/template-check" "$scratch/template/rootkitlings.ko" template
+run_guest "$scratch/api-failure-check" \
+	"$scratch/api-failure/rootkitlings.ko" api-failure
+run_guest "$scratch/kernel-only-check" \
+	"$scratch/kernel-only-build/rootkitlings.ko" kernel-only
+
+"$HERE/../r27-protection-property-selection/test"
+
+printf '[+] R28 SHA-256 verification passed\n'
