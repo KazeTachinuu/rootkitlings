@@ -1,0 +1,10 @@
+Use atomic_cmpxchg(&pending, 0, 1) in rk_worker_request(). Check the action
+switch before that operation, then wake the wait queue only after the slot is
+full. The timer records its firing, calls this same function, ignores its
+result, and rearms itself.
+
+The worker waits for pending or stop. Check stop first, clear the slot with
+atomic_xchg(&pending, 0), then check the action switch again before recording a
+run.
+
+Start state, worker, procfs, then timer. Stop procfs, timer, worker, then state.

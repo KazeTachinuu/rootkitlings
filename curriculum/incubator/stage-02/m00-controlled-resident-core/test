@@ -1,0 +1,95 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m00-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m00-work.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m00-test.XXXXXX")
+trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
+
+for supplied in include/rootkit.h core/state.c; do
+	[[ $(sha256sum "$HERE/template/$supplied" | cut -d' ' -f1) == \
+		$(sha256sum "$HERE/solution/$supplied" | cut -d' ' -f1) ]] || {
+		printf '[x] supplied template differs from solution: %s\n' "$supplied" >&2
+		exit 1
+	}
+done
+
+# M00 starts from the Stage 1 publication workspace. It does not merge the
+# completed Stage 2 lesson snapshots.
+cp -a "$HERE/../../stage-01/r03-owned-state/solution/." "$baseline/"
+cp -a "$HERE/../../stage-01/r04-proc-publication/solution/." "$baseline/"
+cp -a "$baseline/." "$work/"
+while IFS= read -r -d '' source; do
+	relative=${source#"$HERE/template/"}
+	mkdir -p "$work/$(dirname "$relative")"
+	cp -p "$source" "$work/$relative"
+done < <(find "$HERE/template" -type f -print0)
+while IFS= read -r -d '' source; do
+	relative=${source#"$HERE/solution/"}
+	mkdir -p "$work/$(dirname "$relative")"
+	cp -p "$source" "$work/$relative"
+done < <(find "$HERE/solution" -type f -print0)
+
+KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
+[[ -d $KDIR ]] || { printf '[x] kernel build directory not found: %s\n' "$KDIR" >&2; exit 1; }
+
+build_variant()
+{
+	local name=$1 point=$2 destination=$scratch/$1 log=$scratch/$1.log
+	cp -a "$work" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] %s build failed\n' "$name" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] %s builds with warnings\n' "$name" >&2
+		exit 1
+	fi
+}
+
+build_variant success 0
+build_variant preflight 1
+build_variant allocation 2
+build_variant publication 3
+build_variant worker 4
+"$HERE/host-check" "$scratch/success" "$scratch/success/rootkitlings.ko"
+
+cp -a "$work" "$scratch/unknown"
+if make -s -C "$KDIR" M="$scratch/unknown" W=1 ROOTKITLINGS_FAIL_POINT=99 \
+	modules >"$scratch/unknown.log" 2>&1; then
+	printf '[x] unknown failure-point value compiled successfully\n' >&2
+	exit 1
+fi
+
+run_guest()
+{
+	local check_script=$1 module=$2 output
+	shift 2
+	if ! output=$("$HERE/../../../../vm/boot" --check "$check_script" "$@" "$module" 2>&1); then
+		printf '%s\n' "$output" >&2
+		printf '[x] disposable guest did not complete\n' >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+	grep -Fq '[+] PASSED' <<< "$output" || {
+		printf '[x] guest checks did not pass\n' >&2
+		exit 1
+	}
+}
+
+run_guest "$HERE/../../stage-01/r04-proc-publication/failure-ecanceled-check" \
+	"$scratch/preflight/rootkitlings.ko" --tool tools/module_load_test
+run_guest "$HERE/../../stage-01/r04-proc-publication/failure-enomem-check" \
+	"$scratch/allocation/rootkitlings.ko" --tool tools/module_load_test
+run_guest "$HERE/../../stage-01/r04-proc-publication/failure-after-state-check" \
+	"$scratch/publication/rootkitlings.ko" --tool tools/module_load_test
+run_guest "$HERE/publication-rollback-check" "$scratch/publication/rootkitlings.ko" \
+	--tool tools/module_load_test
+run_guest "$HERE/failure-check" "$scratch/worker/rootkitlings.ko" \
+	--tool tools/module_load_test
+run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
+	--tool tools/proc_write_test --tool tools/status_field_test
