@@ -140,13 +140,13 @@ changed_worker_loop=$scratch/changed-worker-loop
 cp -a "$scratch/success" "$changed_worker_loop"
 sed -i 's/"rkling_core"/"wrong_core"/' \
 	"$changed_worker_loop/execution/worker.c"
-rebuild_fixture "$changed_worker_loop" changed-worker-loop
+build_tree "$changed_worker_loop"
 
 changed_evidence_ops=$scratch/changed-evidence-ops
 cp -a "$scratch/success" "$changed_evidence_ops"
 sed -i 's/\.proc_lseek = seq_lseek/\.proc_lseek = noop_llseek/' \
 	"$changed_evidence_ops/interface/evidence.c"
-rebuild_fixture "$changed_evidence_ops" changed-evidence-ops
+build_tree "$changed_evidence_ops"
 
 compose_tree "$scratch/unknown"
 cp -a "$HERE/solution-overlay/." "$scratch/unknown/"
