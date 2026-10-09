@@ -24,6 +24,13 @@ static int fail_point;
 static unsigned int live_contexts;
 static unsigned int erased_contexts;
 static _Thread_local u8 *pending_digest;
+static _Thread_local struct rk_host_context *pending_context;
+static _Thread_local unsigned int tag_comparisons;
+static _Thread_local size_t tag_bytes;
+static _Thread_local size_t tag_length;
+static _Thread_local bool tag_compared_while_locked;
+static _Thread_local bool override_tag_result;
+static _Thread_local bool forced_tag_result;
 
 static uint32_t rotate_right(uint32_t value, unsigned int count)
 {
@@ -214,6 +221,36 @@ bool rk_test_digest_was_cleared(void)
 	return pending_digest == NULL;
 }
 
+void rk_test_force_tag_result(bool enabled, bool result)
+{
+	override_tag_result = enabled;
+	forced_tag_result = result;
+	tag_comparisons = 0;
+	tag_bytes = 0;
+	tag_length = 0;
+	tag_compared_while_locked = false;
+}
+
+unsigned int rk_test_tag_comparisons(void)
+{
+	return tag_comparisons;
+}
+
+size_t rk_test_tag_bytes(void)
+{
+	return tag_bytes;
+}
+
+size_t rk_test_tag_length(void)
+{
+	return tag_length;
+}
+
+bool rk_test_tag_compared_while_locked(void)
+{
+	return tag_compared_while_locked;
+}
+
 int rk_platform_auth_create(void **context, const u8 *key, size_t key_length)
 {
 	struct rk_host_context *created;
@@ -271,6 +308,7 @@ int rk_platform_hmac(void *context, const u8 *data, size_t length,
 	if (owned->locked != 1)
 		return -EDEADLK;
 	pending_digest = digest;
+	pending_context = owned;
 	if (fail_point == 3)
 		return -EIO;
 	host_hmac(owned->key, owned->key_length, data, length, digest);
@@ -292,6 +330,7 @@ int rk_platform_sign_once(const u8 *key, size_t key_length, const u8 *data,
 	/* sign_once returns this digest; only learner temporaries must be
 	 * cleared. */
 	pending_digest = NULL;
+	pending_context = NULL;
 	rk_platform_auth_destroy(context);
 	return error;
 }
@@ -301,8 +340,16 @@ bool rk_platform_tags_equal(const u8 *left, const u8 *right, size_t length)
 	u8 difference = 0;
 	size_t index;
 
-	for (index = 0; index < length; index++)
+	tag_comparisons++;
+	tag_length = length;
+	tag_compared_while_locked = pending_context &&
+		pending_context->locked == 1 && left == pending_digest;
+	for (index = 0; index < length; index++) {
 		difference |= left[index] ^ right[index];
+		tag_bytes++;
+	}
+	if (override_tag_result)
+		return forced_tag_result;
 	return difference == 0;
 }
 
@@ -330,6 +377,8 @@ void rk_platform_clear(void *buffer, size_t length)
 	while (length--)
 		*bytes++ = 0;
 	if (buffer == pending_digest &&
-	    original_length == RK_AUTH_DIGEST_LENGTH)
+	    original_length == RK_AUTH_DIGEST_LENGTH) {
 		pending_digest = NULL;
+		pending_context = NULL;
+	}
 }

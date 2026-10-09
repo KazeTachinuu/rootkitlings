@@ -31,15 +31,22 @@ for command in gcc make nm openssl; do
 	}
 done
 
-generated=$(find "$HERE" -type f \( \
-	-name '*.o' -o -name '*.ko' -o -name '*.mod' -o \
-	-name '*.mod.c' -o -name Module.symvers -o -name modules.order -o \
-	-name '.*.cmd' \) -print -quit)
-[[ -z $generated ]] || {
-	printf '[x] generated artifact stored in lesson: %s\n' \
-		"${generated#"$HERE/"}" >&2
-	exit 1
+assert_clean_tree()
+{
+	local generated
+
+	generated=$(find "$HERE" -type f \( \
+		-name '*.o' -o -name '*.ko' -o -name '*.mod' -o \
+		-name '*.mod.c' -o -name Module.symvers -o -name modules.order -o \
+		-name '.*.cmd' \) -print -quit)
+	[[ -z $generated ]] || {
+		printf '[x] generated artifact stored in lesson: %s\n' \
+			"${generated#"$HERE/"}" >&2
+		exit 1
+	}
 }
+
+assert_clean_tree
 
 for script in test host-check success-check failure-check \
 	allocation-failure-check key-failure-check digest-failure-check; do
@@ -160,6 +167,14 @@ mutate_uncleared_digest()
 {
 	sed -i '/rk_platform_clear(digest, sizeof(digest));/d' "$1"
 }
+mutate_ignores_comparator_result()
+{
+	sed -i '/if (!rk_platform_tags_equal/,+1c\
+\t(void)rk_platform_tags_equal(digest, message + RK_AUTH_BODY_LENGTH,\
+\t\t\t\t     RK_AUTH_TAG_LENGTH);\
+\tif (__builtin_memcmp(digest, message + RK_AUTH_BODY_LENGTH,\
+\t\t\t     RK_AUTH_TAG_LENGTH)) {' "$1"
+}
 
 build_mutant short-tag mutate_short_tag
 build_mutant skips-tag-check mutate_skip_tag
@@ -171,6 +186,7 @@ build_mutant wraps-sequence mutate_wrap
 build_mutant mutates-before-auth mutate_early_output
 build_mutant omits-transition-lock mutate_no_lock
 build_mutant leaves-digest mutate_uncleared_digest
+build_mutant ignores-comparator-result mutate_ignores_comparator_result
 
 cp -a "$HERE/solution" "$scratch/alternate"
 cp "$HERE/fixtures/alternate/authenticated.c" \
@@ -209,5 +225,7 @@ if [[ -x $HERE/../r28-sha256-verification/test ]]; then
 else
 	printf '[*] R28 regression deferred: r28-sha256-verification is not present\n'
 fi
+
+assert_clean_tree
 
 printf '[+] R29 authenticated replay-safe message passed\n'

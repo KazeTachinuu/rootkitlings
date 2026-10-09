@@ -69,8 +69,6 @@ while read -r symbol; do
 		*) die "learner object has unexpected dependency: $symbol" ;;
 	esac
 done <<< "$undefined"
-grep -qx rk_platform_tags_equal <<< "$undefined" ||
-	die "learner must use the supplied constant-time tag comparison"
 if nm "$build_dir/message/authenticated.o" |
 	grep -Eq '[[:space:]][bBdD][[:space:]]'; then
 	die "learner file must not own mutable or persistent object state"

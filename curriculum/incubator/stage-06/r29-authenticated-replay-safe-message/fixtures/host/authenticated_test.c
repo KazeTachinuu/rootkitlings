@@ -20,6 +20,11 @@ void rk_test_fail_at(int point);
 unsigned int rk_test_live_contexts(void);
 unsigned int rk_test_erased_contexts(void);
 bool rk_test_digest_was_cleared(void);
+void rk_test_force_tag_result(bool enabled, bool result);
+unsigned int rk_test_tag_comparisons(void);
+size_t rk_test_tag_bytes(void);
+size_t rk_test_tag_length(void);
+bool rk_test_tag_compared_while_locked(void);
 
 #define CHECK(condition)                                               \
 	do {                                                           \
@@ -202,6 +207,41 @@ static void test_fail_closed_matrix(void)
 	rk_receiver_stop(&receiver);
 }
 
+static void test_comparator_result_is_authoritative(void)
+{
+	struct rk_receiver receiver = {0};
+	u8 key[RK_AUTH_KEY_LENGTH];
+	u8 wrong[RK_AUTH_KEY_LENGTH];
+	u8 message[RK_AUTH_MESSAGE_LENGTH];
+	u64 epoch = 0x5265706c61795361ULL;
+
+	fill_keys(key, wrong);
+	CHECK(rk_receiver_start(&receiver, key, sizeof(key), epoch, 1) == 0);
+	sign_message(key, epoch, 1, RK_AUTH_VERSION,
+		     RK_AUTH_COMMAND_SET_LEVEL, 2, 0, message);
+
+	rk_test_force_tag_result(true, false);
+	expect_unchanged(&receiver, message, sizeof(message), -EBADMSG);
+	CHECK(rk_test_tag_comparisons() == 1);
+	CHECK(rk_test_tag_length() == RK_AUTH_TAG_LENGTH);
+	CHECK(rk_test_tag_bytes() == RK_AUTH_TAG_LENGTH);
+	CHECK(rk_test_tag_compared_while_locked());
+
+	message[RK_AUTH_BODY_LENGTH + 7] ^= 0x80;
+	rk_test_force_tag_result(true, true);
+	CHECK(rk_receiver_submit(&receiver, message, sizeof(message)) == 0);
+	CHECK(rk_test_digest_was_cleared());
+	CHECK(rk_test_tag_comparisons() == 1);
+	CHECK(rk_test_tag_length() == RK_AUTH_TAG_LENGTH);
+	CHECK(rk_test_tag_bytes() == RK_AUTH_TAG_LENGTH);
+	CHECK(rk_test_tag_compared_while_locked());
+	CHECK(receiver.accepted == 1 && receiver.next_sequence == 2 &&
+	      receiver.output_level == 2);
+
+	rk_test_force_tag_result(false, false);
+	rk_receiver_stop(&receiver);
+}
+
 static void test_start_and_crypto_failures(void)
 {
 	struct rk_receiver receiver = {0};
@@ -364,6 +404,7 @@ int main(void)
 	test_known_answer_and_key_ownership();
 	test_start_and_crypto_failures();
 	test_fail_closed_matrix();
+	test_comparator_result_is_authoritative();
 	test_sequences_and_restart();
 	test_concurrent_duplicates();
 	printf("[+] authenticated replay-safe message: %lu assertions\n",
