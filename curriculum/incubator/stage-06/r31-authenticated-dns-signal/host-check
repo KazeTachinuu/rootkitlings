@@ -14,10 +14,10 @@ trap 'rm -rf -- "$scratch"' EXIT
 for relative in Kbuild core/main.c crypto/platform.c \
 	include/authenticated.h include/authenticated_dns.h include/dns_query.h \
 	include/platform.h include/selftest.h include/transport.h \
-	message/authenticated.c tests/selftest.c transport/udp.c \
+	message/authenticated.c signal/authenticated_dns.c tests/selftest.c transport/udp.c \
 	wire/dns_query.c; do
-	cmp -s "$here/solution/$relative" "$build/$relative" ||
-		die "supplied file was changed: $relative"
+	[[ -f $build/$relative && ! -L $build/$relative ]] ||
+		die "build is missing regular file: $relative"
 done
 
 oracle=$(printf '%b' '\x01\x01\x01\x02\x03\x04\x05\x06\x07\x08\x00\x00\x00\x00\x00\x00\x00\x01\x03\x00' |

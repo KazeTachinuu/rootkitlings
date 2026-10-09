@@ -1,4 +1,4 @@
-# L30: Emit an authenticated DNS-shaped signal
+# Emit an authenticated DNS-shaped signal
 
 This exercise sends one status datagram to `127.0.0.1:5300`.
 It uses the DNS question layout so a packet capture can decode it with ordinary DNS fields, but it does not ask a resolver to look up a name.
@@ -25,7 +25,8 @@ DNS header
 00 01  QCLASS=IN
 ```
 
-The authenticated body is the fixed 20-byte body from L28:
+The authenticated body is the fixed 20-byte body from the authenticated
+replay-safe message exercise:
 
 | Offset | Size | Field |
 |---:|---:|---|
@@ -85,7 +86,7 @@ No socket remains for module exit to clean up.
 Run:
 
 ```sh
-./rootkitlings check L30
+./rootkitlings check
 ```
 
 The host checker uses OpenSSL as an independent known-answer oracle, tests every short output capacity and packet length, changes every protected or structural packet byte, and checks wrong-key, stale, duplicate, and gap behavior.

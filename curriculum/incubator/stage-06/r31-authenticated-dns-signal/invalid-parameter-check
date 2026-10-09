@@ -4,6 +4,10 @@
 
 begin "Rejected out-of-range DNS signal status"
 assert_absent /sys/module/rootkitlings
-load_fail rootkitlings.ko status=259
+if module_load_params /rootkitlings/rootkitlings.ko 22 "status=259"; then
+	_ok "out-of-range status returned EINVAL"
+else
+	_fail "out-of-range status returned the wrong error"
+fi
 assert_absent /sys/module/rootkitlings
 summary

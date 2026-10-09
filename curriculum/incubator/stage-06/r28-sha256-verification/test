@@ -89,6 +89,17 @@ build_tree()
 build_tree "$HERE/template" "$scratch/template"
 build_tree "$HERE/solution" "$scratch/solution"
 build_tree "$HERE/solution" "$scratch/api-failure" 1
+cp -a "$HERE/solution" "$scratch/unknown-failure-point"
+if make -s -C "$KDIR" M="$scratch/unknown-failure-point" W=1 \
+	ROOTKITLINGS_FAIL_POINT=99 modules >"$scratch/unknown.log" 2>&1; then
+	printf '[x] unknown failure point compiled\n' >&2
+	exit 1
+fi
+grep -Fq 'unknown ROOTKITLINGS_FAIL_POINT' "$scratch/unknown.log" || {
+	cat "$scratch/unknown.log" >&2
+	printf '[x] unknown failure point failed for the wrong reason\n' >&2
+	exit 1
+}
 "$HERE/host-check" "$scratch/solution" "$scratch/solution/rootkitlings.ko"
 if "$HERE/host-check" "$scratch/template" "$scratch/template/rootkitlings.ko" \
 	> "$scratch/template-host.log" 2>&1; then
@@ -141,7 +152,8 @@ sed -i '/\t\*matches =/i\
 \treturn 0;\
 #endif' "$kernel_only/crypto/sha256.c"
 build_tree "$kernel_only" "$scratch/kernel-only-build"
-expect_rejection "$scratch/kernel-only-build" kernel-only
+# A userspace fixture cannot observe __KERNEL__ branches.  The guest check
+# below validates this mutant against the independent in-kernel self-test.
 
 cp -a "$HERE/solution" "$scratch/alternate-source"
 cp "$HERE/fixtures/alternate/sha256.c" \

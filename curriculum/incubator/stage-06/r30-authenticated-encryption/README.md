@@ -1,4 +1,4 @@
-# L29: Authenticated encryption
+# Use AEAD without releasing unauthenticated plaintext
 
 Edit `crypto/aead.c` only.
 Implement `rk_aead_seal_with()` and `rk_aead_open_with()`, then keep the two kernel entry points as thin calls to `rk_kernel_aead_ops`.
@@ -6,7 +6,7 @@ Implement `rk_aead_seal_with()` and `rk_aead_open_with()`, then keep the two ker
 Run:
 
 ```sh
-./rootkitlings check L29
+./rootkitlings check
 ```
 
 ## What this mechanism does
@@ -23,7 +23,8 @@ For every seal operation, the nonce must be unique under that key.
 GCM nonce reuse can expose relationships between plaintexts and destroy authentication.
 This function is deliberately stateless: the caller, not this function, must allocate nonces without reuse.
 Repeating a nonce while opening is allowed, but GCM does not detect replay.
-A receiver still needs authenticated sequence state such as the mechanism from L28.
+A receiver still needs authenticated sequence state such as the mechanism from
+the authenticated replay-safe message exercise.
 
 ## Linux AEAD layout
 

@@ -16,6 +16,17 @@ build(){ local src=$1 dst=$2 point=${3:-0}; cp -a "$src" "$dst"; make -s -C "$KD
 build "$here/solution" "$tmp/solution"
 build "$here/template" "$tmp/template"
 for point in 1 2 3; do build "$here/solution" "$tmp/fail-$point" "$point"; done
+cp -a "$here/solution" "$tmp/unknown-failure-point"
+if make -s -C "$KDIR" M="$tmp/unknown-failure-point" W=1 \
+	ROOTKITLINGS_FAIL_POINT=99 modules >"$tmp/unknown.log" 2>&1; then
+	printf '[x] unknown failure point compiled\n' >&2
+	exit 1
+fi
+grep -Fq 'unknown ROOTKITLINGS_FAIL_POINT' "$tmp/unknown.log" || {
+	cat "$tmp/unknown.log" >&2
+	printf '[x] unknown failure point failed for the wrong reason\n' >&2
+	exit 1
+}
 "$here/host-check" "$tmp/solution" "$tmp/solution/rootkitlings.ko"
 if "$here/host-check" "$tmp/template" "$tmp/template/rootkitlings.ko" >/dev/null 2>&1; then printf '[x] template accepted\n' >&2; exit 1; fi
 cp -a "$here/solution" "$tmp/alternate-src"; cp "$here/fixtures/alternate/aead.c" "$tmp/alternate-src/crypto/aead.c"; build "$tmp/alternate-src" "$tmp/alternate"; "$here/host-check" "$tmp/alternate" "$tmp/alternate/rootkitlings.ko"

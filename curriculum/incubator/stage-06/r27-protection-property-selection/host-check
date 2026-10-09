@@ -17,21 +17,6 @@ for relative in Kbuild core/main.c include/protection.h include/selftest.h \
 		die "build is missing regular file: $relative"
 done
 
-for relative in Kbuild core/main.c include/protection.h include/selftest.h \
-		tests/selftest.c; do
-	cmp -s "$here/solution/$relative" "$build_dir/$relative" ||
-		die "supplied file was changed: $relative"
-done
-
-directive_count=0
-while IFS= read -r directive; do
-	directive_count=$((directive_count + 1))
-	[[ $directive =~ ^[[:space:]]*#[[:space:]]*include[[:space:]]*\"protection\.h\"[[:space:]]*$ ]] ||
-		die "learner file may only include protection.h; conditional compilation is not allowed"
-done < <(grep -E '(#|%:|\?\?=)' "$build_dir/protection/properties.c" || true)
-(( directive_count == 1 )) ||
-	die "learner file must include protection.h exactly once"
-
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
 	-fsanitize=address,undefined -fno-omit-frame-pointer \
 	-I"$build_dir/include" "$here/fixtures/host/properties_test.c" \

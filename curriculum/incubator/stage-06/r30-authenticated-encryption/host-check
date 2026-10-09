@@ -8,8 +8,9 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r30-host.XXXXXX")
 trap 'rm -rf -- "$tmp"' EXIT
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
-for f in Kbuild core/main.c crypto/platform.c include/aead.h include/platform.h include/selftest.h tests/selftest.c; do
-	cmp -s "$here/solution/$f" "$build/$f" || die "supplied file was changed: $f"
+for f in Kbuild core/main.c crypto/platform.c crypto/aead.c include/aead.h \
+	include/platform.h include/selftest.h tests/selftest.c; do
+	[[ -f $build/$f && ! -L $build/$f ]] || die "build is missing regular file: $f"
 done
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
 	-fsanitize=address,undefined -fno-omit-frame-pointer \

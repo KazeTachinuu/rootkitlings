@@ -89,6 +89,17 @@ build_tree "$HERE/solution" "$scratch/solution"
 build_tree "$HERE/solution" "$scratch/allocation" 1
 build_tree "$HERE/solution" "$scratch/key-failure" 2
 build_tree "$HERE/solution" "$scratch/digest-failure" 3
+cp -a "$HERE/solution" "$scratch/unknown-failure-point"
+if make -s -C "$KDIR" M="$scratch/unknown-failure-point" W=1 \
+	ROOTKITLINGS_FAIL_POINT=99 modules >"$scratch/unknown.log" 2>&1; then
+	printf '[x] unknown failure point compiled\n' >&2
+	exit 1
+fi
+grep -Fq 'must be between 0 and 3' "$scratch/unknown.log" || {
+	cat "$scratch/unknown.log" >&2
+	printf '[x] unknown failure point failed for the wrong reason\n' >&2
+	exit 1
+}
 
 "$HERE/host-check" "$scratch/solution" "$scratch/solution/rootkitlings.ko"
 if "$HERE/host-check" "$scratch/template" \
