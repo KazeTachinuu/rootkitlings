@@ -35,9 +35,8 @@ The R06 matrix builds the same variants and checks all four accepted command for
 
 ## Remaining Stage 2 work
 
-- L06 `execution-context`: choose legal sleep, allocation, and synchronization behavior for each callback context.
-- L07 `timer-workqueue-scheduler`: keep the timer callback minimal and defer sleep-capable work safely.
-- L08 `event-driven-kernel-thread`: create, wake, stop, and join a resident worker without polling.
+- L06 `timer-workqueue-scheduler`: keep the timer callback bounded, defer sleep-capable work to a worker, and close both lifetimes on unload.
+- L07 `event-driven-kernel-thread`: create, wake, stop, and join a resident worker without polling.
 - M00 `controlled-resident-core`: integrate the action switch, scheduler, and worker into the cumulative module and prove disabled, enabled, and unload behavior.
 
 The target route remains private until these assets, metadata, state migration, and cumulative snapshot checks can be adopted atomically.
