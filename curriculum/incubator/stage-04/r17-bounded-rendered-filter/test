@@ -206,4 +206,4 @@ run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
 "$HERE/../../stage-03/r14-return-aware-syscall-telemetry/test"
 "$HERE/../r15-cross-view-evidence/test"
 
-printf '[+] bounded rendered-result lesson passed\n'
+printf '[+] bounded read-result lesson passed\n'

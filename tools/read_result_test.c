@@ -178,6 +178,7 @@ static void usage(const char *name)
 	fprintf(stderr,
 		"usage: %s write PATH HEX | invalid PATH | "
 		"error METHOD PATH ERRNO | "
+		"position-error PATH ERRNO HEX | "
 		"check METHOD PATH OFFSET REQUEST HEX | "
 		"proc PATH HEX | stress PATH ITERATIONS HEX [ALTERNATE_HEX]\n",
 		name);
@@ -391,6 +392,61 @@ static int expect_error(const char *method, const char *path,
 	return result == -1 && errno == expected ? 0 : 1;
 }
 
+static int expect_position_error(const char *path, const char *errno_text,
+				 const char *hex)
+{
+	struct iovec vector;
+	unsigned char failed_buffer[64];
+	unsigned char *expected;
+	unsigned char *actual;
+	char *end;
+	long expected_errno;
+	size_t length;
+	ssize_t result;
+	int descriptor;
+
+	errno = 0;
+	expected_errno = strtol(errno_text, &end, 10);
+	if (errno || *end != '\0' || expected_errno <= 0 ||
+	    expected_errno > 4095)
+		return 2;
+	expected = decode_hex(hex, &length);
+	actual = calloc(length + 1U, 1U);
+	if (!expected || !actual || length == 0 ||
+	    length > sizeof(failed_buffer)) {
+		free(expected);
+		free(actual);
+		return 2;
+	}
+	descriptor = open(path, O_RDONLY | O_CLOEXEC);
+	if (descriptor < 0) {
+		free(expected);
+		free(actual);
+		return 2;
+	}
+	errno = 0;
+	result = syscall(SYS_read, descriptor, failed_buffer, length);
+	if (result != -1 || errno != expected_errno) {
+		close(descriptor);
+		free(expected);
+		free(actual);
+		return 1;
+	}
+	vector.iov_base = actual;
+	vector.iov_len = length;
+	result = syscall(SYS_readv, descriptor, &vector, 1);
+	close(descriptor);
+	if (result != (ssize_t)length ||
+	    memcmp(actual, expected, length) != 0) {
+		free(expected);
+		free(actual);
+		return 1;
+	}
+	free(expected);
+	free(actual);
+	return 0;
+}
+
 struct stress_args {
 	const char *path;
 	const unsigned char *expected;
@@ -537,6 +593,8 @@ int main(int argc, char **argv)
 		return invalid_read(argv[2]);
 	if (argc == 5 && strcmp(argv[1], "error") == 0)
 		return expect_error(argv[2], argv[3], argv[4]);
+	if (argc == 5 && strcmp(argv[1], "position-error") == 0)
+		return expect_position_error(argv[2], argv[3], argv[4]);
 	if (argc == 7 && strcmp(argv[1], "check") == 0)
 		return check_read(argv[2], argv[3], argv[4], argv[5], argv[6]);
 	if (argc == 4 && strcmp(argv[1], "proc") == 0)

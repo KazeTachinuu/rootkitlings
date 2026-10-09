@@ -10,7 +10,7 @@ original=534543524554
 expected='limit=512
 redactions=0
 oversize_results=0
-copy_failures=1
+copy_failures=2
 return_capacity=32
 returns_missed=0'
 
@@ -31,8 +31,13 @@ if read_result_test error read "$target" 14; then
 else
 	_fail "injected copy failure did not return EFAULT"
 fi
+if read_result_test position-error "$target" 14 "$original"; then
+	_ok "EFAULT leaves the read descriptor at its original position"
+else
+	_fail "EFAULT committed the read descriptor's file-position update"
+fi
 if [ "$(cat "$endpoint")" = "$expected" ]; then
-	_ok "copy failure increments only copy_failures"
+	_ok "copy failures increment only copy_failures"
 else
 	_fail "copy failure status is incorrect"
 	cat "$endpoint" >&2
