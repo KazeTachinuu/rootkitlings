@@ -11,6 +11,10 @@ artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
 [[ -f $artifact && ! -L $artifact ]] || die "artifact must be a regular file"
 [[ $artifact == "$build_dir/rootkitlings.ko" ]] ||
 	die "expected artifact at: $build_dir/rootkitlings.ko"
+[[ -f $build_dir/rootkitlings.mod && ! -L $build_dir/rootkitlings.mod ]] ||
+	die "build output is missing rootkitlings.mod"
+[[ $(<"$build_dir/rootkitlings.mod") == './core/main.o' ]] ||
+	die "rootkitlings.ko must contain only core/main.o"
 
 command -v modinfo >/dev/null || die "modinfo is required"
 [[ $(modinfo -F license "$artifact") == GPL ]] || die "module license must be GPL"

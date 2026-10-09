@@ -66,5 +66,14 @@ for point in 0 1; do
 		-o "$scratch/main-$point"
 	"$scratch/main-$point"
 done
+if "${CC:-cc}" "${cflags[@]}" -Werror=unused-result \
+	-c "$HERE/fixtures/host/must_check_test.c" \
+	-o "$scratch/must-check.o" >"$scratch/must-check.log" 2>&1; then
+	die "rk_state_create result may be ignored without a compiler diagnostic"
+fi
+grep -Eq '(unused result|ignoring return value)' "$scratch/must-check.log" || {
+	cat "$scratch/must-check.log" >&2
+	die "ignored constructor result failed for an unrelated reason"
+}
 
 printf '[+] module metadata, ownership boundary, and state lifecycle verified\n'
