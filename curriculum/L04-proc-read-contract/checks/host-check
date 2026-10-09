@@ -62,7 +62,7 @@ if grep -Eq 'struct[[:space:]]+rk_state[[:space:]]*\{' <<< "$header_text"; then
 	die "struct rk_state layout must remain private to core/state.c"
 fi
 
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r05-host.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-proc-read-contract-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 for compiler in gcc clang; do
 	"$compiler" -std=c11 -Wall -Wextra -Werror -Wno-unused-parameter \

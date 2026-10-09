@@ -7,27 +7,27 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 build=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found"
 module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-m03=$here/../../remote-resident-agent
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-c00-host.XXXXXX")
+remote_agent=$here/../../M03-remote-resident-agent
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-authenticated-resident-agent-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
 
 while IFS= read -r source; do
-	relative=${source#"$m03/starter/"}
+	relative=${source#"$remote_agent/starter/"}
 	case $relative in
 		include/agent.h|include/framing.h|include/platform.h|network/agent.c)
 			continue ;;
 	esac
 	cmp -s "$source" "$build/$relative" ||
 		die "inherited resident-agent addition changed: $relative"
-done < <(find "$m03/starter" -type f | sort)
+done < <(find "$remote_agent/starter" -type f | sort)
 while IFS= read -r source; do
-	relative=${source#"$m03/solution/"}
+	relative=${source#"$remote_agent/solution/"}
 	case $relative in Kbuild|core/main.c|network/agent.c) continue ;; esac
 	cmp -s "$source" "$build/$relative" ||
 		die "inherited resident-agent solution changed: $relative"
-done < <(find "$m03/solution" -type f | sort)
+done < <(find "$remote_agent/solution" -type f | sort)
 while IFS= read -r source; do
 	relative=${source#"$here/../starter/"}
 	case $relative in security/control.c) continue ;; esac

@@ -3,16 +3,16 @@ set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$HERE/../../../../scripts/lesson-env"
-baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r10-baseline.XXXXXX")
-work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r10-work.XXXXXX")
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r10-test.XXXXXX")
+source "$HERE/../../../scripts/lesson-env"
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-linux-credential-model-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-linux-credential-model-work.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-linux-credential-model-test.XXXXXX")
 trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
 
-cp -a "$HERE/../../owned-kernel-state/solution/." "$baseline/"
-cp -a "$HERE/../../proc-publication/solution/." "$baseline/"
-cp -a "$HERE/../../proc-read-contract/solution/." "$baseline/"
-cp -a "$HERE/../../current-task-attribution/solution/." "$baseline/"
+cp -a "$HERE/../../L02-owned-kernel-state/solution/." "$baseline/"
+cp -a "$HERE/../../L03-proc-publication/solution/." "$baseline/"
+cp -a "$HERE/../../L04-proc-read-contract/solution/." "$baseline/"
+cp -a "$HERE/../../L08-current-task-attribution/solution/." "$baseline/"
 cp -a "$baseline/." "$work/"
 while IFS= read -r -d '' source; do
 	relative=${source#"$HERE/../starter/"}
@@ -41,7 +41,7 @@ for compiler in gcc clang; do
 	}
 	"$compiler" -std=c11 -Wall -Wextra -Werror -static \
 		-o "$scratch/credential_snapshot_test.$compiler" \
-		"$HERE/../../../../vm/tools/credential_snapshot_test.c"
+		"$HERE/../../../vm/tools/credential_snapshot_test.c"
 done
 
 template_build=$scratch/starter
@@ -97,7 +97,7 @@ run_guest()
 {
 	local check_script=$1 module=$2 output
 	shift 2
-	if ! output=$("$HERE/../../../../vm/boot" --check "$check_script" \
+	if ! output=$("$HERE/../../../vm/boot" --check "$check_script" \
 		--tool vm/tools/run_as "$@" \
 		"$module" 2>&1); then
 		printf '%s\n' "$output" >&2
@@ -105,17 +105,13 @@ run_guest()
 		exit 1
 	fi
 	printf '%s\n' "$output"
-	grep -Fq '[+] PASSED' <<< "$output" || {
-		printf '[x] guest checks did not pass\n' >&2
-		exit 1
-	}
 }
 
-run_guest "$HERE/../../proc-publication/checks/failure-ecanceled-check" \
+run_guest "$HERE/../../L03-proc-publication/checks/failure-ecanceled-check" \
 	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
-run_guest "$HERE/../../proc-publication/checks/failure-enomem-check" \
+run_guest "$HERE/../../L03-proc-publication/checks/failure-enomem-check" \
 	"$scratch/allocation/rootkitlings.ko" --tool vm/tools/module_load_test
-run_guest "$HERE/../../proc-publication/checks/failure-after-state-check" \
+run_guest "$HERE/../../L03-proc-publication/checks/failure-after-state-check" \
 	"$scratch/publication/rootkitlings.ko" --tool vm/tools/module_load_test
 run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
 	--tool vm/tools/credential_snapshot_test

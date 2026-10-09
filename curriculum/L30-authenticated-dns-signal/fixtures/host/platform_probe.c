@@ -4,7 +4,7 @@
 #include "authenticated_dns.h"
 
 #define rk_platform_clear rk_platform_clear_under_test
-#include "../../authenticated-replay-safe-message/fixtures/host/platform.c"
+#include "../../../L28-authenticated-replay-safe-message/fixtures/host/platform.c"
 #undef rk_platform_clear
 
 struct clear_probe {

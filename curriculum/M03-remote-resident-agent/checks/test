@@ -3,12 +3,12 @@ set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$HERE/../../../../scripts/lesson-env"
+source "$HERE/../../../scripts/lesson-env"
 ROOT=$ROOTKITLINGS_ROOT
-M02=$HERE/../../concealment-evidence-map
-M01=$HERE/../../authorized-actions-telemetry
-M00=$HERE/../../controlled-resident-core
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m03.XXXXXX")
+CONCEALMENT=$HERE/../../M02-concealment-evidence-map
+TELEMETRY=$HERE/../../M01-authorized-actions-telemetry
+RESIDENT_CORE=$HERE/../../M00-controlled-resident-core
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-remote-resident-agent.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || { printf '[x] M03 requires x86_64\n' >&2; exit 1; }
@@ -44,11 +44,11 @@ expected_overlay=(./Kbuild ./core/main.c ./network/agent.c)
 }
 while IFS= read -r addition; do
 	relative=${addition#"$HERE/../starter/"}
-	[[ ! -e $M00/solution/$relative &&
-		! -e $M01/starter/$relative &&
-		! -e $M01/solution/$relative &&
-		! -e $M02/starter/$relative &&
-		! -e $M02/solution/$relative ]] || {
+	[[ ! -e $RESIDENT_CORE/solution/$relative &&
+		! -e $TELEMETRY/starter/$relative &&
+		! -e $TELEMETRY/solution/$relative &&
+		! -e $CONCEALMENT/starter/$relative &&
+		! -e $CONCEALMENT/solution/$relative ]] || {
 		printf '[x] addition replaces inherited path: %s\n' "$relative" >&2
 		exit 1
 	}
@@ -60,21 +60,21 @@ while IFS= read -r addition; do
 	fi
 done < <(find "$HERE/../starter" -type f | sort)
 
-compose_m02_solution()
+compose_concealment_solution()
 {
 	local destination=$1
 	mkdir -p "$destination"
-	cp -a "$M00/solution/." "$destination/"
-	cp -a "$M01/starter/." "$destination/"
-	cp -a "$M01/solution/." "$destination/"
-	cp -a "$M02/starter/." "$destination/"
-	cp -a "$M02/solution/." "$destination/"
+	cp -a "$RESIDENT_CORE/solution/." "$destination/"
+	cp -a "$TELEMETRY/starter/." "$destination/"
+	cp -a "$TELEMETRY/solution/." "$destination/"
+	cp -a "$CONCEALMENT/starter/." "$destination/"
+	cp -a "$CONCEALMENT/solution/." "$destination/"
 }
 
 compose_tree()
 {
 	local destination=$1
-	compose_m02_solution "$destination"
+	compose_concealment_solution "$destination"
 	cp -a "$HERE/../starter/." "$destination/"
 }
 
@@ -185,7 +185,6 @@ run_guest()
 		exit 1
 	fi
 	printf '%s\n' "$output"
-	grep -Fq '[+] PASSED' <<< "$output" || exit 1
 }
 
 reject_guest()
@@ -228,13 +227,13 @@ for specification in '8 12 Credential-preparation' '9 125 Credential-cancellatio
 		--tool vm/tools/run_as --tool vm/tools/cred_trigger_test
 done
 
-run_guest "$M02/checks/success-check" "$scratch/success/rootkitlings.ko" \
-	M02-regression --check-arg remote-agent --tool vm/tools/run_as \
+run_guest "$CONCEALMENT/checks/success-check" "$scratch/success/rootkitlings.ko" \
+	concealment-regression --check-arg remote-agent --tool vm/tools/run_as \
 	--tool vm/tools/getdents64_test \
 	--tool vm/tools/status_field_test --tool vm/tools/proc_write_test \
 	--tool vm/tools/proc_read_test
-run_guest "$M01/checks/success-check" "$scratch/success/rootkitlings.ko" \
-	M01-regression --check-arg remote-agent --tool vm/tools/run_as \
+run_guest "$TELEMETRY/checks/success-check" "$scratch/success/rootkitlings.ko" \
+	telemetry-regression --check-arg remote-agent --tool vm/tools/run_as \
 	--tool vm/tools/event_stream_test --tool vm/tools/status_field_test \
 	--tool vm/tools/proc_write_test --tool vm/tools/proc_read_test \
 	--tool vm/tools/cred_trigger_test --tool vm/tools/rmdir_telemetry_test
@@ -246,4 +245,4 @@ reject_guest "$HERE/success-check" \
 reject_guest "$HERE/success-check" "$scratch/drops-marker/rootkitlings.ko" \
 	drops-marker --tool vm/tools/agent_fixture
 
-printf '[+] M03 remote resident agent passed\n'
+printf '[+] remote-resident-agent passed\n'

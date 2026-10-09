@@ -7,7 +7,7 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 build=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found"
 module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r31-host.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-authenticated-dns-signal-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"

@@ -8,7 +8,7 @@ root=/etc/modules-load.d
 target=$root/rootkitlings.conf
 sibling=$root/.rootkitlings.conf.rootkitlings
 status=/proc/rootkitlings_agent
-fixtures=/tmp/rootkitlings-m03
+fixtures=/tmp/rootkitlings-remote-resident-agent
 helper=$fixtures/agent_fixture
 fixture_pid=
 

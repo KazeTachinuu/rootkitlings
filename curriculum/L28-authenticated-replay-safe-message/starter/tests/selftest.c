@@ -120,7 +120,7 @@ static int rk_test_concurrent_duplicate(const u8 key[RK_AUTH_KEY_LENGTH],
 		init_completion(&cases[index].done);
 		cases[index].task =
 		    kthread_run(rk_duplicate_thread, &cases[index],
-				"r29-duplicate-%u", index);
+				"authenticated-message-duplicate-%u", index);
 		if (IS_ERR(cases[index].task)) {
 			error = PTR_ERR(cases[index].task);
 			cases[index].task = NULL;

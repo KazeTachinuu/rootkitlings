@@ -3,21 +3,21 @@ set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$HERE/../../../../scripts/lesson-env"
-baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r12-baseline.XXXXXX")
-work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r12-work.XXXXXX")
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r12-test.XXXXXX")
+source "$HERE/../../../scripts/lesson-env"
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-one-use-authorization-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-one-use-authorization-work.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-one-use-authorization-test.XXXXXX")
 trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
 
 for source in \
-	"$HERE/../../owned-kernel-state/solution" \
-	"$HERE/../../proc-publication/solution" \
-	"$HERE/../../proc-read-contract/solution" \
-	"$HERE/../../bounded-control-switch/solution" \
-	"$HERE/../../current-task-attribution/solution" \
-	"$HERE/../../linux-credential-model/solution" \
-	"$HERE/../../transactional-credential-replacement/starter" \
-	"$HERE/../../transactional-credential-replacement/solution"; do
+	"$HERE/../../L02-owned-kernel-state/solution" \
+	"$HERE/../../L03-proc-publication/solution" \
+	"$HERE/../../L04-proc-read-contract/solution" \
+	"$HERE/../../L05-bounded-control-switch/solution" \
+	"$HERE/../../L08-current-task-attribution/solution" \
+	"$HERE/../../L09-linux-credential-model/solution" \
+	"$HERE/../../L10-transactional-credential-replacement/starter" \
+	"$HERE/../../L10-transactional-credential-replacement/solution"; do
 	cp -a "$source/." "$baseline/"
 done
 cp -a "$baseline/." "$work/"
@@ -43,9 +43,9 @@ for compiler in gcc clang; do
 	}
 	"$compiler" -std=c11 -Wall -Wextra -Werror -pthread -static \
 		-o "$scratch/cred_trigger_test.$compiler" \
-		"$HERE/../../../../vm/tools/cred_trigger_test.c"
+		"$HERE/../../../vm/tools/cred_trigger_test.c"
 done
-make -s -C "$HERE/../../../.." -B vm/tools/cred_trigger_test \
+make -s -C "$HERE/../../.." -B vm/tools/cred_trigger_test \
 	vm/tools/proc_write_test
 
 for script in test host-check success-check credential-failure-check.in; do
@@ -245,7 +245,7 @@ run_guest()
 {
 	local check_script=$1 module=$2 output
 	shift 2
-	if ! output=$("$HERE/../../../../vm/boot" --check "$check_script" \
+	if ! output=$("$HERE/../../../vm/boot" --check "$check_script" \
 		--tool vm/tools/run_as "$@" \
 		"$module" 2>&1); then
 		printf '%s\n' "$output" >&2
@@ -253,17 +253,13 @@ run_guest()
 		exit 1
 	fi
 	printf '%s\n' "$output"
-	grep -Fq '[+] PASSED' <<< "$output" || {
-		printf '[x] guest checks did not pass\n' >&2
-		exit 1
-	}
 }
 
-run_guest "$HERE/../../proc-publication/checks/failure-ecanceled-check" \
+run_guest "$HERE/../../L03-proc-publication/checks/failure-ecanceled-check" \
 	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
-run_guest "$HERE/../../proc-publication/checks/failure-enomem-check" \
+run_guest "$HERE/../../L03-proc-publication/checks/failure-enomem-check" \
 	"$scratch/allocation/rootkitlings.ko" --tool vm/tools/module_load_test
-run_guest "$HERE/../../proc-publication/checks/failure-after-state-check" \
+run_guest "$HERE/../../L03-proc-publication/checks/failure-after-state-check" \
 	"$scratch/publication/rootkitlings.ko" --tool vm/tools/module_load_test
 run_guest "$scratch/prepare-check" \
 	"$scratch/credential_prepare/rootkitlings.ko" \

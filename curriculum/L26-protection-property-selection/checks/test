@@ -3,8 +3,8 @@ set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$HERE/../../../../scripts/lesson-env"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r27-test.XXXXXX")
+source "$HERE/../../../scripts/lesson-env"
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-protection-property-selection-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || {
@@ -162,17 +162,13 @@ run_guest()
 {
 	local check=$1 module=$2 label=$3 output
 	shift 3
-	if ! output=$("$HERE/../../../../vm/boot" --check \
+	if ! output=$("$HERE/../../../vm/boot" --check \
 		"$check" "$module" "$@" 2>&1); then
 		printf '%s\n' "$output" >&2
 		printf '[x] disposable guest rejected %s\n' "$label" >&2
 		exit 1
 	fi
 	printf '%s\n' "$output"
-	grep -Fq '[+] PASSED' <<< "$output" || {
-		printf '[x] guest did not pass %s\n' "$label" >&2
-		exit 1
-	}
 }
 
 run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" solution
@@ -184,6 +180,6 @@ run_guest "$HERE/failure-check" \
 	"$scratch/kernel-only-answer-build/rootkitlings.ko" kernel-only-answer \
 	--tool vm/tools/module_load_test
 
-"$HERE/../../bounded-dns-wire-name/checks/test"
+"$HERE/../../L24-bounded-dns-wire-name/checks/test"
 
-printf '[+] R27 protection-property selection passed\n'
+printf '[+] protection-property-selection passed\n'

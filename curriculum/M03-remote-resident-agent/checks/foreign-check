@@ -7,7 +7,7 @@ begin "Foreign boot-request state is preserved"
 root=/etc/modules-load.d
 target=$root/rootkitlings.conf
 sibling=$root/.rootkitlings.conf.rootkitlings
-original=/tmp/rootkitlings-m03-original
+original=/tmp/rootkitlings-remote-resident-agent-original
 
 cleanup()
 {

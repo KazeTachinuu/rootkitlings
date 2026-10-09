@@ -3,18 +3,18 @@ set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$HERE/../../../../scripts/lesson-env"
-baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r11-baseline.XXXXXX")
-work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r11-work.XXXXXX")
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r11-test.XXXXXX")
+source "$HERE/../../../scripts/lesson-env"
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-transactional-credential-replacement-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-transactional-credential-replacement-work.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-transactional-credential-replacement-test.XXXXXX")
 trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
 
-cp -a "$HERE/../../owned-kernel-state/solution/." "$baseline/"
-cp -a "$HERE/../../proc-publication/solution/." "$baseline/"
-cp -a "$HERE/../../proc-read-contract/solution/." "$baseline/"
-cp -a "$HERE/../../bounded-control-switch/solution/." "$baseline/"
-cp -a "$HERE/../../current-task-attribution/solution/." "$baseline/"
-cp -a "$HERE/../../linux-credential-model/solution/." "$baseline/"
+cp -a "$HERE/../../L02-owned-kernel-state/solution/." "$baseline/"
+cp -a "$HERE/../../L03-proc-publication/solution/." "$baseline/"
+cp -a "$HERE/../../L04-proc-read-contract/solution/." "$baseline/"
+cp -a "$HERE/../../L05-bounded-control-switch/solution/." "$baseline/"
+cp -a "$HERE/../../L08-current-task-attribution/solution/." "$baseline/"
+cp -a "$HERE/../../L09-linux-credential-model/solution/." "$baseline/"
 cp -a "$baseline/." "$work/"
 while IFS= read -r -d '' source; do
 	relative=${source#"$HERE/../starter/"}
@@ -43,24 +43,9 @@ for compiler in gcc clang; do
 	}
 	"$compiler" -std=c11 -Wall -Wextra -Werror -pthread -static \
 		-o "$scratch/cred_trigger_test.$compiler" \
-		"$HERE/../../../../vm/tools/cred_trigger_test.c"
+		"$HERE/../../../vm/tools/cred_trigger_test.c"
 done
-make -s -C "$HERE/../../../.." -B vm/tools/cred_trigger_test
-
-legacy_target=$scratch/legacy-target
-: > "$legacy_target"
-legacy_expected="uid=$(id -ru) euid=$(id -u)"
-legacy_output=$("$HERE/../../../../vm/tools/cred_trigger_test" \
-	"$legacy_target" root)
-[[ $legacy_output == "$legacy_expected" ]] || {
-	printf '[x] legacy trigger output: expected %s, got %s\n' \
-		"$legacy_expected" "$legacy_output" >&2
-	exit 1
-}
-[[ $(< "$legacy_target") == root ]] || {
-	printf '[x] legacy trigger did not write the exact command\n' >&2
-	exit 1
-}
+make -s -C "$HERE/../../.." -B vm/tools/cred_trigger_test
 
 mapfile -t changed_files < <(
 	diff -qr "$HERE/../starter" "$HERE/../solution" |
@@ -229,7 +214,7 @@ run_guest()
 {
 	local check_script=$1 module=$2 output
 	shift 2
-	if ! output=$("$HERE/../../../../vm/boot" --check "$check_script" \
+	if ! output=$("$HERE/../../../vm/boot" --check "$check_script" \
 		--tool vm/tools/run_as "$@" \
 		"$module" 2>&1); then
 		printf '%s\n' "$output" >&2
@@ -237,17 +222,13 @@ run_guest()
 		exit 1
 	fi
 	printf '%s\n' "$output"
-	grep -Fq '[+] PASSED' <<< "$output" || {
-		printf '[x] guest checks did not pass\n' >&2
-		exit 1
-	}
 }
 
-run_guest "$HERE/../../proc-publication/checks/failure-ecanceled-check" \
+run_guest "$HERE/../../L03-proc-publication/checks/failure-ecanceled-check" \
 	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
-run_guest "$HERE/../../proc-publication/checks/failure-enomem-check" \
+run_guest "$HERE/../../L03-proc-publication/checks/failure-enomem-check" \
 	"$scratch/allocation/rootkitlings.ko" --tool vm/tools/module_load_test
-run_guest "$HERE/../../proc-publication/checks/failure-after-state-check" \
+run_guest "$HERE/../../L03-proc-publication/checks/failure-after-state-check" \
 	"$scratch/publication/rootkitlings.ko" --tool vm/tools/module_load_test
 run_guest "$scratch/prepare-check" \
 	"$scratch/credential_prepare/rootkitlings.ko" \

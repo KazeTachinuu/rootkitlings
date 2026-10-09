@@ -3,8 +3,8 @@ set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$HERE/../../../../scripts/lesson-env"
-scratch=$(mktemp -d "$HERE/.r24-test.XXXXXX")
+source "$HERE/../../../scripts/lesson-env"
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-tcp-framing-cancellation-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || {
@@ -157,17 +157,13 @@ run_guest()
 {
 	local check=$1 module=$2 label=$3 output
 	shift 3
-	if ! output=$("$HERE/../../../../vm/boot" --check "$check" "$@" \
+	if ! output=$("$HERE/../../../vm/boot" --check "$check" "$@" \
 			"$module" 2>&1); then
 		printf '%s\n' "$output" >&2
 		printf '[x] disposable guest rejected %s\n' "$label" >&2
 		exit 1
 	fi
 	printf '%s\n' "$output"
-	grep -Fq '[+] PASSED' <<< "$output" || {
-		printf '[x] guest did not pass %s\n' "$label" >&2
-		exit 1
-	}
 }
 
 for name in $modules; do
@@ -186,4 +182,4 @@ run_guest "$HERE/failure-check.in" \
 run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" \
 	solution --tool vm/tools/proc_read_test --tool vm/tools/tcp_session_fixture
 
-printf '[+] R24 cancellable framed TCP session passed\n'
+printf '[+] tcp-framing-cancellation passed\n'

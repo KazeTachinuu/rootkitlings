@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$here/../../../../scripts/lesson-env"
+source "$here/../../../scripts/lesson-env"
 
 die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 
@@ -11,7 +11,7 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
 artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
 [[ -f $artifact && ! -L $artifact ]] || die "artifact must be a regular file"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r15-learner.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-cross-view-evidence-learner.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 build_variant()

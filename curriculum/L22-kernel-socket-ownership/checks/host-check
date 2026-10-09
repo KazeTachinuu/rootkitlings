@@ -27,7 +27,7 @@ done
 
 fixture=$here/../fixtures/host/socket_owner_test.c
 includes=$here/../fixtures/host/include
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r23-host.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-kernel-socket-ownership-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 for point in 0 1 2; do
 	binary=$scratch/socket-owner-$point

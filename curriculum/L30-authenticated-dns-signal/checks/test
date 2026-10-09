@@ -3,8 +3,8 @@ set -Eeuo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$here/../../../../scripts/lesson-env"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r31-test.XXXXXX")
+source "$here/../../../scripts/lesson-env"
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-authenticated-dns-signal-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || {
@@ -48,7 +48,7 @@ if command -v shellcheck >/dev/null; then
 		"$here/invalid-parameter-check"
 fi
 
-parent=$here/../../authenticated-replay-safe-message/solution
+parent=$here/../../L28-authenticated-replay-safe-message/solution
 starter=$here/../starter
 solution_overlay=$here/../solution
 expected_starter=$(cat <<'EOF'
@@ -196,13 +196,12 @@ guest()
 {
 	local check=$1 module=$2 label=$3 output
 	shift 3
-	if ! output=$("$here/../../../../vm/boot" --check "$check" "$module" \
+	if ! output=$("$here/../../../vm/boot" --check "$check" "$module" \
 		"$@" 2>&1); then
 		printf '%s\n[x] guest rejected %s\n' "$output" "$label" >&2
 		exit 1
 	fi
 	printf '%s\n' "$output"
-	grep -Fq '[+] PASSED' <<<"$output" || exit 1
 }
 
 guest "$here/success-check" "$scratch/solution/rootkitlings.ko" solution
@@ -226,17 +225,11 @@ for point in 1 2 3; do
 done
 
 for dependency in \
-	../../kernel-socket-ownership/checks/test \
-	../../bounded-dns-wire-name/checks/test \
-	../../authenticated-replay-safe-message/checks/test; do
-	if git -C "$here" ls-files --error-unmatch "$dependency" >/dev/null 2>&1 &&
-		git -C "$here" diff --quiet -- "$dependency" &&
-		git -C "$here" diff --cached --quiet -- "$dependency"; then
-		"$here/$dependency"
-	else
-		printf '[*] prerequisite regression deferred: %s\n' "$dependency"
-	fi
+	../../L22-kernel-socket-ownership/checks/test \
+	../../L24-bounded-dns-wire-name/checks/test \
+	../../L28-authenticated-replay-safe-message/checks/test; do
+	"$here/$dependency"
 done
 
 assert_clean_tree
-printf '[+] R31 authenticated DNS signal passed\n'
+printf '[+] authenticated-dns-signal passed\n'

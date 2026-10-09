@@ -14,7 +14,7 @@
 
 #include "platform.h"
 
-#define RK_ROOT "/run/rootkitlings-r26"
+#define RK_ROOT "/run/rootkitlings-guarded-file-transaction"
 #define RK_TARGET RK_ROOT "/request.conf"
 #define RK_SIBLING RK_ROOT "/.request.conf.rootkitlings"
 

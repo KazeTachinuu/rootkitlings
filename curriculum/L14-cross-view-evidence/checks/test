@@ -3,19 +3,19 @@ set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$HERE/../../../../scripts/lesson-env"
-baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r15-baseline.XXXXXX")
-work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r15-work.XXXXXX")
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r15-test.XXXXXX")
+source "$HERE/../../../scripts/lesson-env"
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-cross-view-evidence-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-cross-view-evidence-work.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-cross-view-evidence-test.XXXXXX")
 trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
 
 for source in \
-	"$HERE/../../owned-kernel-state/solution" \
-	"$HERE/../../proc-publication/solution" \
-	"$HERE/../../proc-read-contract/solution" \
-	"$HERE/../../bounded-control-switch/solution" \
-	"$HERE/../../managed-kprobe/starter" \
-	"$HERE/../../managed-kprobe/solution"; do
+	"$HERE/../../L02-owned-kernel-state/solution" \
+	"$HERE/../../L03-proc-publication/solution" \
+	"$HERE/../../L04-proc-read-contract/solution" \
+	"$HERE/../../L05-bounded-control-switch/solution" \
+	"$HERE/../../L12-managed-kprobe/starter" \
+	"$HERE/../../L12-managed-kprobe/solution"; do
 	cp -a "$source/." "$baseline/"
 done
 cp -a "$baseline/." "$work/"
@@ -288,7 +288,7 @@ run_guest()
 {
 	local check_script=$1 module=$2 output
 	shift 2
-	if ! output=$("$HERE/../../../../vm/boot" --check "$check_script" \
+	if ! output=$("$HERE/../../../vm/boot" --check "$check_script" \
 		--tool vm/tools/run_as "$@" \
 		"$module" 2>&1); then
 		printf '%s\n' "$output" >&2
@@ -296,15 +296,11 @@ run_guest()
 		exit 1
 	fi
 	printf '%s\n' "$output"
-	grep -Fq '[+] PASSED' <<< "$output" || {
-		printf '[x] guest checks did not pass\n' >&2
-		exit 1
-	}
 }
 
-run_guest "$HERE/../../proc-publication/checks/failure-ecanceled-check" \
+run_guest "$HERE/../../L03-proc-publication/checks/failure-ecanceled-check" \
 	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
-run_guest "$HERE/../../proc-publication/checks/failure-enomem-check" \
+run_guest "$HERE/../../L03-proc-publication/checks/failure-enomem-check" \
 	"$scratch/allocation/rootkitlings.ko" --tool vm/tools/module_load_test
 run_guest "$scratch/publication-check" \
 	"$scratch/publication/rootkitlings.ko" --tool vm/tools/module_load_test

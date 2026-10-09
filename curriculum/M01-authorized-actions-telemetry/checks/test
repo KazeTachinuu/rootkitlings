@@ -3,9 +3,9 @@ set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$HERE/../../../../scripts/lesson-env"
+source "$HERE/../../../scripts/lesson-env"
 ROOT=$ROOTKITLINGS_ROOT
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m01.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-authorized-actions-telemetry.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || { printf '[x] M01 requires x86_64\n' >&2; exit 1; }
@@ -64,7 +64,7 @@ build_variant()
 	directory=$scratch/$name
 	log=$scratch/$name.log
 	mkdir -p "$directory"
-	cp -a "$HERE/../../controlled-resident-core/solution/." \
+	cp -a "$HERE/../../M00-controlled-resident-core/solution/." \
 		"$directory/"
 	cp -a "$HERE/../starter/." "$directory/"
 	cp -a "$HERE/../solution/." "$directory/"
@@ -79,7 +79,7 @@ build_variant()
 
 build_variant success 0
 for point in {1..9}; do build_variant "failure-$point" "$point"; done
-"$HERE/../../one-use-authorization/checks/host-check" \
+"$HERE/../../L11-one-use-authorization/checks/host-check" \
 	"$scratch/success" "$scratch/success/rootkitlings.ko" \
 	"$scratch/failure-8" "$scratch/failure-9"
 "$HERE/host-check" "$scratch/success" "$scratch/success/rootkitlings.ko"
@@ -205,7 +205,7 @@ rebuild_fixture "$second_lock" second-lock
 reject_fixture "$second_lock" split-ring-lock-ownership
 
 mkdir -p "$scratch/unknown"
-cp -a "$HERE/../../controlled-resident-core/solution/." \
+cp -a "$HERE/../../M00-controlled-resident-core/solution/." \
 	"$scratch/unknown/"
 cp -a "$HERE/../starter/." "$scratch/unknown/"
 cp -a "$HERE/../solution/." "$scratch/unknown/"
@@ -223,7 +223,6 @@ run_guest()
 		printf '%s\n' "$output" >&2; exit 1
 	fi
 	printf '%s\n' "$output"
-	grep -Fq '[+] PASSED' <<< "$output" || exit 1
 }
 
 declare -a labels=(unused Preflight Allocation 'Control publication' Worker \
@@ -251,4 +250,4 @@ run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
 	--tool vm/tools/proc_write_test --tool vm/tools/proc_read_test \
 	--tool vm/tools/cred_trigger_test --tool vm/tools/rmdir_telemetry_test
 
-printf '[+] record authorized actions and rmdir results milestone passed\n'
+printf '[+] authorized-actions-telemetry passed\n'

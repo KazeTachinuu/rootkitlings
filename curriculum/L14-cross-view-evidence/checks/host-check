@@ -8,7 +8,7 @@ success_dir=$(realpath -e -- "$1" 2>/dev/null) || die "success directory not fou
 success_artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
 missing_dir=$(realpath -e -- "$3" 2>/dev/null) || die "missing-symbol directory not found: $3"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r15-host.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-cross-view-evidence-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ -f $success_artifact && ! -L $success_artifact ]] ||

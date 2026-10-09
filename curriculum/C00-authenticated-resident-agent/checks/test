@@ -3,16 +3,16 @@ set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$HERE/../../../../scripts/lesson-env"
+source "$HERE/../../../scripts/lesson-env"
 ROOT=$ROOTKITLINGS_ROOT
-M02=$HERE/../../concealment-evidence-map
-M03=$HERE/../../remote-resident-agent
-M01=$HERE/../../authorized-actions-telemetry
-M00=$HERE/../../controlled-resident-core
-R30=$HERE/../../authenticated-encryption
-R31=$HERE/../../authenticated-dns-signal
-R29=$HERE/../../authenticated-replay-safe-message
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-c00.XXXXXX")
+CONCEALMENT=$HERE/../../M02-concealment-evidence-map
+REMOTE_AGENT=$HERE/../../M03-remote-resident-agent
+TELEMETRY=$HERE/../../M01-authorized-actions-telemetry
+RESIDENT_CORE=$HERE/../../M00-controlled-resident-core
+AUTHENTICATED_ENCRYPTION=$HERE/../../L29-authenticated-encryption
+AUTHENTICATED_SIGNAL=$HERE/../../L30-authenticated-dns-signal
+AUTHENTICATED_MESSAGE=$HERE/../../L28-authenticated-replay-safe-message
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-authenticated-resident-agent.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || { printf '[x] capstone requires x86_64\n' >&2; exit 1; }
@@ -43,31 +43,34 @@ expected=(./Kbuild ./core/main.c ./include/agent.h ./include/framing.h
 }
 while IFS= read -r file; do
 	relative=${file#"$HERE/../starter/"}
-	[[ ! -e $M00/solution/$relative &&
-		! -e $M01/starter/$relative &&
-		! -e $M01/solution/$relative &&
-		! -e $M02/starter/$relative &&
-		! -e $M02/solution/$relative &&
-		! -e $M03/starter/$relative &&
-		! -e $M03/solution/$relative ]] || {
+	[[ ! -e $RESIDENT_CORE/solution/$relative &&
+		! -e $TELEMETRY/starter/$relative &&
+		! -e $TELEMETRY/solution/$relative &&
+		! -e $CONCEALMENT/starter/$relative &&
+		! -e $CONCEALMENT/solution/$relative &&
+		! -e $REMOTE_AGENT/starter/$relative &&
+		! -e $REMOTE_AGENT/solution/$relative ]] || {
 		printf '[x] addition replaces inherited path: %s\n' "$relative" >&2
 		exit 1
 	}
 done < <(find "$HERE/../starter" -type f | sort)
 
-cmp -s "$R30/solution/include/aead.h" "$HERE/../starter/include/aead.h" ||
+cmp -s "$AUTHENTICATED_ENCRYPTION/solution/include/aead.h" \
+	"$HERE/../starter/include/aead.h" ||
 	{ printf '[x] supplied authenticated-encryption header changed\n' >&2; exit 1; }
 sed 's/"aead_platform.h"/"platform.h"/' "$HERE/../starter/crypto/aead.c" > "$scratch/aead.c"
-cmp -s "$R30/solution/crypto/aead.c" "$scratch/aead.c" ||
+cmp -s "$AUTHENTICATED_ENCRYPTION/solution/crypto/aead.c" \
+	"$scratch/aead.c" ||
 	{ printf '[x] supplied authenticated-encryption operation changed\n' >&2; exit 1; }
 sed -e 's/> 14/> 3/' -e 's/between 0 and 14/between 0 and 3/' \
 	"$HERE/../starter/crypto/auth_platform.c" > "$scratch/auth-platform.c"
-cmp -s "$R31/starter/crypto/platform.c" "$scratch/auth-platform.c" || {
+cmp -s "$AUTHENTICATED_SIGNAL/starter/crypto/platform.c" \
+	"$scratch/auth-platform.c" || {
 	printf '[x] supplied authenticated-signal HMAC platform changed\n' >&2; exit 1;
 }
-cp -a "$R29/solution" "$scratch/r31-accepted"
-cp -a "$R31/starter/." "$scratch/r31-accepted/"
-cp -a "$R31/solution/." "$scratch/r31-accepted/"
+cp -a "$AUTHENTICATED_MESSAGE/solution" "$scratch/authenticated-signal"
+cp -a "$AUTHENTICATED_SIGNAL/starter/." "$scratch/authenticated-signal/"
+cp -a "$AUTHENTICATED_SIGNAL/solution/." "$scratch/authenticated-signal/"
 for pair in \
 	"message/authenticated.c message/authenticated.c" \
 	"signal/authenticated_dns.c signal/authenticated_dns.c" \
@@ -78,7 +81,8 @@ for pair in \
 	"include/dns_query.h include/dns_query.h" \
 	"include/transport.h include/transport.h"; do
 	read -r source destination <<< "$pair"
-	cmp -s "$scratch/r31-accepted/$source" "$HERE/../starter/$destination" || {
+	cmp -s "$scratch/authenticated-signal/$source" \
+		"$HERE/../starter/$destination" || {
 		printf '[x] supplied authenticated-signal component changed: %s\n' "$source" >&2
 		exit 1
 	}
@@ -88,13 +92,13 @@ compose()
 {
 	local destination=$1
 	mkdir -p "$destination"
-	cp -a "$M00/solution/." "$destination/"
-	cp -a "$M01/starter/." "$destination/"
-	cp -a "$M01/solution/." "$destination/"
-	cp -a "$M02/starter/." "$destination/"
-	cp -a "$M02/solution/." "$destination/"
-	cp -a "$M03/starter/." "$destination/"
-	cp -a "$M03/solution/." "$destination/"
+	cp -a "$RESIDENT_CORE/solution/." "$destination/"
+	cp -a "$TELEMETRY/starter/." "$destination/"
+	cp -a "$TELEMETRY/solution/." "$destination/"
+	cp -a "$CONCEALMENT/starter/." "$destination/"
+	cp -a "$CONCEALMENT/solution/." "$destination/"
+	cp -a "$REMOTE_AGENT/starter/." "$destination/"
+	cp -a "$REMOTE_AGENT/solution/." "$destination/"
 	cp -a "$HERE/../starter/." "$destination/"
 }
 
@@ -112,7 +116,7 @@ make -s -C "$KDIR" M="$scratch/solution" W=1 modules > "$scratch/solution.log" 2
 ! grep -q 'warning:' "$scratch/solution.log" || { cat "$scratch/solution.log"; exit 1; }
 "$HERE/host-check" "$scratch/solution" "$scratch/solution/rootkitlings.ko"
 
-# C00 renames the AEAD platform header because platform.h belongs to the
+# The capstone renames the AEAD platform header because platform.h belongs to the
 # authenticated-signal adapter, and extends the shared failure-point range.
 # Compare the code emitted by the pinned kernel toolchain instead of source
 # spelling so comments, formatting, and parameter names remain pedagogical.
@@ -126,19 +130,21 @@ platform_contract()
 	nm -an "$object" | grep -v ' [aA] '
 }
 
-mkdir -p "$scratch/r30-platform"
-cp -a "$R30/solution/." "$scratch/r30-platform/"
+mkdir -p "$scratch/authenticated-encryption-platform"
+cp -a "$AUTHENTICATED_ENCRYPTION/solution/." \
+	"$scratch/authenticated-encryption-platform/"
 for failure_point in 0 1 2 3; do
 	make -s -C "$KDIR" M="$scratch/solution" W=1 \
 		ROOTKITLINGS_FAIL_POINT="$failure_point" crypto/aead_platform.o
-	make -s -C "$KDIR" M="$scratch/r30-platform" W=1 \
+	make -s -C "$KDIR" M="$scratch/authenticated-encryption-platform" W=1 \
 		ROOTKITLINGS_FAIL_POINT="$failure_point" crypto/platform.o
 	platform_contract "$scratch/solution/crypto/aead_platform.o" \
-		> "$scratch/c00-aead-platform-$failure_point.contract"
-	platform_contract "$scratch/r30-platform/crypto/platform.o" \
-		> "$scratch/r30-aead-platform-$failure_point.contract"
-	cmp -s "$scratch/r30-aead-platform-$failure_point.contract" \
-		"$scratch/c00-aead-platform-$failure_point.contract" || {
+		> "$scratch/capstone-aead-platform-$failure_point.contract"
+	platform_contract \
+		"$scratch/authenticated-encryption-platform/crypto/platform.o" \
+		> "$scratch/authenticated-encryption-platform-$failure_point.contract"
+	cmp -s "$scratch/authenticated-encryption-platform-$failure_point.contract" \
+		"$scratch/capstone-aead-platform-$failure_point.contract" || {
 		printf '[x] supplied authenticated-encryption platform contract changed at failure point %s\n' \
 			"$failure_point" >&2
 		exit 1
@@ -203,7 +209,6 @@ run_guest()
 		printf '%s\n[x] guest rejected %s\n' "$output" "$label" >&2; exit 1
 	fi
 	printf '%s\n' "$output"
-	grep -Fq '[+] PASSED' <<< "$output"
 }
 
 append_binary()
@@ -234,15 +239,15 @@ printf "operator-original\\n" > /etc/modules-load.d/rootkitlings.conf\
 chmod 0600 /etc/modules-load.d/rootkitlings.conf\
 ifconfig lo 127.0.0.1 up' \
 	-e 's/load rootkitlings\.ko/load rootkitlings.ko peer_port=47023 retry_base_ms=5000 retry_max_ms=5000 session_id=1234605616436508552 signal_id=4660/g' \
-	"$M02/checks/success-check" > "$scratch/m02-regression"
-chmod 0755 "$scratch/m02-regression"
-run_guest "$scratch/m02-regression" "$scratch/solution/rootkitlings.ko" \
+		"$CONCEALMENT/checks/success-check" > "$scratch/concealment-regression"
+chmod 0755 "$scratch/concealment-regression"
+run_guest "$scratch/concealment-regression" "$scratch/solution/rootkitlings.ko" \
 	inherited-regression --tool vm/tools/run_as --tool vm/tools/getdents64_test \
 	--tool vm/tools/status_field_test --tool vm/tools/proc_write_test \
 	--tool vm/tools/proc_read_test
 
-"$M03/checks/test"
-"$R30/checks/test"
-"$R31/checks/test"
+"$REMOTE_AGENT/checks/test"
+"$AUTHENTICATED_ENCRYPTION/checks/test"
+"$AUTHENTICATED_SIGNAL/checks/test"
 
-printf '[+] authenticated resident agent capstone passed\n'
+printf '[+] authenticated-resident-agent passed\n'

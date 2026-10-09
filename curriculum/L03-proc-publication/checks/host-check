@@ -7,7 +7,7 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
 artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-support=$HERE/../../module-build-lifecycle/fixtures/host/include
+support=$HERE/../../L00-module-build-lifecycle/fixtures/host/include
 
 [[ -d $build_dir && ! -L $build_dir ]] || die "build directory must be a real directory"
 [[ -f $artifact && ! -L $artifact ]] || die "artifact must be a regular file"
@@ -69,7 +69,7 @@ if grep -Eq 'struct[[:space:]]+rk_state[[:space:]]*\{' <<< "$header_text"; then
 	die "struct rk_state layout must remain private to core/state.c"
 fi
 
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r04-host.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-proc-publication-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 cflags=(-std=c11 -Wall -Wextra -Werror -Wno-unused-parameter
 	"-fsanitize=address,undefined" -fno-omit-frame-pointer

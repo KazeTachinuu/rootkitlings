@@ -3,8 +3,8 @@ set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$HERE/../../../../scripts/lesson-env"
-work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r01-test.XXXXXX")
+source "$HERE/../../../scripts/lesson-env"
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-module-build-lifecycle-test.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
 
 build_and_check()
@@ -16,14 +16,14 @@ build_and_check()
 
 cp -a "$HERE/../solution/." "$work/"
 build_and_check
-"$HERE/../../../../vm/boot" --check "$HERE/../../module-build-lifecycle/checks/module-lifecycle-check" \
+"$HERE/../../../vm/boot" --check "$HERE/../../L00-module-build-lifecycle/checks/module-lifecycle-check" \
 	"$work/rootkitlings.ko"
 printf '[+] reference solution passed host and disposable-guest checks\n'
 
 cp "$HERE/../fixtures/missing-exit-main.c" "$work/core/main.c"
 build_and_check
-if output=$("$HERE/../../../../vm/boot" --check \
-	"$HERE/../../module-build-lifecycle/checks/module-lifecycle-check" "$work/rootkitlings.ko" 2>&1); then
+if output=$("$HERE/../../../vm/boot" --check \
+	"$HERE/../../L00-module-build-lifecycle/checks/module-lifecycle-check" "$work/rootkitlings.ko" 2>&1); then
 	printf '%s\n[x] missing-exit fixture unexpectedly passed guest lifecycle\n' \
 		"$output" >&2
 	exit 1

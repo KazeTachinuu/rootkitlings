@@ -8,7 +8,7 @@ build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: 
 artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-"$here/../../bounded-control-switch/checks/host-check" "$build_dir" "$artifact"
+"$here/../../L05-bounded-control-switch/checks/host-check" "$build_dir" "$artifact"
 
 for path in execution/scheduler.c execution/scheduler.o; do
 	[[ -f $build_dir/$path && ! -L $build_dir/$path ]] ||

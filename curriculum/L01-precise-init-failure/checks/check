@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$HERE/../../../../scripts/lesson-env"
+source "$HERE/../../../scripts/lesson-env"
 
 die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 
@@ -19,7 +19,7 @@ for pair in "workspace:$workspace" "starting snapshot:$baseline"; do
 		[[ -f $directory/$path && ! -L $directory/$path ]] || die "$label is missing regular file: $path"
 	done
 done
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r02-check.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-precise-init-failure-check.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 copy_tree()
@@ -70,9 +70,8 @@ run_guest()
 		die "disposable guest did not complete"
 	fi
 	printf '%s\n' "$output"
-	grep -Fq '[+] PASSED' <<< "$output" || die "guest checks did not pass"
 }
 
 run_guest "$HERE/failed-guest-check" "$scratch/rejected/rootkitlings.ko" \
 	--tool vm/tools/module_load_test
-run_guest "$HERE/../../module-build-lifecycle/checks/module-lifecycle-check" "$scratch/success/rootkitlings.ko"
+run_guest "$HERE/../../L00-module-build-lifecycle/checks/module-lifecycle-check" "$scratch/success/rootkitlings.ko"

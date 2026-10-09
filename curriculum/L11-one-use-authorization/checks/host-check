@@ -112,7 +112,7 @@ command -v nm >/dev/null || die "nm is required"
 	die "module description must be: Rootkitlings kernel module"
 
 cmp -s "$success_dir/privilege/credentials.c" \
-	"$here/../../transactional-credential-replacement/solution/privilege/credentials.c" ||
+	"$here/../../L10-transactional-credential-replacement/solution/privilege/credentials.c" ||
 	die "keep the passed L10 credential primitive unchanged"
 
 authorization_source=$success_dir/control/authorization.c

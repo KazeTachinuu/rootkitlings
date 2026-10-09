@@ -7,8 +7,8 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found"
 module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-r26=$here/../../guarded-file-transaction
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m03-host.XXXXXX")
+file_transaction=$here/../../L25-guarded-file-transaction
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-remote-resident-agent-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
@@ -37,7 +37,8 @@ ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	"$scratch/protocol-test"
 
 sed 's/rkling_demo/rootkitlings/g' \
-	"$r26/fixtures/host/transaction_test.c" > "$scratch/transaction-test.c"
+	"$file_transaction/fixtures/host/transaction_test.c" \
+	> "$scratch/transaction-test.c"
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
 	-fsanitize=address,undefined -fno-omit-frame-pointer \
 	-I"$build_dir/include" "$scratch/transaction-test.c" \

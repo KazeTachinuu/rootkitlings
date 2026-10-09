@@ -4,7 +4,7 @@
 
 begin "Rejected unfinished file transaction"
 
-root=/run/rootkitlings-r26
+root=/run/rootkitlings-guarded-file-transaction
 target=$root/request.conf
 sibling=$root/.request.conf.rootkitlings
 mkdir -p "$root"

@@ -40,7 +40,7 @@ success_artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: 
 missing_dir=$(realpath -e -- "$3" 2>/dev/null) || die "missing-target directory not found: $3"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-"$here/../../bounded-control-switch/checks/host-check" \
+"$here/../../L05-bounded-control-switch/checks/host-check" \
 	"$success_dir" "$success_artifact"
 
 for path in instrumentation/return_probe.c instrumentation/return_probe.o; do

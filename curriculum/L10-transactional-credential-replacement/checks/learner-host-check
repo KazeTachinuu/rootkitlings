@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$here/../../../../scripts/lesson-env"
+source "$here/../../../scripts/lesson-env"
 
 die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 

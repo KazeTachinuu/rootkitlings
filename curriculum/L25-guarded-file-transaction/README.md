@@ -3,8 +3,8 @@
 This exercise changes one file without losing the original when a later step fails.
 It uses only a private test directory created by the checker:
 
-- `/run/rootkitlings-r26/request.conf`
-- `/run/rootkitlings-r26/.request.conf.rootkitlings`
+- `/run/rootkitlings-guarded-file-transaction/request.conf`
+- `/run/rootkitlings-guarded-file-transaction/.request.conf.rootkitlings`
 
 The directory is a root-owned `tmpfs` mounted `nosuid,nodev,noexec` with mode `0700`.
 The module never accepts a path and never accesses `/etc` or a persistent host filesystem.

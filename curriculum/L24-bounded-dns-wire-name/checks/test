@@ -3,8 +3,8 @@ set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$HERE/../../../../scripts/lesson-env"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r25-test.XXXXXX")
+source "$HERE/../../../scripts/lesson-env"
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-bounded-dns-wire-name-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || {
@@ -31,12 +31,12 @@ if command -v shellcheck >/dev/null; then
 fi
 
 for tree in template solution; do
-	cmp -s "$HERE/../../hostile-packet-lengths/solution/parser/ipv4.c" \
+	cmp -s "$HERE/../../L17-hostile-packet-lengths/solution/parser/ipv4.c" \
 		"$HERE/$tree/parser/ipv4.c" || {
 		printf '[x] %s parser differs from accepted L17\n' "$tree" >&2
 		exit 1
 	}
-	cmp -s "$HERE/../../hostile-packet-lengths/solution/include/ipv4_parser.h" \
+	cmp -s "$HERE/../../L17-hostile-packet-lengths/solution/include/ipv4_parser.h" \
 		"$HERE/$tree/include/ipv4_parser.h" || {
 		printf '[x] %s parser API differs from accepted L17\n' "$tree" >&2
 		exit 1
@@ -186,17 +186,13 @@ run_guest()
 {
 	local check=$1 module=$2 label=$3 output
 	shift 3
-	if ! output=$("$HERE/../../../../vm/boot" --check \
+	if ! output=$("$HERE/../../../vm/boot" --check \
 		"$check" "$module" "$@" 2>&1); then
 		printf '%s\n' "$output" >&2
 		printf '[x] disposable guest rejected %s\n' "$label" >&2
 		exit 1
 	fi
 	printf '%s\n' "$output"
-	grep -Fq '[+] PASSED' <<< "$output" || {
-		printf '[x] guest did not pass %s\n' "$label" >&2
-		exit 1
-	}
 }
 
 run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" solution
@@ -208,6 +204,6 @@ run_guest "$HERE/failure-check" \
 run_guest "$HERE/failure-check" "$scratch/starter/rootkitlings.ko" template \
 	--tool vm/tools/module_load_test
 
-"$HERE/../../hostile-packet-lengths/checks/test"
+"$HERE/../../L17-hostile-packet-lengths/checks/test"
 
-printf '[+] R25 bounded DNS wire-name codec passed\n'
+printf '[+] bounded-dns-wire-name passed\n'

@@ -3,11 +3,11 @@ set -Eeuo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
-source "$HERE/../../../../scripts/lesson-env"
-baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r02-baseline.XXXXXX")
-work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r02-work.XXXXXX")
+source "$HERE/../../../scripts/lesson-env"
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-precise-init-failure-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-precise-init-failure-work.XXXXXX")
 trap 'rm -rf -- "$baseline" "$work"' EXIT
-cp -a "$HERE/../../module-build-lifecycle/solution/." "$baseline/"
+cp -a "$HERE/../../L00-module-build-lifecycle/solution/." "$baseline/"
 cp -a "$baseline/." "$work/"
 for path in Kbuild core/main.c; do cp -p "$HERE/../solution/$path" "$work/$path"; done
 

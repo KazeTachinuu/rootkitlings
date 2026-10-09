@@ -7,8 +7,8 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 workspace=$(realpath -e -- "$1") || die "workspace not found"
 module=$(realpath -e -- "$2") || die "module not found"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-r16=$here/../../packed-directory-filter
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m02-host.XXXXXX")
+directory_filter=$here/../../L15-packed-directory-filter
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-concealment-evidence-map-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
@@ -33,9 +33,9 @@ for object in core/main.o core/state.o interface/proc.o \
 done
 
 gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined \
-	-fno-omit-frame-pointer -I "$r16/fixtures/host/include" \
+	-fno-omit-frame-pointer -I "$directory_filter/fixtures/host/include" \
 	-I "$workspace/include" "$workspace/instrumentation/dirent_filter.c" \
-	"$r16/fixtures/host/filter_test.c" -o "$scratch/filter-test"
+	"$directory_filter/fixtures/host/filter_test.c" -o "$scratch/filter-test"
 ASAN_OPTIONS=detect_leaks=1 "$scratch/filter-test"
 
 undefined=$(nm -u "$workspace/instrumentation/dirent_filter.o" |

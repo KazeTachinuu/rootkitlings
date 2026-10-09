@@ -4,16 +4,16 @@
 
 begin "Record authorized actions and rmdir results"
 
-mode=${1:-m01}
+mode=${1:-authorized-actions}
 case $mode in
-	m01|remote-agent) ;;
+	authorized-actions|remote-agent) ;;
 	*) _fail "unknown cumulative check mode: $mode" ;;
 esac
 
 control=/proc/rootkitlings
 events=/proc/rootkitlings_events
 selected=/tmp/rootkitlings-rmdir-watch
-fixtures=/tmp/rootkitlings-m01
+fixtures=/tmp/rootkitlings-authorized-actions-telemetry
 mkdir -p "$fixtures/root"
 chmod 0755 "$fixtures" "$fixtures/root"
 : > "$fixtures/empty"

@@ -4,12 +4,12 @@
 
 begin "Guarded file transaction"
 
-root=/run/rootkitlings-r26
+root=/run/rootkitlings-guarded-file-transaction
 target=$root/request.conf
 sibling=$root/.request.conf.rootkitlings
 extra=$root/request.conf.extra
-original=/tmp/r26-original
-intended=/tmp/r26-intended
+original=/tmp/rootkitlings-guarded-file-transaction-original
+intended=/tmp/rootkitlings-guarded-file-transaction-intended
 printf 'rkling_demo\n' > "$intended"
 
 mkdir -p "$root"

@@ -29,7 +29,7 @@ done <<< "$undefined"
 
 fixture=$here/../fixtures/host/netfilter_observer_test.c
 includes=$here/../fixtures/host/include
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r20-host.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-netfilter-observer-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 for point in 0 1; do
 	binary=$scratch/netfilter-observer-$point

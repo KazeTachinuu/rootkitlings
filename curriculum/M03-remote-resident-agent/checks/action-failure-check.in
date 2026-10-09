@@ -11,7 +11,7 @@ target=$root/rootkitlings.conf
 sibling=$root/.rootkitlings.conf.rootkitlings
 control=/proc/rootkitlings
 events=/proc/rootkitlings_events
-original=/tmp/rootkitlings-m03-original
+original=/tmp/rootkitlings-remote-resident-agent-original
 
 cleanup()
 {

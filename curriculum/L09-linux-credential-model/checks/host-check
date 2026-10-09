@@ -8,7 +8,7 @@ build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: 
 artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-"$here/../../current-task-attribution/checks/host-check" "$build_dir" "$artifact"
+"$here/../../L08-current-task-attribution/checks/host-check" "$build_dir" "$artifact"
 
 source=$build_dir/interface/proc.c
 source_text=$(tr '\n' ' ' < "$source")
