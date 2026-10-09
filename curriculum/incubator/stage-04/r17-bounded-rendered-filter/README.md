@@ -34,7 +34,7 @@ Run:
 
 ## What the supplied code guarantees
 
-The pattern and replacement widths come from `sizeof(...) - 1` and are checked at build time.
+The pattern and replacement widths come from their array sizes minus the terminating byte and are checked at build time.
 Each active probe call owns a 512-byte scratch buffer.
 The return handler does not allocate memory, sleep, or use string termination.
 
