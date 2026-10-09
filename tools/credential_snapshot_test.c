@@ -332,23 +332,23 @@ static int become_nobody(void)
 
 static int install_distinct_roles(void)
 {
-	if (clear_groups() < 0 || setresgid(2001, 2002, 0) < 0 ||
-	    setresuid(1001, 1002, 0) < 0) {
+	if (clear_groups() < 0 || setresgid(2001, 0, 2002) < 0 ||
+	    setresuid(1001, 0, 1002) < 0) {
 		fprintf(stderr,
 			"credential_snapshot_test: install distinct IDs: %s\n",
 			strerror(errno));
 		return -1;
 	}
-	(void)setfsgid(2001);
-	if ((gid_t)setfsgid((gid_t)-1) != 2001) {
+	(void)setfsgid(2003);
+	if ((gid_t)setfsgid((gid_t)-1) != 2003) {
 		fprintf(stderr,
-			"credential_snapshot_test: filesystem GID did not become 2001\n");
+			"credential_snapshot_test: filesystem GID did not become 2003\n");
 		return -1;
 	}
-	(void)setfsuid(1001);
-	if ((uid_t)setfsuid((uid_t)-1) != 1001) {
+	(void)setfsuid(1003);
+	if ((uid_t)setfsuid((uid_t)-1) != 1003) {
 		fprintf(stderr,
-			"credential_snapshot_test: filesystem UID did not become 1001\n");
+			"credential_snapshot_test: filesystem UID did not become 1003\n");
 		return -1;
 	}
 	return 0;

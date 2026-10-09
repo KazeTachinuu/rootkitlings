@@ -18,7 +18,10 @@ for symbol in from_kuid_munged from_kgid_munged init_user_ns; do
 		die "interface/proc.o has no $symbol dependency"
 done
 
-[[ $(grep -Ec '\bcurrent_cred[[:space:]]*\(' "$source") -eq 1 ]] ||
+mapfile -t current_cred_calls < <(
+	grep -Eo '\bcurrent_cred[[:space:]]*\(' <<< "$source_text" || true
+)
+(( ${#current_cred_calls[@]} == 1 )) ||
 	die "take exactly one current_cred() snapshot"
 mapfile -t credential_vars < <(
 	grep -oE 'const[[:space:]]+struct[[:space:]]+cred[[:space:]]*\*[[:space:]]*[[:alpha:]_][[:alnum:]_]*' <<< "$source_text" |
@@ -35,7 +38,10 @@ mapfile -t all_credential_vars < <(
 credential_var=${credential_vars[0]}
 grep -Eq "\b${credential_var}[[:space:]]*=[[:space:]]*current_cred[[:space:]]*\(" <<< "$source_text" ||
 	die "assign current_cred() to the local const credential pointer"
-[[ $(grep -Ec '\bseq_user_ns[[:space:]]*\(' "$source") -eq 1 ]] ||
+mapfile -t seq_user_ns_calls < <(
+	grep -Eo '\bseq_user_ns[[:space:]]*\(' <<< "$source_text" || true
+)
+(( ${#seq_user_ns_calls[@]} == 1 )) ||
 	die "obtain the opener namespace exactly once with seq_user_ns()"
 mapfile -t namespace_vars < <(
 	grep -oE 'struct[[:space:]]+user_namespace[[:space:]]*\*[[:space:]]*[[:alpha:]_][[:alnum:]_]*' <<< "$source_text" |
@@ -60,10 +66,10 @@ done
 [[ $(grep -Eo "from_kgid_munged[[:space:]]*\([[:space:]]*${namespace_var}[[:space:]]*," <<< "$source_text" | wc -l) -eq 4 ]] ||
 	die "translate all four GIDs through the opener namespace"
 
-if grep -Eq '\b(__kuid_val|__kgid_val|from_kuid|from_kgid)[[:space:]]*\(' "$source"; then
+if grep -Eq '\b(__kuid_val|__kgid_val|from_kuid|from_kgid)[[:space:]]*\(' <<< "$source_text"; then
 	die "use only the munged namespace translation helpers"
 fi
-if grep -Eq 'from_k(uid|gid)_munged[[:space:]]*\([[:space:]]*&init_user_ns' "$source"; then
+if grep -Eq 'from_k(uid|gid)_munged[[:space:]]*\([[:space:]]*&init_user_ns' <<< "$source_text"; then
 	die "ID rendering must use the opener namespace, not init_user_ns"
 fi
 
@@ -73,22 +79,25 @@ for field in cap_permitted cap_effective; do
 	grep -Eq "\(unsigned[[:space:]]+long[[:space:]]+long\)[[:space:]]*${credential_var}->${field}\.val" <<< "$source_text" ||
 		die "render $field as fixed-width hexadecimal"
 done
-if grep -Eq '\bseq_put_hex_ll[[:space:]]*\(' "$source"; then
+if grep -Eq '\bseq_put_hex_ll[[:space:]]*\(' <<< "$source_text"; then
 	die "seq_put_hex_ll is not exported to external modules"
 fi
-[[ $(grep -Ec '%016llx' "$source") -eq 2 ]] ||
+mapfile -t capability_formats < <(
+	grep -Eo '%016llx' <<< "$source_text" || true
+)
+(( ${#capability_formats[@]} == 2 )) ||
 	die "render exactly two fixed-width capability sets"
 
-if grep -Eq '\b(cap_inheritable|cap_bset|cap_ambient|securebits|group_info|session_keyring|process_keyring|thread_keyring)\b' "$source"; then
+if grep -Eq '\b(cap_inheritable|cap_bset|cap_ambient|securebits|group_info|session_keyring|process_keyring|thread_keyring)\b' <<< "$source_text"; then
 	die "the record contains credential state outside this lesson's contract"
 fi
-if grep -Eq '\b(prepare_creds|prepare_kernel_cred|commit_creds|abort_creds|override_creds|revert_creds|get_current_cred|get_task_cred|put_cred)[[:space:]]*\(' "$source"; then
+if grep -Eq '\b(prepare_creds|prepare_kernel_cred|commit_creds|abort_creds|override_creds|revert_creds|get_current_cred|get_task_cred|put_cred)[[:space:]]*\(' <<< "$source_text"; then
 	die "this lesson must only read the immediate current credential snapshot"
 fi
-if grep -Eq 'current_real_cred[[:space:]]*\(' "$source"; then
+if grep -Eq 'current_real_cred[[:space:]]*\(' <<< "$source_text"; then
 	die "report current's subjective credentials, not real_cred"
 fi
-if grep -Eq '\([[:space:]]*struct[[:space:]]+cred[[:space:]]*\*' "$source"; then
+if grep -Eq '\([[:space:]]*struct[[:space:]]+cred[[:space:]]*\*' <<< "$source_text"; then
 	die "do not cast away credential constness"
 fi
 
