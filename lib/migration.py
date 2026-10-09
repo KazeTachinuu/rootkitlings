@@ -13,9 +13,18 @@ import os
 from pathlib import Path
 import stat
 import tempfile
+import tomllib
 from typing import Callable, Mapping
 
-from lib.state import ID_RE, ExerciseState, LearnerState, StateError, dump_state, parse_state
+from lib.state import (
+    ID_RE,
+    ExerciseState,
+    LearnerState,
+    StateError,
+    dump_state,
+    migrate_v2_state,
+    parse_state,
+)
 
 
 class MigrationError(ValueError):
@@ -65,6 +74,56 @@ class MigrationPlan:
 
 
 SnapshotVerifier = Callable[[str, str, ExerciseState], bool]
+
+
+def parse_state_for_contract(
+    content: bytes,
+    contract: CurriculumContract,
+) -> LearnerState:
+    """Parse schema 2 or 3 bytes and bind them to one frozen contract."""
+    _validate_contract(contract)
+    try:
+        text = content.decode("utf-8")
+        raw = tomllib.loads(text)
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        raise MigrationError(f"cannot parse source state: {exc}") from exc
+    schema = raw.get("schema_version")
+    try:
+        if schema == 3 and not isinstance(schema, bool):
+            state = parse_state(text)
+        elif schema == 2 and not isinstance(schema, bool):
+            saved_route = raw.get("route")
+            if (
+                not isinstance(saved_route, list)
+                or any(not isinstance(item, str) for item in saved_route)
+                or tuple(saved_route) != contract.route
+            ):
+                raise MigrationError(
+                    "schema-2 saved route differs from the frozen source contract"
+                )
+            state = migrate_v2_state(
+                text,
+                set(contract.ids),
+                contract.route,
+                contract.revision,
+                contract.prerequisites,
+                _providers(contract),
+            )
+        else:
+            raise MigrationError(f"unsupported source state schema: {schema!r}")
+    except StateError as exc:
+        raise MigrationError(f"cannot parse source state: {exc}") from exc
+    try:
+        state.validate(
+            set(contract.ids),
+            contract.route,
+            contract.revision,
+            contract.prerequisites,
+            _providers(contract),
+        )
+    except StateError as exc:
+        raise MigrationError(f"source state violates its contract: {exc}") from exc
+    return state
 
 
 def apply_migration(

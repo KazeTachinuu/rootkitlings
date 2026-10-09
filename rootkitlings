@@ -11,7 +11,13 @@ from pathlib import Path
 
 from lib.catalog import Catalog, CatalogError
 from lib.build_env import module_build_environment
+from lib.migration import MigrationError
 from lib.process import ProcessError, ProcessTimeout, run_process
+from lib.route_migration import (
+    DESTINATION_REVISION as ROUTE_MIGRATION_REVISION,
+    active_destination_contract,
+    migrate_core_route,
+)
 from lib.setup_gate import (
     SETUP_STAMP_PATH,
     SetupGateError,
@@ -115,6 +121,19 @@ def initialize_runtime():
         path.mkdir(parents=True, exist_ok=True)
         if path.is_symlink():
             die(f'Runtime directory must not be a symlink: {path.relative_to(ROOT)}')
+    if CAT.revision == ROUTE_MIGRATION_REVISION:
+        migrate_core_route(
+            STATE,
+            WORK,
+            ARCHIVE,
+            active_destination_contract(
+                CAT.revision,
+                set(CAT.by_id),
+                ROUTE,
+                COMPLETION_DEPENDENCIES,
+                BASELINE_PROVIDERS,
+            ),
+        )
     STORE.migrate_v2(ARCHIVE)
 
 
@@ -1042,6 +1061,7 @@ if __name__ == '__main__':
         raise SystemExit(main(sys.argv[1:]))
     except (
         CLIError,
+        MigrationError,
         SetupGateError,
         StateError,
         VerificationError,
