@@ -2,6 +2,7 @@ KDIR ?= /lib/modules/$(shell uname -r)/build
 MODULE_DIR ?=
 GUEST_TOOLS := \
 	tools/cred_trigger_test \
+	tools/credential_snapshot_test \
 	tools/icmp_send \
 	tools/ioctl_test \
 	tools/module_load_test \
@@ -35,6 +36,9 @@ tools: $(GUEST_TOOLS)
 
 tools/cred_trigger_test: tools/cred_trigger_test.c
 	$(CC) -static -o $@ $<
+
+tools/credential_snapshot_test: tools/credential_snapshot_test.c
+	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
 
 tools/icmp_send: tools/icmp_send.c
 	$(CC) -static -o $@ $<

@@ -1,0 +1,5 @@
+Take one local `const struct cred *` snapshot with `current_cred()`. Translate
+its four UID and GID roles through `seq_user_ns(output)` with the munged ID
+helpers. That namespace belongs to the file opener; capability scope instead
+comes from the snapshot's own `user_ns`. Render only permitted and effective
+capability masks with fixed-width `%016llx` output and an explicit cast.

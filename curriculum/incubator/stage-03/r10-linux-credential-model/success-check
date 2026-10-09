@@ -1,0 +1,62 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Linux credential model"
+
+assert_not_loaded()
+{
+	assert_absent /sys/module/rootkitlings
+	assert_absent /proc/rootkitlings
+	if grep -q '^rootkitlings ' /proc/modules; then
+		_fail "rootkitlings appears in /proc/modules"
+	else
+		_ok "rootkitlings is absent from /proc/modules"
+	fi
+}
+
+check_loaded()
+{
+	assert_loaded rootkitlings
+	assert_exists /proc/rootkitlings
+	mode=$(stat -c '%a' /proc/rootkitlings)
+	if [ "$mode" = 444 ]; then
+		_ok "/proc/rootkitlings mode is 0444"
+	else
+		_fail "/proc/rootkitlings mode: expected 0444, got $mode"
+	fi
+}
+
+run_case()
+{
+	label=$1
+	shift
+	if "$@"; then
+		_ok "$label"
+	else
+		_fail "$label"
+	fi
+}
+
+assert_not_loaded
+for attempt in 1 2; do
+	load rootkitlings.ko
+	check_loaded
+	run_case "attempt $attempt initial root snapshot" \
+		credential_snapshot_test current /proc/rootkitlings
+	run_case "attempt $attempt initial unprivileged snapshot" \
+		chpst -u 65534:65534 credential_snapshot_test current /proc/rootkitlings
+	run_case "attempt $attempt distinct credential roles" \
+		credential_snapshot_test roles /proc/rootkitlings
+	run_case "attempt $attempt credentials changed after open" \
+		credential_snapshot_test after-open /proc/rootkitlings
+	run_case "attempt $attempt nested user namespace snapshot" \
+		chpst -u 65534:65534 busybox unshare -Ur \
+		credential_snapshot_test current /proc/rootkitlings
+	run_case "attempt $attempt opener and reader namespace split" \
+		credential_snapshot_test cross-ns /proc/rootkitlings
+	unload rootkitlings
+	assert_not_loaded
+done
+
+summary
