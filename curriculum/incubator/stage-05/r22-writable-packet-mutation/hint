@@ -1,0 +1,6 @@
+Validate every size and state before `rk_skb_make_writable()`. After that call,
+recompute the offsets and reacquire the UDP pointer before checking the live
+source port, destination port, and length.
+
+Branch on the original `udp->check`, not on `CHECKSUM_PARTIAL`: a zero partial
+seed stays zero.

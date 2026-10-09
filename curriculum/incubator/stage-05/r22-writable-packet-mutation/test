@@ -1,0 +1,219 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r22-test.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+KDIR=${KDIR:-/lib/modules/$(uname -r)/build}
+[[ -d $KDIR ]] || {
+	printf '[x] kernel build directory not found: %s\n' "$KDIR" >&2
+	exit 1
+}
+case $(uname -r) in
+	7.2.*|7.2-*) ;;
+	*) printf '[x] this lesson requires Linux 7.2.x\n' >&2; exit 1 ;;
+esac
+[[ $(uname -m) == x86_64 ]] || {
+	printf '[x] this lesson requires x86_64\n' >&2
+	exit 1
+}
+for option in NET INET NETFILTER PROC_FS; do
+	grep -qx "CONFIG_$option=y" "$KDIR/.config" || {
+		printf '[x] this lesson requires CONFIG_%s=y\n' "$option" >&2
+		exit 1
+	}
+done
+grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
+	printf '[x] pinned kernel build is not configured for GCC\n' >&2
+	exit 1
+}
+for command in base64 gcc gzip make nm perl; do
+	command -v "$command" >/dev/null || {
+		printf '[x] %s is required\n' "$command" >&2
+		exit 1
+	}
+done
+
+for script in test host-check success-check failure-check.in; do
+	bash -n "$HERE/$script"
+done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
+	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check.in"
+fi
+
+for tree in template solution; do
+	cmp -s "$HERE/../r18-hostile-packet-lengths/solution/parser/ipv4.c" \
+		"$HERE/$tree/parser/ipv4.c" || {
+		printf '[x] %s parser differs from accepted L17\n' "$tree" >&2
+		exit 1
+	}
+	cmp -s "$HERE/../r19-safe-skb-access/solution/access/skb_access.c" \
+		"$HERE/$tree/access/skb_access.c" || {
+		printf '[x] %s skb access differs from accepted L18\n' "$tree" >&2
+		exit 1
+	}
+	cmp -s "$HERE/../r21-validated-packet-classification/solution/classifier/udp.c" \
+		"$HERE/$tree/classifier/udp.c" || {
+		printf '[x] %s classifier differs from accepted L20\n' "$tree" >&2
+		exit 1
+	}
+	done
+
+mapfile -t changed_files < <(
+	diff -qr "$HERE/template" "$HERE/solution" |
+		sed -nE 's#^Files .*/template/(.*) and .*/solution/.* differ$#\1#p'
+)
+(( ${#changed_files[@]} == 1 )) || {
+	printf '[x] expected one learner-edited file, found %d\n' \
+		"${#changed_files[@]}" >&2
+	exit 1
+}
+[[ ${changed_files[0]} == mutation/udp_redirect.c ]] || {
+	printf '[x] learner edit surface is %s, expected mutation/udp_redirect.c\n' \
+		"${changed_files[0]}" >&2
+	exit 1
+}
+
+build_tree()
+{
+	local source=$1 destination=$2 point=${3:-0}
+	local log=$destination.log
+	cp -a "$source" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] %s build failed\n' "${source##*/}" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] %s build has warnings\n' "${source##*/}" >&2
+		exit 1
+	fi
+}
+
+build_tree "$HERE/template" "$scratch/template"
+build_tree "$HERE/solution" "$scratch/solution"
+build_tree "$HERE/solution" "$scratch/register-failure" 1
+build_tree "$HERE/solution" "$scratch/proc-failure" 2
+"$HERE/host-check" "$scratch/solution" \
+	"$scratch/solution/rootkitlings.ko"
+
+if "$HERE/host-check" "$scratch/template" \
+	"$scratch/template/rootkitlings.ko" > "$scratch/template-host.log" 2>&1; then
+	printf '[x] host checker accepted the unfinished mutator\n' >&2
+	exit 1
+fi
+
+build_mutant()
+{
+	local name=$1 expression=$2 replacement=$3
+	cp -a "$HERE/solution" "$scratch/$name"
+	perl -0pi -e "s~$expression~$replacement~" \
+		"$scratch/$name/mutation/udp_redirect.c"
+	local log=$scratch/$name.log
+	if ! make -s -C "$KDIR" M="$scratch/$name" W=1 modules \
+		> "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] mutant did not compile: %s\n' "$name" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] mutant build has warnings: %s\n' "$name" >&2
+		exit 1
+	fi
+	if "$HERE/host-check" "$scratch/$name" \
+		"$scratch/$name/rootkitlings.ko" > \
+		"$scratch/$name-host.log" 2>&1; then
+		printf '[x] host checker accepted mutant: %s\n' "$name" >&2
+		exit 1
+	fi
+}
+
+build_mutant skip-writable \
+	'if \(rk_skb_make_writable\(skb, writable_length\)\)' \
+	'if (false && rk_skb_make_writable(skb, writable_length))'
+build_mutant synthesize-partial-zero \
+	'if \(udp->check\) \{' \
+	'if (udp->check || skb->ip_summed == CHECKSUM_PARTIAL) {'
+build_mutant preserve-complete \
+	'skb_checksum_complete_unset\(skb\);' '(void)skb;'
+build_mutant trust-stale-source \
+	'udp->source != before.source \|\| udp->dest != before.dest \|\|\n\t    udp->len != before.len \|\| ntohs\(udp->source\) != view->source_port \|\|' \
+	'udp->dest != before.dest ||\n\t    udp->len != before.len ||'
+build_mutant trust-stale-length \
+	'udp->len != before.len \|\| ntohs\(udp->source\) != view->source_port \|\|\n\t    ntohs\(udp->dest\) != view->destination_port \|\|\n\t    ntohs\(udp->len\) != view->datagram_length' \
+	'ntohs(udp->source) != view->source_port ||\n\t    ntohs(udp->dest) != view->destination_port'
+build_mutant keep-hash \
+	'skb_clear_hash\(skb\);' '(void)skb;'
+build_mutant accept-conntrack \
+	'if \(skb_nfct\(skb\) \|\| secpath_exists\(skb\)\)' \
+	'if (false && (skb_nfct(skb) || secpath_exists(skb)))'
+build_mutant omit-datagram-width \
+	' \|\|\n\t    view->datagram_length > UINT_MAX' ''
+
+equivalent=$scratch/equivalent
+cp -a "$HERE/solution" "$equivalent"
+perl -0pi -e 's~if \(udp->check\) \{\n(.*?)\n\t\} else \{\n\t\tskb_checksum_complete_unset\(skb\);\n\t\}~if (!udp->check) {\n\t\tskb_checksum_complete_unset(skb);\n\t} else {\n$1\n\t}~s' \
+	"$equivalent/mutation/udp_redirect.c"
+build_tree "$equivalent" "$scratch/equivalent-build"
+"$HERE/host-check" "$scratch/equivalent-build" \
+	"$scratch/equivalent-build/rootkitlings.ko"
+
+cp -a "$HERE/solution" "$scratch/unknown"
+if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
+	ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
+	printf '[x] unknown failure-point value compiled successfully\n' >&2
+	exit 1
+fi
+
+gcc -std=c11 -Wall -Wextra -Werror -pedantic -O2 -static \
+	-o "$scratch/traffic_test" "$HERE/fixtures/host/traffic_test.c"
+cp "$HERE/success-check" "$scratch/success-check"
+printf '\n__ROOTKITLINGS_TRAFFIC_HELPER__\n' >> "$scratch/success-check"
+gzip -c "$scratch/traffic_test" | base64 -w 76 >> "$scratch/success-check"
+chmod 0755 "$scratch/success-check"
+
+sed -e 's/@EXPECTED_ERRNO@/22/g' \
+	-e 's/@LABEL@/Unfinished mutator rejection/g' \
+	"$HERE/failure-check.in" > "$scratch/template-failure-check"
+sed -e 's/@EXPECTED_ERRNO@/97/g' \
+	-e 's/@LABEL@/Netfilter registration failure rollback/g' \
+	"$HERE/failure-check.in" > "$scratch/register-failure-check"
+sed -e 's/@EXPECTED_ERRNO@/12/g' \
+	-e 's/@LABEL@/Proc publication failure rollback/g' \
+	"$HERE/failure-check.in" > "$scratch/proc-failure-check"
+chmod 0755 "$scratch/"*failure-check
+
+run_guest()
+{
+	local check_script=$1 module=$2 label=$3 output
+	shift 3
+	if ! output=$("$HERE/../../../../vm/boot" --check "$check_script" \
+		"$@" "$module" 2>&1); then
+		printf '%s\n' "$output" >&2
+		printf '[x] disposable guest rejected %s\n' "$label" >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+	grep -Fq '[+] PASSED' <<< "$output" || {
+		printf '[x] guest did not pass %s\n' "$label" >&2
+		exit 1
+	}
+}
+
+run_guest "$scratch/success-check" "$scratch/solution/rootkitlings.ko" \
+	solution --tool tools/proc_read_test
+run_guest "$scratch/template-failure-check" \
+	"$scratch/template/rootkitlings.ko" template --tool tools/module_load_test
+run_guest "$scratch/register-failure-check" \
+	"$scratch/register-failure/rootkitlings.ko" registration-failure \
+	--tool tools/module_load_test
+run_guest "$scratch/proc-failure-check" \
+	"$scratch/proc-failure/rootkitlings.ko" proc-failure \
+	--tool tools/module_load_test
+
+printf '[+] R22 writable packet mutation passed\n'
