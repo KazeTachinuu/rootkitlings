@@ -75,9 +75,9 @@ grep -Eq "abort_creds[[:space:]]*\([[:space:]]*${credential_var}[[:space:]]*\)" 
 if grep -Eq '\bprepare_creds[[:space:]]*\(' <<< "$credentials_text"; then
 	die "do not copy the caller and mutate only selected identity fields"
 fi
-if grep -Eq -- '->[[:space:]]*(uid|euid|suid|fsuid|gid|egid|sgid|fsgid|user|user_ns|ucounts|group_info|securebits|cap_[[:alnum:]_]+)[[:space:]]*=' \
+if grep -Eq -- '(->|\.)[[:space:]]*(uid|euid|suid|fsuid|gid|egid|sgid|fsgid|user|user_ns|ucounts|group_info|securebits|cap_[[:alnum:]_]+)([^[:alnum:]_]|$)' \
 	<<< "$credentials_text"; then
-	die "install the complete init-task credential without field mutation"
+	die "install the complete init-task credential without accessing individual fields"
 fi
 if grep -Eq '\b(current_cred|current_real_cred|override_creds|revert_creds|get_task_cred)[[:space:]]*\(' \
 	<<< "$credentials_text"; then

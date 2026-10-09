@@ -168,11 +168,12 @@ fi
 
 partial=$scratch/host-partial
 cp -a "$scratch/success" "$partial"
-sed -i '/replacement = prepare_kernel_cred/a\	replacement->uid = GLOBAL_ROOT_UID;' \
+sed -i '/replacement = prepare_kernel_cred/a\	(*replacement).\
+\t\tuid = (*replacement).uid;' \
 	"$partial/privilege/credentials.c"
 if "$HERE/host-check" "$partial" "$partial/rootkitlings.ko" \
 	"$scratch/credential_cancel" > "$scratch/host-partial.log" 2>&1; then
-	printf '[x] host checker accepted partial credential field mutation\n' >&2
+	printf '[x] host checker accepted multiline credential field access\n' >&2
 	exit 1
 fi
 
