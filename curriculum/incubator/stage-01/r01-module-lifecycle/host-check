@@ -13,7 +13,12 @@ artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
 	die "expected artifact at: $build_dir/rootkitlings.ko"
 [[ -f $build_dir/rootkitlings.mod && ! -L $build_dir/rootkitlings.mod ]] ||
 	die "build output is missing rootkitlings.mod"
-[[ $(<"$build_dir/rootkitlings.mod") == './core/main.o' ]] ||
+mapfile -t module_objects < <(sed '/^[[:space:]]*$/d' "$build_dir/rootkitlings.mod")
+(( ${#module_objects[@]} == 1 )) ||
+	die "rootkitlings.ko must contain only core/main.o"
+module_object=${module_objects[0]}
+[[ $module_object == /* ]] || module_object=$build_dir/$module_object
+[[ $(realpath -m -- "$module_object") == "$build_dir/core/main.o" ]] ||
 	die "rootkitlings.ko must contain only core/main.o"
 
 command -v modinfo >/dev/null || die "modinfo is required"
