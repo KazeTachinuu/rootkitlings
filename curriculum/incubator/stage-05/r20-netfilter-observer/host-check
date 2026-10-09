@@ -1,0 +1,231 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR MODULE"
+build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
+module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found: $2"
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+for relative in Kbuild core/main.c include/rootkit.h interface/proc.c \
+		instrumentation/netfilter_observer.c \
+		instrumentation/netfilter_observer.o; do
+	[[ -f $build_dir/$relative && ! -L $build_dir/$relative ]] ||
+		die "build is missing regular file: $relative"
+done
+[[ -f $module && ! -L $module ]] || die "module must be a regular file"
+
+for relative in Kbuild core/main.c include/rootkit.h interface/proc.c; do
+	cmp -s "$here/solution/$relative" "$build_dir/$relative" ||
+		die "supplied file was changed: $relative"
+done
+
+python3 - "$build_dir/instrumentation/netfilter_observer.c" \
+	"$here/template/instrumentation/netfilter_observer.c" <<'PY'
+import re
+import sys
+
+submitted_path, template_path = sys.argv[1:]
+
+
+def fail(message):
+    print(f"[x] {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def strip_comments(text):
+    return re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.S)
+
+
+def function_span(text, name):
+    match = re.search(r"\b" + re.escape(name) + r"\s*\([^;]*?\)\s*\{", text, re.S)
+    if not match:
+        fail(f"could not find {name}")
+    opening = text.find("{", match.start())
+    depth = 0
+    for index in range(opening, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return match.start(), opening, index + 1
+    fail(f"could not find the end of {name}")
+
+
+def compact(text):
+    return re.sub(r"\s+", "", text)
+
+
+submitted = strip_comments(open(submitted_path, encoding="utf-8").read())
+template = strip_comments(open(template_path, encoding="utf-8").read())
+names = (
+    "rk_observe_local_ipv4",
+    "rk_netfilter_start",
+    "rk_netfilter_stop",
+    "rk_netfilter_snapshot",
+)
+
+
+def without_functions(text):
+    spans = sorted((function_span(text, name) for name in names), reverse=True)
+    for start, _opening, end in spans:
+        text = text[:start] + text[end:]
+    return text
+
+
+if compact(without_functions(submitted)) != compact(without_functions(template)):
+    fail("only the four observer functions may change")
+
+
+def function_text(name):
+    span = function_span(submitted, name)
+    return compact(submitted[span[0]:span[2]])
+
+
+callback = function_text("rk_observe_local_ipv4")
+required_callback = (
+    "structrk_netfilter_observer*observer=private;",
+    "(void)skb;",
+    "(void)state;",
+    "atomic64_inc(&observer->callbacks);",
+    "returnNF_ACCEPT;",
+)
+for statement in required_callback:
+    if callback.count(statement) != 1:
+        fail(f"callback must contain exactly one {statement}")
+if any(token in callback for token in ("if(", "for(", "while(", "?", "skb->", "state->")):
+    fail("callback must not branch or inspect packet and hook-state fields")
+if callback.count("return") != 1:
+    fail("callback must have one constant return")
+
+start = function_text("rk_netfilter_start")
+required_start = (
+    "atomic64_set(&observer->callbacks,0);",
+    "observer->net=&init_net;",
+    ".hook=rk_observe_local_ipv4",
+    ".priv=observer",
+    ".pf=NFPROTO_IPV4",
+    ".hooknum=NF_INET_LOCAL_OUT",
+    ".priority=NF_IP_PRI_FIRST",
+    "error=nf_register_net_hook(observer->net,&observer->ops);",
+    "observer->net=NULL;",
+    "returnerror;",
+    "WRITE_ONCE(observer->registered,true);",
+    "return0;",
+)
+for operation in required_start:
+    if start.count(operation) != 1:
+        fail(f"start must contain exactly one {operation}")
+if len(re.findall(r"if\(!observer\)\{?return-EINVAL;\}?", start)) != 1:
+    fail("start must reject a null observer with EINVAL")
+if len(re.findall(
+        r"if\(READ_ONCE\(observer->registered\)\)\{?return-EBUSY;\}?",
+        start)) != 1:
+    fail("start must reject an already registered observer with EBUSY")
+compound_initializer = "observer->ops=(structnf_hook_ops)"
+zero_initializer = "memset(&observer->ops,0,sizeof(observer->ops));"
+if start.count(compound_initializer) == 1:
+    initializer_position = start.index(compound_initializer)
+elif start.count(compound_initializer) == 0 and zero_initializer in start:
+    initializer_position = start.index(zero_initializer)
+else:
+    fail("start must completely initialize the hook descriptor")
+ordered_start = (
+    "atomic64_set(&observer->callbacks,0);",
+    "observer->net=&init_net;",
+    "error=nf_register_net_hook(observer->net,&observer->ops);",
+    "WRITE_ONCE(observer->registered,true);",
+)
+ordered_positions = [start.index(item) for item in ordered_start]
+ordered_positions.insert(2, initializer_position)
+if ordered_positions != sorted(ordered_positions):
+    fail("start must initialize, register, and only then publish registered state")
+register_position = start.index("error=nf_register_net_hook(observer->net,&observer->ops);")
+error_position = start.index("if(error)", register_position)
+cleanup_position = start.index("observer->net=NULL;", error_position)
+return_error_position = start.index("returnerror;", cleanup_position)
+publish_position = start.index("WRITE_ONCE(observer->registered,true);")
+if not register_position < error_position < cleanup_position < return_error_position < publish_position:
+    fail("registration error cleanup and state publication are out of order")
+
+stop = function_text("rk_netfilter_stop")
+required_stop = (
+    "nf_unregister_net_hook(observer->net,&observer->ops);",
+    "synchronize_rcu();",
+    "WRITE_ONCE(observer->registered,false);",
+    "observer->net=NULL;",
+)
+for operation in required_stop:
+    if stop.count(operation) != 1:
+        fail(f"stop must contain exactly one {operation}")
+if len(re.findall(
+        r"if\(!observer\|\|!READ_ONCE\(observer->registered\)\)\{?return;\}?",
+        stop)) != 1:
+    fail("stop must be idempotent for null and unregistered observers")
+positions = [stop.index(operation) for operation in required_stop]
+if positions != sorted(positions):
+    fail("stop must unregister, drain RCU readers, then clear published state")
+
+snapshot = function_text("rk_netfilter_snapshot")
+required_snapshot = (
+    "status->registered=READ_ONCE(observer->registered);",
+    "status->family=READ_ONCE(observer->ops.pf);",
+    "status->hook=READ_ONCE(observer->ops.hooknum);",
+    "status->priority=READ_ONCE(observer->ops.priority);",
+    "status->init_namespace=READ_ONCE(observer->net)==&init_net;",
+    "status->callbacks=atomic64_read(&observer->callbacks);",
+)
+for assignment in required_snapshot:
+    if snapshot.count(assignment) != 1:
+        fail(f"snapshot must read the owned field with {assignment}")
+if snapshot.count("status->") != len(required_snapshot):
+    fail("snapshot must write exactly the six declared status fields")
+
+for forbidden in (
+    "printk", "pr_info", "pr_debug", "kmalloc", "kzalloc", "schedule_work",
+    "queue_work", "msleep", "udelay", "NF_DROP", "NF_STOLEN", "skb->",
+    "state->", "rk_parse_ipv4", "skb_header_pointer", "skb_copy_bits",
+):
+    if forbidden in submitted:
+        fail(f"observer contains forbidden operation: {forbidden}")
+PY
+
+object=$build_dir/instrumentation/netfilter_observer.o
+for specification in \
+	'nf_register_net_hook 1' \
+	'nf_unregister_net_hook 1' \
+	'synchronize_rcu 1'; do
+	read -r symbol expected <<< "$specification"
+	actual=$(objdump -r "$object" |
+		grep -Ec "[[:space:]]${symbol}([+-]|$)" || true)
+	[[ $actual -eq $expected ]] ||
+		die "observer object must reference $symbol exactly $expected time(s)"
+done
+
+undefined=$(nm -u "$object" | awk '{ print $NF }')
+while read -r symbol; do
+	[[ -n $symbol ]] || continue
+	case $symbol in
+		__fentry__|__x86_return_thunk|init_net|nf_register_net_hook|\
+		nf_unregister_net_hook|synchronize_rcu) ;;
+		*) die "observer has forbidden external dependency: $symbol" ;;
+	esac
+done <<< "$undefined"
+
+nm "$object" | grep -Eq '[[:space:]]t[[:space:]]rk_observe_local_ipv4$' ||
+	die "observer callback is missing"
+nm "$module" | grep -Eq '[[:space:]]t[[:space:]]rk_observe_local_ipv4$' ||
+	die "module does not contain the observer callback"
+
+assembly=$(objdump -dr "$object" |
+	sed -n '/<rk_observe_local_ipv4>/,/^$/p')
+grep -Eq '[[:space:]]lock[[:space:]]+incq[[:space:]]' <<< "$assembly" ||
+	die "callback does not contain one atomic 64-bit increment"
+[[ $(grep -Ec '[[:space:]]lock[[:space:]]+incq[[:space:]]' <<< "$assembly") -eq 1 ]] ||
+	die "callback must contain exactly one atomic 64-bit increment"
+grep -Eq "mov[[:space:]]+\\\$0x1,%eax" <<< "$assembly" ||
+	die "callback does not return NF_ACCEPT"
+
+printf '[+] owned Netfilter lifecycle, atomic observation, and accept verdict verified\n'

@@ -1,0 +1,6 @@
+ROOTKITLINGS_FAIL_POINT ?= 0
+
+obj-m += rootkitlings.o
+rootkitlings-y := core/main.o interface/proc.o instrumentation/netfilter_observer.o
+ccflags-y += -I$(src)/include
+ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)
