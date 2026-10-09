@@ -8,16 +8,18 @@ success_dir=$(realpath -e -- "$1" 2>/dev/null) || die "success directory not fou
 success_artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
 missing_dir=$(realpath -e -- "$3" 2>/dev/null) || die "missing-symbol directory not found: $3"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-r15-host.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
 
 [[ -f $success_artifact && ! -L $success_artifact ]] ||
 	die "success artifact must be a regular file"
+[[ $success_artifact == "$success_dir/rootkitlings.ko" ]] ||
+	die "success artifact must belong to the success build"
 
 for relative in Kbuild core/main.c core/state.c include/rootkit.h \
-	instrumentation/probes.c; do
+	instrumentation/probes.c core/main.o core/state.o; do
 	[[ -f $success_dir/$relative && ! -L $success_dir/$relative ]] ||
 		die "success build is missing regular file: $relative"
-	cmp -s "$here/solution/$relative" "$success_dir/$relative" ||
-		die "supplied file was changed: $relative"
 done
 for relative in interface/proc.c interface/proc.o instrumentation/probes.o; do
 	[[ -f $success_dir/$relative && ! -L $success_dir/$relative ]] ||
@@ -28,85 +30,18 @@ done
 	die "missing-symbol build lacks instrumentation/probes.o"
 
 proc_source=$success_dir/interface/proc.c
-if ! python3 - "$proc_source" "$here/template/interface/proc.c" <<'PY'
-import re
-import sys
-
-submitted_path, template_path = sys.argv[1:]
-
-def fail(message):
-    print(f"[x] {message}", file=sys.stderr)
-    raise SystemExit(1)
-
-def strip_comments(text):
-    return re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.S)
-
-def function_span(text, name):
-    match = re.search(r"\b" + re.escape(name) + r"\s*\([^;]*?\)\s*\{", text, re.S)
-    if not match:
-        fail(f"could not find {name} definition")
-    opening = text.find("{", match.start())
-    depth = 0
-    for index in range(opening, len(text)):
-        if text[index] == "{":
-            depth += 1
-        elif text[index] == "}":
-            depth -= 1
-            if depth == 0:
-                return match.start(), index + 1
-    fail(f"could not find the end of {name}")
-
-def compact(text):
-    return re.sub(r"\s+", "", text)
-
-submitted = strip_comments(open(submitted_path, encoding="utf-8").read())
-template = strip_comments(open(template_path, encoding="utf-8").read())
-submitted_span = function_span(submitted, "rk_proc_show")
-template_span = function_span(template, "rk_proc_show")
-submitted_show = submitted[slice(*submitted_span)]
-template_show = template[slice(*template_span)]
-
-def parenthesized_identifier(name):
-    return rf"(?:\(\s*)*{name}(?:\s*\))*"
-
-comparison = (
-    rf"(?:{parenthesized_identifier('id')}\s*==\s*"
-    rf"{parenthesized_identifier('RK_PROBE_FILENAME_RMDIR')}|"
-    rf"{parenthesized_identifier('RK_PROBE_FILENAME_RMDIR')}\s*==\s*"
-    rf"{parenthesized_identifier('id')})"
-)
-decision = re.compile(
-    rf"\bif\s*\(\s*(?:\(\s*)*{comparison}(?:\s*\))*\s*\)\s*"
-    rf"(?:\{{\s*)?return\s+SEQ_SKIP\s*;\s*(?:\}})?",
-    re.S,
-)
-matches = list(decision.finditer(submitted_show))
-if len(matches) != 1:
-    fail("rk_proc_show must directly skip exactly RK_PROBE_FILENAME_RMDIR")
-if len(re.findall(r"\bSEQ_SKIP\b", submitted)) != 1:
-    fail("the renderer must contain exactly one SEQ_SKIP")
-if len(re.findall(r"\bRK_PROBE_FILENAME_RMDIR\b", submitted_show)) != 1:
-    fail("the show decision must name the omitted probe exactly once")
-
-first_output = re.search(r"\bseq_(?:printf|puts|putc|write|escape|hex_dump)\s*\(", submitted_show)
-if first_output is None or matches[0].start() > first_output.start():
-    fail("the suppression decision must precede every seq output call")
-
-without_decision = submitted_show[:matches[0].start()] + submitted_show[matches[0].end():]
-if compact(without_decision) != compact(template_show):
-    fail("only the one probe-ID suppression decision belongs in rk_proc_show")
-
-submitted_outside = submitted[:submitted_span[0]] + submitted[submitted_span[1]:]
-template_outside = template[:template_span[0]] + template[template_span[1]:]
-if compact(submitted_outside) != compact(template_outside):
-    fail("the supplied iterator, parser, publication, and lifecycle must stay unchanged")
-
-if re.search(r'"(?:vfs_mkdir|filename_rmdir)"', submitted):
-    fail("the proc renderer must obtain names from the canonical probe catalog")
-PY
-then
-	exit 1
-fi
+gcc -std=c11 -Wall -Wextra -Werror -Wno-unused-parameter \
+	-DROOTKITLINGS_FAIL_POINT=0 \
+	-I "$here/fixtures/host/include" -I "$success_dir/include" \
+	-I "$success_dir" "$here/fixtures/host/proc_test.c" \
+	-o "$scratch/proc-test"
+"$scratch/proc-test"
+gcc -std=c11 -Wall -Wextra -Werror -Wno-unused-parameter \
+	-DROOTKITLINGS_FAIL_POINT=0 \
+	-I "$here/fixtures/host/include" -I "$success_dir/include" \
+	-I "$success_dir" "$here/fixtures/host/probe_test.c" \
+	-o "$scratch/probe-test"
+"$scratch/probe-test"
 
 proc_undefined=$(nm -u "$success_dir/interface/proc.o" | awk '{ print $NF }')
 while read -r symbol; do
@@ -133,16 +68,10 @@ for specification in \
 		die "proc renderer must reference $symbol exactly $expected time(s)"
 done
 
-probe_source=$success_dir/instrumentation/probes.c
-probe_text=$(tr '\n' ' ' < "$probe_source")
 for target in vfs_mkdir filename_rmdir; do
-	[[ $(grep -Eo "\"${target}\"" "$probe_source" | wc -l) -eq 1 ]] ||
+	[[ $(strings "$success_artifact" | grep -Fxc "$target") -eq 1 ]] ||
 		die "$target must have one identity in the canonical catalog"
 done
-grep -Eq 'static struct kprobe probe_catalog[[:space:]]*\[[[:space:]]*RK_PROBE_COUNT[[:space:]]*\]' \
-	<<< "$probe_text" || die "registration must use the canonical descriptor catalog"
-grep -Eq 'return[[:space:]]+probes[[:space:]]*\[[[:space:]]*id[[:space:]]*\][[:space:]]*->[[:space:]]*symbol_name' \
-	<<< "$probe_text" || die "display names must come from registered descriptors"
 if grep -Eq '(%p[xsS]?|->addr|\.addr|kallsyms_lookup_name|module_mutex|\bmodules\b|sys_call_table|getdents)' \
 	"$proc_source"; then
 	die "the proc renderer must not inspect addresses, registries, module lists, or directories"
@@ -156,6 +85,20 @@ for object in "$success_dir/instrumentation/probes.o" \
 		die "probe catalog must be batch-unregistered exactly once"
 done
 
+main_relocations=$(objdump -r "$success_dir/core/main.o")
+for specification in \
+	'rk_state_create 1' \
+	'rk_probes_start 1' \
+	'rk_proc_publish 1' \
+	'rk_proc_unpublish 1' \
+	'rk_probes_stop 2' \
+	'rk_state_destroy 2'; do
+	read -r symbol expected <<< "$specification"
+	actual=$(grep -Ec "[[:space:]]${symbol}([+-]|$)" <<< "$main_relocations" || true)
+	[[ $actual -eq $expected ]] ||
+		die "module lifecycle must reference $symbol exactly $expected time(s)"
+done
+
 if grep -Fxq '__rootkitlings_missing_kprobe_target_7_2__' \
 	< <(strings "$success_artifact"); then
 	die "success artifact contains the negative-control target"
@@ -164,4 +107,4 @@ grep -Fxq '__rootkitlings_missing_kprobe_target_7_2__' \
 	< <(strings "$missing_dir/rootkitlings.ko") ||
 	die "missing-symbol artifact lacks the negative-control target"
 
-printf '[+] fixed item suppression, canonical identity, and narrow renderer verified\n'
+printf '[+] behavioral item suppression, canonical identity, and lifecycle verified\n'

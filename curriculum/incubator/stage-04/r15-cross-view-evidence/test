@@ -35,12 +35,10 @@ grep -qx 'CONFIG_CC_IS_GCC=y' "$KDIR/.config" || {
 	printf '[x] pinned kernel build is not configured for its GCC toolchain\n' >&2
 	exit 1
 }
-for command in gcc python3; do
-	command -v "$command" >/dev/null || {
-		printf '[x] %s is required\n' "$command" >&2
-		exit 1
-	}
-done
+command -v gcc >/dev/null || {
+	printf '[x] gcc is required\n' >&2
+	exit 1
+}
 
 symvers=$KDIR/Module.symvers
 [[ -f $symvers ]] || {
@@ -159,6 +157,22 @@ expect_host_rejection()
 	fi
 }
 
+rebuild_host_fixture()
+{
+	local directory=$1 label=$2 log=$scratch/rebuild-$2.log
+	if ! make -s -C "$KDIR" M="$directory" W=1 \
+		ROOTKITLINGS_FAIL_POINT=0 modules > "$log" 2>&1; then
+		cat "$log" >&2
+		printf '[x] host fixture %s did not rebuild\n' "$label" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[x] host fixture %s rebuilt with warnings\n' "$label" >&2
+		exit 1
+	fi
+}
+
 formatted=$scratch/host-formatting
 cp -a "$scratch/success" "$formatted"
 sed -i \
@@ -204,25 +218,41 @@ expect_host_rejection "$name_filter" a-name-based-filter
 hidden_helper=$scratch/host-hidden-helper
 cp -a "$scratch/success" "$hidden_helper"
 sed -i '/static int rk_proc_show/i\
-static bool rk_hide_probe(enum rk_probe_id id)\
+static bool rk_probe_is_suppressed(enum rk_probe_id id)\
 {\
 \treturn id == RK_PROBE_FILENAME_RMDIR;\
 }\
 ' "$hidden_helper/interface/proc.c"
-sed -i 's/id == RK_PROBE_FILENAME_RMDIR/rk_hide_probe(id)/' \
+sed -i 's/if (id == RK_PROBE_FILENAME_RMDIR)/if (rk_probe_is_suppressed(id))/' \
 	"$hidden_helper/interface/proc.c"
-expect_host_rejection "$hidden_helper" a-helper-hidden-filter
+rebuild_host_fixture "$hidden_helper" helper-factored-filter
+"$HERE/host-check" "$hidden_helper" "$hidden_helper/rootkitlings.ko" \
+	"$scratch/missing" > "$scratch/host-helper.log"
+
+no_suppression=$scratch/host-no-suppression
+cp -a "$scratch/success" "$no_suppression"
+sed -i 's/id == RK_PROBE_FILENAME_RMDIR/false/' \
+	"$no_suppression/interface/proc.c"
+expect_host_rejection "$no_suppression" no-suppression
+
+wrong_suppression=$scratch/host-wrong-suppression
+cp -a "$scratch/success" "$wrong_suppression"
+sed -i 's/id == RK_PROBE_FILENAME_RMDIR/id == RK_PROBE_VFS_MKDIR/' \
+	"$wrong_suppression/interface/proc.c"
+expect_host_rejection "$wrong_suppression" wrong-selected-item
 
 catalog_mutation=$scratch/host-catalog-mutation
 cp -a "$scratch/success" "$catalog_mutation"
 sed -i 's/"filename_rmdir"/"vfs_rmdir"/' \
 	"$catalog_mutation/instrumentation/probes.c"
+rebuild_host_fixture "$catalog_mutation" mutated-catalog
 expect_host_rejection "$catalog_mutation" a-mutated-catalog
 
 registration_mutation=$scratch/host-registration-mutation
 cp -a "$scratch/success" "$registration_mutation"
 sed -i '0,/register_kprobes(probes, ARRAY_SIZE(probes))/s//register_kprobes(probes, 1)/' \
 	"$registration_mutation/instrumentation/probes.c"
+rebuild_host_fixture "$registration_mutation" shortened-registration
 expect_host_rejection "$registration_mutation" a-shortened-registration-set
 
 hide_toggle=$scratch/host-hide-toggle
