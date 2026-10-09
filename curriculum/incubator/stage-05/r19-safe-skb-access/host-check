@@ -24,7 +24,7 @@ done
 
 source=$build_dir/access/skb_access.c
 for required in skb_network_offset skb_headroom skb_frags_readable \
-	skb_header_pointer_careful INT_MIN S64_MAX copy_offset; do
+	skb_headlen skb_header_pointer_careful INT_MIN S64_MAX copy_offset; do
 	rg -q "${required}" "$source" || die "missing required operation: $required"
 done
 

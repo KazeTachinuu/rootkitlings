@@ -23,7 +23,7 @@ Implement `rk_skb_read_network()`.
 On success it must:
 
 - copy exactly `length` bytes starting `offset` bytes after the network header;
-- set `available` to the logical byte count from that header to the end of the packet;
+- set `available` to the logical byte count from that header to the end of the `sk_buff`;
 - work with linear data, page fragments, `frag_list`, shared data, and cloned buffers;
 - leave the `sk_buff` unchanged.
 
@@ -48,10 +48,15 @@ For a nonnegative offset, prove it does not exceed `skb->len` before subtracting
 
 Reject `data_len > len`, lengths that exceed the signed helper interface, and unreadable fragments before claiming an available byte count.
 After validating the network-relative range, add the requested offset with a wide signed type and prove the result fits the helper's signed `int` interface.
+For a negative final offset, also keep the helper's `skb_headlen() - offset` calculation within signed `int`.
 Use `skb_header_pointer_careful()` to obtain the bytes.
 Copy through a fixed local array and change neither output on failure.
 
-The caller owns a stable `sk_buff` reference for the whole call.
+After invalid arguments and base geometry, an unreadable-fragment marker takes precedence over a truncated requested range.
+If an otherwise present range cannot fit the helper's signed arithmetic, return invalid geometry.
+If the safe-copy helper still cannot retrieve a range that the length fields claim exists, return unreadable.
+
+The caller owns a stable `sk_buff` reference and prevents concurrent changes to its geometry or packet data for the whole call.
 `bytes` and `available` are valid, non-overlapping outputs.
 They do not overlap the `sk_buff` or its packet storage.
 
@@ -72,4 +77,4 @@ It then reruns L17's complete parser corpus.
 - [Linux v7.2 `skb_header_pointer_careful()`](https://github.com/torvalds/linux/blob/v7.2/include/linux/skbuff.h#L4311-L4341)
 - [Linux v7.2 `skb_copy_bits()` across linear data, page fragments, and `frag_list`](https://github.com/torvalds/linux/blob/v7.2/net/core/skbuff.c#L3019-L3097)
 - [Linux v7.2 `skb_frags_readable()`](https://github.com/torvalds/linux/blob/v7.2/include/linux/skbuff.h#L1890-L1894)
-- [Linux v7.2 network-header offset helpers](https://github.com/torvalds/linux/blob/v7.2/include/linux/skbuff.h#L3129-L3146)
+- [Linux v7.2 `skb_network_offset()`](https://github.com/torvalds/linux/blob/v7.2/include/linux/skbuff.h#L3252-L3255)

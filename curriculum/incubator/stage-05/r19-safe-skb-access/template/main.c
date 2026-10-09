@@ -39,6 +39,18 @@ struct rk_skb_snapshot {
 
 static unsigned int rk_assertions;
 
+static bool rk_all_bytes_are(const unsigned char *bytes, size_t length,
+			     unsigned char value)
+{
+	size_t index;
+
+	for (index = 0; index < length; index++) {
+		if (bytes[index] != value)
+			return false;
+	}
+	return true;
+}
+
 static int rk_expect(bool condition, const char *label)
 {
 	rk_assertions++;
@@ -148,77 +160,148 @@ rk_inspect_ipv4(const struct sk_buff *skb, struct rk_ipv4_view *view)
 static int rk_test_arguments_and_geometry(void)
 {
 	unsigned char packet[20];
-	unsigned char prefix[20];
+	unsigned char bytes[RK_SKB_READ_LIMIT];
 	struct sk_buff *skb;
 	size_t available;
-	unsigned int saved;
+	unsigned int saved_data_len;
+	unsigned int saved_len;
 	int ret = -EINVAL;
 
 	rk_make_ipv4(packet, sizeof(packet), 5, 20, 17);
 	skb = rk_linear_skb(packet, sizeof(packet), 0, 0);
 	if (rk_expect(skb != NULL, "argument fixture allocation"))
 		return -ENOMEM;
-	memset(prefix, 0x5a, sizeof(prefix));
+	memset(bytes, 0x5a, sizeof(bytes));
 	available = 0x5a5a;
-	if (rk_expect(rk_skb_read_ipv4_prefix(NULL, prefix, &available) ==
+	if (rk_expect(rk_skb_read_ipv4_prefix(NULL, bytes, &available) ==
 		      RK_SKB_ACCESS_INVALID_ARGUMENT,
 		      "null skb") ||
-	    rk_expect(available == 0x5a5a && prefix[0] == 0x5a,
+	    rk_expect(available == 0x5a5a &&
+		      rk_all_bytes_are(bytes, sizeof(bytes), 0x5a),
 		      "null skb leaves outputs") ||
 	    rk_expect(rk_skb_read_ipv4_prefix(skb, NULL, &available) ==
 		      RK_SKB_ACCESS_INVALID_ARGUMENT, "null prefix") ||
-	    rk_expect(rk_skb_read_ipv4_prefix(skb, prefix, NULL) ==
-		      RK_SKB_ACCESS_INVALID_ARGUMENT, "null available"))
+	    rk_expect(rk_skb_read_ipv4_prefix(skb, bytes, NULL) ==
+		      RK_SKB_ACCESS_INVALID_ARGUMENT, "null available") ||
+	    rk_expect(rk_all_bytes_are(bytes, sizeof(bytes), 0x5a),
+		      "null available leaves bytes"))
 		goto out;
 
-	saved = skb->data_len;
+	saved_data_len = skb->data_len;
 	skb->data_len = skb->len + 1;
-	if (rk_expect(rk_skb_read_ipv4_prefix(skb, prefix, &available) ==
-		      RK_SKB_ACCESS_INVALID_GEOMETRY, "data_len exceeds len"))
+	if (rk_expect(rk_skb_read_ipv4_prefix(skb, bytes, &available) ==
+		      RK_SKB_ACCESS_INVALID_GEOMETRY, "data_len exceeds len") ||
+	    rk_expect(available == 0x5a5a &&
+		      rk_all_bytes_are(bytes, sizeof(bytes), 0x5a),
+		      "bad data_len leaves outputs"))
 		goto restore_data_len;
-	skb->data_len = saved;
+	skb->data_len = saved_data_len;
 
-	saved = skb->len;
+	saved_len = skb->len;
 	skb->len = (unsigned int)INT_MAX + 1U;
-	if (rk_expect(rk_skb_read_ipv4_prefix(skb, prefix, &available) ==
-		      RK_SKB_ACCESS_INVALID_GEOMETRY, "len exceeds helper range"))
+	if (rk_expect(rk_skb_read_ipv4_prefix(skb, bytes, &available) ==
+		      RK_SKB_ACCESS_INVALID_GEOMETRY, "len exceeds helper range") ||
+	    rk_expect(available == 0x5a5a &&
+		      rk_all_bytes_are(bytes, sizeof(bytes), 0x5a),
+		      "bad len leaves outputs"))
 		goto restore_len;
-	skb->len = saved;
-	memset(prefix, 0x5a, sizeof(prefix));
+	skb->len = saved_len;
 	available = 0x5a5a;
-	if (rk_expect(rk_skb_read_network(skb, 0, prefix, 0, &available) ==
+	if (rk_expect(rk_skb_read_network(skb, 0, bytes, 0, &available) ==
 		      RK_SKB_ACCESS_INVALID_ARGUMENT, "zero-length request") ||
-	    rk_expect(rk_skb_read_network(skb, 0, prefix,
+	    rk_expect(rk_skb_read_network(skb, 0, bytes,
 					  RK_SKB_READ_LIMIT + 1, &available) ==
 		      RK_SKB_ACCESS_INVALID_ARGUMENT, "oversize request") ||
 	    rk_expect(rk_skb_read_network(skb, (size_t)S64_MAX + 1,
-					  prefix, 1, &available) ==
+					  bytes, 1, &available) ==
 		      RK_SKB_ACCESS_INVALID_ARGUMENT, "offset exceeds s64") ||
-	    rk_expect(available == 0x5a5a && prefix[0] == 0x5a,
+	    rk_expect(available == 0x5a5a &&
+		      rk_all_bytes_are(bytes, sizeof(bytes), 0x5a),
 		      "invalid requests leave outputs") ||
-	    rk_expect(rk_skb_read_network(skb, skb->len + 1, prefix, 1,
+	    rk_expect(rk_skb_read_network(skb, skb->len + 1, bytes, 1,
 					  &available) == RK_SKB_ACCESS_TRUNCATED,
 		      "relative offset truncation") ||
-	    rk_expect(rk_skb_read_network(skb, 0, prefix, skb->len + 1,
+	    rk_expect(rk_skb_read_network(skb, 0, bytes, skb->len + 1,
 					  &available) == RK_SKB_ACCESS_TRUNCATED,
 		      "relative length truncation") ||
-	    rk_expect(available == 0x5a5a && prefix[0] == 0x5a,
+	    rk_expect(available == 0x5a5a &&
+		      rk_all_bytes_are(bytes, sizeof(bytes), 0x5a),
 		      "truncated requests leave outputs"))
 		goto out;
 
+	saved_data_len = skb->data_len;
+	skb->data_len = skb->len - 4;
+	if (rk_expect(rk_skb_read_ipv4_prefix(skb, bytes, &available) ==
+		      RK_SKB_ACCESS_UNREADABLE,
+		      "safe-copy failure is unreadable") ||
+	    rk_expect(available == 0x5a5a &&
+		      rk_all_bytes_are(bytes, sizeof(bytes), 0x5a),
+		      "safe-copy failure leaves outputs"))
+		goto restore_data_len;
+	skb->data_len = saved_data_len;
+
 	skb_set_network_header(skb, skb->len + 1);
-	if (rk_expect(rk_skb_read_ipv4_prefix(skb, prefix, &available) ==
+	if (rk_expect(rk_skb_read_ipv4_prefix(skb, bytes, &available) ==
 		      RK_SKB_ACCESS_INVALID_GEOMETRY,
-		      "network header follows packet"))
+		      "network header follows packet") ||
+	    rk_expect(available == 0x5a5a &&
+		      rk_all_bytes_are(bytes, sizeof(bytes), 0x5a),
+		      "bad network offset leaves outputs"))
 		goto out;
 	ret = 0;
 	goto out;
 
 restore_len:
-	skb->len = saved;
+	skb->len = saved_len;
 	goto out;
 restore_data_len:
-	skb->data_len = saved;
+	skb->data_len = saved_data_len;
+out:
+	kfree_skb(skb);
+	return ret;
+}
+
+static int rk_test_generic_ranges(void)
+{
+	unsigned char packet[96];
+	unsigned char bytes[RK_SKB_READ_LIMIT];
+	struct rk_skb_snapshot snapshot;
+	struct sk_buff *skb;
+	size_t available = 0;
+	size_t index;
+	size_t length;
+	int ret = -EINVAL;
+
+	for (index = 0; index < sizeof(packet); index++)
+		packet[index] = (unsigned char)(index ^ 0xa7);
+	skb = rk_linear_skb(packet, sizeof(packet), 7, 0);
+	if (rk_expect(skb != NULL, "generic-range fixture allocation"))
+		return -ENOMEM;
+	rk_snapshot(skb, &snapshot);
+	for (length = 1; length <= RK_SKB_READ_LIMIT; length++) {
+		size_t offset = RK_SKB_READ_LIMIT - length;
+
+		memset(bytes, 0, sizeof(bytes));
+		if (rk_expect(rk_skb_read_network(skb, offset, bytes, length,
+						  &available) == RK_SKB_ACCESS_OK,
+			      "generic length accepted") ||
+		    rk_expect(available == sizeof(packet),
+			      "generic length available") ||
+		    rk_expect(!memcmp(bytes, packet + offset, length),
+			      "generic length bytes"))
+			goto out;
+	}
+	if (rk_expect(rk_skb_read_network(skb, sizeof(packet) - 1, bytes, 1,
+					  &available) == RK_SKB_ACCESS_OK,
+		      "last network-relative byte") ||
+	    rk_expect(bytes[0] == packet[sizeof(packet) - 1],
+		      "last network-relative value") ||
+	    rk_expect(rk_unchanged(skb, &snapshot),
+		      "generic reads leave geometry unchanged") ||
+	    rk_expect(!memcmp(skb_network_header(skb), packet, sizeof(packet)),
+		      "generic reads leave packet data unchanged"))
+		goto out;
+	ret = 0;
 out:
 	kfree_skb(skb);
 	return ret;
@@ -266,7 +349,9 @@ static int rk_test_linear_offsets(void)
 		      "negative available") ||
 	    rk_expect(!memcmp(prefix, packet, sizeof(prefix)),
 		      "negative prefix") ||
-	    rk_expect(rk_unchanged(skb, &snapshot), "negative read-only"))
+	    rk_expect(rk_unchanged(skb, &snapshot), "negative read-only") ||
+	    rk_expect(!memcmp(skb_network_header(skb), packet, sizeof(packet)),
+		      "negative read leaves packet data"))
 		goto out;
 	memset(prefix, 0, sizeof(prefix));
 	if (rk_expect(rk_skb_read_network(skb, 13, prefix, 6, &available) ==
@@ -299,7 +384,8 @@ static int rk_test_truncation(void)
 		failed = rk_expect(rk_skb_read_ipv4_prefix(skb, prefix,
 							     &available) ==
 				   RK_SKB_ACCESS_TRUNCATED, "short prefix") ||
-			 rk_expect(available == 0x31337 && prefix[0] == 0x3c,
+			 rk_expect(available == 0x31337 &&
+				   rk_all_bytes_are(prefix, sizeof(prefix), 0x3c),
 				   "truncation leaves outputs");
 		kfree_skb(skb);
 		if (failed)
@@ -310,10 +396,11 @@ static int rk_test_truncation(void)
 
 static int rk_test_page_fragments(void)
 {
-	unsigned char packet[20];
+	unsigned char packet[32];
 	unsigned int split;
 
-	rk_make_ipv4(packet, sizeof(packet), 5, 20, 17);
+	rk_make_ipv4(packet, sizeof(packet), 5, 28, 17);
+	memcpy(packet + 20, "\x12\x34\x56\x78\x00\x08\x9a\xbc", 8);
 	for (split = 0; split <= sizeof(packet); split++) {
 		unsigned char prefix[20];
 		struct rk_skb_snapshot snapshot;
@@ -363,6 +450,23 @@ static int rk_test_page_fragments(void)
 				 rk_expect(!memcmp(prefix, packet + 4, 12),
 					   "page-fragment relative bytes");
 		}
+		if (!failed) {
+			memset(prefix, 0, sizeof(prefix));
+			failed = rk_expect(rk_skb_read_network(skb, 20, prefix, 8,
+							       &available) ==
+					   RK_SKB_ACCESS_OK,
+					   "page-fragment UDP-header read") ||
+				 rk_expect(!memcmp(prefix, packet + 20, 8),
+					   "page-fragment UDP-header bytes");
+		}
+		if (!failed) {
+			unsigned char verify[sizeof(packet)];
+
+			failed = rk_expect(!skb_copy_bits(skb, 0, verify,
+							  sizeof(verify)) &&
+					   !memcmp(verify, packet, sizeof(packet)),
+					   "page-fragment packet unchanged");
+		}
 		kfree_skb(skb);
 		if (failed)
 			return -EINVAL;
@@ -401,7 +505,10 @@ static int rk_test_frag_list(void)
 	    rk_expect(available == sizeof(packet), "frag_list available") ||
 	    rk_expect(!memcmp(prefix, packet, sizeof(prefix)),
 		      "frag_list bytes") ||
-	    rk_expect(rk_unchanged(skb, &snapshot), "frag_list read-only"))
+	    rk_expect(rk_unchanged(skb, &snapshot), "frag_list read-only") ||
+	    rk_expect(!skb_copy_bits(skb, 0, prefix, sizeof(prefix)) &&
+		      !memcmp(prefix, packet, sizeof(packet)),
+		      "frag_list packet unchanged"))
 		goto out;
 	ret = 0;
 out:
@@ -413,6 +520,7 @@ static int rk_test_shared_and_unreadable(void)
 {
 	unsigned char packet[20];
 	unsigned char prefix[20];
+	struct rk_skb_snapshot original_snapshot;
 	struct rk_skb_snapshot snapshot;
 	struct sk_buff *clone;
 	struct sk_buff *skb;
@@ -424,14 +532,34 @@ static int rk_test_shared_and_unreadable(void)
 	skb = rk_linear_skb(packet, sizeof(packet), 0, 0);
 	if (rk_expect(skb != NULL, "shared fixture allocation"))
 		return -ENOMEM;
+	skb_get(skb);
+	rk_snapshot(skb, &snapshot);
+	if (rk_expect(skb_shared(skb), "shared skb reference") ||
+	    rk_expect(rk_skb_read_ipv4_prefix(skb, prefix, &available) ==
+		      RK_SKB_ACCESS_OK, "shared skb") ||
+	    rk_expect(!memcmp(prefix, packet, sizeof(prefix)),
+		      "shared skb bytes") ||
+	    rk_expect(rk_unchanged(skb, &snapshot), "shared skb read-only")) {
+		kfree_skb(skb);
+		goto out_skb;
+	}
+	kfree_skb(skb);
+
 	clone = skb_clone(skb, GFP_KERNEL);
 	if (rk_expect(clone != NULL, "clone allocation"))
 		goto out_skb;
+	rk_snapshot(skb, &original_snapshot);
 	rk_snapshot(clone, &snapshot);
-	if (rk_expect(rk_skb_read_ipv4_prefix(clone, prefix, &available) ==
+	if (rk_expect(skb_cloned(clone), "cloned data") ||
+	    rk_expect(rk_skb_read_ipv4_prefix(clone, prefix, &available) ==
 		      RK_SKB_ACCESS_OK, "cloned buffer") ||
 	    rk_expect(!memcmp(prefix, packet, sizeof(prefix)), "cloned bytes") ||
-	    rk_expect(rk_unchanged(clone, &snapshot), "clone read-only"))
+	    rk_expect(rk_unchanged(clone, &snapshot), "clone read-only") ||
+	    rk_expect(rk_unchanged(skb, &original_snapshot),
+		      "clone read leaves original geometry") ||
+	    rk_expect(!memcmp(clone->data, packet, sizeof(packet)) &&
+		      !memcmp(skb->data, packet, sizeof(packet)),
+		      "clone read leaves shared data"))
 		goto out_clone;
 	kfree_skb(clone);
 	kfree_skb(skb);
@@ -449,7 +577,8 @@ static int rk_test_shared_and_unreadable(void)
 	rk_snapshot(skb, &snapshot);
 	if (rk_expect(rk_skb_read_ipv4_prefix(skb, prefix, &available) ==
 		      RK_SKB_ACCESS_UNREADABLE, "unreadable fragments") ||
-	    rk_expect(prefix[0] == 0x69 && available == 0x6969,
+	    rk_expect(rk_all_bytes_are(prefix, sizeof(prefix), 0x69) &&
+		      available == 0x6969,
 		      "unreadable leaves outputs") ||
 	    rk_expect(rk_unchanged(skb, &snapshot), "unreadable read-only"))
 		goto out_skb;
@@ -513,6 +642,8 @@ static int __init rootkitlings_init(void)
 	int ret;
 
 	ret = rk_test_arguments_and_geometry();
+	if (!ret)
+		ret = rk_test_generic_ranges();
 	if (!ret)
 		ret = rk_test_linear_offsets();
 	if (!ret)

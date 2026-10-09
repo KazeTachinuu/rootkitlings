@@ -51,6 +51,9 @@ rk_skb_read_network(const struct sk_buff *skb, size_t offset,
 	copy_offset = (s64)network_offset + (s64)offset;
 	if (copy_offset < INT_MIN || copy_offset > INT_MAX)
 		return RK_SKB_ACCESS_INVALID_GEOMETRY;
+	if (copy_offset < 0 &&
+	    (s64)skb_headlen(skb) > (s64)INT_MAX + copy_offset)
+		return RK_SKB_ACCESS_INVALID_GEOMETRY;
 	source = skb_header_pointer_careful(skb, (int)copy_offset, (int)length,
 					    local);
 	if (!source)

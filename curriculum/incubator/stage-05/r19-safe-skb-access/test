@@ -158,6 +158,24 @@ build_mutant early-output mutate_early_output
 run_guest "$HERE/failure-check" "$scratch/early-output/rootkitlings.ko" \
 	"early output mutation" --tool tools/module_load_test
 
+mutate_prefix_only()
+{
+	sed -i '/if (!skb_frags_readable(skb))/i\
+\tif (length > RK_IPV4_PREFIX_LENGTH)\
+\t\treturn RK_SKB_ACCESS_TRUNCATED;' "$1"
+}
+build_mutant prefix-only mutate_prefix_only
+run_guest "$HERE/failure-check" "$scratch/prefix-only/rootkitlings.ko" \
+	"IPv4-prefix-only adapter" --tool tools/module_load_test
+
+mutate_last_failure_byte()
+{
+	sed -i 's/return RK_SKB_ACCESS_TRUNCATED;/return bytes[RK_SKB_READ_LIMIT - 1] = 0, RK_SKB_ACCESS_TRUNCATED;/' "$1"
+}
+build_mutant last-failure-byte mutate_last_failure_byte
+run_guest "$HERE/failure-check" "$scratch/last-failure-byte/rootkitlings.ko" \
+	"partial failure-output mutation" --tool tools/module_load_test
+
 expect_host_rejection()
 {
 	local directory=$1 label=$2

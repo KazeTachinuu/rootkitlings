@@ -4,5 +4,6 @@ Reject INT_MIN before negation, then prove the magnitude fits in skb_headroom().
 For a nonnegative offset, prove it is no larger than skb->len.
 Validate the requested network-relative range by checking before subtracting.
 Add that offset to the signed skb offset in s64, then prove the result fits int.
+If the final offset is negative, bound skb_headlen() before the helper subtracts it.
 Only after geometry and fragment readability are known should you call
 skb_header_pointer_careful() and commit local output values.
