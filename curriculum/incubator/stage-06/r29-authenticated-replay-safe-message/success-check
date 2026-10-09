@@ -1,0 +1,25 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Authenticated replay-safe message"
+
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	load rootkitlings.ko
+	if dmesg | grep -Eq 'rootkitlings: authenticated replay-safe message passed: [1-9][0-9]* assertions'; then
+		_ok "attempt $attempt completed authenticated and concurrent checks"
+	else
+		_fail "attempt $attempt did not publish its self-test result"
+	fi
+	unload rootkitlings
+	assert_absent /sys/module/rootkitlings
+	attempt=$((attempt + 1))
+done
+
+if dmesg | grep -Eq 'BUG:|WARNING:|Oops:|KASAN:|UBSAN:|hung task'; then
+	_fail "kernel log contains a fault report"
+else
+	_ok "kernel log is clean"
+fi
+summary

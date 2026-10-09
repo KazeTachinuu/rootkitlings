@@ -1,0 +1,12 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "HMAC key setup failure"
+if module_load_test /rootkitlings/rootkitlings.ko 129; then
+	_ok "key setup failure is propagated as EKEYREJECTED"
+else
+	_fail "key setup failure returned the wrong error"
+fi
+assert_absent /sys/module/rootkitlings
+summary
