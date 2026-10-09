@@ -421,25 +421,30 @@ The milestone produces a machine-readable evidence card stating which view chang
 - Defensive evidence: linear, nonlinear, truncated, and fragmented cases.
 - Current source: missing explicitly; current packet lessons hide part of this work.
 
-#### R20 - Register a non-disruptive Netfilter observer
+#### R20 - Observe local IPv4 traffic without changing it
 
-- Teaches: hook points, namespaces, priorities, verdicts, registration lifetime, and
-  accept-by-default behavior, plus the local callback rule: do bounded,
-  non-sleeping work and defer anything that may block.
-- Produces: a packet observation point.
-- Requires: R19 and R04.
-- Defensive evidence: hook inventory/counters, unchanged traffic, and removal.
-- Current source: L40.
+- Teaches: one IPv4 `LOCAL_OUT` hook in `init_net`, priority and verdict meaning,
+  atomic callback counting, bounded non-sleeping callback work, and RCU-safe
+  unregister-before-unload lifetime.
+- Produces: one `NF_ACCEPT` observation callback and its invocation count.
+- Requires: R04.
+- Scope: one count is one callback invocation for one skb traversal at that hook,
+  not a syscall, datagram, unique skb, or wire-packet count.
+- Defensive evidence: exact controlled IPv4 loopback deltas and payload delivery;
+  IPv6 and child-network-namespace negative controls; registration and publication
+  rollback; concurrent traffic; unload under traffic; reload; and clean logs.
+- Current source: L40, with its PRE_ROUTING choice and ambiguous ping test retired.
 
-#### R21 - Classify only fully validated packets
+#### R21 - Classify one bounded IPv4 UDP datagram
 
-- Teaches: layered protocol predicates, exact matching, fragment policy, and
+- Teaches: layered protocol predicates, exact UDP length and port decoding, and
   malformed-input state preservation.
-- Produces: bounded IPv4 and ICMP/transport classification.
-- Requires: R20.
-- Defensive evidence: matching, nonmatching, truncated, fragmented, and unrelated
-  traffic.
-- Current sources: L41 and the predicate work of L42.
+- Produces: one bounded UDP classification that combines R18 parsing, R19 packet
+  access, and R20 observation without claiming checksum validation.
+- Requires: R19 and R20.
+- Defensive evidence: matching, nonmatching, truncated, fragmented, malformed-length,
+  option-bearing, and unrelated traffic.
+- Current sources: L41 and only the relevant transport predicate from L42.
 
 #### R22 - Mutate a writable packet and repair its checksum state
 
