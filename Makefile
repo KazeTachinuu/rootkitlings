@@ -7,8 +7,6 @@ GUEST_TOOL_NAMES := \
 	credential_snapshot_test \
 	event_stream_test \
 	getdents64_test \
-	icmp_send \
-	ioctl_test \
 	module_load_params \
 	module_load_test \
 	netfilter_udp_test \
@@ -66,12 +64,6 @@ $(TOOL_OUT)/event_stream_test: vm/tools/event_stream_test.c | tool-output-direct
 
 $(TOOL_OUT)/getdents64_test: vm/tools/getdents64_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
-
-$(TOOL_OUT)/icmp_send: vm/tools/icmp_send.c | tool-output-directory
-	$(CC) -static -o $@ $<
-
-$(TOOL_OUT)/ioctl_test: vm/tools/ioctl_test.c | tool-output-directory
-	$(CC) -static -o $@ $<
 
 $(TOOL_OUT)/module_load_params: vm/tools/module_load_params.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
