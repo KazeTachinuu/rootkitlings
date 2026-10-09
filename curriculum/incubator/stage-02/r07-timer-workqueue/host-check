@@ -31,16 +31,29 @@ for symbol in rk_state_timer_fires rk_state_record_timer_fire \
 done
 
 state_source=$build_dir/core/state.c
-grep -Eq 'atomic_long_t[[:space:]]+timer_fires' "$state_source" ||
-	die "timer_fires must be a private atomic_long_t"
-grep -Eq 'atomic_long_t[[:space:]]+worker_runs' "$state_source" ||
-	die "worker_runs must be a private atomic_long_t"
-[[ $(grep -Ec 'atomic_long_set[[:space:]]*\(' "$state_source") -ge 2 ]] ||
-	die "initialize both counters with atomic_long_set"
-[[ $(grep -Ec 'atomic_long_read[[:space:]]*\(' "$state_source") -ge 2 ]] ||
-	die "read both counters with atomic_long_read"
-[[ $(grep -Ec 'atomic_long_inc[[:space:]]*\(' "$state_source") -eq 2 ]] ||
-	die "increment each counter through its state operation"
+state_text=$(tr '\n' ' ' < "$state_source")
+for field in timer_fires worker_runs; do
+	grep -Eq "unsigned[[:space:]]+long[[:space:]]+$field" "$state_source" ||
+		die "$field must be a private unsigned long"
+	grep -Eq "state->${field}[[:space:]]*=[[:space:]]*0" "$state_source" ||
+		die "$field must be initialized before publication"
+	[[ $(grep -Ec "READ_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*\)" \
+		"$state_source") -eq 2 ]] ||
+		die "$field needs one getter read and one single-writer increment read"
+	[[ $(grep -Ec "WRITE_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*," \
+		"$state_source") -eq 1 ]] ||
+		die "$field must have one single-writer increment"
+done
+for specification in \
+	'rk_state_record_timer_fire timer_fires' \
+	'rk_state_record_worker_run worker_runs'; do
+	read -r function field <<< "$specification"
+	grep -Eq "void[[:space:]]+${function}[^{}]*\{[[:space:]]*unsigned[[:space:]]+long[[:space:]]+value;[[:space:]]*value[[:space:]]*=[[:space:]]*READ_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*\);[[:space:]]*WRITE_ONCE[[:space:]]*\([[:space:]]*state->${field}[[:space:]]*,[[:space:]]*value[[:space:]]*\+[[:space:]]*1[[:space:]]*\);[[:space:]]*\}" \
+		<<< "$state_text" || die "$function must be one READ_ONCE plus WRITE_ONCE"
+done
+if grep -Eq '(^|[^[:alnum:]_])atomic(_long)?(_t|_(read|set|inc))' "$state_source"; then
+	die "single-writer counters must not use the atomic_t API"
+fi
 
 proc_undefined=$(nm -u "$build_dir/interface/proc.o")
 for symbol in rk_state_timer_fires rk_state_worker_runs; do
@@ -71,6 +84,12 @@ scheduler_source=$build_dir/execution/scheduler.c
 if grep -Eq '\b(in_atomic|in_task|in_interrupt)[[:space:]]*\(' "$scheduler_source"; then
 	die "do not branch on context predicates"
 fi
+[[ $(grep -Ec 'struct[[:space:]]+work_struct[[:space:]]+action_work' \
+	"$scheduler_source") -eq 1 ]] || die "use exactly one action_work item"
+[[ $(grep -Ec 'schedule_work[[:space:]]*\([[:space:]]*&action_work[[:space:]]*\)' \
+	"$scheduler_source") -eq 1 ]] || die "queue action_work exactly once per timer callback"
+[[ $(grep -Ec 'struct[[:space:]]+timer_list[[:space:]]+action_timer' \
+	"$scheduler_source") -eq 1 ]] || die "use exactly one action_timer"
 
 state_line=$(grep -n 'scheduler_state[[:space:]]*=[[:space:]]*state' "$scheduler_source" |
 	head -n1 | cut -d: -f1)
@@ -145,6 +164,12 @@ assert_direct_calls rk_action_timer "$timer_disassembly" \
 	rk_state_record_timer_fire queue_work_on mod_timer
 assert_direct_calls rk_action_run "$work_disassembly" \
 	rk_state_actions_enabled rk_state_record_worker_run
+all_scheduler_calls=$(call_relocations "$scheduler_disassembly")
+for symbol in rk_state_record_timer_fire rk_state_record_worker_run; do
+	count=$(awk -v expected="$symbol" '$0 == expected { count++ }
+		END { print count + 0 }' <<< "$all_scheduler_calls")
+	[[ $count -eq 1 ]] || die "$symbol must have exactly one scheduler caller"
+done
 
 state_disassembly=$(objdump -dr "$build_dir/core/state.o")
 for function in rk_state_record_timer_fire rk_state_actions_enabled \
@@ -152,11 +177,9 @@ for function in rk_state_record_timer_fire rk_state_actions_enabled \
 	helper_disassembly=$(sed -n "/<$function>:/,/^$/p" <<< "$state_disassembly")
 	[[ -n $helper_disassembly ]] || die "core/state.c must define $function"
 	assert_direct_calls "$function" "$helper_disassembly"
-done
-for function in rk_state_record_timer_fire rk_state_record_worker_run; do
-	helper_disassembly=$(sed -n "/<$function>:/,/^$/p" <<< "$state_disassembly")
-	grep -Eq '[[:space:]]lock[[:space:]]' <<< "$helper_disassembly" ||
-		die "$function must remain one inline atomic increment"
+	if grep -Eq '[[:space:]]lock[[:space:]]' <<< "$helper_disassembly"; then
+		die "$function must remain a lock-free single-writer helper"
+	fi
 done
 
 main_undefined=$(nm -u "$build_dir/core/main.o")
@@ -178,10 +201,14 @@ destroy_line=$(grep -n 'rk_state_destroy[[:space:]]*(' "$main_source" | tail -n1
 	die "unload order must be proc unpublish, scheduler stop, state destroy"
 
 header_text=$(tr '\n' ' ' < "$build_dir/include/rootkit.h")
+for getter in rk_state_timer_fires rk_state_worker_runs; do
+	grep -Eq "unsigned[[:space:]]+long[[:space:]]+${getter}[[:space:]]*\(" \
+		<<< "$header_text" || die "rootkit.h must expose unsigned long $getter"
+done
 for declaration in rk_state_timer_fires rk_state_record_timer_fire \
 	rk_state_worker_runs rk_state_record_worker_run rk_scheduler_start rk_scheduler_stop; do
 	grep -Eq "${declaration}[[:space:]]*\(" <<< "$header_text" ||
 		die "rootkit.h must declare $declaration"
 done
 
-printf '[+] timer deferral, normal workqueue, counters, and teardown verified\n'
+printf '[+] timer deferral, single-writer counters, and teardown verified\n'

@@ -1,0 +1,10 @@
+Keep one task pointer, one wait queue, one atomic pending count, and one borrowed
+rk_state pointer in execution/worker.c.
+
+The proc callback checks actions_enabled before calling rk_worker_request(). The
+request operation adds one unless pending is already INT_MAX, then wakes the
+wait queue. The thread waits for pending > 0 or kthread_should_stop(), checks the
+stop condition first, and consumes one unit with atomic_dec_if_positive().
+
+Start the worker before publishing procfs. On publication failure and unload,
+kthread_stop() must return before state is destroyed.

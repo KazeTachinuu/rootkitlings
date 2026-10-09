@@ -1,0 +1,7 @@
+ROOTKITLINGS_FAIL_POINT ?= 0
+
+obj-m += rootkitlings.o
+# TODO: add execution/worker.o to the module.
+rootkitlings-y := core/main.o core/state.o interface/proc.o
+ccflags-y += -I$(src)/include
+ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)

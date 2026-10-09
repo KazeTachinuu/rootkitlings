@@ -1,0 +1,32 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Worker cleanup after publication failure"
+
+worker_count()
+{
+	count=0
+	for comm in /proc/[0-9]*/comm; do
+		[ -r "$comm" ] || continue
+		[ "$(cat "$comm")" = rkling_event ] && count=$((count + 1))
+	done
+	printf '%s\n' "$count"
+}
+
+for attempt in 1 2; do
+	if module_load_test /rootkitlings/rootkitlings.ko 12; then
+		_ok "attempt $attempt returned numeric ENOMEM"
+	else
+		_fail "attempt $attempt did not return ENOMEM"
+	fi
+	assert_absent /sys/module/rootkitlings
+	assert_absent /proc/rootkitlings
+	if [ "$(worker_count)" -eq 0 ]; then
+		_ok "attempt $attempt stopped and joined the worker"
+	else
+		_fail "attempt $attempt left rkling_event running"
+	fi
+done
+
+summary

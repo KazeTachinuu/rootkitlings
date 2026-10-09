@@ -18,9 +18,9 @@ __must_check struct rk_state *rk_state_create(void);
 bool rk_state_is_active(const struct rk_state *state);
 bool rk_state_actions_enabled(const struct rk_state *state);
 void rk_state_set_actions_enabled(struct rk_state *state, bool enabled);
-long rk_state_timer_fires(const struct rk_state *state);
+unsigned long rk_state_timer_fires(const struct rk_state *state);
 void rk_state_record_timer_fire(struct rk_state *state);
-long rk_state_worker_runs(const struct rk_state *state);
+unsigned long rk_state_worker_runs(const struct rk_state *state);
 void rk_state_record_worker_run(struct rk_state *state);
 void rk_state_destroy(struct rk_state *state);
 

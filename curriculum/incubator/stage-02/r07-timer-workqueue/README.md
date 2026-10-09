@@ -38,6 +38,16 @@ The worker reads the action switch once.
 An enabled read admits that run; a disabled read rejects it.
 Writing `disable` prevents later admissions, but it is not a quiescence barrier: a run admitted before the write may finish after the write returns.
 
+Each counter also has exactly one writer:
+
+- the timer callback writes `timer_fires`
+- the one non-reentrant `action_work` item writes `worker_runs`
+
+Procfs reads both counters concurrently.
+The supplied state code therefore uses `READ_ONCE()` for each read and one `READ_ONCE()` plus `WRITE_ONCE()` for each increment.
+That read-plus-write is safe only under the single-writer rule; it is not an atomic read-modify-write operation.
+Adding another writer would require an atomic read-modify-write operation or a lock.
+
 ## Ownership and shutdown
 
 `execution/scheduler.c` owns one timer and one work item.
@@ -74,5 +84,6 @@ The checker verifies the callback call boundaries, observable timer and worker b
 - [Kernel timers](https://docs.kernel.org/7.2/driver-api/basics.html#timers)
 - [Workqueues](https://docs.kernel.org/7.2/core-api/workqueue.html)
 - [Concurrency and contexts](https://docs.kernel.org/7.2/kernel-hacking/hacking.html)
+- [`READ_ONCE()` and `WRITE_ONCE()`](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/Documentation/memory-barriers.txt?h=v7.2)
 - [`timer_shutdown_sync()` implementation](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/time/timer.c?h=v7.2)
 - [Timer API declarations](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/linux/timer.h?h=v7.2)

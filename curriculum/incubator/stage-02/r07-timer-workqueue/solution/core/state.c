@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/atomic.h>
 #include <linux/bug.h>
+#include <linux/compiler.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
@@ -9,9 +9,9 @@
 
 struct rk_state {
 	bool active;
-	atomic_t actions_enabled;
-	atomic_long_t timer_fires;
-	atomic_long_t worker_runs;
+	bool actions_enabled;
+	unsigned long timer_fires;
+	unsigned long worker_runs;
 };
 
 __must_check struct rk_state *rk_state_create(void)
@@ -26,9 +26,9 @@ __must_check struct rk_state *rk_state_create(void)
 		return ERR_PTR(-ENOMEM);
 
 	state->active = true;
-	atomic_set(&state->actions_enabled, 0);
-	atomic_long_set(&state->timer_fires, 0);
-	atomic_long_set(&state->worker_runs, 0);
+	state->actions_enabled = false;
+	state->timer_fires = 0;
+	state->worker_runs = 0;
 	return state;
 }
 
@@ -39,32 +39,38 @@ bool rk_state_is_active(const struct rk_state *state)
 
 bool rk_state_actions_enabled(const struct rk_state *state)
 {
-	return atomic_read(&state->actions_enabled) != 0;
+	return READ_ONCE(state->actions_enabled);
 }
 
 void rk_state_set_actions_enabled(struct rk_state *state, bool enabled)
 {
-	atomic_set(&state->actions_enabled, enabled ? 1 : 0);
+	WRITE_ONCE(state->actions_enabled, enabled);
 }
 
-long rk_state_timer_fires(const struct rk_state *state)
+unsigned long rk_state_timer_fires(const struct rk_state *state)
 {
-	return atomic_long_read(&state->timer_fires);
+	return READ_ONCE(state->timer_fires);
 }
 
 void rk_state_record_timer_fire(struct rk_state *state)
 {
-	atomic_long_inc(&state->timer_fires);
+	unsigned long value;
+
+	value = READ_ONCE(state->timer_fires);
+	WRITE_ONCE(state->timer_fires, value + 1);
 }
 
-long rk_state_worker_runs(const struct rk_state *state)
+unsigned long rk_state_worker_runs(const struct rk_state *state)
 {
-	return atomic_long_read(&state->worker_runs);
+	return READ_ONCE(state->worker_runs);
 }
 
 void rk_state_record_worker_run(struct rk_state *state)
 {
-	atomic_long_inc(&state->worker_runs);
+	unsigned long value;
+
+	value = READ_ONCE(state->worker_runs);
+	WRITE_ONCE(state->worker_runs, value + 1);
 }
 
 void rk_state_destroy(struct rk_state *state)
