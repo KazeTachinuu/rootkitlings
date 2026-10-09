@@ -504,16 +504,39 @@ The old L34 private-mutex unlink is therefore not a valid required mechanism, wh
 - Current source: L44, with its one-assignment task, duplicated parsing, fixed-port
   logic, inaccurate routing wording, and unsupported capture claim retired.
 
-#### R23 - Own a kernel socket from creation through release
+#### R23 - Own a kernel TCP socket from creation through release
 
-- Teaches: namespace-aware creation, connect/send/receive errors, datagram exactness,
-  shutdown, release, visibility in socket tables, and the local rule that
-  blocking socket operations run only from an owned sleep-capable path.
-- Produces: a kernel-owned endpoint.
+- Teaches: namespace-aware socket creation, blocking connect error propagation,
+  endpoint capture, shutdown versus release, socket-table evidence, and the rule
+  that these potentially sleeping operations run only from an owned process-context
+  path.
+- Produces: one idle `init_net` IPv4 TCP client connected to a dynamic loopback
+  listener supplied by the guest checker.
 - Requires: R04.
-- Defensive evidence: socket inventory and disappearance after failure or unload.
-- Current source: L43, refactored so the title and implementation agree on the
-  actual socket family and type.
+- Acquisition: validate the fixed loopback configuration; create locally; connect
+  with flags zero; capture and validate both actual endpoint tuples; commit evidence
+  fields; and publish the owning socket pointer last.
+  Creation, connection, and endpoint-query errors propagate unchanged.
+- Teardown: every post-creation failure releases the socket; every post-connection
+  failure first attempts `SHUT_RDWR` and then releases unconditionally without
+  replacing the acquisition error.
+  Procfs is published only after complete ownership and removed before close.
+  Shutdown changes connection directions but never substitutes for `sock_release()`.
+- Context: all socket work is synchronous in module init and exit.
+  Send, receive, retry, a resident worker, and blocked-I/O cancellation begin only
+  in R24.
+- Evidence: proc status renders the captured local and peer tuples, while the exact
+  `TCP_ESTABLISHED` row in `init_net` is the independent live view.
+  Ownership status does not claim the peer remains connected forever.
+  After release, a legitimate `TIME_WAIT` row is not mistaken for a leaked owned
+  socket.
+- Defensive evidence: invalid configuration; exact `ECONNREFUSED`; failures after
+  create, connect, and proc publication; repeated rollback; child-network-namespace
+  load with `init_net` scope; exact tuple visibility and isolation; concurrent
+  snapshots; held peer during unload; prompt EOF; reload; and clean logs.
+- Current source: L43.
+  Its raw ICMP specialization, ambiguous row-count evidence, static status, missing
+  namespace contrast, and lack of real lifecycle failures are retired.
 
 #### R24 - Frame and cancel a TCP client correctly
 
