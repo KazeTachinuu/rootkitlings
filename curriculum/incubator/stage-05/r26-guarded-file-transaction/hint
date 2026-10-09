@@ -1,0 +1,7 @@
+Treat every file as an identity plus metadata, length, and bytes.
+
+Read and write in loops. A positive result may be shorter than requested. Reject a result that exceeds the request or does not advance the supplied position by exactly that result.
+
+After writing and syncing the candidate, reopen both fixed names and compare them with the retained snapshots before exchanging them. Record a successful exchange before the directory sync can fail.
+
+Rollback uses the same rule in reverse. If either name no longer matches, preserve both names and return the error.

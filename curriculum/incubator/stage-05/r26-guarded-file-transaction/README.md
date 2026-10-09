@@ -1,0 +1,56 @@
+# Replace one owned file and restore it conditionally
+
+This exercise changes one file without losing the original when a later step fails.
+It uses only a private test directory created by the checker:
+
+- `/run/rootkitlings-r26/request.conf`
+- `/run/rootkitlings-r26/.request.conf.rootkitlings`
+
+The directory is a root-owned `tmpfs` mounted `nosuid,nodev,noexec` with mode `0700`.
+The module never accepts a path and never accesses `/etc` or a persistent host filesystem.
+
+## Your task
+
+Edit one file:
+
+- `persistence/transaction.c`
+
+Implement the four functions declared in `include/transaction.h`.
+The supplied platform layer performs fixed-path lookup, the locked VFS exchange, guarded unlink, and sync calls.
+Your code owns the transaction:
+
+- read the original with a bounded loop;
+- admit only a root-owned regular file with mode `0600`, one link, and at most 256 binary bytes;
+- reject a target that already contains the exact 12 bytes `rkling_demo\n`;
+- create the fixed sibling exclusively and finish every short write;
+- sync the candidate;
+- reopen and compare identity, metadata, length, and bytes for both names;
+- exchange the names, record that fact immediately, then sync the directory;
+- publish `applied` only after the directory sync succeeds;
+- on rollback, exchange only if both names still match their retained snapshots;
+- sync the restored directory, verify the candidate again, unlink it, and sync once more.
+
+Any changed, removed, replaced, relinked, or re-moded file suppresses rollback.
+Preserve both names and emit one warning instead of overwriting evidence.
+
+Both apply and restore run in module load or unload process context.
+`/proc/rootkitlings` reports cached state only; reading it performs no file I/O.
+
+Run:
+
+```bash
+./rootkitlings check
+```
+
+The checker covers binary originals of 0, 1, and 256 bytes, rejects 257 bytes, forces every positive short-read and short-write size, injects failures at each transaction stage, and changes both names before unload.
+It also builds with `W=1` and runs the module against real files on the disposable guest's private `tmpfs`.
+
+`fsync` on `tmpfs` still checks call ordering and error handling, but it does not prove survival across reboot or power loss.
+The private directory gives this exercise exclusive ownership during the transaction; this is not a compare-and-swap API for cooperating writers.
+
+## References
+
+- [Linux 7.2 `kernel_read()`, `kernel_write()`, and `vfs_fsync()` declarations](https://github.com/torvalds/linux/blob/v7.2/include/linux/fs.h)
+- [Linux 7.2 locked rename helpers and `vfs_rename()`](https://github.com/torvalds/linux/blob/v7.2/fs/namei.c)
+- [Linux 7.2 `RENAME_EXCHANGE` definition](https://github.com/torvalds/linux/blob/v7.2/include/uapi/linux/fs.h)
+- [Linux 7.2 tmpfs file operations](https://github.com/torvalds/linux/blob/v7.2/mm/shmem.c)

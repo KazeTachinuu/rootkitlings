@@ -1,0 +1,27 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /lib/check.sh
+
+begin "Rejected unfinished file transaction"
+
+root=/run/rootkitlings-r26
+target=$root/request.conf
+sibling=$root/.request.conf.rootkitlings
+mkdir -p "$root"
+mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
+chmod 0700 "$root"
+printf 'original' > "$target"
+chmod 0600 "$target"
+
+if module_load_test /rootkitlings/rootkitlings.ko 22; then
+	_ok "unfinished transaction is rejected with EINVAL"
+else
+	_fail "unfinished transaction returned the wrong error"
+fi
+if [ "$(cat "$target")" = original ] && [ ! -e "$sibling" ]; then
+	_ok "unfinished transaction changed no file"
+else
+	_fail "unfinished transaction changed the fixture"
+fi
+assert_absent /sys/module/rootkitlings
+summary
