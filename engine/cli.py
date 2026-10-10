@@ -14,7 +14,13 @@ from engine.catalog import Catalog, CatalogError
 from engine.build_env import module_build_environment
 from engine.console import Console
 from engine.process import ProcessError, ProcessTimeout, run_process
-from engine.reference_play import OperatorError, run_reference_play
+from engine.control_console import (
+    OperatorError,
+    create_target_session,
+    read_target_session,
+    run_control_console,
+    wait_for_operator,
+)
 from engine.state import StateStore, StateError
 from engine.verification import VerificationError, build_verification_cases
 from engine.workspace import (
@@ -813,6 +819,7 @@ def cmd_run(a, gdb=False):
     command_name = 'gdb' if gdb else 'run'
     q = None
     extra = []
+    reference = False
     i = 0
     while i < len(a):
         if a[i] == '--cap':
@@ -820,6 +827,11 @@ def cmd_run(a, gdb=False):
                 die('--cap requires a capability')
             extra += ['--cap', a[i + 1]]
             i += 2
+        elif a[i] == '--reference':
+            if reference:
+                die('--reference may be specified only once')
+            reference = True
+            i += 1
         elif a[i].startswith('-'):
             die(f'Unknown option: {a[i]}')
         elif q is None:
@@ -829,7 +841,55 @@ def cmd_run(a, gdb=False):
             die(f'{command_name} accepts at most one exercise')
     with STORE.read_locked() as s:
         x = resolve(q, s)
-        available(x, s)
+        if not reference:
+            available(x, s)
+    if reference:
+        if gdb:
+            die('--reference cannot be combined with gdb')
+        if extra:
+            die('--reference cannot be combined with --cap')
+        if x.runtime is None:
+            die(f'{label(x)} has no interactive completed reference')
+        UI.heading(f'Target {label(x)}: {x.title}')
+        UI.field('Source', 'Completed reference')
+        UI.field('Guest', 'Restricted QEMU')
+        with tempfile.TemporaryDirectory(
+            prefix='rootkitlings-reference-'
+        ) as directory:
+            root = Path(directory)
+            source = CAT.materialize_solution(x, root, 'source')
+            module_source = (
+                source
+                if x.workspace.build == '.'
+                else source / x.workspace.build
+            )
+            module = build_source(x, module_source, root / 'build')
+            try:
+                target = create_target_session(ROOT, label(x))
+            except OperatorError as error:
+                raise CLIError(str(error)) from error
+            try:
+                UI.section('Connect from another terminal')
+                UI.command(f'./rootkitlings connect {label(x)}')
+                UI.progress('Waiting for both operator listeners')
+                wait_for_operator(target)
+                UI.success('Operator listeners ready')
+                UI.section('Target console')
+                command = [
+                    str(ROOT / 'vm/boot'),
+                    '--runtime-setup', str(ROOT / x.runtime.setup),
+                    '--control-key-file', str(target.key_file),
+                    '--control-port', str(target.control_port),
+                    '--shell-port', str(target.shell_port),
+                    str(module),
+                ]
+                status = run(command, visible=True).returncode
+            finally:
+                target.close()
+        if status:
+            die(f'Target exited with status {status}')
+        UI.success(f'Target {label(x)} stopped')
+        return
     command = [
         str(ROOT / 'vm/boot'),
         *(['--gdb'] if gdb else []),
@@ -840,39 +900,36 @@ def cmd_run(a, gdb=False):
     raise SystemExit(run(command, visible=True).returncode)
 
 
-def cmd_play(a):
+def cmd_connect(a):
     with STORE.read_locked() as state:
-        item = resolve(one(a, 'play'), state)
-    if item.play is None:
-        die(f'{label(item)} has no playable reference')
-    UI.heading(f'Play {label(item)}: {item.title}')
-    UI.field('Source', 'Completed reference')
-    UI.field('Network', 'Restricted host loopback forwards')
-    with tempfile.TemporaryDirectory(prefix='rootkitlings-play-') as directory:
-        root = Path(directory)
-        source = CAT.materialize_solution(item, root, 'source')
-        module_source = (
-            source
-            if item.workspace.build == '.'
-            else source / item.workspace.build
+        item = resolve(one(a, 'connect'), state)
+    if item.runtime is None:
+        die(f'{label(item)} has no interactive completed reference')
+    try:
+        target = read_target_session(ROOT, label(item))
+        UI.heading(f'{label(item)} control console')
+        UI.field('Target', item.title)
+        UI.field('Control', 'AES-256-GCM authenticated')
+        UI.field('Shell', 'Ticket-bound plaintext PTY')
+        status = run_control_console(
+            ROOT,
+            target,
+            transcript=UI.transcript,
+            output=UI.raw,
+            success=UI.success,
+            warning=UI.warning,
         )
-        module = build_source(item, module_source, root / 'build')
-        try:
-            status = run_reference_play(
-                ROOT,
-                module,
-                item.play.profile,
-                ROOT / item.play.script,
-                transcript=UI.transcript,
-                output=UI.raw,
-                success=UI.success,
-                warning=UI.warning,
-            )
-        except OperatorError as error:
-            raise CLIError(str(error)) from error
+    except OperatorError as error:
+        raise CLIError(
+            str(error),
+            recovery=((
+                'Start the target in another terminal',
+                f'./rootkitlings run {label(item)} --reference',
+            ),),
+        ) from error
     if status:
-        die(f'Reference play session exited with status {status}')
-    UI.success(f'Play session closed for {label(item)}')
+        die(f'Control console exited with status {status}')
+    UI.success('Console disconnected; the target is still running')
 
 
 def cmd_status(a):
@@ -1071,8 +1128,9 @@ def usage():
             ('start [EXERCISE]', 'Create or reopen the workspace'),
             ('build [EXERCISE]', 'Compile without running checks'),
             ('check [EXERCISE]', 'Build and verify in a disposable guest'),
-            ('run [EXERCISE]', 'Open an interactive disposable guest'),
-            ('play [EXERCISE]', 'Operate the completed reference'),
+            ('run [EXERCISE]', 'Run your module in a disposable guest'),
+            ('run ID --reference', 'Run the completed reference'),
+            ('connect [EXERCISE]', 'Connect to its control console'),
             ('gdb [EXERCISE]', 'Open a guest waiting for GDB'),
         )),
         ('Progress', (
@@ -1109,7 +1167,7 @@ CMDS = {
     'hint': cmd_hint,
     'solution': cmd_solution,
     'run': cmd_run,
-    'play': cmd_play,
+    'connect': cmd_connect,
     'gdb': lambda a: cmd_run(a, True),
     'status': cmd_status,
     'list': cmd_list,
@@ -1142,7 +1200,7 @@ def main(a):
         CMDS[command](arguments)
         return 0
     initialize_runtime()
-    if command in {'build', 'check', 'run', 'gdb', 'play'}:
+    if command in {'build', 'check', 'run', 'gdb', 'connect'}:
         require_setup()
     CMDS[command](arguments)
     return 0

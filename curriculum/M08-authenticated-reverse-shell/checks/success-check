@@ -61,7 +61,7 @@ wait_field()
 mkdir -p "$root" "$work"
 mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
 chmod 0700 "$root"
-printf 'operator-original\n' > "$root/rootkitlings.conf"
+printf 'original-request\n' > "$root/rootkitlings.conf"
 chmod 0600 "$root/rootkitlings.conf"
 cp "$root/rootkitlings.conf" "$work/original"
 ifconfig lo 127.0.0.1 up

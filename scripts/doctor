@@ -71,10 +71,14 @@ package_name()
 		arch:build|arch:compiler|arch:binutils) printf base-devel ;;
 		debian:build|debian:compiler) printf build-essential ;;
 		arch:python) printf python ;;
+		arch:glibc|fedora:glibc) printf glibc ;;
+		debian:glibc) printf libc-bin ;;
 		arch:static-libc) printf glibc ;;
 		debian:libelf) printf libelf-dev ;;
 		debian:libcrypto) printf libssl-dev ;;
 		debian:static-libc) printf libc6-dev ;;
+		arch:script|fedora:script) printf util-linux ;;
+		debian:script) printf bsdutils ;;
 		fedora:build) printf make ;;
 		fedora:compiler) printf gcc ;;
 		fedora:libelf) printf elfutils-libelf-devel ;;
@@ -128,6 +132,7 @@ ui_item note 'host kernel' "irrelevant ($(uname -r))"
 printf '\n'
 ui_heading 'Build and verification tools'
 check_command bash bash
+check_command ldd glibc
 check_command make build
 check_command gcc compiler
 check_command clang clang
@@ -201,8 +206,8 @@ if command -v busybox >/dev/null; then
 	missing_applets=
 	for applet in bc cat chmod cmp cut dd diff dmesg echo find grep head hexdump id \
 		ifconfig insmod kill ls lsmod mkdir modinfo mount nc ping poweroff printf ps \
-		reboot rm rmdir rmmod sed setsid sh sha256sum sleep sort stat tail test touch tr \
-		uname unshare wc xargs xxd od; do
+		reboot rm rmdir rmmod sed setsid sh sha256sum sleep sort stat stty tail \
+		test touch tr tty uname unshare wc xargs xxd od; do
 		grep -qx "$applet" <<< "$busybox_applets" || missing_applets+=" $applet"
 	done
 	if [[ -z $missing_applets ]]; then
@@ -211,6 +216,18 @@ if command -v busybox >/dev/null; then
 		ui_item fail 'BusyBox applets' "missing:$missing_applets"
 		missing=$((missing + 1))
 	fi
+fi
+
+if command -v script >/dev/null; then
+	if script --version 2>&1 | grep -qi 'util-linux'; then
+		ui_item pass script 'util-linux PTY relay'
+	else
+		ui_item fail script "requires util-linux (package: $(package_name script))"
+		missing=$((missing + 1))
+	fi
+else
+	ui_item fail script "missing (package: $(package_name script))"
+	missing=$((missing + 1))
 fi
 
 if command -v qemu-system-x86_64 >/dev/null; then

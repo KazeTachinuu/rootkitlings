@@ -160,7 +160,8 @@ class LearnerCLITests(unittest.TestCase):
             name: (lambda _arguments: None)
             for name in (
                 "setup", "read", "start", "build", "check", "hint",
-                "solution", "run", "play", "gdb", "status", "list", "prereq",
+                "solution", "run", "connect", "gdb", "status", "list",
+                "prereq",
                 "restore", "reset", "clean",
             )
         }
@@ -173,7 +174,7 @@ class LearnerCLITests(unittest.TestCase):
                 self.globals["main"]([command])
                 self.assertEqual(
                     bool(gated),
-                    command in {"build", "check", "run", "play", "gdb"},
+                    command in {"build", "check", "run", "connect", "gdb"},
                 )
         finally:
             self.globals["CMDS"] = original_commands
@@ -219,7 +220,8 @@ class LearnerCLITests(unittest.TestCase):
         self.assertNotIn("progress-reset", help_text)
         self.assertIn("current exercise is used", help_text)
         self.assertIn("or a unique prefix", help_text)
-        self.assertIn("play [EXERCISE]", help_text)
+        self.assertIn("run ID --reference", help_text)
+        self.assertIn("connect [EXERCISE]", help_text)
 
     def test_standard_help_flags_show_help(self) -> None:
         for flag in ("-h", "--help"):
@@ -657,9 +659,9 @@ class LearnerCLITests(unittest.TestCase):
         finally:
             self.globals["solution_output"] = original_output
 
-    def test_play_uses_a_reference_copy_without_mutating_progress(self) -> None:
+    def test_reference_run_does_not_mutate_progress(self) -> None:
         item = self.globals["CAT"].by_id[self.globals["ROUTE"][-1]]
-        self.assertIsNotNone(item.play)
+        self.assertIsNotNone(item.runtime)
         first = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
         with self.globals["STORE"].locked() as state:
             state.exercise(first.id).attempts = 2
@@ -671,7 +673,9 @@ class LearnerCLITests(unittest.TestCase):
         catalog = self.globals["CAT"]
         original_materialize = catalog.materialize_solution
         original_build = self.globals["build_source"]
-        original_play = self.globals["run_reference_play"]
+        original_session = self.globals["create_target_session"]
+        original_wait = self.globals["wait_for_operator"]
+        original_run = self.globals["run"]
 
         def fake_materialize(selected, destination, stable_id):
             calls["materialize"] = (selected, destination, stable_id)
@@ -686,34 +690,54 @@ class LearnerCLITests(unittest.TestCase):
             module.write_bytes(b"reference module")
             return module
 
-        def fake_play(*args, **kwargs):
-            calls["play"] = (args, kwargs)
-            return 0
+        class FakeTarget:
+            key_file = ROOT / ".rootkitlings/run/C00/control.key"
+            control_port = 40001
+            shell_port = 40002
+
+            @staticmethod
+            def close():
+                calls["closed"] = True
+
+        def fake_session(*args):
+            calls["session"] = args
+            target = FakeTarget()
+            calls["target"] = target
+            return target
+
+        def fake_run(command, **kwargs):
+            calls["run"] = (command, kwargs)
+            return SimpleNamespace(returncode=0)
 
         try:
             catalog.materialize_solution = fake_materialize
             self.globals["build_source"] = fake_build
-            self.globals["run_reference_play"] = fake_play
+            self.globals["create_target_session"] = fake_session
+            self.globals["wait_for_operator"] = lambda target: calls.update(
+                waited=target
+            )
+            self.globals["run"] = fake_run
             with redirect_stdout(io.StringIO()):
-                self.globals["cmd_play"]([item.serial])
+                self.globals["cmd_run"]([item.serial, "--reference"])
         finally:
             catalog.materialize_solution = original_materialize
             self.globals["build_source"] = original_build
-            self.globals["run_reference_play"] = original_play
+            self.globals["create_target_session"] = original_session
+            self.globals["wait_for_operator"] = original_wait
+            self.globals["run"] = original_run
 
         self.assertEqual(self.globals["STATE"].read_bytes(), before_state)
         self.assertEqual(marker.read_bytes(), before_workspace)
         self.assertEqual(calls["materialize"][0], item)
         self.assertEqual(calls["materialize"][2], "source")
-        play_args, play_kwargs = calls["play"]
-        self.assertEqual(play_args[0], ROOT)
-        self.assertEqual(play_args[2], item.play.profile)
-        self.assertEqual(play_args[3], ROOT / item.play.script)
-        self.assertTrue(Path(play_args[1]).name.endswith(".ko"))
-        self.assertEqual(
-            set(play_kwargs),
-            {"transcript", "output", "success", "warning"},
-        )
+        self.assertEqual(calls["session"], (ROOT, item.serial))
+        self.assertIs(calls["waited"], calls["target"])
+        command, run_kwargs = calls["run"]
+        self.assertIn("--runtime-setup", command)
+        self.assertIn(str(ROOT / item.runtime.setup), command)
+        self.assertTrue(Path(command[-1]).name.endswith(".ko"))
+        self.assertEqual(run_kwargs, {"visible": True})
+        self.assertTrue(calls["closed"])
 
     def test_start_records_starter_and_inherited_baseline_provenance(self) -> None:
         first, second = (

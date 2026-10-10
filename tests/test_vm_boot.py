@@ -12,9 +12,9 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class VMBootTests(unittest.TestCase):
-    def test_play_options_require_a_complete_play_configuration(self) -> None:
+    def test_runtime_options_require_runtime_setup(self) -> None:
         result = subprocess.run(
-            [ROOT / "vm/boot", "--play-profile", "authenticated-agent"],
+            [ROOT / "vm/boot", "--control-port", "40001"],
             check=False,
             text=True,
             stdout=subprocess.PIPE,
@@ -22,25 +22,24 @@ class VMBootTests(unittest.TestCase):
             env={**os.environ, "NO_COLOR": "1"},
         )
         self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn("play options require --play", result.stdout)
+        self.assertIn("runtime options require --runtime-setup", result.stdout)
 
-    def test_play_rejects_an_invalid_key_before_building_the_guest(self) -> None:
+    def test_runtime_setup_rejects_an_invalid_control_key(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
-            script = path / "play"
+            setup = path / "runtime-setup"
             module = path / "module.ko"
             key = path / "control.key"
-            script.write_text("#!/bin/sh\n", encoding="utf-8")
+            setup.write_text("#!/bin/sh\n", encoding="utf-8")
             module.write_bytes(b"module")
             key.write_text("bad\n", encoding="ascii")
             result = subprocess.run(
                 [
                     ROOT / "vm/boot",
-                    "--play", script,
-                    "--play-profile", "authenticated-agent",
-                    "--play-key-file", key,
-                    "--play-control-port", "40001",
-                    "--play-shell-port", "40002",
+                    "--runtime-setup", setup,
+                    "--control-key-file", key,
+                    "--control-port", "40001",
+                    "--shell-port", "40002",
                     module,
                 ],
                 check=False,

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 from pathlib import Path
 import socket
+import stat
 import struct
 import subprocess
 import tempfile
@@ -12,22 +14,27 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-from engine.reference_play import (
+from engine.control_console import (
     HEADER_LENGTH,
     HostOperator,
     KEY_LENGTH,
     OpenSslAead,
+    OperatorError,
     REPLY,
     REQUEST,
     SecureControl,
-    OperatorError,
+    TargetProcess,
     _accept_shell_while_running,
     _next_control_command,
     _nonce,
     _poll_shell_status,
+    _process_start,
+    _shell_input,
+    create_target_session,
     parse_shell_ticket,
+    read_target_session,
     receive_frame,
-    run_reference_play,
+    run_control_console,
     send_frame,
 )
 
@@ -35,22 +42,8 @@ from engine.reference_play import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class HostOperatorTests(unittest.TestCase):
-    def test_control_key_is_nonzero(self):
-        expected = bytes((1,)) + bytes(KEY_LENGTH - 1)
-        with patch(
-            "engine.reference_play.secrets.token_bytes",
-            side_effect=(bytes(KEY_LENGTH), expected),
-        ):
-            operator = HostOperator.create()
-        try:
-            self.assertEqual(operator.key, expected)
-        finally:
-            operator.close()
-
-
 class FakeAead:
-    """Deterministic authenticated adapter for protocol-only unit tests."""
+    """Deterministic authenticated adapter for protocol-only tests."""
 
     def __init__(self, key: bytes):
         self.key = key
@@ -59,7 +52,9 @@ class FakeAead:
         pass
 
     def seal(self, nonce: bytes, aad: bytes, plaintext: bytes) -> bytes:
-        tag = hashlib.sha256(self.key + nonce + aad + plaintext).digest()[:16]
+        tag = hashlib.sha256(
+            self.key + nonce + aad + plaintext
+        ).digest()[:16]
         return plaintext + tag
 
     def open(self, nonce: bytes, aad: bytes, sealed: bytes) -> bytes:
@@ -87,6 +82,39 @@ def envelope(
     )
 
 
+def _test_listener() -> socket.socket:
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    return listener
+
+
+def _mode(path: Path) -> int:
+    return stat.S_IMODE(path.stat().st_mode)
+
+
+class HostOperatorTests(unittest.TestCase):
+    def test_control_key_is_fresh_and_nonzero(self) -> None:
+        expected = bytes((1,)) + bytes(KEY_LENGTH - 1)
+        with patch(
+            "engine.control_console.secrets.token_bytes",
+            side_effect=(bytes(KEY_LENGTH), expected),
+        ):
+            operator = HostOperator.create()
+        try:
+            self.assertEqual(operator.key, expected)
+            self.assertEqual(
+                operator.control_listener.getsockname()[0],
+                "127.0.0.1",
+            )
+            self.assertEqual(
+                operator.shell_listener.getsockname()[0],
+                "127.0.0.1",
+            )
+        finally:
+            operator.close()
+
+
 class SecureControlTests(unittest.TestCase):
     def setUp(self) -> None:
         self.key = bytes(range(KEY_LENGTH))
@@ -96,59 +124,189 @@ class SecureControlTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.control.close()
 
-    def test_authenticated_hello_sequences_commands(self):
+    def test_authenticated_hello_sequences_commands(self) -> None:
         session = 0x0102030405060708
         hello = envelope(self.aead, REPLY, session, 1, b"HELLO")
         self.assertEqual(self.control.accept_hello(hello), session)
-        self.assertEqual(self.control.session, session)
 
         request = self.control.seal_request(b"STATUS")
-        self.assertEqual(request[:HEADER_LENGTH], struct.pack(
-            ">BBQQ", 1, REQUEST, session, 1
-        ))
+        self.assertEqual(
+            request[:HEADER_LENGTH],
+            struct.pack(">BBQQ", 1, REQUEST, session, 1),
+        )
         reply = envelope(self.aead, REPLY, session, 2, b"STATUS 1 0")
         self.assertEqual(self.control.open_reply(reply), b"STATUS 1 0")
 
-    def test_unverified_hello_never_publishes_its_session(self):
-        candidate = bytearray(envelope(self.aead, REPLY, 42, 1, b"HELLO"))
+    def test_unverified_hello_never_publishes_its_session(self) -> None:
+        candidate = bytearray(
+            envelope(self.aead, REPLY, 42, 1, b"HELLO")
+        )
         candidate[-1] ^= 1
         with self.assertRaisesRegex(OperatorError, "bad tag"):
             self.control.accept_hello(bytes(candidate))
         self.assertEqual(self.control.session, 0)
 
-    def test_hello_contract_rejects_wrong_direction_sequence_or_text(self):
+    def test_hello_requires_reply_one_and_exact_text(self) -> None:
         cases = (
             envelope(self.aead, REQUEST, 7, 1, b"HELLO"),
             envelope(self.aead, REPLY, 7, 2, b"HELLO"),
             envelope(self.aead, REPLY, 7, 1, b"NOT HELLO"),
         )
         for candidate in cases:
-            with self.subTest(candidate=candidate[:HEADER_LENGTH]):
+            with self.subTest(header=candidate[:HEADER_LENGTH]):
                 with self.assertRaises(OperatorError):
                     self.control.accept_hello(candidate)
                 self.assertEqual(self.control.session, 0)
 
-    def test_reply_rejects_old_session_and_sequence_gap(self):
-        self.control.accept_hello(envelope(self.aead, REPLY, 9, 1, b"HELLO"))
+    def test_reply_rejects_old_session_and_sequence_gap(self) -> None:
+        self.control.accept_hello(
+            envelope(self.aead, REPLY, 9, 1, b"HELLO")
+        )
         for candidate in (
             envelope(self.aead, REPLY, 8, 2, b"PONG"),
             envelope(self.aead, REPLY, 9, 3, b"PONG"),
         ):
-            with self.subTest(candidate=candidate[:HEADER_LENGTH]):
+            with self.subTest(header=candidate[:HEADER_LENGTH]):
                 with self.assertRaisesRegex(OperatorError, "reply header"):
                     self.control.open_reply(candidate)
 
 
+class TargetSessionTests(unittest.TestCase):
+    def test_create_read_and_close_private_target_session(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            session = create_target_session(root, "complete-rootkit")
+            try:
+                self.assertEqual(_mode(root / ".rootkitlings/run"), 0o700)
+                self.assertEqual(_mode(session.directory), 0o700)
+                self.assertEqual(_mode(session.key_file), 0o600)
+                self.assertEqual(
+                    _mode(session.directory / "session.toml"),
+                    0o600,
+                )
+                self.assertEqual(len(session.key), KEY_LENGTH)
+                self.assertTrue(any(session.key))
+                self.assertNotEqual(
+                    session.control_port,
+                    session.shell_port,
+                )
+                self.assertEqual(
+                    read_target_session(root, "complete-rootkit"),
+                    session,
+                )
+            finally:
+                session.close()
+            self.assertFalse(session.directory.exists())
+
+    def test_live_target_cannot_be_replaced(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            session = create_target_session(root, "complete-rootkit")
+            try:
+                with self.assertRaisesRegex(
+                    OperatorError,
+                    "already running",
+                ):
+                    create_target_session(root, "complete-rootkit")
+            finally:
+                session.close()
+
+    def test_stale_target_is_removed_before_recreation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = create_target_session(root, "complete-rootkit")
+            metadata = first.directory / "session.toml"
+            stale = metadata.read_text(encoding="ascii").replace(
+                f"target_start = {first.target_start}",
+                f"target_start = {first.target_start + 1}",
+            )
+            metadata.write_text(stale, encoding="ascii")
+
+            second = create_target_session(root, "complete-rootkit")
+            try:
+                self.assertEqual(
+                    second.target_start,
+                    _process_start(os.getpid()),
+                )
+                self.assertEqual(
+                    read_target_session(root, "complete-rootkit"),
+                    second,
+                )
+            finally:
+                second.close()
+
+    def test_pid_start_time_prevents_pid_reuse(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            session = create_target_session(root, "complete-rootkit")
+            metadata = session.directory / "session.toml"
+            content = metadata.read_text(encoding="ascii").replace(
+                f"target_start = {session.target_start}",
+                f"target_start = {session.target_start + 1}",
+            )
+            metadata.write_text(content, encoding="ascii")
+            with self.assertRaisesRegex(OperatorError, "no longer active"):
+                read_target_session(root, "complete-rootkit")
+            session.close()
+
+    def test_target_process_checks_pid_and_start_time_together(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            session = create_target_session(
+                Path(directory),
+                "complete-rootkit",
+            )
+            process = TargetProcess(session)
+            try:
+                self.assertIsNone(process.poll())
+                with patch(
+                    "engine.control_console._process_start",
+                    return_value=session.target_start + 1,
+                ):
+                    self.assertEqual(process.poll(), "stopped")
+                    self.assertEqual(process.returncode, "stopped")
+            finally:
+                session.close()
+
+    def test_session_reader_rejects_non_private_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            session = create_target_session(root, "complete-rootkit")
+            session.key_file.chmod(0o644)
+            with self.assertRaisesRegex(OperatorError, "not private"):
+                read_target_session(root, "complete-rootkit")
+            session.key_file.chmod(0o600)
+            session.close()
+
+    def test_session_reader_rejects_a_missing_target(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(
+                OperatorError,
+                "start it in another terminal",
+            ):
+                read_target_session(Path(directory), "complete-rootkit")
+
+
 class FramingTests(unittest.TestCase):
-    def test_shell_wait_rejects_a_wrong_ticket_before_accepting_its_peer(self):
+    def test_shell_exit_closes_input_after_forwarding_the_command(self) -> None:
+        line = bytearray()
+        self.assertEqual(
+            _shell_input(b"printf ok\r", line),
+            (b"printf ok\r", False),
+        )
+        self.assertEqual(_shell_input(b"exit\r", line), (b"exit\r", True))
+        self.assertEqual(_shell_input(b"\x04", line), (b"", True))
+
+    def test_shell_wait_rejects_wrong_ticket_then_accepts_peer(self) -> None:
         listener = _test_listener()
         process = Mock()
         process.poll.return_value = None
         warnings: list[str] = []
 
         def connect(prelude: bytes) -> None:
-            with socket.create_connection(listener.getsockname(), timeout=2) \
-                    as peer:
+            with socket.create_connection(
+                listener.getsockname(),
+                timeout=2,
+            ) as peer:
                 peer.sendall(prelude)
 
         wrong = threading.Thread(
@@ -180,17 +338,15 @@ class FramingTests(unittest.TestCase):
         finally:
             listener.close()
 
-    def test_shell_wait_reports_a_dead_guest_immediately(self):
-        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        listener.bind(("127.0.0.1", 0))
-        listener.listen(1)
+    def test_shell_wait_reports_a_stopped_target_immediately(self) -> None:
+        listener = _test_listener()
         process = Mock()
-        process.poll.return_value = 7
-        process.returncode = 7
+        process.poll.return_value = "stopped"
+        process.returncode = "stopped"
         try:
             with self.assertRaisesRegex(
                 OperatorError,
-                r"guest exited before connecting \(7\)",
+                r"target stopped before connecting \(stopped\)",
             ):
                 _accept_shell_while_running(
                     listener,
@@ -203,7 +359,7 @@ class FramingTests(unittest.TestCase):
         finally:
             listener.close()
 
-    def test_frame_round_trip_preserves_payload(self):
+    def test_frame_round_trip_preserves_payload(self) -> None:
         first, second = socket.socketpair()
         try:
             send_frame(first, b"rootkitlings")
@@ -212,7 +368,7 @@ class FramingTests(unittest.TestCase):
             first.close()
             second.close()
 
-    def test_shell_ticket_requires_the_exact_bounded_reply(self):
+    def test_shell_ticket_requires_the_exact_bounded_reply(self) -> None:
         self.assertEqual(
             parse_shell_ticket("OPEN 0000002a 0102030405060708"),
             (42, 0x0102030405060708),
@@ -228,8 +384,19 @@ class FramingTests(unittest.TestCase):
                 with self.assertRaisesRegex(OperatorError, "invalid ticket"):
                     parse_shell_ticket(reply)
 
-    def test_invalid_input_warns_and_returns_the_next_command(self):
+    def test_worker_command_maps_to_run(self) -> None:
+        self.assertEqual(
+            _next_control_command(
+                io.StringIO("worker\n"),
+                lambda _text: None,
+                lambda _text: None,
+            ),
+            ("RUN", b"RUN"),
+        )
+
+    def test_invalid_input_warns_then_returns_next_command(self) -> None:
         stream = io.StringIO(
+            "unknown\n"
             "mark café\n"
             "mark this message is much too long\n"
             "help\n"
@@ -242,15 +409,14 @@ class FramingTests(unittest.TestCase):
             _next_control_command(stream, output.append, warnings.append),
             ("STATUS", b"STATUS"),
         )
-        self.assertEqual(len(warnings), 2)
-        self.assertIn("ASCII", warnings[0])
-        self.assertIn("maximum 30", warnings[1])
-        self.assertTrue(any(
-            line.startswith("help | status") for line in output
-        ))
-        self.assertEqual(output.count("rootkit> "), 4)
+        self.assertEqual(len(warnings), 3)
+        self.assertIn("unknown command", warnings[0])
+        self.assertIn("ASCII", warnings[1])
+        self.assertIn("maximum 30", warnings[2])
+        self.assertTrue(any(line.startswith("Observe\n") for line in output))
+        self.assertEqual(output.count("operator> "), 5)
 
-    def test_shell_status_is_polled_until_terminal(self):
+    def test_shell_status_is_polled_until_terminal(self) -> None:
         replies = iter((
             "STATE 0000002a running -115",
             "STATE 0000002a exited 0",
@@ -269,14 +435,14 @@ class FramingTests(unittest.TestCase):
         self.assertEqual(commands, ["SHELL STATUS", "SHELL STATUS"])
         self.assertEqual(pauses, [0.05])
 
-    def test_shell_status_rejects_another_request(self):
+    def test_shell_status_rejects_another_request(self) -> None:
         with self.assertRaisesRegex(OperatorError, "invalid status"):
             _poll_shell_status(
                 42,
                 lambda _command: "STATE 0000002b exited 0",
             )
 
-    def test_rejects_oversize_frame_before_reading_payload(self):
+    def test_rejects_oversize_frame_before_reading_payload(self) -> None:
         first, second = socket.socketpair()
         try:
             first.sendall(struct.pack(">H", 65))
@@ -288,9 +454,9 @@ class FramingTests(unittest.TestCase):
 
 
 class OpenSslAeadTests(unittest.TestCase):
-    def test_helper_round_trip_rejects_a_changed_tag(self):
+    def test_helper_round_trip_rejects_a_changed_tag(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            helper = Path(directory) / "operator-aead"
+            helper = Path(directory) / "control-aead"
             build = subprocess.run(
                 [
                     "gcc",
@@ -301,7 +467,7 @@ class OpenSslAeadTests(unittest.TestCase):
                     "-O2",
                     "-o",
                     helper,
-                    ROOT / "engine/operator_aead.c",
+                    ROOT / "engine/control_aead.c",
                     "-lcrypto",
                 ],
                 stdout=subprocess.PIPE,
@@ -310,12 +476,10 @@ class OpenSslAeadTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(build.returncode, 0, build.stdout)
-            commands: list[list[object]] = []
             output: list[str] = []
             aead = OpenSslAead(
                 bytes(range(KEY_LENGTH)),
                 helper,
-                commands.append,
                 output.append,
             )
             nonce = bytes(range(12))
@@ -330,179 +494,126 @@ class OpenSslAeadTests(unittest.TestCase):
                 "authentication failed",
             ):
                 aead.open(nonce, b"header", changed)
-            self.assertEqual(
-                commands,
-                [
-                    [helper, "seal"],
-                    [helper, "open"],
-                    [helper, "open"],
-                ],
-            )
-            self.assertTrue(any("authentication failed" in line
-                                for line in output))
+            self.assertTrue(any(
+                "authentication failed" in line for line in output
+            ))
             aead.close()
 
 
-class ReferencePlayTests(unittest.TestCase):
-    def test_play_drives_the_guest_protocol_and_serializes_output(self):
-        key = bytes(range(1, KEY_LENGTH + 1))
-        operator = HostOperator(key, _test_listener(), _test_listener())
-        guest_output_started = threading.Event()
-        release_guest_output = threading.Event()
-        callback_lock = threading.Lock()
-        callback_active = False
-        overlaps: list[str] = []
-        records: list[tuple[str, object]] = []
-        commands: list[str] = []
-        guest_errors: list[BaseException] = []
-        launch: dict[str, object] = {}
+class ControlConsoleTests(unittest.TestCase):
+    def test_console_runs_status_and_quit_over_real_loopback(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = create_target_session(root, "complete-rootkit")
+            guest_errors: list[BaseException] = []
+            commands: list[str] = []
+            output: list[str] = []
+            success: list[str] = []
 
-        def record(kind: str, value: object) -> None:
-            nonlocal callback_active
-            with callback_lock:
-                if callback_active:
-                    overlaps.append(kind)
-                callback_active = True
-            try:
-                if value == "guest booted\n":
-                    guest_output_started.set()
-                    release_guest_output.wait(2)
-                records.append((kind, value))
-            finally:
-                with callback_lock:
-                    callback_active = False
-
-        class FakeProcess:
-            stdout = io.StringIO(
-                "guest booted\nROOTKITLINGS_PLAY_READY\n"
-            )
-            returncode = None
-            pid = 12345
-
-            @staticmethod
-            def poll():
-                return None
-
-        process = FakeProcess()
-
-        def fake_popen(command, **kwargs):
-            launch["command"] = command
-            launch["kwargs"] = kwargs
-            key_index = command.index("--play-key-file") + 1
-            key_file = Path(command[key_index])
-            launch["key"] = key_file.read_text(encoding="ascii")
-            launch["mode"] = key_file.stat().st_mode & 0o777
-            return process
-
-        def guest() -> None:
-            peer = None
-            try:
-                peer = socket.create_connection(
-                    operator.control_listener.getsockname(),
-                    timeout=2,
-                )
-                if not guest_output_started.wait(2):
-                    raise AssertionError("guest output was not forwarded")
-                guest_aead = FakeAead(key)
-                session = 0x0102030405060708
-                send_frame(
-                    peer,
-                    envelope(guest_aead, REPLY, session, 1, b"HELLO"),
-                )
-                time.sleep(0.05)
-                release_guest_output.set()
-                for sequence, expected in enumerate(
-                    (b"STATUS", b"QUIT"),
-                    start=1,
-                ):
-                    request = receive_frame(peer)
-                    header = request[:HEADER_LENGTH]
-                    version, kind, found_session, found_sequence = (
-                        struct.unpack(">BBQQ", header)
-                    )
-                    self.assertEqual(
-                        (version, kind, found_session, found_sequence),
-                        (1, REQUEST, session, sequence),
-                    )
-                    plaintext = guest_aead.open(
-                        _nonce(session, sequence, REQUEST),
-                        header,
-                        request[HEADER_LENGTH:],
-                    )
-                    commands.append(plaintext.decode("ascii"))
-                    if expected != b"QUIT":
-                        reply = envelope(
+            def guest() -> None:
+                peer = None
+                deadline = time.monotonic() + 2
+                try:
+                    while time.monotonic() < deadline:
+                        try:
+                            peer = socket.create_connection(
+                                ("127.0.0.1", target.control_port),
+                                timeout=0.1,
+                            )
+                            break
+                        except OSError:
+                            time.sleep(0.01)
+                    if peer is None:
+                        raise AssertionError("control listener did not start")
+                    guest_aead = FakeAead(target.key)
+                    session = 0x0102030405060708
+                    send_frame(
+                        peer,
+                        envelope(
                             guest_aead,
                             REPLY,
                             session,
-                            sequence + 1,
-                            b"STATUS ready",
+                            1,
+                            b"HELLO",
+                        ),
+                    )
+                    for sequence, expected in enumerate(
+                        (b"STATUS", b"QUIT"),
+                        start=1,
+                    ):
+                        request = receive_frame(peer)
+                        header = request[:HEADER_LENGTH]
+                        version, kind, found_session, found_sequence = (
+                            struct.unpack(">BBQQ", header)
                         )
-                        send_frame(peer, reply)
-            except BaseException as error:
-                guest_errors.append(error)
-                release_guest_output.set()
-            finally:
-                if peer is not None:
-                    peer.close()
+                        self.assertEqual(
+                            (
+                                version,
+                                kind,
+                                found_session,
+                                found_sequence,
+                            ),
+                            (1, REQUEST, session, sequence),
+                        )
+                        plaintext = guest_aead.open(
+                            _nonce(session, sequence, REQUEST),
+                            header,
+                            request[HEADER_LENGTH:],
+                        )
+                        commands.append(plaintext.decode("ascii"))
+                        self.assertEqual(plaintext, expected)
+                        if plaintext == b"STATUS":
+                            send_frame(
+                                peer,
+                                envelope(
+                                    guest_aead,
+                                    REPLY,
+                                    session,
+                                    sequence + 1,
+                                    b"STATUS ready",
+                                ),
+                            )
+                except BaseException as error:
+                    guest_errors.append(error)
+                finally:
+                    if peer is not None:
+                        peer.close()
 
-        guest_thread = threading.Thread(target=guest)
-        guest_thread.start()
-        try:
-            with (
-                tempfile.TemporaryDirectory() as directory,
-                patch.object(HostOperator, "create", return_value=operator),
-                patch(
-                    "engine.reference_play._build_crypto_helper",
-                    return_value=Path(directory) / "operator-aead",
-                ),
-                patch(
-                    "engine.reference_play.OpenSslAead",
-                    side_effect=lambda selected, *_args: FakeAead(selected),
-                ),
-                patch("engine.reference_play.subprocess.Popen",
-                      side_effect=fake_popen),
-                patch("engine.reference_play._stop_process") as stop,
-            ):
-                result = run_reference_play(
-                    ROOT,
-                    Path(directory) / "rootkitlings.ko",
-                    "authenticated-agent",
-                    ROOT / "vm/play/complete-rootkit",
-                    transcript=lambda value: record("transcript", value),
-                    output=lambda value: record("output", value),
-                    success=lambda value: record("success", value),
-                    warning=lambda value: record("warning", value),
-                    input_stream=io.StringIO("status\nquit\n"),
-                )
-            stop.assert_called_once_with(process)
-        finally:
-            release_guest_output.set()
-            guest_thread.join(timeout=2)
-            operator.close()
+            guest_thread = threading.Thread(target=guest)
+            guest_thread.start()
+            try:
+                with (
+                    patch(
+                        "engine.control_console._build_crypto_helper",
+                        return_value=root / "control-aead",
+                    ),
+                    patch(
+                        "engine.control_console.OpenSslAead",
+                        side_effect=lambda key, *_args: FakeAead(key),
+                    ),
+                ):
+                    result = run_control_console(
+                        root,
+                        target,
+                        transcript=lambda _command: None,
+                        output=output.append,
+                        success=success.append,
+                        warning=lambda _message: None,
+                        input_stream=io.StringIO("status\nquit\n"),
+                    )
+            finally:
+                guest_thread.join(timeout=2)
+                target.close()
 
         self.assertFalse(guest_thread.is_alive())
         self.assertEqual(guest_errors, [])
         self.assertEqual(result, 0)
         self.assertEqual(commands, ["STATUS", "QUIT"])
-        self.assertEqual(launch["key"], key.hex() + "\n")
-        self.assertEqual(launch["mode"], 0o600)
-        self.assertEqual(overlaps, [])
-        rendered = "".join(
-            value for kind, value in records
-            if kind in ("output", "success") and isinstance(value, str)
-        )
-        self.assertIn("guest booted", rendered)
-        self.assertIn("Authenticated HELLO", rendered)
-        self.assertIn("> STATUS", rendered)
-        self.assertIn("< STATUS ready", rendered)
+        self.assertTrue(any("listen  control" in line for line in output))
+        self.assertIn("send    STATUS\n", output)
+        self.assertIn("recv    STATUS ready\n", output)
+        self.assertTrue(any("verify  HELLO" in line for line in success))
 
-
-def _test_listener() -> socket.socket:
-    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    listener.bind(("127.0.0.1", 0))
-    listener.listen(1)
-    return listener
 
 if __name__ == "__main__":
     unittest.main()

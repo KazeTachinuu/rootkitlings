@@ -65,8 +65,8 @@ Run `./rootkitlings help` for the complete command list.
 Lessons isolate mechanisms.
 Milestones turn them into a small tool or a visible system behavior.
 Use `list` for the route and `prereq` for direct dependencies.
-Use `./rootkitlings play C00` to operate the completed project in its restricted
-guest network.
+Use `./rootkitlings run C00 --reference` then `./rootkitlings connect C00` to
+operate the completed project in its restricted guest network.
 
 ## Recovery
 

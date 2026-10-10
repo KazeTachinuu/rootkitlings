@@ -105,9 +105,8 @@ host_check = "curriculum/M08-authenticated-reverse-shell/checks/host-check"
 hint = "curriculum/M08-authenticated-reverse-shell/hint"
 solution = "curriculum/M08-authenticated-reverse-shell/solution"
 
-[play]
-profile = "authenticated-agent"
-script = "vm/play/authenticated-agent"
+[runtime]
+setup = "vm/runtime/authenticated-agent"
 
 [verification]
 timeout_seconds = 360

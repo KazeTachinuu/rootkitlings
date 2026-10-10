@@ -36,7 +36,7 @@ TOP_FIELDS = {
     "tradecraft", "difficulty", "prerequisites", "teaches", "requires",
     "workspace", "resources", "verification",
 }
-PLAY_FIELDS = {"profile", "script"}
+RUNTIME_FIELDS = {"setup"}
 RESOURCE_FIELDS = {"readme", "host_check", "hint", "solution"}
 VERIFICATION_FIELDS = {"timeout_seconds", "tools", "cases"}
 VERIFICATION_CASE_REQUIRED_FIELDS = {"id", "label", "expect_build"}
@@ -50,7 +50,7 @@ QUERY_FIELDS = {
     "workspace_build", "workspace_baseline", "workspace_parent",
     "workspace_additions", "workspace_module_artifact",
     "readme", "host_check", "hint", "solution", "verification_timeout",
-    "verification_tools", "play_profile", "play_script",
+    "verification_tools", "runtime_setup",
 }
 
 
@@ -130,11 +130,10 @@ class Verification:
 
 
 @dataclass(frozen=True)
-class Play:
-    """Optional, manifest-owned reference demonstration."""
+class Runtime:
+    """Optional target setup for operating a completed reference."""
 
-    profile: str
-    script: str
+    setup: str
 
 
 @dataclass(frozen=True)
@@ -152,7 +151,7 @@ class Exercise:
     workspace: Workspace
     resources: Resources
     verification: Verification
-    play: Play | None = None
+    runtime: Runtime | None = None
     serial: str = ""
     sequence: int = -1
 
@@ -179,8 +178,7 @@ class Exercise:
             "hint": self.resources.hint, "solution": self.resources.solution,
             "verification_timeout": self.verification.timeout_seconds,
             "verification_tools": self.verification.tools,
-            "play_profile": self.play.profile if self.play else "",
-            "play_script": self.play.script if self.play else "",
+            "runtime_setup": self.runtime.setup if self.runtime else "",
         }
         return values[field]
 
@@ -275,7 +273,7 @@ class Catalog:
                 raise CatalogError(f"cannot parse {relative}: {exc}") from exc
             _exact_fields(
                 data,
-                TOP_FIELDS | ({"play"} if "play" in data else set()),
+                TOP_FIELDS | ({"runtime"} if "runtime" in data else set()),
                 relative,
             )
             if data["schema_version"] != 2 or isinstance(data["schema_version"], bool):
@@ -285,7 +283,10 @@ class Catalog:
             workspace = self._workspace(data["workspace"], relative)
             resources = self._resources(data["resources"], relative)
             verification = self._verification(data["verification"], relative)
-            play = self._play(data["play"], relative) if "play" in data else None
+            runtime = (
+                self._runtime(data["runtime"], relative)
+                if "runtime" in data else None
+            )
             items.append(Exercise(
                 id=exercise_id, path=path, title=_string(data, "title", relative),
                 stage=_token(data, "stage", relative), kind=_token(data, "kind", relative),
@@ -295,18 +296,17 @@ class Catalog:
                 teaches=tuple(_token_list(data, "teaches", relative)),
                 requires=tuple(_token_list(data, "requires", relative)),
                 workspace=workspace, resources=resources,
-                verification=verification, play=play,
+                verification=verification, runtime=runtime,
             ))
         return items
 
-    def _play(self, value, path):
-        play_path = path / "play"
+    def _runtime(self, value, path):
+        runtime_path = path / "runtime"
         if not isinstance(value, dict):
-            raise CatalogError(f"{play_path}: play must be a table")
-        _exact_fields(value, PLAY_FIELDS, play_path)
-        return Play(
-            profile=_token(value, "profile", play_path),
-            script=_safe_path(value["script"], play_path, self.root),
+            raise CatalogError(f"{runtime_path}: runtime must be a table")
+        _exact_fields(value, RUNTIME_FIELDS, runtime_path)
+        return Runtime(
+            setup=_safe_path(value["setup"], runtime_path, self.root),
         )
 
     def _workspace(self, value, path):
@@ -646,8 +646,8 @@ class Catalog:
     def _validate_paths(self, item):
         required_files = [item.resources.readme, item.resources.hint]
         optional_files = [item.resources.host_check]
-        if item.play is not None:
-            required_files.append(item.play.script)
+        if item.runtime is not None:
+            required_files.append(item.runtime.setup)
         for value in required_files:
             if not value or not (self.root / value).is_file():
                 raise CatalogError(f"{item.path}: missing resource file: {value!r}")

@@ -88,7 +88,7 @@ mkdir -p "$fixtures" "$root"
 mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
 chmod 0700 "$root"
 ifconfig lo 127.0.0.1 up
-printf 'operator-original\n' > "$target"
+printf 'original-request\n' > "$target"
 chmod 0600 "$target"
 cp "$target" "$fixtures/original"
 rmdir_before=$(probe_count r __x64_sys_rmdir)

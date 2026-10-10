@@ -48,13 +48,19 @@ OPEN <8-hex request id> <16-hex cookie>
 
 The shell connection begins with the matching `RKSH` prelude.
 This binds the connection to the authenticated request.
-The following shell stream is a raw, non-PTY `/bin/sh` stream; it is not
-encrypted by the control channel.
+The following stream carries an interactive root Bash through a pseudoterminal.
+It includes terminal echo, prompts, CRLF line endings, and escape sequences.
+The ticket authenticates the connection, but the PTY bytes are not encrypted by
+the control channel.
 
-Run the completed reference safely with:
+Run the completed reference in one terminal, then connect from another:
 
 ```sh
-./rootkitlings play C00
+./rootkitlings run C00 --reference
+```
+
+```sh
+./rootkitlings connect C00
 ```
 
 The disposable guest can reach only the two host-side listeners created for that

@@ -101,7 +101,7 @@ int main(int argc, char **argv)
 
 	if (argc != 2 ||
 	    (strcmp(argv[1], "seal") != 0 && strcmp(argv[1], "open") != 0)) {
-		fprintf(stderr, "usage: operator-aead seal|open\n");
+		fprintf(stderr, "usage: control-aead seal|open\n");
 		return EXIT_FAILURE;
 	}
 	if (read_exact(header, sizeof(header))) {

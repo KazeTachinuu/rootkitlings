@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -eu
+
 export PATH=/bin
 export LC_ALL=C
 export PS1='(rootkitlings) \w # '
@@ -18,6 +20,8 @@ run()
 }
 
 mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 mount -t debugfs debugfs /sys/kernel/debug
@@ -28,7 +32,7 @@ for _word in $_cmdline; do
 	case "$_word" in
 		rootkitlings=check) _check=1 ;;
 		rootkitlings=network) _network=1 ;;
-		rootkitlings=play) _play=1 ;;
+		rootkitlings=runtime) _runtime=1 ;;
 		rootkitlings=color) _color=1 ;;
 	esac
 done
@@ -45,11 +49,10 @@ if [ "${_check:-}" = 1 ]; then
 	export NO_COLOR=1
 	printf '\nROOTKITLINGS_CHECK_BEGIN\n'
 	if [ -f /check.args ]; then
-		xargs -0 /check < /check.args
+		xargs -0 /check < /check.args && _rc=0 || _rc=$?
 	else
-		/check
+		/check && _rc=0 || _rc=$?
 	fi
-	_rc=$?
 	if [ "$_rc" -eq 0 ]; then
 		printf 'ROOTKITLINGS_RESULT=pass\n'
 	else
@@ -59,30 +62,33 @@ if [ "${_check:-}" = 1 ]; then
 	while :; do sleep 1; done
 fi
 
-if [ "${_play:-}" = 1 ]; then
+if [ "${_runtime:-}" = 1 ]; then
 	{
-		read -r _play_profile
-		read -r _play_key
-		read -r _play_peer
-		read -r _play_control_port
-		read -r _play_shell_port
-	} < /play.args
-	_play_command="/play $_play_profile <control-key> $_play_peer"
-	_play_command="$_play_command $_play_control_port $_play_shell_port"
-	show "$_play_command"
-	/play "$_play_profile" "$_play_key" "$_play_peer" \
-		"$_play_control_port" "$_play_shell_port"
-	_play_status=$?
-	if [ "$_play_status" -eq 0 ]; then
-		ui_success 'Play setup complete; waiting for the host operator'
-		case $_play_profile in
-			complete-rootkit)
-				printf 'ROOTKITLINGS_PLAY_ENABLE_DONE\n' ;;
-			*) printf 'ROOTKITLINGS_PLAY_READY\n' ;;
-		esac
+		read -r _control_key
+		read -r _callback_peer
+		read -r _control_port
+		read -r _shell_port
+	} < /runtime.args
+	_setup_command="/runtime-setup <control-key> $_callback_peer"
+	_setup_command="$_setup_command $_control_port $_shell_port"
+	show "$_setup_command"
+	/runtime-setup "$_control_key" "$_callback_peer" \
+		"$_control_port" "$_shell_port" \
+		&& _setup_status=0 || _setup_status=$?
+	if [ "$_setup_status" -eq 0 ]; then
+		ui_success 'Target ready; the rootkit is waiting for its operator'
 	else
-		ui_error "Play setup failed with exit $_play_status"
+		ui_error "Target setup failed with exit $_setup_status"
+		reboot -f
 	fi
+	ui_progress 'Use this console to inspect the target; exit powers it off'
+	cd /rootkitlings || exit 1
+	show 'setsid -c /bin/bash --noprofile --rcfile /etc/rootkitlings.bashrc -i'
+	setsid -c /bin/bash --noprofile \
+		--rcfile /etc/rootkitlings.bashrc -i \
+		</dev/ttyS0 >/dev/ttyS0 2>&1
+	show 'reboot -f'
+	reboot -f
 	while :; do sleep 1; done
 fi
 

@@ -6,7 +6,7 @@ It has no userspace address space, executable image, or file-descriptor table.
 Build the boundary instead:
 
 ```text
-peer listener <-> kernel TCP socket <-> stdin, stdout, stderr <-> /bin/sh
+peer terminal <-> plaintext TCP <-> script PTY <-> interactive root Bash
 ```
 
 The supplied module parses `peer_address=` as IPv4 and defaults to `127.0.0.1`.
@@ -20,23 +20,33 @@ Create and connect one kernel socket from a work item.
 
 Use a user-mode-helper setup callback to install three references to that file
 as descriptors 0, 1, and 2 in the helper's clean descriptor table.
-Then execute `/bin/sh` with `call_usermodehelper_exec()` and wait for the
-process to finish.
+The fixed helper chain is:
+
+```sh
+/bin/setsid /bin/script -q \
+  -c '/bin/bash --noprofile --rcfile /etc/rootkitlings.bashrc -i' /dev/null
+```
+
+`setsid` gives the helper its own session and process group.
+`script` allocates a pseudoterminal and forwards the socket-backed standard
+descriptors to an interactive Bash process.
+The peer therefore gets terminal behavior: command echo, prompts, CRLF line
+endings, job-control signals, and terminal escape sequences.
+This exercise does not carry terminal-resize metadata, so the shell is intended
+for normal command-line interaction rather than full-screen programs.
+
+Execute that fixed chain with `call_usermodehelper_exec()` and wait for it to
+finish.
 
 The helper API creates the userspace process with root credentials.
 Do not edit credentials in this exercise.
 
-The helper starts a new session before the final shell:
-
-```sh
-/bin/setsid /bin/sh
-```
-
-The process keeps the same PID and becomes its process-group leader.
+The `setsid` process becomes the session and process-group leader.
 Timeout and unload signal that leader and its current process group.
 A descendant that deliberately creates another session or process group is
 outside this exercise's cleanup boundary.
-No learner-controlled text reaches `sh -c`.
+No learner-controlled text enters the helper argument list.
+Interactive commands arrive only through the PTY stream.
 
 Before the handoff, send this exact prelude on the socket:
 
@@ -46,9 +56,9 @@ RKSH <8-hex request id> <16-hex cookie>\n
 
 Generate a fresh nonzero cookie for every accepted request.
 The peer compares the prelude with the ticket returned by
-`rk_root_shell_request()` before it trusts the raw shell stream.
-This binds one accepted connection to its request; it does not encrypt the shell
-stream.
+`rk_root_shell_request()` before it trusts the terminal stream.
+This binds one accepted connection to its request; it does not encrypt the
+following PTY bytes.
 
 ## One owned session
 
@@ -94,9 +104,10 @@ Run:
 ./rootkitlings check
 ```
 
-The checker verifies the prelude, opens two sequential UID-0 shells, observes
-refusal and timeout results, unloads a blocked shell, rejects an invalid peer,
-and checks the kernel log.
+The checker verifies the prelude, proves that Bash has a PTY on descriptors 0,
+1, and 2, opens two sequential UID-0 shells, observes refusal and timeout
+results, unloads a blocked shell, rejects an invalid peer, and checks the kernel
+log.
 
 ## References
 

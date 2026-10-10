@@ -8,11 +8,16 @@ capture=/tmp/rootkitlings-root-shell-timeout
 rm -f "$capture"
 ifconfig lo 127.0.0.1 up
 
-printf '%s\n' 'echo shell-ready' 'sleep 60' |
+has_line()
+{
+	tr '\r' '\n' < "$1" | grep -Eq "$2"
+}
+
+printf '%s\n' 'printf "rkproof-%s\n" ready' 'sleep 60' |
 	nc -l -p "$port" -s 127.0.0.1 >"$capture" 2>&1 &
 listener=$!
 sleep 0.1
-load rootkitlings.ko "shell_port=$port" shell_timeout_ms=250
+load rootkitlings.ko "shell_port=$port" shell_timeout_ms=1000
 ticket=$(cat /sys/module/rootkitlings/parameters/shell_ticket)
 request_id=${ticket%% *}
 
@@ -28,7 +33,7 @@ else
 	wait "$listener" || true
 	_ok "timeout closed a shell running a command"
 fi
-if grep -qx shell-ready "$capture"; then
+if has_line "$capture" '^rkproof-ready$'; then
 	_ok "shell ran before its deadline"
 else
 	_fail "shell never reached the listener"
@@ -52,7 +57,7 @@ else
 	_fail "timeout status is missing or incorrect"
 fi
 
-printf '%s\n' 'echo retry=ok' 'exit' |
+printf '%s\n' 'printf "rkproof-%s\n" retry' 'exit' |
 	nc -l -p 46127 -s 127.0.0.1 >"$capture.retry" 2>&1 &
 listener=$!
 sleep 0.1
@@ -70,7 +75,8 @@ while kill -0 "$listener" 2>/dev/null && [ "$attempt" -lt 100 ]; do
 	attempt=$((attempt + 1))
 done
 wait "$listener" || _fail "retry after timeout failed"
-if [ "$fully_requested" = 1 ] && grep -qx 'retry=ok' "$capture.retry"; then
+if [ "$fully_requested" = 1 ] && \
+		has_line "$capture.retry" '^rkproof-retry$'; then
 	_ok "timed-out state accepted a later request"
 else
 	_fail "timed-out state did not release capacity"

@@ -5,12 +5,14 @@ the root shell built in L21.
 
 ```text
 operator -- authenticated control --> resident agent
-operator <------ plain TCP shell ---- root /bin/sh
+operator <---- plaintext PTY stream -- root Bash
 ```
 
 `peer_address=` selects the IPv4 peer for both connections and defaults to
 `127.0.0.1`.
 The shell stream is a separate lab transport and is not encrypted.
+The fixed `setsid` and `script` helper chain gives Bash a pseudoterminal, so the
+stream includes terminal echo, prompts, CRLF line endings, and escape sequences.
 
 ## Provision the key
 
@@ -56,7 +58,7 @@ The shell connection starts with the matching plaintext prelude:
 RKSH <8-hex request id> <16-hex cookie>\n
 ```
 
-The operator must verify it before using the raw stream.
+The operator must verify it before using the PTY stream.
 The one-use cookie prevents another guest process from winning the listener
 race.
 It authenticates ownership of that connection; it does not encrypt later shell

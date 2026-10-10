@@ -17,6 +17,7 @@ enum {
 	TAG_LENGTH = 16,
 	HEADER_LENGTH = 18,
 	FRAME_MAX = 64,
+	SHELL_TRANSCRIPT_MAX = 8192,
 	REQUEST = 1,
 	REPLY = 2,
 };
@@ -475,6 +476,76 @@ static void expect_eof(int fd)
 	}
 }
 
+static size_t read_shell_transcript(int fd, char *buffer, size_t capacity)
+{
+	int input_closed = 0;
+	size_t length = 0;
+
+	while (length + 1 < capacity) {
+		struct pollfd ready = { .fd = fd, .events = POLLIN };
+		ssize_t count;
+
+		if (poll(&ready, 1, 5000) <= 0) {
+			buffer[length] = '\0';
+			fputs("--- stalled root shell transcript ---\n", stderr);
+			(void)fwrite(buffer, 1, length, stderr);
+			fputs("\n--- end transcript ---\n", stderr);
+			errno = ETIMEDOUT;
+			fail("read root PTY Bash");
+		}
+		count = read(fd, buffer + length, capacity - length - 1);
+		if (count < 0 && errno == EINTR)
+			continue;
+		if (count < 0)
+			fail("read shell transcript");
+		if (!count) {
+			buffer[length] = '\0';
+			return length;
+		}
+		length += (size_t)count;
+		buffer[length] = '\0';
+		if (!input_closed && strstr(buffer, "rkproof-uid=0") &&
+		    strstr(buffer, "rkproof-tty=yes") &&
+		    strstr(buffer, "rkproof-bash=") &&
+		    strstr(buffer, "rkproof-command")) {
+			if (shutdown(fd, SHUT_WR) < 0)
+				fail("shutdown completed shell input");
+			input_closed = 1;
+		}
+	}
+	errno = EOVERFLOW;
+	fail("shell transcript limit");
+	return 0;
+}
+
+static void drain_shell_eof(int fd)
+{
+	char buffer[1024];
+	size_t total = 0;
+
+	for (;;) {
+		struct pollfd ready = { .fd = fd, .events = POLLIN };
+		ssize_t count;
+
+		if (poll(&ready, 1, 5000) <= 0) {
+			errno = ETIMEDOUT;
+			fail("wait for shell EOF");
+		}
+		count = read(fd, buffer, sizeof(buffer));
+		if (count < 0 && errno == EINTR)
+			continue;
+		if (count < 0)
+			fail("drain shell output");
+		if (!count)
+			return;
+		total += (size_t)count;
+		if (total > SHELL_TRANSCRIPT_MAX) {
+			errno = EOVERFLOW;
+			fail("shell drain limit");
+		}
+	}
+}
+
 static void expect_no_peer(int server)
 {
 	struct pollfd descriptor = { .fd = server, .events = POLLIN };
@@ -636,19 +707,32 @@ static int accept_shell(int server, uint32_t request_id, uint64_t cookie)
 static void run_shell(int peer)
 {
 	static const char commands[] =
-		"id -u\nprintf 'rootkitlings-shell\\n'\n";
-	static const char expected[] = "0\nrootkitlings-shell\n";
-	char output[sizeof(expected) - 1];
+		"printf 'rkproof-%s=%s\\n' uid \"$(id -u)\"\n"
+		"if test -t 0 && test -t 1 && test -t 2; then "
+		"value=yes; else value=no; fi; "
+		"printf 'rkproof-%s=%s\\n' tty \"$value\"\n"
+		"printf 'rkproof-%s=%s\\n' bash "
+		"\"${BASH_VERSION%%.*}\"\n"
+		"printf 'rkproof-%s\\n' command\n"
+		"exit\n";
+	char output[SHELL_TRANSCRIPT_MAX];
+	const char *bash;
+	size_t length;
 
 	write_all(peer, commands, sizeof(commands) - 1);
-	if (shutdown(peer, SHUT_WR) < 0)
-		fail("shutdown shell input");
-	read_all(peer, output, sizeof(output));
-	if (memcmp(output, expected, sizeof(output))) {
+	length = read_shell_transcript(peer, output, sizeof(output));
+	bash = strstr(output, "rkproof-bash=");
+	if (!strstr(output, "rkproof-uid=0") ||
+	    !strstr(output, "rkproof-tty=yes") ||
+	    !strstr(output, "rkproof-command") || !bash ||
+	    bash[sizeof("rkproof-bash=") - 1] < '1' ||
+	    bash[sizeof("rkproof-bash=") - 1] > '9') {
+		fputs("--- root shell transcript ---\n", stderr);
+		(void)fwrite(output, 1, length, stderr);
+		fputs("\n--- end transcript ---\n", stderr);
 		errno = EPROTO;
-		fail("root shell output");
+		fail("root PTY Bash proof");
 	}
-	expect_eof(peer);
 	close(peer);
 }
 
@@ -877,7 +961,7 @@ static int serve(const char *directory, const char *port_text,
 		parse_ticket(reply, &request_id, &cookie);
 		shell_peer = accept_shell(shell_server, request_id, cookie);
 		wait_shell_state(peer, &channel, request_id, "timed-out", -110);
-		expect_eof(shell_peer);
+		drain_shell_eof(shell_peer);
 		close(shell_peer);
 		marker(directory, "shell_timeout");
 
@@ -888,7 +972,7 @@ static int serve(const char *directory, const char *port_text,
 		marker(directory, "blocked_shell");
 		marker(directory, "blocked_receive");
 		expect_eof(peer);
-		expect_eof(shell_peer);
+		drain_shell_eof(shell_peer);
 		close(shell_peer);
 		close(peer);
 	}

@@ -6,7 +6,7 @@ import tomllib
 import unittest
 
 from engine.catalog import (
-    Catalog, CatalogError, Exercise, Play, Resources, Verification,
+    Catalog, CatalogError, Exercise, Resources, Runtime, Verification,
     VerificationCase, Workspace, WorkspaceImport,
 )
 from engine.workspace import WorkspaceError
@@ -287,49 +287,47 @@ class VerificationCaseTests(unittest.TestCase):
             catalog._validate_paths(explicit)
 
 
-class PlayMetadataTests(unittest.TestCase):
-    def test_optional_play_metadata_is_manifest_owned_and_queryable(self) -> None:
+class RuntimeMetadataTests(unittest.TestCase):
+    def test_optional_runtime_metadata_is_manifest_owned_and_queryable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            script = root / "demo/play"
-            script.parent.mkdir()
-            script.write_text("#!/bin/sh\n", encoding="utf-8")
+            setup = root / "vm/runtime/example"
+            setup.parent.mkdir(parents=True)
+            setup.write_text("#!/bin/sh\n", encoding="utf-8")
             catalog = Catalog.__new__(Catalog)
             catalog.root = root
-            play = catalog._play(
-                {"profile": "authenticated-agent", "script": "demo/play"},
+            runtime = catalog._runtime(
+                {"setup": "vm/runtime/example"},
                 Path("curriculum/L00-example/exercise.toml"),
             )
         self.assertEqual(
-            play,
-            Play("authenticated-agent", "demo/play"),
+            runtime,
+            Runtime("vm/runtime/example"),
         )
 
-    def test_play_metadata_rejects_unknown_fields_and_unsafe_paths(self) -> None:
+    def test_runtime_metadata_rejects_unknown_fields_and_unsafe_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             catalog = Catalog.__new__(Catalog)
             catalog.root = Path(directory)
             for value in (
-                {"profile": "agent", "script": "../escape"},
-                {"profile": "agent", "script": "play", "extra": True},
+                {"setup": "../escape"},
+                {"setup": "vm/runtime/example", "extra": True},
             ):
                 with self.subTest(value=value):
                     with self.assertRaises(CatalogError):
-                        catalog._play(value, Path("exercise.toml"))
+                        catalog._runtime(value, Path("exercise.toml"))
 
-    def test_final_project_has_its_own_guest_demonstration(self) -> None:
+    def test_final_project_has_its_own_runtime_setup(self) -> None:
         catalog = Catalog(ROOT)
         milestone = catalog.by_id["authenticated-reverse-shell"]
         final = catalog.by_id["complete-rootkit"]
 
-        self.assertEqual(milestone.play.profile, "authenticated-agent")
-        self.assertEqual(final.play.profile, "complete-rootkit")
         self.assertEqual(
-            milestone.play.script,
-            "vm/play/authenticated-agent",
+            milestone.runtime.setup,
+            "vm/runtime/authenticated-agent",
         )
-        self.assertEqual(final.play.script, "vm/play/complete-rootkit")
-        self.assertNotEqual(milestone.play.script, final.play.script)
+        self.assertEqual(final.runtime.setup, "vm/runtime/complete-rootkit")
+        self.assertNotEqual(milestone.runtime.setup, final.runtime.setup)
 
 
 def _exercise(

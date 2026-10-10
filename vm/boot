@@ -17,26 +17,33 @@ GDB=
 NETWORK=
 GUEST_COLOR=
 ACCEL=auto
-PLAY=
-PLAY_PROFILE=
-PLAY_KEY=
-PLAY_KEY_FILE=
-PLAY_CONTROL_PORT=
-PLAY_SHELL_PORT=
+RUNTIME_SETUP=
+CONTROL_KEY=
+CONTROL_KEY_FILE=
+CONTROL_PORT=
+SHELL_PORT=
 declare -a TOOLS=() TOOL_PATHS=() CHECK_ARGS=()
 while (( $# )); do
     case $1 in
         --check) CHECK=${2:?--check requires an argument}; shift 2 ;;
         --check-arg) CHECK_ARGS+=("${2:?--check-arg requires an argument}"); shift 2 ;;
         --gdb)   GDB=1; shift ;;
-        --play) PLAY=${2:?--play requires an argument}; shift 2 ;;
-        --play-profile) PLAY_PROFILE=${2:?--play-profile requires an argument}; shift 2 ;;
-        --play-key-file)
-            PLAY_KEY_FILE=${2:?--play-key-file requires an argument}
+        --runtime-setup)
+            RUNTIME_SETUP=${2:?--runtime-setup requires an argument}
             shift 2
             ;;
-        --play-control-port) PLAY_CONTROL_PORT=${2:?--play-control-port requires an argument}; shift 2 ;;
-        --play-shell-port) PLAY_SHELL_PORT=${2:?--play-shell-port requires an argument}; shift 2 ;;
+        --control-key-file)
+            CONTROL_KEY_FILE=${2:?--control-key-file requires an argument}
+            shift 2
+            ;;
+        --control-port)
+            CONTROL_PORT=${2:?--control-port requires an argument}
+            shift 2
+            ;;
+        --shell-port)
+            SHELL_PORT=${2:?--shell-port requires an argument}
+            shift 2
+            ;;
         --tool)  TOOLS+=("${2:?--tool requires an argument}"); shift 2 ;;
         --accel)
             ACCEL=${2:?--accel requires an argument}
@@ -61,28 +68,25 @@ done
 if (( ${#CHECK_ARGS[@]} )) && [[ -z $CHECK ]]; then
 	ui_die "--check-arg requires --check"
 fi
-if [[ -n $PLAY ]]; then
+if [[ -n $RUNTIME_SETUP ]]; then
     [[ -z $CHECK && -z $GDB && -n $MODULE ]] ||
-        ui_die "--play requires one module and forbids --check and --gdb"
-    [[ -n $PLAY_PROFILE && $PLAY_PROFILE =~ ^[a-z0-9][a-z0-9-]*$ ]] ||
-        ui_die "--play-profile must be a slug"
-    [[ -f $PLAY_KEY_FILE && ! -L $PLAY_KEY_FILE ]] ||
-        ui_die "--play-key-file must name a regular file"
-    [[ $(wc -c < "$PLAY_KEY_FILE") -eq 65 ]] ||
-        ui_die "play key file must contain 64 hexadecimal digits and a newline"
-    IFS= read -r PLAY_KEY < "$PLAY_KEY_FILE" ||
-        ui_die "could not read the play key file"
-    [[ $PLAY_KEY =~ ^[0-9a-f]{64}$ ]] ||
-        ui_die "play key file must contain 64 lowercase hexadecimal digits"
-    for port in "$PLAY_CONTROL_PORT" "$PLAY_SHELL_PORT"; do
+        ui_die "--runtime-setup needs one module and forbids checks and GDB"
+    [[ -f $CONTROL_KEY_FILE && ! -L $CONTROL_KEY_FILE ]] ||
+        ui_die "--control-key-file must name a regular file"
+    [[ $(wc -c < "$CONTROL_KEY_FILE") -eq 65 ]] ||
+        ui_die "control key must contain 64 hexadecimal digits and a newline"
+    IFS= read -r CONTROL_KEY < "$CONTROL_KEY_FILE" ||
+        ui_die "could not read the control key"
+    [[ $CONTROL_KEY =~ ^[0-9a-f]{64}$ ]] ||
+        ui_die "control key must contain 64 lowercase hexadecimal digits"
+    for port in "$CONTROL_PORT" "$SHELL_PORT"; do
         if [[ ! $port =~ ^[0-9]+$ ]] ||
             (( port < 1 || port > 65535 )); then
-            ui_die "play forwarding ports must be from 1 through 65535"
+            ui_die "callback ports must be from 1 through 65535"
         fi
     done
-elif [[ -n $PLAY_PROFILE || -n $PLAY_KEY_FILE ||
-        -n $PLAY_CONTROL_PORT || -n $PLAY_SHELL_PORT ]]; then
-    ui_die "play options require --play"
+elif [[ -n $CONTROL_KEY_FILE || -n $CONTROL_PORT || -n $SHELL_PORT ]]; then
+    ui_die "runtime options require --runtime-setup"
 fi
 if [[ -n $GDB ]] && ! command -v pwndbg >/dev/null && ! command -v gdb >/dev/null; then
 	ui_die "GDB not found; install gdb or run make doctor for the package name"
@@ -106,10 +110,13 @@ RELEASE=$("$ROOT_DIR/scripts/kernel" release) || ui_die "Course kernel manifest 
 KERNEL=$("$ROOT_DIR/scripts/kernel" image) || ui_die "Course kernel is not ready; run: ./rootkitlings setup"
 VMLINUX=$("$ROOT_DIR/scripts/kernel" vmlinux) || ui_die "Course kernel is not ready; run: ./rootkitlings setup"
 BUSYBOX=$(command -v busybox || true)
+BASH=$(command -v bash || true)
+SCRIPT=$(command -v script || true)
 
-readonly VM_DIR ROOT_DIR RELEASE KERNEL VMLINUX BUSYBOX WORK ROOTFS INITRAMFS
-readonly MODULE CHECK GDB NETWORK GUEST_COLOR ACCEL PLAY PLAY_PROFILE PLAY_KEY
-readonly PLAY_KEY_FILE PLAY_CONTROL_PORT PLAY_SHELL_PORT
+readonly VM_DIR ROOT_DIR RELEASE KERNEL VMLINUX BUSYBOX BASH SCRIPT WORK ROOTFS
+readonly INITRAMFS
+readonly MODULE CHECK GDB NETWORK GUEST_COLOR ACCEL RUNTIME_SETUP
+readonly CONTROL_KEY CONTROL_KEY_FILE CONTROL_PORT SHELL_PORT
 
 resolve_tools()
 {
@@ -158,12 +165,16 @@ check_prerequisites()
 {
     resolve_tools
     [[ -n $BUSYBOX ]] || ui_die "BusyBox not found; run make doctor for the package name"
+	[[ -n $BASH ]] || ui_die "Bash not found; run make doctor for the package name"
+	[[ -n $SCRIPT ]] || ui_die "util-linux script not found; run make doctor"
+	"$SCRIPT" --version 2>&1 | grep -qi 'util-linux' ||
+		ui_die "script must come from util-linux; run make doctor"
     file "$BUSYBOX" | grep -q 'statically linked' ||
         ui_die "BusyBox is not statically linked: $BUSYBOX"
     command -v cpio >/dev/null || ui_die "cpio not found"
     command -v qemu-system-x86_64 >/dev/null || ui_die "QEMU not found"
     command -v python3 >/dev/null || ui_die "python3 not found"
-    if [[ -n $NETWORK || -n $PLAY ]] &&
+    if [[ -n $NETWORK || -n $RUNTIME_SETUP ]] &&
         ! qemu-system-x86_64 -netdev help 2>&1 | grep -q '^user$'; then
         ui_die "QEMU user networking was requested but SLIRP support is unavailable"
     fi
@@ -178,7 +189,8 @@ PY
     fi
     [[ -z $MODULE || -f $MODULE ]] || ui_die "Module not found: $MODULE"
     [[ -z $CHECK  || -f $CHECK  ]] || ui_die "Check script not found: $CHECK"
-    [[ -z $PLAY || -f $PLAY ]] || ui_die "Play script not found: $PLAY"
+    [[ -z $RUNTIME_SETUP || -f $RUNTIME_SETUP ]] ||
+        ui_die "Runtime setup not found: $RUNTIME_SETUP"
     ui_success "Prerequisites verified for Linux $RELEASE"
 }
 
@@ -186,22 +198,46 @@ PY
 
 build_rootfs()
 {
-    local applet
+    local applet candidate library terminfo
 
     ui_heading "Building the BusyBox root filesystem"
     mkdir -p "$ROOTFS"/{bin,dev,etc,lib,proc,rootkitlings,sys,tmp,vm/checks} \
         "$ROOTFS/lib/modules/$RELEASE"
     : > "$ROOTFS/lib/modules/$RELEASE/modules.dep"
-    printf 'root:x:0:0:root:/rootkitlings:/bin/sh\n' > "$ROOTFS/etc/passwd"
+	printf 'root:x:0:0:root:/rootkitlings:/bin/bash\n' > "$ROOTFS/etc/passwd"
     printf 'root:!:0:::::\n' > "$ROOTFS/etc/shadow"
     cp "$BUSYBOX" "$ROOTFS/bin/busybox"
     for applet in cat chmod cmp cut dd diff dmesg echo find grep head \
 		hexdump id \
 		ifconfig insmod kill ls lsmod mkdir modinfo mount nc ping poweroff \
-		printf ps reboot rm rmdir rmmod sed setsid sh sha256sum sleep sort stat \
-		tail test touch tr uname wc xargs xxd od; do
+		printf ps reboot rm rmdir rmmod sed setsid sh sha256sum sleep \
+		sort stat stty tail test touch tr tty uname wc xargs xxd od; do
         ln -s busybox "$ROOTFS/bin/$applet"
     done
+	install -D -m 0755 -- "$BASH" "$ROOTFS/bin/bash"
+	install -D -m 0755 -- "$SCRIPT" "$ROOTFS/bin/script"
+	while IFS= read -r library; do
+		install -D -m 0755 -- "$library" "$ROOTFS$library"
+	done < <(ldd "$BASH" "$SCRIPT" | awk '
+		$2 == "=>" && $3 ~ /^\// { print $3 }
+		$1 ~ /^\// && $1 !~ /:$/ { print $1 }
+	' | sort -u)
+	terminfo=
+	for candidate in /usr/share/terminfo/x/xterm-256color \
+		/lib/terminfo/x/xterm-256color; do
+		if [[ -f $candidate ]]; then
+			terminfo=$candidate
+			break
+		fi
+	done
+	[[ -n $terminfo ]] || ui_die "xterm-256color terminfo entry not found"
+	install -D -m 0644 -- "$terminfo" \
+		"$ROOTFS/usr/share/terminfo/x/xterm-256color"
+	printf '%s\n' \
+		"PS1='root@rootkitlings:\\w# '" \
+		"unset HISTFILE" \
+		"bind 'set enable-bracketed-paste off' 2>/dev/null || true" \
+		> "$ROOTFS/etc/rootkitlings.bashrc"
     cp "$VM_DIR/init" "$ROOTFS/init"
     cp "$ROOT_DIR/scripts/lib/ui.sh" "$ROOTFS/vm/ui.sh"
     chmod 755 "$ROOTFS/init"
@@ -218,13 +254,13 @@ build_rootfs()
         fi
         ui_success "Check script copied to /check"
     fi
-    if [[ -n $PLAY ]]; then
-        cp "$PLAY" "$ROOTFS/play"
-        chmod 755 "$ROOTFS/play"
-        printf '%s\n' "$PLAY_PROFILE" "$PLAY_KEY" 10.0.2.100 47023 47024 \
-            > "$ROOTFS/play.args"
-        chmod 0600 "$ROOTFS/play.args"
-        ui_success "Play script copied to /play"
+    if [[ -n $RUNTIME_SETUP ]]; then
+        cp "$RUNTIME_SETUP" "$ROOTFS/runtime-setup"
+        chmod 755 "$ROOTFS/runtime-setup"
+        printf '%s\n' "$CONTROL_KEY" 10.0.2.100 47023 47024 \
+            > "$ROOTFS/runtime.args"
+        chmod 0600 "$ROOTFS/runtime.args"
+        ui_success "Target runtime setup copied to /runtime-setup"
     fi
     for tool in "${TOOL_PATHS[@]}"; do
 		install -m 0755 -- "$tool" "$ROOTFS/bin/$(basename "$tool")"
@@ -277,11 +313,11 @@ run_vm()
     if [[ -n $CHECK ]]; then
         cmdline+=' rootkitlings=check'
     fi
-    if [[ -n $NETWORK || -n $PLAY ]]; then
+    if [[ -n $NETWORK || -n $RUNTIME_SETUP ]]; then
         cmdline+=' rootkitlings=network'
     fi
-    if [[ -n $PLAY ]]; then
-        cmdline+=' rootkitlings=play'
+    if [[ -n $RUNTIME_SETUP ]]; then
+        cmdline+=' rootkitlings=runtime'
     fi
     if [[ -n $GUEST_COLOR ]]; then
         cmdline+=' rootkitlings=color'
@@ -315,10 +351,10 @@ run_vm()
         -nographic
     )
 
-    if [[ -n $PLAY ]]; then
+    if [[ -n $RUNTIME_SETUP ]]; then
         qemu_args+=(-nic "user,model=virtio-net-pci,restrict=on,\
-guestfwd=tcp:10.0.2.100:47023-tcp:127.0.0.1:$PLAY_CONTROL_PORT,\
-guestfwd=tcp:10.0.2.100:47024-tcp:127.0.0.1:$PLAY_SHELL_PORT")
+guestfwd=tcp:10.0.2.100:47023-tcp:127.0.0.1:$CONTROL_PORT,\
+guestfwd=tcp:10.0.2.100:47024-tcp:127.0.0.1:$SHELL_PORT")
     elif [[ -n $NETWORK ]]; then
         qemu_args+=(-nic 'user,model=virtio-net-pci')
     else

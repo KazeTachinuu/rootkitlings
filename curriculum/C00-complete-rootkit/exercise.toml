@@ -138,9 +138,8 @@ host_check = "curriculum/C00-complete-rootkit/checks/host-check"
 hint = "curriculum/C00-complete-rootkit/hint"
 solution = "curriculum/C00-complete-rootkit/solution"
 
-[play]
-profile = "complete-rootkit"
-script = "vm/play/complete-rootkit"
+[runtime]
+setup = "vm/runtime/complete-rootkit"
 
 [verification]
 timeout_seconds = 600

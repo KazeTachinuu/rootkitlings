@@ -47,7 +47,7 @@ expect_rejected "invalid peer address" "control_key=$key" \
 mkdir -p "$root"
 mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
 chmod 0700 "$root"
-printf 'operator-original\n' > "$root/rootkitlings.conf"
+printf 'original-request\n' > "$root/rootkitlings.conf"
 chmod 0600 "$root/rootkitlings.conf"
 ifconfig lo 127.0.0.1 up
 

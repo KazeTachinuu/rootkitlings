@@ -90,7 +90,7 @@ toggle_many()
 mkdir -p "$request_root"
 mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$request_root"
 chmod 0700 "$request_root"
-printf 'operator-original\n' > "$request"
+printf 'original-request\n' > "$request"
 chmod 0600 "$request"
 ifconfig lo 127.0.0.1 up
 
@@ -145,7 +145,7 @@ else
 	_fail "an exact artifact path became unavailable"
 fi
 if test "$(cat "$request")" = rootkitlings &&
-	test "$(cat "$sibling")" = operator-original; then
+	test "$(cat "$sibling")" = original-request; then
 	_ok "direct load-request reads preserve both real files"
 else
 	_fail "direct load-request evidence changed"

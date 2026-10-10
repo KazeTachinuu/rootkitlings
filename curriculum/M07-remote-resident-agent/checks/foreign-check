@@ -21,7 +21,7 @@ trap cleanup EXIT INT TERM
 mkdir -p "$root"
 mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
 chmod 0700 "$root"
-printf 'operator-original\n' > "$target"
+printf 'original-request\n' > "$target"
 chmod 0600 "$target"
 cp "$target" "$original"
 

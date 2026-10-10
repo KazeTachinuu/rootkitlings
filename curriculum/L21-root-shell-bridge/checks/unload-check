@@ -8,19 +8,24 @@ capture=/tmp/rootkitlings-root-shell-unload
 rm -f "$capture"
 ifconfig lo 127.0.0.1 up
 
-printf '%s\n' 'echo shell-ready' 'while :; do :; done' |
+has_line()
+{
+	tr '\r' '\n' < "$1" | grep -Eq "$2"
+}
+
+printf '%s\n' 'printf "rkproof-%s\n" ready' 'while :; do :; done' |
 	nc -l -p "$port" -s 127.0.0.1 >"$capture" 2>&1 &
 listener=$!
 sleep 0.1
 load rootkitlings.ko "shell_port=$port" shell_timeout_ms=300000
 
 attempt=0
-while ! grep -qx shell-ready "$capture" 2>/dev/null && \
+while ! has_line "$capture" '^rkproof-ready$' 2>/dev/null && \
 		[ "$attempt" -lt 100 ]; do
 	sleep 0.05
 	attempt=$((attempt + 1))
 done
-grep -qx shell-ready "$capture" || _fail "shell did not start"
+has_line "$capture" '^rkproof-ready$' || _fail "shell did not start"
 if printf 46129 > /sys/module/rootkitlings/parameters/shell_port 2>/dev/null;
 then
 	_fail "a busy shell accepted a concurrent request"

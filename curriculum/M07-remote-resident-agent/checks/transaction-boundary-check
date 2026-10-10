@@ -25,7 +25,7 @@ chmod 0700 "$root"
 reset_target()
 {
 	rm -f "$target" "$sibling" "$extra"
-	printf 'operator-original\n' > "$target"
+	printf 'original-request\n' > "$target"
 	chmod 0600 "$target"
 }
 
@@ -46,7 +46,7 @@ expect_load_error()
 reset_target
 chmod 0644 "$target"
 expect_load_error 1 "wrong target mode"
-if test "$(cat "$target")" = operator-original &&
+if test "$(cat "$target")" = original-request &&
 		test "$(stat -c %a "$target")" = 644 && test ! -e "$sibling"; then
 	_ok "mode rejection changes no name, byte, or mode"
 else
@@ -67,7 +67,7 @@ printf 'foreign-sibling\n' > "$sibling"
 chmod 0600 "$sibling"
 # The module loader maps an init return of EEXIST to EBUSY.
 expect_load_error 16 "occupied sibling"
-if test "$(cat "$target")" = operator-original &&
+if test "$(cat "$target")" = original-request &&
 		test "$(cat "$sibling")" = foreign-sibling; then
 	_ok "occupied sibling remains untouched"
 else
