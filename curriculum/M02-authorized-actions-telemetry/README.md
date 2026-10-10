@@ -1,4 +1,4 @@
-# Protect the root command and record activity
+# Protect root access and keep an activity log
 
 The resident core from M00 accepts local commands, but any process with write
 access could use them.
@@ -11,8 +11,7 @@ The project combines three jobs:
 - observe whether one selected `rmdir()` call succeeded or failed;
 - retain the newest 16 events in order.
 
-The log uses fixed storage because observation code must not stop to allocate
-memory.
+The log uses fixed storage so event recording never allocates.
 When the log is full, the next event replaces the oldest one.
 
 The control endpoint remains `/proc/rootkitlings` with mode `0622`.
@@ -122,7 +121,7 @@ Complete the integration and event ring in:
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -131,7 +130,7 @@ sequence/overwrite accounting, snapshots, unload, and reset.
 The controlled authorization-start failure returns `-EINTR`; normal builds still
 call `wait_for_random_bytes()` and propagate its real result.
 
-## Official Linux v7.2 references
+## References
 
 - Spinlock API
   <https://github.com/torvalds/linux/blob/v7.2/include/linux/spinlock.h>

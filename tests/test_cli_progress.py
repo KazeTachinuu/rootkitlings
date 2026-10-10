@@ -34,7 +34,6 @@ class LearnerCLITests(unittest.TestCase):
         self.globals.update(values)
         self.globals["STORE"] = self.globals["StateStore"](
             values["STATE"],
-            set(self.globals["CAT"].by_id),
             self.globals["ROUTE"],
             self.globals["CAT"].revision,
             self.globals["COMPLETION_DEPENDENCIES"],
@@ -372,7 +371,7 @@ class LearnerCLITests(unittest.TestCase):
         )
 
     def test_check_runs_each_declarative_case_and_records_one_attempt(self) -> None:
-        exercise = self.globals["CAT"].ordered()[0]
+        exercise = self.globals["CAT"].required()[0]
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             self.globals["cmd_start"]([exercise.serial])
         build_root = self.globals["wp"](exercise)
@@ -381,7 +380,8 @@ class LearnerCLITests(unittest.TestCase):
         success = SimpleNamespace(
             id="normal",
             label="Normal load",
-            check=exercise.resources.check,
+            check=exercise.verification.cases[0].check,
+            check_arguments=(),
         )
         rejection = SimpleNamespace(
             id="invalid",
@@ -391,7 +391,8 @@ class LearnerCLITests(unittest.TestCase):
         repeated_success = SimpleNamespace(
             id="second",
             label="Second load",
-            check=exercise.resources.check,
+            check=exercise.verification.cases[0].check,
+            check_arguments=(),
         )
         outcomes = (
             SimpleNamespace(
@@ -467,14 +468,14 @@ class LearnerCLITests(unittest.TestCase):
         self.assertEqual(attempts, [(exercise.id, True)])
 
     def test_missing_workspace_is_not_an_attempt(self) -> None:
-        exercise = self.globals["CAT"].ordered()[0]
+        exercise = self.globals["CAT"].required()[0]
         with self.assertRaisesRegex(self.globals["CLIError"], "has no workspace"):
             self.globals["cmd_check"]([exercise.serial])
         with self.globals["STORE"].read_locked() as state:
             self.assertNotIn(exercise.id, state.exercises)
 
     def test_changed_workspace_records_one_failed_attempt_not_pass(self) -> None:
-        exercise = self.globals["CAT"].ordered()[0]
+        exercise = self.globals["CAT"].required()[0]
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             self.globals["cmd_start"]([exercise.serial])
         workspace = self.globals["wp"](exercise)
@@ -507,14 +508,18 @@ class LearnerCLITests(unittest.TestCase):
             self.assertEqual(record.passed_snapshot, "")
 
     def test_guest_launch_error_records_exactly_one_attempt(self) -> None:
-        exercise = self.globals["CAT"].ordered()[0]
+        exercise = self.globals["CAT"].required()[0]
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             self.globals["cmd_start"]([exercise.serial])
         workspace = self.globals["wp"](exercise)
         artifact = workspace / self.globals["CAT"].module_artifact(exercise)
         artifact.write_bytes(b"module")
         outcome = SimpleNamespace(
-            case=SimpleNamespace(label="Control", check=exercise.resources.check),
+            case=SimpleNamespace(
+                label="Control",
+                check=exercise.verification.cases[0].check,
+                check_arguments=(),
+            ),
             build_root=workspace,
             artifact=artifact,
         )
@@ -562,7 +567,7 @@ class LearnerCLITests(unittest.TestCase):
         try:
             self.globals["CAT"] = SimpleNamespace(
                 solution_tree=lambda _exercise: tree,
-                baseline_provider=lambda _exercise: None,
+                solution_provider=lambda _exercise: None,
             )
             output = self.globals["solution_output"](exercise, set())
         finally:
@@ -605,7 +610,7 @@ class LearnerCLITests(unittest.TestCase):
                 solution_tree=lambda item: (
                     provider_tree if item is provider else consumer_tree
                 ),
-                baseline_provider=lambda item: (
+                solution_provider=lambda item: (
                     provider if item is exercise else None
                 ),
             )
@@ -626,7 +631,7 @@ class LearnerCLITests(unittest.TestCase):
         self.assertIn("+++ b/include/api.h", output)
 
     def test_solution_view_does_not_mutate_learner_state(self) -> None:
-        exercise = self.globals["CAT"].ordered()[0]
+        exercise = self.globals["CAT"].required()[0]
         original_output = self.globals["solution_output"]
         try:
             self.globals["solution_output"] = lambda *_args: self.globals["die"](
@@ -642,7 +647,7 @@ class LearnerCLITests(unittest.TestCase):
 
             state_path = self.globals["STATE"]
             before = state_path.read_bytes() if state_path.exists() else None
-            future = self.globals["CAT"].ordered()[-1]
+            future = self.globals["CAT"].required()[-1]
             self.globals["solution_output"] = lambda *_args: "rendered\n"
             with redirect_stdout(io.StringIO()):
                 self.globals["cmd_solution"]([future.serial])
@@ -759,47 +764,6 @@ class LearnerCLITests(unittest.TestCase):
             "not owned by course state\n",
         )
 
-    def test_elective_reset_includes_only_elective_descendants(self) -> None:
-        workspace = SimpleNamespace(parent="")
-        required = SimpleNamespace(
-            id="required",
-            status="required",
-            prerequisites=(),
-            workspace=workspace,
-        )
-        elective = SimpleNamespace(
-            id="elective",
-            status="elective",
-            prerequisites=("required",),
-            workspace=workspace,
-        )
-        descendant = SimpleNamespace(
-            id="descendant",
-            status="elective",
-            prerequisites=("elective",),
-            workspace=workspace,
-        )
-        unrelated = SimpleNamespace(
-            id="unrelated",
-            status="elective",
-            prerequisites=("required",),
-            workspace=workspace,
-        )
-        original_catalog = self.globals["CAT"]
-        original_route = self.globals["ROUTE"]
-        try:
-            self.globals["CAT"] = SimpleNamespace(
-                by_id={item.id: item for item in (required, elective, descendant, unrelated)},
-                exercises=(required, elective, descendant, unrelated),
-                completion_dependencies=lambda item: item.prerequisites,
-            )
-            self.globals["ROUTE"] = ("required",)
-            affected = self.globals["progress_reset_ids"](elective)
-        finally:
-            self.globals["CAT"] = original_catalog
-            self.globals["ROUTE"] = original_route
-        self.assertEqual(affected, {"elective", "descendant"})
-
     def test_derived_baseline_requires_provider_snapshot(self) -> None:
         provider = SimpleNamespace(id="provider", serial="L00")
         exercise = SimpleNamespace(id="consumer", serial="L01")
@@ -825,9 +789,12 @@ class LearnerCLITests(unittest.TestCase):
         )
         exercise = SimpleNamespace(
             id="consumer",
+            serial="L01",
             workspace=SimpleNamespace(
                 files=("main.c", "status.c"),
                 additions="curriculum/additions/consumer",
+                baseline="parent",
+                imports=(),
             ),
         )
         state = SimpleNamespace(
@@ -859,6 +826,7 @@ class LearnerCLITests(unittest.TestCase):
     def test_scaffold_materialization_uses_static_composed_starter(self) -> None:
         exercise = SimpleNamespace(
             id="consumer",
+            serial="L01",
             workspace=SimpleNamespace(baseline="scaffold"),
         )
         calls = []
@@ -876,7 +844,7 @@ class LearnerCLITests(unittest.TestCase):
         finally:
             self.globals["CAT"] = original_catalog
         self.assertEqual(result, Path("/workspace"))
-        self.assertEqual(calls, [(exercise, self.globals["WORK"], "consumer")])
+        self.assertEqual(calls, [(exercise, self.globals["WORK"], "L01")])
 
     def test_edit_boundary_uses_the_recorded_start_not_reference_bytes(self) -> None:
         exercise = SimpleNamespace(
@@ -909,48 +877,50 @@ class LearnerCLITests(unittest.TestCase):
                 )
 
     def test_read_and_hint_use_the_current_exercise_without_changing_state(self) -> None:
+        exercise = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
+        serial = exercise.serial
         state_path = self.globals["STATE"]
         state_before = state_path.read_bytes() if state_path.exists() else None
         output = io.StringIO()
         with redirect_stdout(output):
             self.globals["cmd_read"]([])
         read_text = output.getvalue()
-        self.assertIn("# Build and load a kernel module", read_text)
-        self.assertIn("./rootkitlings start L00", read_text)
+        self.assertIn(f"# {exercise.title}", read_text)
+        self.assertIn(f"./rootkitlings start {serial}", read_text)
 
         output = io.StringIO()
         with redirect_stdout(output):
             self.globals["cmd_hint"]([])
         hint_text = output.getvalue()
-        self.assertIn("Hint for L00", hint_text)
-        self.assertIn("./rootkitlings start L00", hint_text)
-        self.assertIn("./rootkitlings solution L00", hint_text)
+        self.assertIn(f"Hint for {serial}", hint_text)
+        self.assertIn(f"./rootkitlings start {serial}", hint_text)
+        self.assertIn(f"./rootkitlings solution {serial}", hint_text)
         state_after = state_path.read_bytes() if state_path.exists() else None
         self.assertEqual(state_after, state_before)
 
         with redirect_stdout(io.StringIO()):
-            self.globals["cmd_start"](["L00"])
+            self.globals["cmd_start"]([serial])
         output = io.StringIO()
         with redirect_stdout(output):
-            self.globals["cmd_read"](["L00"])
-        self.assertIn("./rootkitlings check L00", output.getvalue())
-        self.assertNotIn("./rootkitlings start L00", output.getvalue())
+            self.globals["cmd_read"]([serial])
+        self.assertIn(f"./rootkitlings check {serial}", output.getvalue())
+        self.assertNotIn(f"./rootkitlings start {serial}", output.getvalue())
 
     def test_start_uses_a_short_visible_workspace_and_complete_edit_paths(self) -> None:
+        exercise = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
         output = io.StringIO()
         with redirect_stdout(output):
-            self.globals["cmd_start"](["L00"])
+            self.globals["cmd_start"]([exercise.serial])
 
         text = output.getvalue()
-        exercise = self.globals["CAT"].by_id["module-build-lifecycle"]
         workspace = self.globals["wp"](exercise)
         self.assertIn(f"Workspace created: {workspace}", text)
-        self.assertIn(f"- {workspace}/Kbuild", text)
-        self.assertIn(f"- {workspace}/core/main.c", text)
+        for relative in exercise.workspace.editable:
+            self.assertIn(f"- {workspace}/{relative}", text)
         self.assertNotIn(".rootkitlings/work", text)
         self.assertEqual(
             workspace,
-            self.globals["WORK"] / "L00",
+            self.globals["WORK"] / exercise.serial,
         )
 
     def test_read_uses_bat_without_paging_and_respects_redirected_output(self) -> None:
@@ -982,6 +952,7 @@ class LearnerCLITests(unittest.TestCase):
         self.assertIn("# highlighted", output.getvalue())
 
     def test_read_shows_renderer_failure_then_plain_markdown(self) -> None:
+        exercise = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
         original_which = self.globals["shutil"].which
         original_run = self.globals["run"]
         try:
@@ -993,7 +964,7 @@ class LearnerCLITests(unittest.TestCase):
             output = io.StringIO()
             error = io.StringIO()
             with redirect_stdout(output), redirect_stderr(error):
-                self.globals["cmd_read"](["L00"])
+                self.globals["cmd_read"]([exercise.serial])
         finally:
             self.globals["shutil"].which = original_which
             self.globals["run"] = original_run
@@ -1005,26 +976,29 @@ class LearnerCLITests(unittest.TestCase):
         self.assertIn("$ /usr/bin/bat", rendered)
         self.assertRegex(rendered, r"Exit\s+2")
         self.assertIn(
-            "# Build and load a kernel module",
+            f"# {exercise.title}",
             rendered,
         )
 
     def test_list_and_status_cover_started_advanced_and_complete_states(self) -> None:
+        first = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
+        second = self.globals["CAT"].by_id[self.globals["ROUTE"][1]]
+        third = self.globals["CAT"].by_id[self.globals["ROUTE"][2]]
         original_ready = self.globals["course_kernel_ready"]
         try:
             self.globals["course_kernel_ready"] = lambda: True
             with redirect_stdout(io.StringIO()):
-                self.globals["cmd_start"](["L00"])
+                self.globals["cmd_start"]([first.serial])
 
             output = io.StringIO()
             with redirect_stdout(output):
                 self.globals["cmd_status"]([])
             status = output.getvalue()
             self.assertIn("Files to edit", status)
-            self.assertIn("work/L00/Kbuild", status)
-            self.assertIn("work/L00/core/main.c", status)
+            for relative in first.workspace.editable:
+                self.assertIn(f"work/{first.serial}/{relative}", status)
             self.assertRegex(status, r"State +Unchanged")
-            self.assertIn("./rootkitlings check L00", status)
+            self.assertIn(f"./rootkitlings check {first.serial}", status)
 
             editable = self.globals["wp"](
                 self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
@@ -1041,10 +1015,13 @@ class LearnerCLITests(unittest.TestCase):
             with redirect_stdout(output):
                 self.globals["cmd_list"]([])
             listing = output.getvalue()
-            self.assertRegex(listing, r"passed\s+L00")
-            self.assertRegex(listing, r"current\s+L01")
-            self.assertRegex(listing, r"locked\s+L02")
-            self.assertIn("./rootkitlings read L01", listing)
+            self.assertRegex(listing, rf"passed\s+{first.serial}")
+            self.assertRegex(listing, rf"current\s+{second.serial}")
+            self.assertRegex(listing, rf"locked\s+{third.serial}")
+            self.assertIn(
+                f"./rootkitlings read {second.serial}",
+                listing,
+            )
 
             with self.globals["STORE"].locked() as state:
                 state.completed.update(self.globals["ROUTE"])
@@ -1162,7 +1139,7 @@ class LearnerCLITests(unittest.TestCase):
         case = SimpleNamespace(
             id="success",
             label="Complete behavior",
-            check=exercise.resources.check,
+            check=exercise.verification.cases[0].check,
             check_arguments=(),
         )
         outcome = SimpleNamespace(case=case, build_root=workspace, artifact=artifact)

@@ -64,7 +64,7 @@ state, or replace an error returned by a component with a different one.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -82,7 +82,7 @@ allocation is passed to `kfree()` during rollback; object-file checks enforce
 the component ownership boundary.
 Module logs are not accepted as cleanup evidence.
 
-## Official references
+## References
 
 - [Procfs API declarations][ref-1]
 - [The seq_file interface](https://docs.kernel.org/filesystems/seq_file.html)

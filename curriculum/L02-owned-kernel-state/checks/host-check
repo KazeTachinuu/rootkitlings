@@ -41,18 +41,16 @@ if grep -Eq '[[:space:]](__kmalloc|__kmalloc_cache_noprof|kmalloc_noprof|kfree|k
 	die "core/main.o must not allocate or free private state"
 fi
 
-header=$build_dir/include/rootkit.h
-header_text=$(tr '\n' ' ' < "$header")
-grep -Eq 'struct[[:space:]]+rk_state[[:space:]]*;' <<< "$header_text" ||
-	die "rootkit.h must forward-declare struct rk_state"
-if grep -Eq 'struct[[:space:]]+rk_state[[:space:]]*\{' <<< "$header_text"; then
-	die "struct rk_state layout must remain private to core/state.c"
-fi
-
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-owned-kernel-state-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 cflags=(-std=c11 -Wall -Wextra -Werror "-fsanitize=address,undefined"
 	-fno-omit-frame-pointer -I"$support" -I"$build_dir/include")
+
+if "${CC:-cc}" "${cflags[@]}" \
+	-c "$HERE/../fixtures/host/private_state_test.c" \
+	-o "$scratch/private-state.o" >"$scratch/private-state.log" 2>&1; then
+	die "struct rk_state layout is visible outside core/state.c"
+fi
 
 for point in 0 2; do
 	"${CC:-cc}" "${cflags[@]}" -DROOTKITLINGS_FAIL_POINT=$point \

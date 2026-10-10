@@ -1,4 +1,4 @@
-# Issue a one-use operator key
+# Authorize root with a one-use token
 
 An exposed `root` command is not an acceptable control channel.
 Require a fresh one-use secret, consume it before attempting the action, and
@@ -89,7 +89,7 @@ comparison wrapper, and teardown erasure are supplied.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -98,7 +98,7 @@ rejection, one winner among concurrent users, same-writer replacement,
 preparation and cancellation failures, consume-on-failure rotation, rollback,
 clean unload, and repeated load cycles without kernel warnings.
 
-## Official Linux v7.2 references
+## References
 
 - [Kernel random-number implementation and readiness contract][ref-1]
 - [`get_random_bytes()` and `wait_for_random_bytes()` declarations][ref-2]

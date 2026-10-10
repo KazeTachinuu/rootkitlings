@@ -5,32 +5,40 @@ from pathlib import Path
 import re
 import sys
 
-sys.path.insert(0, str(Path.cwd()))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 from engine.catalog import Catalog
 
 
-catalog = Catalog(Path.cwd())
-serial_by_readme = {Path(item.resources.readme): item.serial for item in catalog.exercises}
-roots = [Path("README.md"), Path("vm/README.md")]
+catalog = Catalog(ROOT)
+serial_by_readme = {
+    ROOT / item.resources.readme: item.serial for item in catalog.exercises
+}
+roots = [ROOT / "README.md", ROOT / "vm/README.md"]
 documents = list(dict.fromkeys(roots + sorted(serial_by_readme)))
 failures: list[str] = []
 
 for document in documents:
+    shown = document.relative_to(ROOT)
     text = document.read_text()
     for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", text):
         if "://" in target or target.startswith("#"):
             continue
         relative = target.split("#", 1)[0]
         if relative and not (document.parent / relative).exists():
-            failures.append(f"{document}: missing link target: {target}")
+            failures.append(f"{shown}: missing link target: {target}")
 
-    if re.search(r"\./rootkitlings\s+(?:debug|prerequisites|prereqs|peek|readme)\b", text):
-        failures.append(f"{document}: uses a removed rootkitlings command")
     if re.search(
-        r"\./rootkitlings\s+(?:read|start|check|hint|solution|run|gdb|prereq)\s+[0-9]+\b",
+        r"\./rootkitlings\s+(?:debug|prerequisites|prereqs|peek|readme)\b",
         text,
     ):
-        failures.append(f"{document}: uses a removed numeric exercise selector")
+        failures.append(f"{shown}: uses a removed rootkitlings command")
+    if re.search(
+        r"\./rootkitlings\s+"
+        r"(?:read|start|check|hint|solution|run|gdb|prereq)\s+[0-9]+\b",
+        text,
+    ):
+        failures.append(f"{shown}: uses a removed numeric exercise selector")
 
     serial = serial_by_readme.get(document)
     if not serial:
@@ -44,10 +52,10 @@ for document in documents:
         selector = selector.rstrip("`.,;:")
         if selector and selector != serial:
             failures.append(
-                f"{document}: {command} example targets {selector}, expected {serial}"
+                f"{shown}: {command} example targets {selector}, expected {serial}"
             )
     if not any(command == "check" for command, _ in examples):
-        failures.append(f"{document}: missing './rootkitlings check' example")
+        failures.append(f"{shown}: missing './rootkitlings check' example")
 
 if failures:
     raise SystemExit("\n".join(failures))

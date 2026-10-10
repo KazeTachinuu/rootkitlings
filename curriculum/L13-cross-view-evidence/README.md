@@ -97,14 +97,14 @@ unchanged.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
 The checker covers exact seq-file behavior, live probes, independent registry
 evidence, rollback, teardown, reload, and stale-state cleanup.
 
-## Official Linux v7.2 references
+## References
 
 - [The seq_file interface and `SEQ_SKIP`][1]
 - [Linux v7.2 seq_file core][2]

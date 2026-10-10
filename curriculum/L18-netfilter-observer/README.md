@@ -1,4 +1,4 @@
-# Place a passive watch on outbound IPv4
+# Observe outbound IPv4 with Netfilter
 
 Install a traffic watch where locally generated IPv4 leaves the host network
 stack.
@@ -87,14 +87,14 @@ Implement `rk_observe_local_ipv4()`, `rk_netfilter_start()`,
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
 The checker builds with `W=1` and verifies exact status, delivery, counter
 deltas, namespace controls, rollback, concurrent traffic, unload, and reload.
 
-## Official Linux v7.2 references
+## References
 
 - [Netfilter hook API and `nf_hook_ops`][1]
 - [IPv4 hook numbers and priorities][2]

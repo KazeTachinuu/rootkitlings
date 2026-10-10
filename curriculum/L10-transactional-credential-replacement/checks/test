@@ -45,8 +45,6 @@ for compiler in gcc clang; do
 		-o "$scratch/cred_trigger_test.$compiler" \
 		"$HERE/../../../vm/tools/cred_trigger_test.c"
 done
-make -s -C "$HERE/../../.." -B vm/tools/cred_trigger_test
-
 mapfile -t changed_files < <(
 	diff -qr "$HERE/../starter" "$HERE/../solution" |
 		sed -nE 's#^Files .*/starter/(.*) and .*/solution/.* differ$#\1#p'

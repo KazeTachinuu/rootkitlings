@@ -56,10 +56,12 @@ class ValidationTests(unittest.TestCase):
         validator.validate_sources = mock.Mock()
         validator.run_unit_tests = mock.Mock()
         validator.build_assets = mock.Mock()
+        validator.run_checker_tests = mock.Mock()
         with mock.patch("engine.validation.Catalog", return_value=catalog):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 validator.validate(quick=True)
         validator.build_assets.assert_not_called()
+        validator.run_checker_tests.assert_not_called()
 
 
 if __name__ == "__main__":

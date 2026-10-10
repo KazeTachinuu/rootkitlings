@@ -3,7 +3,6 @@ id = "protection-property-selection"
 title = "Choose protection for each threat"
 stage = "authenticated-operations"
 kind = "lesson"
-status = "required"
 tradecraft = ["cryptography", "detection"]
 difficulty = "standard"
 prerequisites = []
@@ -20,21 +19,16 @@ source = "curriculum/L22-protection-property-selection/starter"
 
 [resources]
 readme = "curriculum/L22-protection-property-selection/README.md"
-check = "curriculum/L22-protection-property-selection/checks/success-check"
 host_check = "curriculum/L22-protection-property-selection/checks/host-check"
 hint = "curriculum/L22-protection-property-selection/hint"
 solution = "curriculum/L22-protection-property-selection/solution"
 
 [verification]
 timeout_seconds = 240
-capabilities = []
 tools = []
-cleanup_required = true
 
 [[verification.cases]]
 id = "property-selection"
 label = "Protection selection and bounded XOR behavior"
 expect_build = "pass"
 check = "curriculum/L22-protection-property-selection/checks/success-check"
-build_output_contains = ""
-[verification.cases.build_variables]

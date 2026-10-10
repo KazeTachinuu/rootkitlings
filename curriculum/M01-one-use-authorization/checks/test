@@ -45,9 +45,6 @@ for compiler in gcc clang; do
 		-o "$scratch/cred_trigger_test.$compiler" \
 		"$HERE/../../../vm/tools/cred_trigger_test.c"
 done
-make -s -C "$HERE/../../.." -B vm/tools/cred_trigger_test \
-	vm/tools/proc_write_test
-
 for script in test host-check success-check credential-failure-check.in; do
 	bash -n "$HERE/$script"
 done

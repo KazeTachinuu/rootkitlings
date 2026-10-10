@@ -72,7 +72,6 @@ BASELINE_PROVIDERS = {
 }
 STORE = StateStore(
     STATE,
-    set(CAT.by_id),
     ROUTE,
     CAT.revision,
     COMPLETION_DEPENDENCIES,
@@ -158,7 +157,7 @@ def label(item):
 
 def workspace_name(item):
     """Return the short learner-facing directory name for an exercise."""
-    return getattr(item, 'serial', '') or item.id
+    return item.serial or item.id
 
 
 def kind_label(item):
@@ -214,23 +213,14 @@ def resolve(q, state):
 
 
 def available(x, state):
-    if x.status == 'required':
-        if x.id in state.completed or state.current is None:
-            return
-        if ROUTE.index(x.id) > ROUTE.index(state.current):
-            now = CAT.by_id[state.current]
-            die(
-                f'{label(x)} is locked. Complete {label(now)}: '
-                f'{now.title} first.'
-            )
-    else:
-        missing = [p for p in x.prerequisites if p not in state.completed]
-        if missing:
-            prerequisites = ', '.join(missing)
-            die(
-                f'{label(x)} is locked; incomplete prerequisites: '
-                f'{prerequisites}'
-            )
+    if x.id in state.completed or state.current is None:
+        return
+    if ROUTE.index(x.id) > ROUTE.index(state.current):
+        now = CAT.by_id[state.current]
+        die(
+            f'{label(x)} is locked. Complete {label(now)}: '
+            f'{now.title} first.'
+        )
 
 
 def wp(x):
@@ -275,12 +265,12 @@ def baseline(x, state):
 
 
 def materialize_workspace(x, state):
-    if getattr(x.workspace, 'baseline', '') == 'scaffold':
+    if x.workspace.baseline == 'scaffold':
         return CAT.materialize_starter(x, WORK, workspace_name(x))
     source = baseline(x, state)
     provider = CAT.baseline_provider(x)
     imported = {}
-    for workspace_import in getattr(x.workspace, 'imports', ()):
+    for workspace_import in x.workspace.imports:
         tree = CAT.solution_tree(CAT.by_id[workspace_import.exercise])
         for source_path, destination_path in workspace_import.files:
             solution_file = tree[source_path]
@@ -465,11 +455,7 @@ def solution_text(data, relative):
 
 def solution_output(x, completed):
     tree = CAT.solution_tree(x)
-    provider = (
-        CAT.solution_provider(x)
-        if hasattr(CAT, 'solution_provider')
-        else CAT.baseline_provider(x)
-    )
+    provider = CAT.solution_provider(x)
     derived = provider is not None
     lines = []
     if not derived:
@@ -611,10 +597,7 @@ def tools(x):
 
 
 def bootargs(x):
-    z = []
-    for capability in x.verification.capabilities:
-        z += ['--cap', capability]
-    return z + tools(x)
+    return tools(x)
 
 
 def check_timeout(x):
@@ -704,7 +687,7 @@ def cmd_check(a):
         die(f'{label(x)} has no recorded starting snapshot')
     starting_snapshot = snap(baseline_hash)
     timeout = check_timeout(x)
-    cases = CAT.verification_cases(x)
+    cases = x.verification.cases
     UI.heading(f'Check {label(x)}: {x.title}')
     UI.field('Cases', str(len(cases)))
     UI.field('Timeout', f'{timeout} seconds')
@@ -778,9 +761,7 @@ def cmd_check(a):
                         str(ROOT / outcome.case.check),
                         *(
                             value
-                            for argument in getattr(
-                                outcome.case, 'check_arguments', ()
-                            )
+                            for argument in outcome.case.check_arguments
                             for value in ('--check-arg', argument)
                         ),
                         str(outcome.artifact),
@@ -936,29 +917,6 @@ def cmd_list(a):
                 f'({x.difficulty.capitalize()})',
                 style=style,
             )
-        if CAT.elective_tracks:
-            UI.section('Optional tracks')
-        for track in CAT.elective_tracks:
-            UI.heading(f'{track.serial}  {track.label}')
-            for exercise_id in track.members:
-                x = CAT.by_id[exercise_id]
-                if x.id in s.completed:
-                    state = 'passed'
-                    style = 'success'
-                elif all(
-                    prerequisite in s.completed
-                    for prerequisite in x.prerequisites
-                ):
-                    state = 'optional'
-                    style = 'accent'
-                else:
-                    state = 'locked'
-                    style = 'dim'
-                UI.line(
-                    f'  {state:<8} {label(x):<4} '
-                    f'{x.title} ({x.difficulty.capitalize()})',
-                    style=style,
-                )
         if s.current:
             show_next(s, kernel_ready=kernel_ready)
 
@@ -1011,23 +969,8 @@ def cmd_restore(a):
 
 def progress_reset_ids(selected):
     if selected is None:
-        affected = set(CAT.by_id)
-    elif selected.id in ROUTE:
-        affected = set(ROUTE[ROUTE.index(selected.id):])
-    else:
-        affected = {selected.id}
-
-    changed = True
-    while changed:
-        changed = False
-        for exercise in CAT.exercises:
-            if exercise.status == 'required' or exercise.id in affected:
-                continue
-            dependencies = set(CAT.completion_dependencies(exercise))
-            if dependencies & affected:
-                affected.add(exercise.id)
-                changed = True
-    return affected
+        return set(ROUTE)
+    return set(ROUTE[ROUTE.index(selected.id):])
 
 
 def cmd_reset(a):

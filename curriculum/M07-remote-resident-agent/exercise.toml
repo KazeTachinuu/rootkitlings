@@ -3,7 +3,6 @@ id = "remote-resident-agent"
 title = "Call home and request loading at boot"
 stage = "persistence"
 kind = "milestone"
-status = "required"
 tradecraft = ["control", "networking", "persistence", "lifecycle"]
 difficulty = "advanced"
 prerequisites = ["concealment-evidence-map", "tcp-framing-cancellation", "guarded-file-transaction"]
@@ -25,23 +24,19 @@ imports = [
 
 [resources]
 readme = "curriculum/M07-remote-resident-agent/README.md"
-check = "curriculum/M07-remote-resident-agent/checks/success-check"
 host_check = "curriculum/M07-remote-resident-agent/checks/host-check"
 hint = "curriculum/M07-remote-resident-agent/hint"
 solution = "curriculum/M07-remote-resident-agent/solution"
 
 [verification]
 timeout_seconds = 360
-capabilities = []
 tools = ["agent-fixture", "module-load-params", "getdents64-test", "event-stream-test", "status-field-test", "proc-write-test", "proc-read-test", "credential-trigger-test", "rmdir-telemetry-test", "run-as"]
-cleanup_required = true
 
 [[verification.cases]]
 id = "remote-agent"
 label = "Remote resident agent"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/success-check"
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
 
@@ -50,7 +45,6 @@ id = "transaction-boundaries"
 label = "Boot-request transaction boundaries"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/transaction-boundary-check"
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
 
@@ -59,7 +53,6 @@ id = "foreign-state-preservation"
 label = "Foreign boot-request state is preserved"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/foreign-check"
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
 
@@ -69,7 +62,6 @@ label = "Process-view and evidence regression"
 expect_build = "pass"
 check = "curriculum/M03-concealment-evidence-map/checks/success-check"
 check_arguments = ["remote-agent"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
 
@@ -79,7 +71,6 @@ label = "Authorized actions and telemetry regression"
 expect_build = "pass"
 check = "curriculum/M02-authorized-actions-telemetry/checks/success-check"
 check_arguments = ["remote-agent"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
 
@@ -89,7 +80,6 @@ label = "Preflight rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["125", "Preflight"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "1"
 
@@ -99,7 +89,6 @@ label = "State allocation rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["12", "Allocation"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "2"
 
@@ -109,7 +98,6 @@ label = "Control publication rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["12", "Control publication"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "3"
 
@@ -119,7 +107,6 @@ label = "Worker start rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["4", "Worker"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "4"
 
@@ -129,7 +116,6 @@ label = "Authorization startup rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["4", "Authorization startup"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "5"
 
@@ -139,7 +125,6 @@ label = "Missing rmdir target"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["2", "Missing rmdir target"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "6"
 
@@ -149,7 +134,6 @@ label = "Events publication rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["12", "Events publication"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "7"
 
@@ -159,7 +143,6 @@ label = "Credential preparation rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/action-failure-check.in"
 check_arguments = ["12", "Credential preparation"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "8"
 
@@ -169,7 +152,6 @@ label = "Credential cancellation"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/action-failure-check.in"
 check_arguments = ["125", "Credential cancellation"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "9"
 
@@ -179,7 +161,6 @@ label = "Missing iterate_dir target"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["2", "Missing iterate_dir target"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "10"
 
@@ -189,7 +170,6 @@ label = "Evidence publication rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["12", "Evidence publication"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "11"
 
@@ -199,7 +179,6 @@ label = "Agent worker creation rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["4", "Agent worker creation"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "12"
 
@@ -209,7 +188,6 @@ label = "Agent status publication rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["12", "Agent status publication"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "13"
 
@@ -217,7 +195,6 @@ ROOTKITLINGS_FAIL_POINT = "13"
 id = "unknown-failure-point"
 label = "Reject unknown failure point"
 expect_build = "fail"
-check = ""
 build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "99"

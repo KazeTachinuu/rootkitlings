@@ -1,4 +1,4 @@
-# Recognize one UDP signal without changing it
+# Classify one outbound UDP signal
 
 The outbound watch sees every local IPv4 packet.
 Select only a structurally valid UDP datagram addressed to one chosen port, and
@@ -69,7 +69,7 @@ Implement `rk_classify_ipv4_udp()`.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 

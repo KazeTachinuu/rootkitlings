@@ -39,6 +39,27 @@ build_variant preflight 1
 build_variant allocation 2
 "$HERE/host-check" "$scratch/success" "$scratch/success/rootkitlings.ko"
 
+sed -i 's/^struct rk_state;$/struct rk_state { unsigned int active; };/' \
+	"$work/include/rootkit.h"
+sed -i '/^struct rk_state {$/,/^};$/d' "$work/core/state.c"
+build_variant public-state 0
+if output=$("$HERE/host-check" "$scratch/public-state" \
+	"$scratch/public-state/rootkitlings.ko" 2>&1); then
+	printf '%s\n[x] public-state fixture unexpectedly passed\n' "$output" >&2
+	exit 1
+fi
+case $output in
+	*"struct rk_state layout is visible outside core/state.c"*) ;;
+	*)
+		printf '%s\n[x] public-state fixture failed for the wrong reason\n' \
+			"$output" >&2
+		exit 1
+		;;
+esac
+printf '[+] public-state fixture rejected by an incomplete-type compile test\n'
+
+cp -p "$HERE/../solution/include/rootkit.h" "$work/include/rootkit.h"
+cp -p "$HERE/../solution/core/state.c" "$work/core/state.c"
 cp "$HERE/../fixtures/no-free-state.c" "$work/core/state.c"
 build_variant no-free 0
 if output=$("$HERE/host-check" "$scratch/no-free" \

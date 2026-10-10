@@ -1,11 +1,12 @@
-# Accept one authenticated order, once
+# Accept each authenticated command exactly once
 
 Build the receiver for a tiny command channel.
 An operator can set a resident agent's level from `0` through `3`, but the
 receiver must accept each authentic order exactly once and in sequence.
 Copies, gaps, tampering, and commands from the wrong key must change nothing.
 
-The message does not encrypt its fields or expose a runtime control file.
+The message fields remain visible, and this exercise exposes no runtime control
+file.
 
 Each message is exactly 36 bytes:
 
@@ -65,16 +66,16 @@ ready or exhausted -- stop ----------> unstarted
 
 ## Errors and replay policy
 
-`rk_receiver_start()` returns `EINVAL` for invalid arguments, `EBUSY` if
+`rk_receiver_start()` returns `-EINVAL` for invalid arguments, `-EBUSY` if
 started, or the platform allocation/key error.
-`rk_receiver_submit()` returns `EINVAL` for null arguments, `EMSGSIZE` for the
-wrong length, and `ENODEV` before start.
-Return digest errors unchanged and use `EBADMSG` for a wrong tag.
-After authentication, use `EPROTONOSUPPORT` for version, `EOPNOTSUPP` for
-command, `EINVAL` for level or reserved byte, `ESTALE` for epoch, `EALREADY` for
-a lower sequence, `ERANGE` for a higher sequence, and `EOVERFLOW` after
+`rk_receiver_submit()` returns `-EINVAL` for null arguments, `-EMSGSIZE` for the
+wrong length, and `-ENODEV` before start.
+Return digest errors unchanged and use `-EBADMSG` for a wrong tag.
+After authentication, use `-EPROTONOSUPPORT` for version, `-EOPNOTSUPP` for
+command, `-EINVAL` for level or reserved byte, `-ESTALE` for epoch, `-EALREADY`
+for a lower sequence, `-ERANGE` for a higher sequence, and `-EOVERFLOW` after
 exhaustion.
-Unauthenticated field changes therefore return `EBADMSG`.
+Unauthenticated field changes therefore return `-EBADMSG`.
 
 This is strict ordered replay protection, not an out-of-order window.
 Replay state is only in memory, so reloading with the same key, epoch, and first
@@ -97,7 +98,7 @@ This requires a secret key, rate limits, and key rotation.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 

@@ -69,12 +69,12 @@ build_tree()
 	fi
 }
 
-starter=$scratch/starter-source
-solution=$scratch/solution-source
-cp -a "$HERE/../../L19-validated-packet-classification/solution" "$starter"
-cp -a "$HERE/../starter/." "$starter/"
-cp -a "$starter" "$solution"
-cp -a "$HERE/../solution/." "$solution/"
+source_root=$scratch/sources
+mkdir "$source_root"
+starter=$("$ROOTKITLINGS_ROOT/scripts/catalog" materialize starter M04 \
+	"$source_root" --name starter-source)
+solution=$("$ROOTKITLINGS_ROOT/scripts/catalog" materialize solution M04 \
+	"$source_root" --name solution-source)
 
 build_tree "$starter" "$scratch/starter"
 build_tree "$solution" "$scratch/solution"

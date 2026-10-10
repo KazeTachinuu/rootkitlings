@@ -31,6 +31,10 @@ UI = Console("rootkitlings.kernel")
 RUNTIME = ROOT / ".rootkitlings"
 TOOLBOX = ROOT / "scripts/toolbox"
 MANIFEST_PATH = ROOT / "vm/kernel.toml"
+# Increment only when the extraction, configuration, build environment, or
+# required-artifact recipe changes. Presentation and diagnostics do not affect
+# the kernel artifacts and must not invalidate multi-gigabyte kits.
+BUILD_RECIPE_REVISION = 1
 MANIFEST_FIELDS = {
     "schema_version",
     "architecture",
@@ -216,9 +220,11 @@ def libelf_identity(compiler: str) -> str:
 
 
 def build_identity(manifest: dict[str, object]) -> str:
-    digest = hashlib.sha256()
+    digest = hashlib.sha256(b"rootkitlings-kernel-build-v1\0")
+    revision = str(BUILD_RECIPE_REVISION).encode("ascii")
+    digest.update(len(revision).to_bytes(8, "big"))
+    digest.update(revision)
     for path in (
-        Path(__file__).resolve(),
         MANIFEST_PATH,
         ROOT / str(manifest["config"]),
         TOOLBOX / "bc",
@@ -552,6 +558,7 @@ def run(
     env: dict[str, str] | None = None,
 ) -> None:
     shown = shlex.join(command)
+    UI.transcript(command)
     result = subprocess.run(
         command,
         cwd=cwd,
@@ -561,9 +568,9 @@ def run(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
+    UI.process_output(result.stdout or "", error=bool(result.returncode))
+    UI.process_result(result.returncode)
     if result.returncode:
-        if result.stdout:
-            UI.raw_block(result.stdout, error=True)
         fail(f"command failed with status {result.returncode}: {shown}")
 
 
@@ -789,6 +796,30 @@ def finish_kit_build(kit: Path, backup: Path | None) -> None:
     fsync_directory(kit.parent)
 
 
+def prune_superseded_kits(current: Path, release: str) -> tuple[Path, ...]:
+    """Remove complete older identities for the current kernel release."""
+    kernel_root = RUNTIME / "kernel/kits"
+    expected = re.compile(rf"{re.escape(release)}-[0-9a-f]{{16}}\Z")
+    if (
+        current.parent != kernel_root
+        or not expected.fullmatch(current.name)
+        or current.is_symlink()
+        or not current.is_dir()
+    ):
+        fail(f"refusing to prune from unsafe current kernel kit: {current}")
+    removed: list[Path] = []
+    for candidate in sorted(kernel_root.iterdir()):
+        if candidate == current or not expected.fullmatch(candidate.name):
+            continue
+        if candidate.is_symlink() or not candidate.is_dir():
+            continue
+        remove_generated_kit(candidate)
+        removed.append(candidate)
+    if removed:
+        fsync_directory(kernel_root)
+    return tuple(removed)
+
+
 def recover_interrupted_build(
     manifest: dict[str, object], paths: dict[str, Path | str]
 ) -> None:
@@ -890,7 +921,6 @@ def build(manifest: dict[str, object], paths: dict[str, Path | str]) -> None:
         rollback_kit_build(kit, backup)
         raise
     finish_kit_build(kit, backup)
-    UI.success(f"Course kernel ready: {paths['release']}")
 
 
 def ensure(manifest: dict[str, object], paths: dict[str, Path | str]) -> None:
@@ -911,6 +941,15 @@ def ensure(manifest: dict[str, object], paths: dict[str, Path | str]) -> None:
             "build workspace requires at least 4 GiB free"
         )
         build(manifest, paths)
+        is_ready, reason = ready(manifest, paths)
+        if not is_ready:
+            fail(f"new course kernel failed verification: {reason}")
+        kit = paths["kit"]
+        assert isinstance(kit, Path)
+        removed = prune_superseded_kits(kit, str(paths["release"]))
+        if removed:
+            UI.success(f"Removed {len(removed)} superseded kernel kit(s)")
+        UI.success(f"Course kernel ready: {paths['release']}")
 
 
 def existing_path(manifest: dict[str, object], paths: dict[str, Path | str], key: str) -> None:

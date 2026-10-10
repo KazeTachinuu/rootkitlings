@@ -17,7 +17,7 @@ Edit one file:
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 

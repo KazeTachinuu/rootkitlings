@@ -3,7 +3,6 @@ id = "module-build-lifecycle"
 title = "Build and load a kernel module"
 stage = "module-core"
 kind = "lesson"
-status = "required"
 tradecraft = ["lifecycle", "detection"]
 difficulty = "standard"
 prerequisites = []
@@ -20,23 +19,19 @@ source = "curriculum/L00-module-build-lifecycle/starter"
 
 [resources]
 readme = "curriculum/L00-module-build-lifecycle/README.md"
-check = "curriculum/L00-module-build-lifecycle/checks/module-lifecycle-check"
 host_check = "curriculum/L00-module-build-lifecycle/checks/host-check"
 hint = "curriculum/L00-module-build-lifecycle/hint"
 solution = "curriculum/L00-module-build-lifecycle/solution"
 
 [verification]
 timeout_seconds = 120
-capabilities = []
 tools = []
-cleanup_required = true
 
 [[verification.cases]]
 id = "normal-lifecycle"
 label = "Normal load and unload"
 expect_build = "pass"
 check = "curriculum/L00-module-build-lifecycle/checks/module-lifecycle-check"
-build_output_contains = ""
 
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"

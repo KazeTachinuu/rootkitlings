@@ -79,7 +79,7 @@ proc read callback.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -88,7 +88,7 @@ sharing, buffering, and rewind.
 It also checks hostile names, proc read semantics, rollback, unload through an
 open descriptor, and repeated load cycles.
 
-## Official references
+## References
 
 - [Linux v7.2 `current` on x86][ref-1]
 - [Linux v7.2 task and process ID helpers][ref-2]

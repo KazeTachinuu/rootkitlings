@@ -88,7 +88,7 @@ Implement `rk_socket_open()`, `rk_socket_close()`, and `rk_socket_snapshot()`.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -96,7 +96,7 @@ The checker uses `W=1` and verifies exact errors, rollback, and `init_net`
 ownership.
 It also tests independent controls, concurrent status, unload, and reload.
 
-## Linux v7.2 references
+## References
 
 - [`sock_create_kern()`, the kernel socket operations, and `sock_release()`
   declarations][1]

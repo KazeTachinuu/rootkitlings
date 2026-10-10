@@ -94,7 +94,7 @@ Do not prepare, mutate, retain, or replace credentials in this exercise.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -103,7 +103,7 @@ unprivileged, distinct-ID, changed-after-open, and nested-namespace cases.
 It also proves cross-namespace descriptor semantics, rollback, clean unload, and
 repeated load cycles.
 
-## Official Linux v7.2 references
+## References
 
 - [Credential model and lifetime][ref-1]
 - [`struct cred` and `current_cred()`][ref-2]

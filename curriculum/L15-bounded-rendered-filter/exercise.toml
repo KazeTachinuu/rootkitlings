@@ -3,7 +3,6 @@ id = "bounded-rendered-filter"
 title = "Redact one marker from a file read"
 stage = "views-detection"
 kind = "lesson"
-status = "required"
 tradecraft = ["concealment", "detection"]
 difficulty = "advanced"
 prerequisites = ["return-aware-syscall-telemetry", "cross-view-evidence"]
@@ -20,23 +19,19 @@ source = "curriculum/L15-bounded-rendered-filter/starter"
 
 [resources]
 readme = "curriculum/L15-bounded-rendered-filter/README.md"
-check = "curriculum/L15-bounded-rendered-filter/checks/success-check"
 host_check = "curriculum/L15-bounded-rendered-filter/checks/learner-host-check"
 hint = "curriculum/L15-bounded-rendered-filter/hint"
 solution = "curriculum/L15-bounded-rendered-filter/solution"
 
 [verification]
 timeout_seconds = 300
-capabilities = []
 tools = ["module-load-test", "read-result-test"]
-cleanup_required = true
 
 [[verification.cases]]
 id = "bounded-read-filtering"
 label = "Bounded read-result filtering"
 expect_build = "pass"
 check = "curriculum/L15-bounded-rendered-filter/checks/success-check"
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
 
@@ -45,7 +40,6 @@ id = "missing-retained-path"
 label = "Missing retained target"
 expect_build = "pass"
 check = "curriculum/L15-bounded-rendered-filter/checks/missing-path-check"
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
 
@@ -54,7 +48,6 @@ id = "preflight-rejection"
 label = "Preflight rejection"
 expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-ecanceled-check"
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "1"
 
@@ -63,7 +56,6 @@ id = "publication-rollback"
 label = "Proc publication rollback"
 expect_build = "pass"
 check = "curriculum/L15-bounded-rendered-filter/checks/probe-failure-check.in"
-build_output_contains = ""
 check_arguments = ["12", "Proc publication rollback"]
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "2"
@@ -73,7 +65,6 @@ id = "missing-probe-target"
 label = "Missing vfs_read target rollback"
 expect_build = "pass"
 check = "curriculum/L15-bounded-rendered-filter/checks/probe-failure-check.in"
-build_output_contains = ""
 check_arguments = ["2", "Missing vfs_read target rollback"]
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "3"
@@ -83,7 +74,6 @@ id = "copy-in-failure"
 label = "No-fault input copy rollback"
 expect_build = "pass"
 check = "curriculum/L15-bounded-rendered-filter/checks/copy-failure-check"
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "4"
 
@@ -92,7 +82,6 @@ id = "copy-out-failure"
 label = "No-fault output copy rollback"
 expect_build = "pass"
 check = "curriculum/L15-bounded-rendered-filter/checks/copy-failure-check"
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "5"
 
@@ -100,7 +89,6 @@ ROOTKITLINGS_FAIL_POINT = "5"
 id = "unknown-failure-point"
 label = "Reject unknown failure point"
 expect_build = "fail"
-check = ""
 build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "99"

@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """Build and run reference solutions through the learner verification path."""
 
 from __future__ import annotations
@@ -41,11 +41,9 @@ def run(command: list[str], timeout: int | None = None):
         raise SolutionCheckError(str(error)) from error
 
 
-def boot_arguments(catalog: Catalog, item, timeout: int) -> list[str]:
+def boot_arguments(catalog: Catalog, item) -> list[str]:
     binaries = {tool.id: tool.binary for tool in catalog.tools}
     arguments: list[str] = []
-    for capability in item.verification.capabilities:
-        arguments += ["--cap", capability]
     for tool_id in item.verification.tools:
         binary = binaries[tool_id]
         arguments += ["--tool", binary]
@@ -57,14 +55,14 @@ def verify_item(
 ) -> None:
     source = catalog.materialize_solution(item, solution_root, item.id)
     timeout = item.verification.timeout_seconds
-    arguments = boot_arguments(catalog, item, timeout)
+    arguments = boot_arguments(catalog, item)
     with build_verification_cases(
         ROOT,
         source,
         item.workspace.files,
         item.workspace.build,
         catalog.module_artifact(item),
-        catalog.verification_cases(item),
+        item.verification.cases,
         timeout,
         kernel_build_dir=kernel_build_dir,
     ) as verification:
@@ -93,9 +91,7 @@ def verify_item(
                 str(ROOT / outcome.case.check),
                 *(
                     value
-                    for argument in getattr(
-                        outcome.case, "check_arguments", ()
-                    )
+                    for argument in outcome.case.check_arguments
                     for value in ("--check-arg", argument)
                 ),
                 str(outcome.artifact),

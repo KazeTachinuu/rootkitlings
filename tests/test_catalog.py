@@ -6,8 +6,8 @@ import tomllib
 import unittest
 
 from engine.catalog import (
-    Catalog, CatalogError, ElectiveTrack, Exercise, Resources, Verification,
-    VerificationCase, Workspace, WorkspaceImport, _elective_track_rows,
+    Catalog, CatalogError, Exercise, Resources, Verification,
+    VerificationCase, Workspace, WorkspaceImport,
 )
 from engine.workspace import WorkspaceError
 
@@ -22,9 +22,6 @@ class GeneratedSerialTests(unittest.TestCase):
     def test_course_does_not_store_aliases(self) -> None:
         course = tomllib.loads((ROOT / "course.toml").read_text(encoding="utf-8"))
         self.assertNotIn("aliases", course)
-
-    def test_unused_capability_registry_is_empty(self) -> None:
-        self.assertEqual(self.catalog.capabilities, ())
 
     def test_serials_follow_route_and_kind(self) -> None:
         prefixes = {"lesson": "L", "milestone": "M", "final-project": "C"}
@@ -59,16 +56,10 @@ class GeneratedSerialTests(unittest.TestCase):
                     self.catalog._validate_bundle_path(misplaced)
 
     def test_discovery_order_does_not_define_serials(self) -> None:
-        route_positions = {
-            stable_id: position
-            for position, stable_id in enumerate(self.catalog.required_route)
-        }
-        ordered = sorted(
-            self.catalog.exercises,
-            key=lambda exercise: route_positions.get(exercise.id, len(route_positions)),
+        self.assertEqual(
+            list(self.catalog.required_route),
+            [item.id for item in self.catalog.required()],
         )
-        required = [exercise for exercise in ordered if exercise.status == "required"]
-        self.assertEqual(list(self.catalog.required_route), [item.id for item in required])
 
     def test_selectors_accept_exact_aliases_and_unique_prefixes(self) -> None:
         self.assertEqual("module-build-lifecycle", self.catalog.resolve("l00").id)
@@ -105,7 +96,6 @@ class GeneratedSerialTests(unittest.TestCase):
         self.assertIsNone(
             data["exercises"][0]["workspace"]["module_artifact_override"]
         )
-        self.assertEqual(data["elective_tracks"], [])
         self.assertEqual(
             data["exercises"][0]["verification"]["cases"],
             [{
@@ -113,97 +103,15 @@ class GeneratedSerialTests(unittest.TestCase):
                 "label": "Normal load and unload",
                 "build_variables": {"ROOTKITLINGS_FAIL_POINT": "0"},
                 "expect_build": "pass",
-                "check": data["exercises"][0]["resources"]["check"],
+                "check": (
+                    "curriculum/L00-module-build-lifecycle/"
+                    "checks/module-lifecycle-check"
+                ),
                 "build_output_contains": "",
                 "check_arguments": [],
             }],
         )
         self.assertNotIn("cumulative_root", data)
-
-
-class ElectiveTrackTests(unittest.TestCase):
-    def exercise(self, stable_id: str, status: str) -> Exercise:
-        item = _exercise(stable_id, "starter")
-        return Exercise(**{**item.__dict__, "status": status})
-
-    def catalog(
-        self,
-        exercises: tuple[Exercise, ...],
-        tracks: tuple[ElectiveTrack, ...],
-    ) -> Catalog:
-        catalog = Catalog.__new__(Catalog)
-        catalog.exercises = list(exercises)
-        catalog.by_id = {item.id: item for item in exercises}
-        catalog.elective_tracks = catalog._generate_track_aliases(tracks)
-        catalog.track_aliases = {
-            track.serial: track.id for track in catalog.elective_tracks
-        }
-        return catalog
-
-    def test_absent_registry_is_an_empty_backward_compatible_value(self) -> None:
-        self.assertEqual(_elective_track_rows({}), [])
-        self.assertEqual(Catalog(ROOT).elective_tracks, ())
-
-    def test_track_aliases_come_only_from_registry_order(self) -> None:
-        tracks = (
-            ElectiveTrack("debugging-track", "Kernel debugging", ("debugging",)),
-            ElectiveTrack("abi-track", "Binary control ABI", ("ioctl",)),
-        )
-        catalog = self.catalog((), tracks)
-        self.assertEqual(
-            [(track.serial, track.position) for track in catalog.elective_tracks],
-            [("E01", 0), ("E02", 1)],
-        )
-        self.assertEqual(
-            catalog.track_aliases,
-            {"E01": "debugging-track", "E02": "abi-track"},
-        )
-
-    def test_parser_rejects_empty_and_duplicate_members(self) -> None:
-        for members, message in (([], "must not be empty"), (["one", "one"], "duplicate")):
-            with self.subTest(members=members):
-                with self.assertRaisesRegex(CatalogError, message):
-                    _elective_track_rows({
-                        "elective_tracks": [{
-                            "id": "debugging-track",
-                            "label": "Kernel debugging",
-                            "members": members,
-                        }]
-                    })
-
-    def test_each_elective_belongs_to_exactly_one_track(self) -> None:
-        required = self.exercise("required", "required")
-        elective = self.exercise("debugging", "elective")
-        track = ElectiveTrack(
-            "debugging-track", "Kernel debugging", ("debugging",)
-        )
-        catalog = self.catalog((required, elective), (track,))
-        catalog._validate_elective_tracks(set(catalog.by_id))
-
-        catalog = self.catalog((required, elective), ())
-        with self.assertRaisesRegex(CatalogError, "membership mismatch"):
-            catalog._validate_elective_tracks(set(catalog.by_id))
-
-        duplicate = ElectiveTrack(
-            "second-track", "Second track", ("debugging",)
-        )
-        catalog = self.catalog((required, elective), (track, duplicate))
-        with self.assertRaisesRegex(CatalogError, "only one"):
-            catalog._validate_elective_tracks(set(catalog.by_id))
-
-    def test_track_members_must_exist_and_be_elective(self) -> None:
-        required = self.exercise("required", "required")
-        wrong_status = ElectiveTrack(
-            "wrong-track", "Wrong status", ("required",)
-        )
-        catalog = self.catalog((required,), (wrong_status,))
-        with self.assertRaisesRegex(CatalogError, "status='elective'"):
-            catalog._validate_elective_tracks(set(catalog.by_id))
-
-        unknown = ElectiveTrack("unknown-track", "Unknown", ("missing",))
-        catalog = self.catalog((required,), (unknown,))
-        with self.assertRaisesRegex(CatalogError, "unknown exercise"):
-            catalog._validate_elective_tracks(set(catalog.by_id))
 
 
 class VerificationCaseTests(unittest.TestCase):
@@ -219,9 +127,7 @@ class VerificationCaseTests(unittest.TestCase):
                     target.write_text("#!/bin/sh\n")
             return catalog._verification({
                 "timeout_seconds": 30,
-                "capabilities": [],
                 "tools": [],
-                "cleanup_required": True,
                 "cases": cases,
             }, Path("exercise.toml"))
 
@@ -248,13 +154,35 @@ class VerificationCaseTests(unittest.TestCase):
         )
         self.assertEqual(verification.cases[1].expect_build, "fail")
 
-    def test_implicit_default_case_preserves_existing_manifests(self) -> None:
-        exercise = _exercise("existing", "starter")
+    def test_cases_are_required_and_nonempty(self) -> None:
+        with self.assertRaisesRegex(CatalogError, "must be non-empty"):
+            self.parse([])
         catalog = Catalog.__new__(Catalog)
-        self.assertEqual(
-            catalog.verification_cases(exercise),
-            (VerificationCase("default", "Default", (), "pass", "check", ""),),
-        )
+        with self.assertRaisesRegex(CatalogError, r"missing=\['cases'\]"):
+            catalog._verification(
+                {"timeout_seconds": 30, "tools": []},
+                Path("exercise.toml"),
+            )
+
+    def test_empty_case_fields_have_context_aware_defaults(self) -> None:
+        verification = self.parse([
+            {
+                "id": "control",
+                "label": "Control",
+                "expect_build": "pass",
+                "check": "check",
+            },
+            {
+                "id": "rejected",
+                "label": "Rejected build",
+                "expect_build": "fail",
+            },
+        ])
+        rejected = verification.cases[1]
+        self.assertEqual(rejected.build_variables, ())
+        self.assertEqual(rejected.check, "")
+        self.assertEqual(rejected.build_output_contains, "")
+        self.assertEqual(rejected.check_arguments, ())
 
     def test_rejects_duplicate_ids_and_labels(self) -> None:
         base = {
@@ -321,28 +249,23 @@ class VerificationCaseTests(unittest.TestCase):
 
         failure = self.parse([
             {
-                "id": "control", "label": "Control", "build_variables": {},
+                "id": "control", "label": "Control",
                 "expect_build": "pass", "check": "check",
-                "build_output_contains": "",
             },
             {
-                "id": "failure", "label": "Failure", "build_variables": {},
-                "expect_build": "fail", "check": "",
-                "build_output_contains": "",
+                "id": "failure", "label": "Failure",
+                "expect_build": "fail",
             },
         ])
         self.assertEqual(failure.cases[1].build_output_contains, "")
 
     def test_cases_require_control_before_failures(self) -> None:
         failure = {
-            "id": "failure", "label": "Failure", "build_variables": {},
-            "expect_build": "fail", "check": "",
-            "build_output_contains": "",
+            "id": "failure", "label": "Failure", "expect_build": "fail",
         }
         control = {
-            "id": "control", "label": "Control", "build_variables": {},
+            "id": "control", "label": "Control",
             "expect_build": "pass", "check": "check",
-            "build_output_contains": "",
         }
         with self.assertRaisesRegex(CatalogError, "successful control"):
             self.parse([failure])
@@ -354,9 +277,7 @@ class VerificationCaseTests(unittest.TestCase):
         item = catalog.exercises[0]
         verification = Verification(
             item.verification.timeout_seconds,
-            item.verification.capabilities,
             item.verification.tools,
-            item.verification.cleanup_required,
             (VerificationCase(
                 "normal", "Normal", (), "pass", "missing/guest-check", ""
             ),),
@@ -388,15 +309,18 @@ def _exercise(
         additions=additions,
         module_artifact=module_artifact,
     )
-    resources = Resources("README", "check", "", "hint", "solution")
-    verification = Verification(30, (), (), True)
+    resources = Resources("README", "", "hint", "solution")
+    verification = Verification(
+        30,
+        (),
+        (VerificationCase("normal", "Normal", (), "pass", "check", ""),),
+    )
     return Exercise(
         id=stable_id,
         path=Path(stable_id),
         title=stable_id,
         stage="stage",
         kind=kind,
-        status="required",
         tradecraft=(),
         difficulty="standard",
         prerequisites=(),
@@ -509,29 +433,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
         with self.assertRaisesRegex(CatalogError, "parent must be earlier"):
             catalog._validate_required_route()
 
-        elective = Exercise(**{
-            **_exercise("elective", "starter").__dict__,
-            "status": "elective",
-        })
-        consumer = _exercise("consumer", "parent", parent="elective")
-        catalog = self.catalog((consumer,), (elective,))
-        with self.assertRaisesRegex(CatalogError, "parent must be earlier"):
-            catalog._validate_required_route()
-
-    def test_required_exercise_cannot_depend_on_non_required_exercise(self) -> None:
-        elective = Exercise(**{
-            **_exercise("elective", "starter").__dict__,
-            "status": "elective",
-        })
-        required = Exercise(**{
-            **_exercise("required", "starter").__dict__,
-            "prerequisites": ("elective",),
-        })
-        catalog = self.catalog((required,), (elective,))
-        with self.assertRaisesRegex(CatalogError, "cannot depend on non-required"):
-            catalog._validate_required_route()
-
-    def test_final_project_is_optional_unique_and_final(self) -> None:
+    def test_final_project_is_unique_and_last_when_present(self) -> None:
         lessons = tuple(
             _exercise(f"lesson-{index}", "starter") for index in range(3)
         )
@@ -574,11 +476,11 @@ class WorkspaceInheritanceTests(unittest.TestCase):
                 "parent": provider.id,
                 "source": "consumer-starter",
             }),
-            "resources": Resources("", "", "", "", "consumer-solution"),
+            "resources": Resources("", "", "", "consumer-solution"),
         })
         provider = Exercise(**{
             **provider.__dict__,
-            "resources": Resources("", "", "", "", "provider-solution"),
+            "resources": Resources("", "", "", "provider-solution"),
         })
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -740,11 +642,11 @@ class WorkspaceInheritanceTests(unittest.TestCase):
         )
         provider = Exercise(**{
             **provider.__dict__,
-            "resources": Resources("README", "check", "", "hint", "provider"),
+            "resources": Resources("README", "", "hint", "provider"),
         })
         consumer = Exercise(**{
             **consumer.__dict__,
-            "resources": Resources("README", "check", "", "hint", "consumer"),
+            "resources": Resources("README", "", "hint", "consumer"),
         })
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -842,14 +744,14 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             provider = _exercise("provider", "starter")
             provider = Exercise(**{
                 **provider.__dict__,
-                "resources": Resources("", "", "", "", "provider"),
+                "resources": Resources("", "", "", "provider"),
             })
             consumer = _exercise(
                 "consumer", "parent", parent="provider"
             )
             consumer = Exercise(**{
                 **consumer.__dict__,
-                "resources": Resources("", "", "", "", "consumer"),
+                "resources": Resources("", "", "", "consumer"),
             })
 
             catalog = self.catalog((provider, consumer))
@@ -868,7 +770,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
                 )
                 donor = Exercise(**{
                     **donor.__dict__,
-                    "resources": Resources("", "", "", "", "donor-solution"),
+                    "resources": Resources("", "", "", "donor-solution"),
                 })
                 base = _exercise(
                     "base",
@@ -877,7 +779,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
                 )
                 base = Exercise(**{
                     **base.__dict__,
-                    "resources": Resources("", "", "", "", "base-solution"),
+                    "resources": Resources("", "", "", "base-solution"),
                 })
                 local_name = "main.c" if baseline == "starter" else "base.c"
                 consumer = _exercise(
@@ -903,9 +805,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
                             ),
                         ),
                     }),
-                    "resources": Resources(
-                        "", "", "", "", "consumer-solution"
-                    ),
+                    "resources": Resources("", "", "", "consumer-solution"),
                 })
                 for name in (
                     "donor-solution",

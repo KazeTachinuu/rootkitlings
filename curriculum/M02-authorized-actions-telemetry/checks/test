@@ -34,9 +34,6 @@ for compiler in gcc clang; do
 	"$compiler" -std=c11 -Wall -Wextra -Werror -static \
 		-o "$scratch/event_stream_test.$compiler" "$ROOT/vm/tools/event_stream_test.c"
 done
-make -s -C "$ROOT" -B vm/tools/event_stream_test vm/tools/cred_trigger_test \
-	vm/tools/module_load_test vm/tools/status_field_test
-
 build_variant()
 {
 	local name=$1 point=$2 directory log

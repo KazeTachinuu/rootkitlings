@@ -131,8 +131,6 @@ build_mutant spin-retry mutate_no_wait
 build_mutant single-attempt mutate_single_attempt
 build_mutant drops-marker mutate_drop_marker
 
-make -s -C "$ROOT" -B vm/tools/agent_fixture vm/tools/module_load_params
-
 run_guest()
 {
 	local check=$1 module=$2 label=$3 output

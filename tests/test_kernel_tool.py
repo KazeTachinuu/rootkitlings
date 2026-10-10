@@ -17,7 +17,7 @@ TOOL = runpy.run_path(str(ROOT / "engine/kernel.py"))
 
 
 class KernelToolTests(unittest.TestCase):
-    def test_command_output_is_shown_only_when_the_command_fails(self) -> None:
+    def test_command_transcript_output_and_status_are_always_shown(self) -> None:
         with mock.patch.object(
             TOOL["subprocess"],
             "run",
@@ -27,7 +27,9 @@ class KernelToolTests(unittest.TestCase):
             stderr = io.StringIO()
             with mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
                 TOOL["run"](["example", "success"])
-            self.assertEqual(stdout.getvalue(), "")
+            self.assertIn("$ example success", stdout.getvalue())
+            self.assertIn("successful noise", stdout.getvalue())
+            self.assertIn("Exit       0", stdout.getvalue())
             self.assertEqual(stderr.getvalue(), "")
 
         with mock.patch.object(
@@ -35,10 +37,13 @@ class KernelToolTests(unittest.TestCase):
             "run",
             return_value=mock.Mock(returncode=2, stdout="failure details"),
         ):
+            stdout = io.StringIO()
             stderr = io.StringIO()
-            with mock.patch("sys.stderr", stderr):
+            with mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
                 with self.assertRaisesRegex(TOOL["KernelError"], "status 2"):
                     TOOL["run"](["example", "failure"])
+            self.assertIn("$ example failure", stdout.getvalue())
+            self.assertIn("Exit       2", stdout.getvalue())
             self.assertIn("failure details", stderr.getvalue())
             self.assertTrue(stderr.getvalue().endswith("\n"))
 
@@ -84,6 +89,57 @@ class KernelToolTests(unittest.TestCase):
         self.assertEqual(manifest["source_size"], 160392664)
         self.assertEqual(manifest["base_config"], "allnoconfig")
         self.assertEqual(manifest["config"], "vm/kernel.config")
+
+    def test_build_identity_uses_only_explicit_artifact_inputs(self) -> None:
+        globals_ = TOOL["build_identity"].__globals__
+        manifest = TOOL["read_manifest"]()
+        with tempfile.TemporaryDirectory(dir=ROOT) as temporary_name:
+            temporary = Path(temporary_name)
+            manifest_path = temporary / "kernel.toml"
+            config = temporary / "kernel.config"
+            manifest_path.write_text("fixed manifest\n", encoding="ascii")
+            config.write_text("CONFIG_TEST=y\n", encoding="ascii")
+            inputs = {
+                "MANIFEST_PATH": manifest_path,
+                "tool_identity": lambda command: f"tool:{command}:1",
+                "libelf_identity": lambda compiler: f"libelf:{compiler}:1",
+            }
+            manifest = {**manifest, "config": str(config)}
+            with mock.patch.dict(globals_, inputs):
+                baseline = TOOL["build_identity"](manifest)
+                with mock.patch.dict(
+                    globals_,
+                    {"__file__": "/presentation/only/kernel.py"},
+                ):
+                    self.assertEqual(
+                        TOOL["build_identity"](manifest),
+                        baseline,
+                    )
+
+                config.write_text("CONFIG_TEST=n\n", encoding="ascii")
+                self.assertNotEqual(TOOL["build_identity"](manifest), baseline)
+                config.write_text("CONFIG_TEST=y\n", encoding="ascii")
+
+                with mock.patch.dict(
+                    globals_,
+                    {
+                        "BUILD_RECIPE_REVISION":
+                            globals_["BUILD_RECIPE_REVISION"] + 1,
+                    },
+                ):
+                    self.assertNotEqual(
+                        TOOL["build_identity"](manifest),
+                        baseline,
+                    )
+
+                with mock.patch.dict(
+                    globals_,
+                    {"tool_identity": lambda command: f"tool:{command}:2"},
+                ):
+                    self.assertNotEqual(
+                        TOOL["build_identity"](manifest),
+                        baseline,
+                    )
 
     def test_module_sdk_digest_detects_consumed_header_changes(self) -> None:
         with tempfile.TemporaryDirectory(dir=ROOT) as temporary_name:
@@ -231,6 +287,90 @@ class KernelToolTests(unittest.TestCase):
                 self.assertEqual((kit / "identity").read_text(encoding="ascii"), "new")
                 self.assertFalse(backup.exists())
 
+        finally:
+            globals_["RUNTIME"] = previous_runtime
+
+    def test_pruning_removes_only_superseded_kits_for_the_same_release(self) -> None:
+        globals_ = TOOL["prune_superseded_kits"].__globals__
+        previous_runtime = globals_["RUNTIME"]
+        try:
+            with tempfile.TemporaryDirectory(dir=ROOT) as temporary_name:
+                runtime = Path(temporary_name) / "runtime"
+                globals_["RUNTIME"] = runtime
+                kits = runtime / "kernel/kits"
+                kits.mkdir(parents=True)
+                release = "7.2.9-rootkitlings"
+                current = kits / f"{release}-{'a' * 16}"
+                superseded = kits / f"{release}-{'b' * 16}"
+                other_release = kits / f"7.2.8-rootkitlings-{'c' * 16}"
+                unfinished = kits / f"{release}-{'d' * 16}.previous"
+                symlink = kits / f"{release}-{'e' * 16}"
+                for path in (current, superseded, other_release, unfinished):
+                    path.mkdir()
+                symlink.symlink_to(superseded, target_is_directory=True)
+
+                removed = TOOL["prune_superseded_kits"](current, release)
+
+                self.assertEqual(removed, (superseded,))
+                self.assertTrue(current.is_dir())
+                self.assertFalse(superseded.exists())
+                self.assertTrue(other_release.is_dir())
+                self.assertTrue(unfinished.is_dir())
+                self.assertTrue(symlink.is_symlink())
+                with self.assertRaisesRegex(
+                    TOOL["KernelError"],
+                    "unsafe current kernel kit",
+                ):
+                    TOOL["prune_superseded_kits"](
+                        runtime / "outside",
+                        release,
+                    )
+        finally:
+            globals_["RUNTIME"] = previous_runtime
+
+    def test_ensure_prunes_only_after_the_new_kit_verifies(self) -> None:
+        globals_ = TOOL["ensure"].__globals__
+        previous_runtime = globals_["RUNTIME"]
+        try:
+            with tempfile.TemporaryDirectory(dir=ROOT) as temporary_name:
+                runtime = Path(temporary_name) / "runtime"
+                globals_["RUNTIME"] = runtime
+                kit = runtime / "kernel/kits/release-aaaaaaaaaaaaaaaa"
+                kit.mkdir(parents=True)
+                manifest = {"source_size": 1}
+                paths = {"kit": kit, "release": "release"}
+                common = {
+                    "recover_interrupted_build": mock.Mock(),
+                    "preflight_space": mock.Mock(),
+                    "build": mock.Mock(),
+                    "prune_superseded_kits": mock.Mock(return_value=()),
+                }
+                with mock.patch.dict(globals_, common):
+                    globals_["ready"] = mock.Mock(
+                        side_effect=((False, "not built"), (True, "ready"))
+                    )
+                    with mock.patch("sys.stdout", io.StringIO()):
+                        TOOL["ensure"](manifest, paths)
+                    common["prune_superseded_kits"].assert_called_once_with(
+                        kit,
+                        "release",
+                    )
+
+                failed = {**common, "prune_superseded_kits": mock.Mock()}
+                with mock.patch.dict(globals_, failed):
+                    globals_["ready"] = mock.Mock(
+                        side_effect=(
+                            (False, "not built"),
+                            (False, "artifact changed"),
+                        )
+                    )
+                    with self.assertRaisesRegex(
+                        TOOL["KernelError"],
+                        "failed verification",
+                    ):
+                        with mock.patch("sys.stdout", io.StringIO()):
+                            TOOL["ensure"](manifest, paths)
+                    failed["prune_superseded_kits"].assert_not_called()
         finally:
             globals_["RUNTIME"] = previous_runtime
 

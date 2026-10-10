@@ -1,4 +1,4 @@
-# Read live state through the status channel
+# Read live module state from procfs
 
 The status channel says `active`, but that fixed word proves little.
 Connect it to the module's real private state and make every read return one
@@ -62,7 +62,7 @@ Do not add a proc read callback, mutable state, or a lock.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -71,7 +71,7 @@ It also verifies the exact output bytes, uneven partial reads, repeated end of
 file, rewind and reread, rejected writes, reload, and unload while a proc file
 descriptor is open.
 
-## Official references
+## References
 
 - [Linux v7.2 procfs entry creation and removal][ref-1]
 - [Linux v7.2 procfs callback rundown][ref-2]

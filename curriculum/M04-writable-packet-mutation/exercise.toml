@@ -3,7 +3,6 @@ id = "writable-packet-mutation"
 title = "Redirect one UDP signal to a new port"
 stage = "network-state"
 kind = "milestone"
-status = "required"
 tradecraft = ["networking"]
 difficulty = "advanced"
 prerequisites = ["validated-packet-classification"]
@@ -21,23 +20,19 @@ parent = "validated-packet-classification"
 
 [resources]
 readme = "curriculum/M04-writable-packet-mutation/README.md"
-check = "curriculum/M04-writable-packet-mutation/checks/success-check"
 host_check = "curriculum/M04-writable-packet-mutation/checks/host-check"
 hint = "curriculum/M04-writable-packet-mutation/hint"
 solution = "curriculum/M04-writable-packet-mutation/solution"
 
 [verification]
 timeout_seconds = 360
-capabilities = []
 tools = ["module-load-test", "proc-read-test", "packet-mutation-test"]
-cleanup_required = true
 
 [[verification.cases]]
 id = "writable-udp-mutation"
 label = "Writable UDP destination mutation"
 expect_build = "pass"
 check = "curriculum/M04-writable-packet-mutation/checks/success-check"
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
 
@@ -46,7 +41,6 @@ id = "registration-rollback"
 label = "Netfilter registration failure rollback"
 expect_build = "pass"
 check = "curriculum/M04-writable-packet-mutation/checks/failure-check.in"
-build_output_contains = ""
 check_arguments = ["97", "Netfilter registration failure rollback"]
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "1"
@@ -56,7 +50,6 @@ id = "publication-rollback"
 label = "Proc publication failure rollback"
 expect_build = "pass"
 check = "curriculum/M04-writable-packet-mutation/checks/failure-check.in"
-build_output_contains = ""
 check_arguments = ["12", "Proc publication failure rollback"]
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "2"
@@ -65,7 +58,6 @@ ROOTKITLINGS_FAIL_POINT = "2"
 id = "unknown-failure-point"
 label = "Reject unknown failure point"
 expect_build = "fail"
-check = ""
 build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "99"

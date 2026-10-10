@@ -1,9 +1,8 @@
 schema_version = 2
 id = "authorized-actions-telemetry"
-title = "Protect the root command and record activity"
+title = "Protect root access and keep an activity log"
 stage = "identity-observation"
 kind = "milestone"
-status = "required"
 tradecraft = ["privilege", "instrumentation", "detection"]
 difficulty = "standard"
 prerequisites = ["controlled-resident-core", "one-use-authorization", "return-aware-syscall-telemetry"]
@@ -25,23 +24,19 @@ imports = [
 
 [resources]
 readme = "curriculum/M02-authorized-actions-telemetry/README.md"
-check = "curriculum/M02-authorized-actions-telemetry/checks/success-check"
 host_check = "curriculum/M02-authorized-actions-telemetry/checks/host-check"
 hint = "curriculum/M02-authorized-actions-telemetry/hint"
 solution = "curriculum/M02-authorized-actions-telemetry/solution"
 
 [verification]
 timeout_seconds = 240
-capabilities = []
 tools = ["module-load-test", "event-stream-test", "status-field-test", "proc-write-test", "proc-read-test", "credential-trigger-test", "rmdir-telemetry-test", "run-as"]
-cleanup_required = true
 
 [[verification.cases]]
 id = "normal-integration"
 label = "Authorized action telemetry"
 expect_build = "pass"
 check = "curriculum/M02-authorized-actions-telemetry/checks/success-check"
-build_output_contains = ""
 
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
@@ -51,7 +46,6 @@ id = "preflight-rejection"
 label = "Preflight rejection"
 expect_build = "pass"
 check = "curriculum/M02-authorized-actions-telemetry/checks/failure-check.in"
-build_output_contains = ""
 check_arguments = ["125", "Preflight", "0"]
 
 [verification.cases.build_variables]
@@ -62,7 +56,6 @@ id = "allocation-rejection"
 label = "State allocation rejection"
 expect_build = "pass"
 check = "curriculum/M02-authorized-actions-telemetry/checks/failure-check.in"
-build_output_contains = ""
 check_arguments = ["12", "Allocation", "0"]
 
 [verification.cases.build_variables]
@@ -73,7 +66,6 @@ id = "control-publication-rejection"
 label = "Control publication rejection"
 expect_build = "pass"
 check = "curriculum/M02-authorized-actions-telemetry/checks/failure-check.in"
-build_output_contains = ""
 check_arguments = ["12", "Control publication", "1"]
 
 [verification.cases.build_variables]
@@ -84,7 +76,6 @@ id = "worker-start-rejection"
 label = "Worker start rejection"
 expect_build = "pass"
 check = "curriculum/M02-authorized-actions-telemetry/checks/failure-check.in"
-build_output_contains = ""
 check_arguments = ["4", "Worker", "1"]
 
 [verification.cases.build_variables]
@@ -95,7 +86,6 @@ id = "authorization-start-rejection"
 label = "Authorization startup rejection"
 expect_build = "pass"
 check = "curriculum/M02-authorized-actions-telemetry/checks/failure-check.in"
-build_output_contains = ""
 check_arguments = ["4", "Authorization startup", "1"]
 
 [verification.cases.build_variables]
@@ -106,7 +96,6 @@ id = "missing-return-target"
 label = "Missing Kretprobe target"
 expect_build = "pass"
 check = "curriculum/M02-authorized-actions-telemetry/checks/failure-check.in"
-build_output_contains = ""
 check_arguments = ["2", "Missing Kretprobe target", "1"]
 
 [verification.cases.build_variables]
@@ -117,7 +106,6 @@ id = "events-publication-rejection"
 label = "Events publication rejection"
 expect_build = "pass"
 check = "curriculum/M02-authorized-actions-telemetry/checks/failure-check.in"
-build_output_contains = ""
 check_arguments = ["12", "Events publication", "1"]
 
 [verification.cases.build_variables]
@@ -128,7 +116,6 @@ id = "credential-prepare-rejection"
 label = "Credential preparation rejection"
 expect_build = "pass"
 check = "curriculum/M02-authorized-actions-telemetry/checks/action-failure-check.in"
-build_output_contains = ""
 check_arguments = ["12", "Credential preparation"]
 
 [verification.cases.build_variables]
@@ -139,7 +126,6 @@ id = "credential-cancel-rejection"
 label = "Credential cancellation"
 expect_build = "pass"
 check = "curriculum/M02-authorized-actions-telemetry/checks/action-failure-check.in"
-build_output_contains = ""
 check_arguments = ["125", "Credential cancellation"]
 
 [verification.cases.build_variables]
@@ -149,7 +135,6 @@ ROOTKITLINGS_FAIL_POINT = "9"
 id = "unknown-failure-point"
 label = "Reject unknown failure point"
 expect_build = "fail"
-check = ""
 build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
 
 [verification.cases.build_variables]

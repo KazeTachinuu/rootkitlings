@@ -3,7 +3,6 @@ id = "safe-skb-access"
 title = "Read a packet split across kernel storage"
 stage = "network-state"
 kind = "lesson"
-status = "required"
 tradecraft = ["networking"]
 difficulty = "advanced"
 prerequisites = ["hostile-packet-lengths"]
@@ -21,21 +20,16 @@ parent = "hostile-packet-lengths"
 
 [resources]
 readme = "curriculum/L17-safe-skb-access/README.md"
-check = "curriculum/L17-safe-skb-access/checks/success-check"
 host_check = "curriculum/L17-safe-skb-access/checks/host-check"
 hint = "curriculum/L17-safe-skb-access/hint"
 solution = "curriculum/L17-safe-skb-access/solution"
 
 [verification]
 timeout_seconds = 240
-capabilities = []
 tools = []
-cleanup_required = true
 
 [[verification.cases]]
 id = "real-skb-layouts"
 label = "Safe sk_buff access"
 expect_build = "pass"
 check = "curriculum/L17-safe-skb-access/checks/success-check"
-build_output_contains = ""
-[verification.cases.build_variables]

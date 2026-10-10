@@ -1,4 +1,4 @@
-# Combine the timer, controls, and worker
+# Run a controllable resident worker
 
 The earlier lessons built state, a control file, a timer, and a kernel thread in
 isolation.
@@ -120,21 +120,21 @@ another request path.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
 The checker covers request races and gates, status, rollback, held descriptors,
 unload, reload, reset, and kernel warnings.
 
-## Official Linux v7.2 references
+## References
 
 - Kernel threads
   <https://docs.kernel.org/7.2/driver-api/basics.html#c.kthread_run>
 - Stopping a kernel thread
   <https://docs.kernel.org/7.2/driver-api/basics.html#c.kthread_stop>
 - Wait queues
-<https://docs.kernel.org/7.2/driver-api/basics.html#wait-queues-and-wake-events>
+  <https://docs.kernel.org/7.2/driver-api/basics.html#wait-queues-and-wake-events>
 - Kernel timers
   <https://docs.kernel.org/7.2/driver-api/basics.html#timers>
 - Atomic operations

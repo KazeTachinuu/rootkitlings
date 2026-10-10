@@ -3,7 +3,6 @@ id = "managed-kprobe"
 title = "Watch directory activity with Kprobes"
 stage = "identity-observation"
 kind = "lesson"
-status = "required"
 tradecraft = ["instrumentation", "detection", "lifecycle"]
 difficulty = "standard"
 prerequisites = ["bounded-control-switch"]
@@ -21,23 +20,19 @@ parent = "bounded-control-switch"
 
 [resources]
 readme = "curriculum/L11-managed-kprobe/README.md"
-check = "curriculum/L11-managed-kprobe/checks/success-check"
 host_check = "curriculum/L11-managed-kprobe/checks/learner-host-check"
 hint = "curriculum/L11-managed-kprobe/hint"
 solution = "curriculum/L11-managed-kprobe/solution"
 
 [verification]
 timeout_seconds = 180
-capabilities = []
 tools = ["module-load-test", "proc-write-test", "run-as"]
-cleanup_required = true
 
 [[verification.cases]]
 id = "normal-probes"
 label = "Managed named Kprobes"
 expect_build = "pass"
 check = "curriculum/L11-managed-kprobe/checks/success-check"
-build_output_contains = ""
 
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
@@ -47,7 +42,6 @@ id = "preflight-rejection"
 label = "Preflight rejection"
 expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-ecanceled-check"
-build_output_contains = ""
 
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "1"
@@ -57,7 +51,6 @@ id = "allocation-rejection"
 label = "State allocation rejection"
 expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-enomem-check"
-build_output_contains = ""
 
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "2"
@@ -67,7 +60,6 @@ id = "publication-probe-rollback"
 label = "Probe cleanup after publication failure"
 expect_build = "pass"
 check = "curriculum/L11-managed-kprobe/checks/probe-failure-check.in"
-build_output_contains = ""
 check_arguments = ["12", "Probe cleanup after procfs publication failure"]
 
 [verification.cases.build_variables]
@@ -78,7 +70,6 @@ id = "missing-target-rollback"
 label = "Missing second target rollback"
 expect_build = "pass"
 check = "curriculum/L11-managed-kprobe/checks/probe-failure-check.in"
-build_output_contains = ""
 check_arguments = ["2", "Batch rollback after a missing second symbol"]
 
 [verification.cases.build_variables]
@@ -88,7 +79,6 @@ ROOTKITLINGS_FAIL_POINT = "4"
 id = "unknown-failure-point"
 label = "Reject unknown failure point"
 expect_build = "fail"
-check = ""
 build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
 
 [verification.cases.build_variables]

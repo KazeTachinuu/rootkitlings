@@ -82,7 +82,7 @@ Complete both pre-handlers, batch registration, and batch unregistration.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -91,7 +91,7 @@ changing filesystem results.
 It also verifies missing-symbol and procfs rollback, registry cleanup, unload,
 and repeated load cycles.
 
-## Official Linux v7.2 references
+## References
 
 - [Kprobes API, handler constraints, and debugfs registry][ref-1]
 - [`register_kprobes()` rollback and named lookup][ref-2]

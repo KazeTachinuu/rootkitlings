@@ -65,7 +65,7 @@ Foreign change suppresses rollback.
 This requests a later boot; it neither installs the module nor updates
 dependencies or proves reboot loading.
 
-## Your work
+## Your task
 
 Edit:
 
@@ -93,14 +93,14 @@ teardown.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
 The checker covers commands, retry after refusal, two sessions, blocked-receive
 unload, inherited behavior, the exact boot request and rollback, and guest logs.
 
-## Linux v7.2 references
+## References
 
 - Kernel socket operations and `sock_release()`
   <https://github.com/torvalds/linux/blob/v7.2/include/linux/net.h>

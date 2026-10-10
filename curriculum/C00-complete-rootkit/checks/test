@@ -34,14 +34,14 @@ if command -v shellcheck >/dev/null; then
 	shellcheck -x -s sh "$HERE/success-check" "$HERE/signal-failure-check"
 fi
 
-compose()
+materialize()
 {
-	local destination=$1
-	"$ROOT/scripts/catalog" materialize starter C00 "${destination%/*}" \
+	local tree=$1 destination=$2
+	"$ROOT/scripts/catalog" materialize "$tree" C00 "${destination%/*}" \
 		--name "${destination##*/}" >/dev/null
 }
 
-compose "$scratch/starter"
+materialize starter "$scratch/starter"
 make -s -C "$KDIR" M="$scratch/starter" W=1 modules \
 	> "$scratch/starter.log" 2>&1
 if "$HERE/host-check" "$scratch/starter" "$scratch/starter/rootkitlings.ko" \
@@ -49,15 +49,12 @@ if "$HERE/host-check" "$scratch/starter" "$scratch/starter/rootkitlings.ko" \
 	printf '[x] host checker accepted unfinished learner file\n' >&2; exit 1
 fi
 
-"$ROOT/scripts/catalog" materialize solution C00 "$scratch" \
-	--name solution >/dev/null
+materialize solution "$scratch/solution"
 make -s -C "$KDIR" M="$scratch/solution" W=1 modules > "$scratch/solution.log" 2>&1
 ! grep -q 'warning:' "$scratch/solution.log" || { cat "$scratch/solution.log"; exit 1; }
 "$HERE/host-check" "$scratch/solution" "$scratch/solution/rootkitlings.ko"
 
-compose "$scratch/alternate"
-mkdir -p "$scratch/alternate/security"
-cp -a "$HERE/../solution/." "$scratch/alternate/"
+materialize solution "$scratch/alternate"
 cp "$HERE/../fixtures/alternate/control.c" "$scratch/alternate/security/control.c"
 make -s -C "$KDIR" M="$scratch/alternate" W=1 modules > "$scratch/alternate.log" 2>&1
 ! grep -q 'warning:' "$scratch/alternate.log" || { cat "$scratch/alternate.log"; exit 1; }
@@ -66,8 +63,7 @@ make -s -C "$KDIR" M="$scratch/alternate" W=1 modules > "$scratch/alternate.log"
 mutant()
 {
 	local name=$1 edit=$2 directory=$scratch/mutant-$1
-	compose "$directory"
-	cp -a "$HERE/../solution/." "$directory/"
+	materialize solution "$directory"
 	perl -0pi -e "$edit" "$directory/security/control.c"
 	! cmp -s "$HERE/../solution/security/control.c" "$directory/security/control.c" || {
 		printf '[x] mutant edit did not apply: %s\n' "$name" >&2; exit 1;
@@ -92,13 +88,11 @@ mutant leaves-channel-key 's/rk_platform_clear\(channel, sizeof\(\*channel\)\);/
 # shellcheck disable=SC2016
 mutant publishes-failed-open 's/(error = rk_aead_open[\s\S]*?\);\n)\tif \(error\)\n\t\tgoto out;/$1\tif (false \&\& error)\n\t\tgoto out;/'
 
-compose "$scratch/fail-14"
-cp -a "$HERE/../solution/." "$scratch/fail-14/"
+materialize solution "$scratch/fail-14"
 make -s -C "$KDIR" M="$scratch/fail-14" W=1 \
 	ROOTKITLINGS_FAIL_POINT=14 modules > "$scratch/fail-14.log" 2>&1
 
-compose "$scratch/fail-15"
-cp -a "$HERE/../solution/." "$scratch/fail-15/"
+materialize solution "$scratch/fail-15"
 make -s -C "$KDIR" M="$scratch/fail-15" W=1 \
 	ROOTKITLINGS_FAIL_POINT=15 modules > "$scratch/fail-15.log" 2>&1
 

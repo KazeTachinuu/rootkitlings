@@ -1,4 +1,4 @@
-# Hide one process listing and map the blind spot
+# Hide one PID from /proc and map the blind spot
 
 An operator wants the resident worker omitted from an ordinary listing of
 `/proc`.
@@ -94,11 +94,16 @@ probe, authorization, worker, then state.
 Drain process-view hooks before releasing their PID reference, and keep the
 worker alive until that component stops.
 
-Run `./rootkitlings check`.
+Run:
+
+```sh
+./rootkitlings check
+```
+
 The checker exercises gate and namespace behavior, direct-view controls,
 record/cookie boundaries, concurrency, rollback, unload, and inherited features.
 
-## Official Linux v7.2 references
+## References
 
 - `struct pid` ownership and namespace translation
   <https://github.com/torvalds/linux/blob/v7.2/include/linux/pid.h>

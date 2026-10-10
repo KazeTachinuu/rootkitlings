@@ -1,4 +1,4 @@
-# Prepare a bounded DNS wire name
+# Encode and parse a bounded DNS name
 
 A DNS-shaped signal first needs its labels translated into the exact bytes used
 on the wire.
@@ -80,7 +80,7 @@ pointer rules, and a budget absent from this API.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 

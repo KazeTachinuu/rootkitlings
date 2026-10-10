@@ -74,7 +74,7 @@ unload.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -94,7 +94,7 @@ Each guest is diskless and discarded after the check.
 A rejected load leaves no entry in `/proc/modules` or `/sys/module`; kernel
 messages alone do not prove that absence.
 
-## Official references
+## References
 
 - [Driver basics: module initialization and exit][ref-1]
 - [Linux kernel error conventions][ref-2]

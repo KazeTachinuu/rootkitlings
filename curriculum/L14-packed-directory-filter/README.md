@@ -96,7 +96,7 @@ or know about probes.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -132,7 +132,7 @@ The following cases deliberately fail open:
 `directory_returns_missed` reports Kretprobe instance exhaustion.
 Allocation precedes admission, so a miss need not be a selected enumeration.
 
-## Official Linux v7.2 references
+## References
 
 - [Directory record layout, `filldir64()`, cookie writes, and `getdents64()`][1]
 - [`struct linux_dirent64`][2]

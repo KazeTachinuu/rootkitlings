@@ -121,6 +121,7 @@ class Validator:
         self.run_unit_tests()
         if not quick:
             self.build_assets(catalog)
+            self.run_checker_tests()
         self.console.success("Validation passed")
 
     def validate_catalog_assets(self, catalog: Catalog) -> None:
@@ -237,6 +238,7 @@ class Validator:
             owned_checks = [] if not checks.is_dir() else sorted(checks.rglob("*"))
             if not any(path.is_file() for path in owned_checks):
                 failures.append(f"{item.id}: checks directory is empty")
+            regular(checks / "test", 0o755, f"{item.id} checker test")
             for path in owned_checks:
                 if path.is_dir() and not path.is_symlink():
                     continue
@@ -255,9 +257,9 @@ class Validator:
                 elif path.is_file() and checks not in path.parents:
                     regular(path, 0o644, f"{item.id} asset")
 
-            referenced_checks = [resources.check, resources.host_check]
+            referenced_checks = [resources.host_check]
             referenced_checks.extend(
-                case.check for case in catalog.verification_cases(item)
+                case.check for case in item.verification.cases
             )
             for value in filter(None, referenced_checks):
                 path = self.root / value
@@ -451,6 +453,13 @@ class Validator:
             "unit tests failed",
         )
 
+    def run_checker_tests(self) -> None:
+        self.console.progress("Running checker regression tests")
+        self.require_command(
+            [self.root / "scripts" / "test-checkers"],
+            "checker regression tests failed",
+        )
+
     def build_assets(self, catalog: Catalog) -> None:
         located = self.require_command(
             [self.root / "scripts" / "kernel", "build-dir"],
@@ -488,7 +497,7 @@ class Validator:
                     materialize_solution_tree(starter, starter_root, item.id)
                 catalog.materialize_solution(item, solution_root, item.id)
 
-            for item in catalog.display_order():
+            for item in catalog.required():
                 if item.workspace.baseline == "starter":
                     self._build_module(
                         kernel_build,

@@ -6,8 +6,7 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$HERE/../../../scripts/lesson-env"
 ROOT=$ROOTKITLINGS_ROOT
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-bounded-rendered-filter-test.XXXXXX")
-tool=$ROOT/vm/tools/read_result_test
-trap 'rm -rf -- "$scratch"; rm -f -- "$tool"' EXIT
+trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || {
 	printf '[x] this lesson requires x86_64\n' >&2
@@ -152,9 +151,6 @@ if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
 	printf '[x] unknown failure-point value compiled successfully\n' >&2
 	exit 1
 fi
-
-gcc -std=c11 -Wall -Wextra -Werror -pedantic -static -pthread \
-	"$ROOT/vm/tools/read_result_test.c" -o "$tool"
 
 sed -e 's/@EXPECTED_ERRNO@/12/g' \
 	-e 's/@LABEL@/Proc publication rollback/g' \

@@ -3,7 +3,6 @@ id = "current-task-attribution"
 title = "Identify who reads the status channel"
 stage = "identity-observation"
 kind = "lesson"
-status = "required"
 tradecraft = ["instrumentation", "detection"]
 difficulty = "standard"
 prerequisites = ["proc-read-contract"]
@@ -21,23 +20,19 @@ parent = "proc-read-contract"
 
 [resources]
 readme = "curriculum/L08-current-task-attribution/README.md"
-check = "curriculum/L08-current-task-attribution/checks/success-check"
 host_check = "curriculum/L08-current-task-attribution/checks/host-check"
 hint = "curriculum/L08-current-task-attribution/hint"
 solution = "curriculum/L08-current-task-attribution/solution"
 
 [verification]
 timeout_seconds = 180
-capabilities = []
 tools = ["module-load-test", "task-attribution-test"]
-cleanup_required = true
 
 [[verification.cases]]
 id = "normal-attribution"
 label = "Current-task attribution"
 expect_build = "pass"
 check = "curriculum/L08-current-task-attribution/checks/success-check"
-build_output_contains = ""
 
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
@@ -47,7 +42,6 @@ id = "preflight-rejection"
 label = "Preflight rejection"
 expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-ecanceled-check"
-build_output_contains = ""
 
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "1"
@@ -57,7 +51,6 @@ id = "allocation-rejection"
 label = "State allocation rejection"
 expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-enomem-check"
-build_output_contains = ""
 
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "2"
@@ -67,7 +60,6 @@ id = "publication-rollback"
 label = "Publication rollback"
 expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-after-state-check"
-build_output_contains = ""
 
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "3"
@@ -76,7 +68,6 @@ ROOTKITLINGS_FAIL_POINT = "3"
 id = "unknown-failure-point"
 label = "Reject unknown failure point"
 expect_build = "fail"
-check = ""
 build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
 
 [verification.cases.build_variables]

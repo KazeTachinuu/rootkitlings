@@ -62,7 +62,7 @@ or use a log message as proof of ownership.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -78,7 +78,7 @@ lifetime and error propagation without relying on source-text patterns.
 Object-file and header checks enforce only the component boundary: allocation
 and release belong to `core/state.c`, and the state layout stays private.
 
-## Official references
+## References
 
 - [Linux memory allocation guide][ref-1]
 - [Error pointers][ref-2]

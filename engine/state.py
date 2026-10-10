@@ -59,14 +59,13 @@ class LearnerState:
 
     def validate(
         self,
-        valid_ids: set[str],
         route: tuple[str, ...],
         revision: str,
         prerequisites: Mapping[str, frozenset[str]],
         baseline_providers: Mapping[str, str | None],
     ) -> None:
         _validate_contract(
-            valid_ids, route, revision, prerequisites, baseline_providers
+            route, revision, prerequisites, baseline_providers
         )
         if self.curriculum_revision != revision:
             raise StateError(
@@ -74,13 +73,10 @@ class LearnerState:
             )
         if self.route != route:
             raise StateError("saved required route differs from the active route for this revision")
+        valid_ids = set(route)
         unknown = (self.completed | set(self.exercises)) - valid_ids
         if unknown:
             raise StateError(f"state contains unknown stable IDs: {sorted(unknown)}")
-        if not self.completed <= set(route):
-            elective_completed = self.completed - set(route)
-            if not elective_completed <= valid_ids:
-                raise StateError(f"state contains unknown stable IDs: {sorted(elective_completed - valid_ids)}")
         for stable_id in self.completed:
             missing = set(prerequisites[stable_id]) - self.completed
             if missing:
@@ -113,17 +109,15 @@ class LearnerState:
 
 def new_state(
     route: tuple[str, ...],
-    valid_ids: set[str],
     revision: str,
     prerequisites: Mapping[str, frozenset[str]],
     baseline_providers: Mapping[str, str | None],
 ) -> LearnerState:
-    _validate_contract(valid_ids, route, revision, prerequisites, baseline_providers)
+    _validate_contract(route, revision, prerequisites, baseline_providers)
     return LearnerState(revision, route)
 
 
 def _validate_contract(
-    valid_ids: set[str],
     route: tuple[str, ...],
     revision: str,
     prerequisites: Mapping[str, frozenset[str]],
@@ -133,10 +127,9 @@ def _validate_contract(
         raise StateError("curriculum revision must be a non-empty single-line string")
     if not route or len(route) != len(set(route)):
         raise StateError("required route must be non-empty and contain unique IDs")
-    if any(not ID_RE.fullmatch(item) for item in valid_ids | set(route)):
+    valid_ids = set(route)
+    if any(not ID_RE.fullmatch(item) for item in route):
         raise StateError("stable IDs must be lowercase slug tokens")
-    if not set(route) <= valid_ids:
-        raise StateError(f"route contains unknown IDs: {sorted(set(route) - valid_ids)}")
     if set(prerequisites) != valid_ids:
         raise StateError("prerequisite map must cover every stable ID exactly")
     if set(baseline_providers) != valid_ids:
@@ -183,7 +176,6 @@ def _validate_contract(
 
 def load_state(
     path: Path,
-    valid_ids: set[str],
     route: tuple[str, ...],
     revision: str,
     prerequisites: Mapping[str, frozenset[str]],
@@ -197,7 +189,7 @@ def load_state(
         raise StateError(f"learner state must not be a symlink: {path}")
     if not path.exists():
         return new_state(
-            route, valid_ids, revision, prerequisites, baseline_providers
+            route, revision, prerequisites, baseline_providers
         )
     if not path.is_file():
         raise StateError(f"learner state must be a regular file: {path}")
@@ -206,7 +198,7 @@ def load_state(
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
         raise StateError(f"cannot read learner state: {exc}") from exc
     state.validate(
-        valid_ids, route, revision, prerequisites, baseline_providers
+        route, revision, prerequisites, baseline_providers
     )
     return state
 
@@ -364,14 +356,12 @@ class StateStore:
     def __init__(
         self,
         path: Path,
-        valid_ids: set[str],
         route: tuple[str, ...],
         revision: str,
         prerequisites: Mapping[str, frozenset[str]],
         baseline_providers: Mapping[str, str | None],
     ):
         self.path = Path(path)
-        self.valid_ids = set(valid_ids)
         self.route = tuple(route)
         self.revision = revision
         self.prerequisites = {
@@ -380,7 +370,6 @@ class StateStore:
         }
         self.baseline_providers = dict(baseline_providers)
         _validate_contract(
-            self.valid_ids,
             self.route,
             self.revision,
             self.prerequisites,
@@ -395,7 +384,6 @@ class StateStore:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
             state = load_state(
                 self.path,
-                self.valid_ids,
                 self.route,
                 self.revision,
                 self.prerequisites,
@@ -407,7 +395,6 @@ class StateStore:
                 raise
             else:
                 state.validate(
-                    self.valid_ids,
                     self.route,
                     self.revision,
                     self.prerequisites,
@@ -427,7 +414,6 @@ class StateStore:
             try:
                 yield load_state(
                     self.path,
-                    self.valid_ids,
                     self.route,
                     self.revision,
                     self.prerequisites,

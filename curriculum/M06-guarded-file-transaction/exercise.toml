@@ -3,7 +3,6 @@ id = "guarded-file-transaction"
 title = "Leave a reversible note in an owned file"
 stage = "persistence"
 kind = "milestone"
-status = "required"
 tradecraft = ["persistence", "lifecycle", "detection"]
 difficulty = "advanced"
 prerequisites = ["proc-publication"]
@@ -20,21 +19,16 @@ source = "curriculum/M06-guarded-file-transaction/starter"
 
 [resources]
 readme = "curriculum/M06-guarded-file-transaction/README.md"
-check = "curriculum/M06-guarded-file-transaction/checks/success-check"
 host_check = "curriculum/M06-guarded-file-transaction/checks/host-check"
 hint = "curriculum/M06-guarded-file-transaction/hint"
 solution = "curriculum/M06-guarded-file-transaction/solution"
 
 [verification]
 timeout_seconds = 360
-capabilities = []
 tools = ["module-load-test"]
-cleanup_required = true
 
 [[verification.cases]]
 id = "guarded-transaction"
 label = "Guarded file transaction and rollback"
 expect_build = "pass"
 check = "curriculum/M06-guarded-file-transaction/checks/success-check"
-build_output_contains = ""
-[verification.cases.build_variables]

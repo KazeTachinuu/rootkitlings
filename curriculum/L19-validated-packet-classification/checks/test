@@ -36,32 +36,40 @@ if command -v shellcheck >/dev/null; then
 	shellcheck -x -s sh "$HERE/success-check" "$HERE/failure-check.in"
 fi
 
-for tree in starter solution; do
+source_root=$scratch/sources
+mkdir "$source_root"
+starter=$("$ROOTKITLINGS_ROOT/scripts/catalog" materialize starter L19 \
+	"$source_root" --name starter-source)
+solution=$("$ROOTKITLINGS_ROOT/scripts/catalog" materialize solution L19 \
+	"$source_root" --name solution-source)
+
+for tree in "$starter" "$solution"; do
+	label=${tree##*/}
 	cmp -s "$HERE/../../L16-hostile-packet-lengths/solution/parser/ipv4.c" \
-		"$HERE/$tree/parser/ipv4.c" || {
-		printf '[x] %s parser differs from accepted L16\n' "$tree" >&2
+		"$tree/parser/ipv4.c" || {
+		printf '[x] %s parser differs from accepted L16\n' "$label" >&2
 		exit 1
 	}
 	cmp -s "$HERE/../../L16-hostile-packet-lengths/solution/include/ipv4_parser.h" \
-		"$HERE/$tree/include/ipv4_parser.h" || {
-		printf '[x] %s parser API differs from accepted L16\n' "$tree" >&2
+		"$tree/include/ipv4_parser.h" || {
+		printf '[x] %s parser API differs from accepted L16\n' "$label" >&2
 		exit 1
 	}
 	cmp -s "$HERE/../../L17-safe-skb-access/solution/access/skb_access.c" \
-		"$HERE/$tree/access/skb_access.c" || {
-		printf '[x] %s skb access differs from accepted L17\n' "$tree" >&2
+		"$tree/access/skb_access.c" || {
+		printf '[x] %s skb access differs from accepted L17\n' "$label" >&2
 		exit 1
 	}
 	cmp -s "$HERE/../../L17-safe-skb-access/starter/include/skb_access.h" \
-		"$HERE/$tree/include/skb_access.h" || {
-		printf '[x] %s skb access API differs from accepted L17\n' "$tree" >&2
+		"$tree/include/skb_access.h" || {
+		printf '[x] %s skb access API differs from accepted L17\n' "$label" >&2
 		exit 1
 	}
 done
 
 mapfile -t changed_files < <(
-	diff -qr "$HERE/../starter" "$HERE/../solution" |
-		sed -nE 's#^Files .*/starter/(.*) and .*/solution/.* differ$#\1#p'
+	diff -qr "$starter" "$solution" |
+		sed -nE 's#^Files .*/starter-source/(.*) and .*/solution-source/.* differ$#\1#p'
 )
 (( ${#changed_files[@]} == 1 )) || {
 	printf '[x] expected one learner-edited file, found %d\n' \
@@ -92,10 +100,10 @@ build_tree()
 	fi
 }
 
-build_tree "$HERE/../starter" "$scratch/starter"
-build_tree "$HERE/../solution" "$scratch/solution"
-build_tree "$HERE/../solution" "$scratch/register-failure" 1
-build_tree "$HERE/../solution" "$scratch/proc-failure" 2
+build_tree "$starter" "$scratch/starter"
+build_tree "$solution" "$scratch/solution"
+build_tree "$solution" "$scratch/register-failure" 1
+build_tree "$solution" "$scratch/proc-failure" 2
 "$HERE/host-check" "$scratch/solution" \
 	"$scratch/solution/rootkitlings.ko"
 
@@ -108,7 +116,7 @@ fi
 build_mutant()
 {
 	local name=$1
-	cp -a "$HERE/../solution" "$scratch/$name"
+	cp -a "$solution" "$scratch/$name"
 	shift
 	"$@" "$scratch/$name/classifier/udp.c"
 	local log=$scratch/$name.log
@@ -198,7 +206,7 @@ mutate_inspect_other_protocol()
 build_mutant inspect-other-protocol mutate_inspect_other_protocol
 
 equivalent=$scratch/equivalent
-cp -a "$HERE/../solution" "$equivalent"
+cp -a "$solution" "$equivalent"
 sed -i 's/((unsigned int)bytes\[0\] << 8) | bytes\[1\]/bytes[1] + (unsigned int)bytes[0] * 256U/' \
 	"$equivalent/classifier/udp.c"
 sed -i 's/if (!ipv4 || !view || target_port > 65535)/if (!ipv4 || !view)/' \
@@ -210,7 +218,7 @@ build_tree "$equivalent" "$scratch/equivalent-build"
 "$HERE/host-check" "$scratch/equivalent-build" \
 	"$scratch/equivalent-build/rootkitlings.ko"
 
-cp -a "$HERE/../solution" "$scratch/unknown"
+cp -a "$solution" "$scratch/unknown"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
 	ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure-point value compiled successfully\n' >&2

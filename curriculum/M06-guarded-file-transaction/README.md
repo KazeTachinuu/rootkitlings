@@ -52,7 +52,7 @@ Both apply and restore run in module load or unload process context.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 

@@ -82,7 +82,7 @@ pointer returned by `current_cred()`.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -90,7 +90,7 @@ The checker proves parsing and gating, preparation failure and cancellation,
 complete initial-namespace identity, writer and sibling isolation, concurrent
 switch behavior, clean unload, and repeated load cycles.
 
-## Official Linux v7.2 references
+## References
 
 - [Credential lifetime and replacement rules][ref-1]
 - [`prepare_creds()`, `commit_creds()`, `abort_creds()`, and

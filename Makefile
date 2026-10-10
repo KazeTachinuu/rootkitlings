@@ -1,7 +1,7 @@
 KDIR ?=
 MODULE_DIR ?=
 MODULE_OUT ?=
-TOOL_OUT ?= vm/tools
+TOOL_OUT ?= .rootkitlings/build/tools
 ROOTKITLINGS_FAIL_POINT ?= 0
 GUEST_TOOL_NAMES := \
 	agent_fixture \
@@ -26,7 +26,8 @@ GUEST_TOOL_NAMES := \
 	tcp_session_fixture
 GUEST_TOOLS := $(addprefix $(TOOL_OUT)/,$(GUEST_TOOL_NAMES))
 
-.PHONY: all help module clean compile-db test-solutions doctor validate validate-quick tools tool-output-directory
+.PHONY: all help module clean compile-db doctor tools tool-output-directory
+.PHONY: test-checkers test-solutions validate validate-quick
 
 .DEFAULT_GOAL := help
 
@@ -40,6 +41,7 @@ help:
 		'  doctor          Check host dependencies' \
 		'  validate        Run the full repository validation' \
 		'  validate-quick  Run static validation only' \
+		'  test-checkers   Test exercise checkers against faulty implementations' \
 		'  test-solutions  Build and test reference solutions' \
 		'  compile-db      Generate compile_commands.json'
 
@@ -126,7 +128,7 @@ $(TOOL_OUT)/tcp_session_fixture: vm/tools/tcp_session_fixture.c | tool-output-di
 	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
 
 clean:
-	@test "$(TOOL_OUT)" = vm/tools || \
+	@test "$(TOOL_OUT)" = .rootkitlings/build/tools || \
 		{ echo 'clean does not accept TOOL_OUT' >&2; exit 2; }
 	$(RM) $(GUEST_TOOLS)
 
@@ -141,6 +143,9 @@ validate:
 
 validate-quick:
 	@"$(CURDIR)/scripts/validate" --quick
+
+test-checkers:
+	@"$(CURDIR)/scripts/test-checkers"
 
 test-solutions:
 	@"$(CURDIR)/scripts/test-solutions"

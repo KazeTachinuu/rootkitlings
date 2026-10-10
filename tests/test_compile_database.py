@@ -122,8 +122,28 @@ class CompileDatabaseTests(unittest.TestCase):
     def test_cumulative_source_includes_provider_headers(self) -> None:
         root = Path(__file__).resolve().parent.parent
         catalog = Catalog(root)
-        source = root / "curriculum/C00-complete-rootkit/solution/security/control.c"
-        expected = root / "curriculum/M07-remote-resident-agent/starter/include"
+        exercise = catalog.resolve("C00")
+        provider = catalog.solution_provider(exercise)
+        self.assertIsNotNone(provider)
+        source = next((root / exercise.resources.solution).rglob("*.c"))
+        provider_roots = (
+            root / provider.resources.solution,
+            *(
+                (root / provider.workspace.additions,)
+                if provider.workspace.additions
+                else ()
+            ),
+            *(
+                (root / provider.workspace.source,)
+                if provider.workspace.source
+                else ()
+            ),
+        )
+        expected = next(
+            path / "include"
+            for path in provider_roots
+            if (path / "include").is_dir()
+        )
 
         includes = source_include_directories(source, root, catalog)
 

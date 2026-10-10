@@ -9,8 +9,9 @@ can authenticate it.
 The flare performs no lookup, never leaves the guest, and is not a command
 channel.
 
-An epoch and sequence make status `0` through `3` fresh.
-The packet carries the first 16 HMAC-SHA-256 bytes under the laboratory key.
+The receiver authenticates the epoch and accepts only the next sequence, so a
+captured status cannot be replayed within that receiver state.
+The packet carries the first 16 HMAC-SHA-256 bytes under the supplied test key.
 
 ## Packet layout
 
@@ -84,7 +85,7 @@ unchanged.
 The supplied UDP transport creates one socket, sends the complete packet, and
 releases it before returning, leaving no exit-time socket.
 
-## Verify
+## Check
 
 Run:
 

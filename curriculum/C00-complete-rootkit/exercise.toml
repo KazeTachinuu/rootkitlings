@@ -3,7 +3,6 @@ id = "complete-rootkit"
 title = "Assemble and verify the complete rootkit"
 stage = "final-project"
 kind = "final-project"
-status = "required"
 tradecraft = [
   "lifecycle",
   "control",
@@ -123,14 +122,12 @@ imports = [
 
 [resources]
 readme = "curriculum/C00-complete-rootkit/README.md"
-check = "curriculum/C00-complete-rootkit/checks/success-check"
 host_check = "curriculum/C00-complete-rootkit/checks/host-check"
 hint = "curriculum/C00-complete-rootkit/hint"
 solution = "curriculum/C00-complete-rootkit/solution"
 
 [verification]
 timeout_seconds = 600
-capabilities = []
 tools = [
   "secure-agent-fixture",
   "module-load-params",
@@ -143,14 +140,12 @@ tools = [
   "rmdir-telemetry-test",
   "run-as",
 ]
-cleanup_required = true
 
 [[verification.cases]]
 id = "complete-rootkit"
 label = "Complete course rootkit"
 expect_build = "pass"
 check = "curriculum/C00-complete-rootkit/checks/success-check"
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
 
@@ -160,7 +155,6 @@ label = "Process view, evidence, and local control"
 expect_build = "pass"
 check = "curriculum/M03-concealment-evidence-map/checks/success-check"
 check_arguments = ["complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
 
@@ -170,7 +164,6 @@ label = "Credential action and syscall telemetry"
 expect_build = "pass"
 check = "curriculum/M02-authorized-actions-telemetry/checks/success-check"
 check_arguments = ["complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
 
@@ -180,7 +173,6 @@ label = "Preflight rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["125", "Preflight", "complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "1"
 
@@ -190,7 +182,6 @@ label = "State allocation rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["12", "Allocation", "complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "2"
 
@@ -200,7 +191,6 @@ label = "Control publication rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["12", "Control publication", "complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "3"
 
@@ -210,7 +200,6 @@ label = "Worker start rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["4", "Worker", "complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "4"
 
@@ -220,7 +209,6 @@ label = "Authorization startup rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["4", "Authorization startup", "complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "5"
 
@@ -230,7 +218,6 @@ label = "Missing rmdir target"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["2", "Missing rmdir target", "complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "6"
 
@@ -240,7 +227,6 @@ label = "Events publication rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["12", "Events publication", "complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "7"
 
@@ -250,7 +236,6 @@ label = "Credential preparation rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/action-failure-check.in"
 check_arguments = ["12", "Credential preparation", "complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "8"
 
@@ -260,7 +245,6 @@ label = "Credential cancellation"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/action-failure-check.in"
 check_arguments = ["125", "Credential cancellation", "complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "9"
 
@@ -270,7 +254,6 @@ label = "Missing iterate_dir target"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["2", "Missing iterate_dir target", "complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "10"
 
@@ -280,7 +263,6 @@ label = "Evidence publication rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["12", "Evidence publication", "complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "11"
 
@@ -290,7 +272,6 @@ label = "Agent worker creation rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["4", "Agent worker creation", "complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "12"
 
@@ -300,7 +281,6 @@ label = "Agent status publication rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["12", "Agent status publication", "complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "13"
 
@@ -309,7 +289,6 @@ id = "status-signal-rollback"
 label = "Status-signal failure rolls back the complete module"
 expect_build = "pass"
 check = "curriculum/C00-complete-rootkit/checks/signal-failure-check"
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "14"
 
@@ -319,7 +298,6 @@ label = "Packet redirect registration rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["4", "Packet redirect registration", "complete-rootkit"]
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "15"
 
@@ -327,7 +305,6 @@ ROOTKITLINGS_FAIL_POINT = "15"
 id = "unknown-failure-point"
 label = "Reject unknown failure point"
 expect_build = "fail"
-check = ""
 build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "99"

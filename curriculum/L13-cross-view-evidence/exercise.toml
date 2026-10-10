@@ -3,7 +3,6 @@ id = "cross-view-evidence"
 title = "Keep a live probe off the status page"
 stage = "views-detection"
 kind = "lesson"
-status = "required"
 tradecraft = ["detection", "concealment"]
 difficulty = "standard"
 prerequisites = ["managed-kprobe"]
@@ -21,23 +20,19 @@ parent = "managed-kprobe"
 
 [resources]
 readme = "curriculum/L13-cross-view-evidence/README.md"
-check = "curriculum/L13-cross-view-evidence/checks/success-check"
 host_check = "curriculum/L13-cross-view-evidence/checks/learner-host-check"
 hint = "curriculum/L13-cross-view-evidence/hint"
 solution = "curriculum/L13-cross-view-evidence/solution"
 
 [verification]
 timeout_seconds = 240
-capabilities = []
 tools = ["module-load-test", "proc-read-test", "proc-write-test", "run-as"]
-cleanup_required = true
 
 [[verification.cases]]
 id = "selected-view-suppression"
 label = "Cross-view probe evidence"
 expect_build = "pass"
 check = "curriculum/L13-cross-view-evidence/checks/success-check"
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
 
@@ -46,7 +41,6 @@ id = "preflight-rejection"
 label = "Preflight rejection"
 expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-ecanceled-check"
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "1"
 
@@ -55,7 +49,6 @@ id = "allocation-rejection"
 label = "State allocation rejection"
 expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-enomem-check"
-build_output_contains = ""
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "2"
 
@@ -64,7 +57,6 @@ id = "publication-rollback"
 label = "Probe cleanup after procfs publication failure"
 expect_build = "pass"
 check = "curriculum/L13-cross-view-evidence/checks/probe-failure-check.in"
-build_output_contains = ""
 check_arguments = ["12", "Probe cleanup after procfs publication failure"]
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "3"
@@ -74,7 +66,6 @@ id = "missing-target-rollback"
 label = "Batch rollback after a missing second symbol"
 expect_build = "pass"
 check = "curriculum/L13-cross-view-evidence/checks/probe-failure-check.in"
-build_output_contains = ""
 check_arguments = ["2", "Batch rollback after a missing second symbol"]
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "4"
@@ -83,7 +74,6 @@ ROOTKITLINGS_FAIL_POINT = "4"
 id = "unknown-failure-point"
 label = "Reject unknown failure point"
 expect_build = "fail"
-check = ""
 build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "99"

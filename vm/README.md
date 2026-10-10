@@ -12,7 +12,7 @@ The scripts print the important commands they run.
 
 ## Boot
 
-```bash
+```sh
 ./vm/boot
 ```
 
@@ -31,7 +31,7 @@ The default guest has only loopback.
 For an experiment that must reach QEMU's user-network services, request the
 optional capability explicitly:
 
-```bash
+```sh
 ./rootkitlings run --cap network L19
 ```
 
@@ -39,7 +39,7 @@ The guest then uses `10.0.2.15`; the host-side QEMU alias is `10.0.2.2`.
 
 ## Add a module
 
-```bash
+```sh
 ./vm/boot path/to/module.ko
 ```
 
@@ -53,7 +53,7 @@ The option is repeatable.
 It accepts an executable filename or a repository-relative path under
 `vm/tools/`:
 
-```bash
+```sh
 ./vm/boot --tool netfilter_udp_test path/to/module.ko
 ```
 

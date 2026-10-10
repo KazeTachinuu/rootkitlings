@@ -1,4 +1,4 @@
-# Build a kernel heartbeat
+# Drive a workqueue from a kernel timer
 
 The module needs a periodic heartbeat, but a timer callback cannot do work that
 may sleep.
@@ -90,7 +90,7 @@ The borrowed pointer remains valid until both callback sources have stopped.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -98,7 +98,7 @@ The checker verifies the callback call boundaries, observable timer and worker
 behavior, inherited failure rollback and procfs writes, two load cycles, and a
 bounded post-unload clean period.
 
-## Official Linux v7.2 references
+## References
 
 - [Kernel timers](https://docs.kernel.org/7.2/driver-api/basics.html#timers)
 - [Workqueues](https://docs.kernel.org/7.2/core-api/workqueue.html)

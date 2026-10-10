@@ -6,7 +6,6 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$HERE/../../../scripts/lesson-env"
 ROOT=$ROOTKITLINGS_ROOT
 TELEMETRY=$HERE/../../M02-authorized-actions-telemetry
-RESIDENT_CORE=$HERE/../../M00-controlled-resident-core
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-concealment-evidence-map.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
@@ -25,9 +24,7 @@ grep -Eqx '(CONFIG_PREEMPT_RT=n|# CONFIG_PREEMPT_RT is not set)' \
 }
 
 mapfile -t additions < <(cd "$HERE/../starter" && find . -type f | sort)
-expected_additions=(./include/dirent_filter.h \
-	./instrumentation/dirent_filter.c \
-	./instrumentation/getdents_probe.c ./interface/evidence.c)
+expected_additions=(./instrumentation/getdents_probe.c ./interface/evidence.c)
 [[ ${additions[*]} == "${expected_additions[*]}" ]] || {
 	printf '[x] sparse additions differ\nexpected: %s\nactual: %s\n' \
 		"${expected_additions[*]}" "${additions[*]}" >&2; exit 1;
@@ -40,22 +37,6 @@ expected_overlay=(./Kbuild ./core/main.c ./execution/worker.c \
 	printf '[x] sparse solution overlay differs\nexpected: %s\nactual: %s\n' \
 		"${expected_overlay[*]}" "${overlay[*]}" >&2; exit 1;
 }
-while IFS= read -r addition; do
-	relative=${addition#"$HERE/../starter/"}
-	[[ ! -e $RESIDENT_CORE/solution/$relative &&
-		! -e $TELEMETRY/starter/$relative &&
-		! -e $TELEMETRY/solution/$relative ]] || {
-		printf '[x] addition replaces inherited path: %s\n' "$relative" >&2
-		exit 1
-	}
-	if [[ -e $HERE/../solution/$relative ]] &&
-		cmp -s "$addition" "$HERE/../solution/$relative"; then
-		printf '[x] solution overlay duplicates unchanged addition: %s\n' \
-			"$relative" >&2
-		exit 1
-	fi
-done < <(find "$HERE/../starter" -type f | sort)
-
 for script in test host-check success-check failure-check.in; do
 	bash -n "$HERE/$script"
 done
@@ -67,18 +48,12 @@ if command -v shellcheck >/dev/null; then
 		"$TELEMETRY/checks/success-check" \
 		"$TELEMETRY/checks/action-failure-check.in"
 fi
-make -s -C "$ROOT" -B vm/tools/getdents64_test vm/tools/event_stream_test \
-	vm/tools/cred_trigger_test vm/tools/module_load_test vm/tools/status_field_test \
-	vm/tools/proc_write_test vm/tools/proc_read_test vm/tools/rmdir_telemetry_test
 
-compose_tree()
+materialize_tree()
 {
-	local directory=$1
-	mkdir -p "$directory"
-	cp -a "$RESIDENT_CORE/solution/." "$directory/"
-	cp -a "$TELEMETRY/starter/." "$directory/"
-	cp -a "$TELEMETRY/solution/." "$directory/"
-	cp -a "$HERE/../starter/." "$directory/"
+	local tree=$1 name=$2
+	"$ROOT/scripts/catalog" materialize "$tree" M03 "$scratch" \
+		--name "$name" >/dev/null
 }
 
 build_tree()
@@ -96,7 +71,7 @@ build_tree()
 	fi
 }
 
-compose_tree "$scratch/starter"
+materialize_tree starter starter
 build_tree "$scratch/starter"
 if "$HERE/host-check" "$scratch/starter" \
 		"$scratch/starter/rootkitlings.ko" >/dev/null 2>&1; then
@@ -108,8 +83,7 @@ build_variant()
 {
 	local name=$1 point=$2 directory
 	directory=$scratch/$name
-	compose_tree "$directory"
-	cp -a "$HERE/../solution/." "$directory/"
+	materialize_tree solution "$name"
 	build_tree "$directory" "$point"
 }
 
@@ -118,7 +92,7 @@ for point in {1..11}; do build_variant "failure-$point" "$point"; done
 "$HERE/host-check" "$scratch/success" "$scratch/success/rootkitlings.ko"
 
 # A learner's valid M02 snapshot is the provider, not canonical M02 bytes.
-compose_tree "$scratch/alternate-baseline"
+materialize_tree starter alternate-baseline
 printf '\n/* Equivalent inherited M02 implementation. */\n' >> \
 	"$scratch/alternate-baseline/core/state.c"
 cp -a "$HERE/../solution/." "$scratch/alternate-baseline/"
@@ -138,8 +112,7 @@ sed -i 's/\.proc_lseek = seq_lseek/\.proc_lseek = noop_llseek/' \
 	"$changed_evidence_ops/interface/evidence.c"
 build_tree "$changed_evidence_ops"
 
-compose_tree "$scratch/unknown"
-cp -a "$HERE/../solution/." "$scratch/unknown/"
+materialize_tree solution unknown
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
 	ROOTKITLINGS_FAIL_POINT=99 modules >"$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure point compiled\n' >&2; exit 1

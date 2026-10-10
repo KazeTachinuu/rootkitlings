@@ -30,7 +30,7 @@ class MakefileTests(unittest.TestCase):
         self.assertEqual(outputs[1], outputs[2])
         for target in (
             "tools", "clean", "doctor", "validate", "validate-quick",
-            "test-solutions", "compile-db",
+            "test-checkers", "test-solutions", "compile-db",
         ):
             self.assertIn(target, outputs[0])
         self.assertNotIn("module", outputs[0])
@@ -113,6 +113,16 @@ class MakefileTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertTrue(target.is_file())
             self.assertTrue(target.stat().st_mode & 0o111)
+
+    def test_default_guest_tool_builds_do_not_write_beside_sources(self) -> None:
+        result = make("-B", "-n", "tools")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        for source in sorted((ROOT / "vm/tools").glob("*.c")):
+            relative_source = source.relative_to(ROOT)
+            source_binary = relative_source.with_suffix("")
+            managed_binary = Path(".rootkitlings/build/tools") / source.stem
+            self.assertIn(f"-o {managed_binary} {relative_source}", result.stdout)
+            self.assertNotIn(f"-o {source_binary} {relative_source}", result.stdout)
 
 
 if __name__ == "__main__":

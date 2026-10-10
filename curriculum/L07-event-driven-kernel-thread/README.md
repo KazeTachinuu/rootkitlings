@@ -87,14 +87,14 @@ Use supplied `RK_WORKER_NAME` when creating the task.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
 The checker proves creation failure and rollback, idle sleep, command gating,
 exact sequential and concurrent counts, clean unload, and repeated load cycles.
 
-## Official Linux v7.2 references
+## References
 
 - [Kernel threads][ref-1]
 - [Stopping a kernel thread][ref-2]

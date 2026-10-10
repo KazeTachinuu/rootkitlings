@@ -84,7 +84,7 @@ plus block boundaries and tampering.
 Instrumented host tests inspect layout, deferred completion, lifetime, overlap,
 cleanup, and publication; only the NIST bytes judge cryptographic output.
 
-## Sources
+## References
 
 - Linux v7.2 `include/crypto/aead.h`
   <https://github.com/torvalds/linux/blob/v7.2/include/crypto/aead.h>

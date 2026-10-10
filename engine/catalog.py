@@ -20,13 +20,11 @@ from .workspace import WorkspaceError
 
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 SERIAL_RE = re.compile(r"(?:L|M|C)[0-9]{2}\Z")
-TRACK_SERIAL_RE = re.compile(r"E[0-9]{2}\Z")
 TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 MODULE_ARTIFACT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.ko\Z")
 MAKE_VARIABLE_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 DIFFICULTIES = {"intro", "standard", "advanced", "challenge"}
 KINDS = {"lesson", "milestone", "final-project"}
-STATUSES = {"required", "elective", "retired"}
 WORKSPACE_MODES = {"cumulative", "single-file", "project"}
 BASELINES = {
     "starter",
@@ -34,26 +32,24 @@ BASELINES = {
     "scaffold",
 }
 TOP_FIELDS = {
-    "schema_version", "id", "title", "stage", "kind", "status",
+    "schema_version", "id", "title", "stage", "kind",
     "tradecraft", "difficulty", "prerequisites", "teaches", "requires",
     "workspace", "resources", "verification",
 }
-RESOURCE_FIELDS = {"readme", "check", "host_check", "hint", "solution"}
-VERIFICATION_FIELDS = {"timeout_seconds", "capabilities", "tools", "cleanup_required"}
-VERIFICATION_CASE_FIELDS = {
-    "id", "label", "build_variables", "expect_build", "check",
-    "build_output_contains",
+RESOURCE_FIELDS = {"readme", "host_check", "hint", "solution"}
+VERIFICATION_FIELDS = {"timeout_seconds", "tools", "cases"}
+VERIFICATION_CASE_REQUIRED_FIELDS = {"id", "label", "expect_build"}
+VERIFICATION_CASE_OPTIONAL_FIELDS = {
+    "build_variables", "check", "build_output_contains", "check_arguments",
 }
 QUERY_FIELDS = {
     "id", "path", "serial", "sequence", "title", "stage", "kind",
-    "route_position", "track_id", "track_position",
-    "status", "tradecraft", "difficulty", "prerequisites", "teaches", "requires",
+    "tradecraft", "difficulty", "prerequisites", "teaches", "requires",
     "workspace_mode", "workspace_source", "workspace_files", "workspace_editable",
     "workspace_build", "workspace_baseline", "workspace_parent",
     "workspace_additions", "workspace_module_artifact",
-    "readme", "check",
-    "host_check", "hint", "solution", "verification_timeout", "verification_capabilities",
-    "verification_tools", "verification_cleanup",
+    "readme", "host_check", "hint", "solution", "verification_timeout",
+    "verification_tools",
 }
 
 
@@ -87,15 +83,6 @@ class Tool:
 
 
 @dataclass(frozen=True)
-class ElectiveTrack:
-    id: str
-    label: str
-    members: tuple[str, ...]
-    serial: str = ""
-    position: int = -1
-
-
-@dataclass(frozen=True)
 class WorkspaceImport:
     exercise: str
     files: tuple[tuple[str, str], ...]
@@ -118,7 +105,6 @@ class Workspace:
 @dataclass(frozen=True)
 class Resources:
     readme: str
-    check: str
     host_check: str
     hint: str
     solution: str
@@ -138,10 +124,8 @@ class VerificationCase:
 @dataclass(frozen=True)
 class Verification:
     timeout_seconds: int
-    capabilities: tuple[str, ...]
     tools: tuple[str, ...]
-    cleanup_required: bool
-    cases: tuple[VerificationCase, ...] = ()
+    cases: tuple[VerificationCase, ...]
 
 
 @dataclass(frozen=True)
@@ -151,7 +135,6 @@ class Exercise:
     title: str
     stage: str
     kind: str
-    status: str
     tradecraft: tuple[str, ...]
     difficulty: str
     prerequisites: tuple[str, ...]
@@ -162,19 +145,15 @@ class Exercise:
     verification: Verification
     serial: str = ""
     sequence: int = -1
-    route_position: int = -1
-    track_id: str = ""
-    track_position: int = -1
 
     def value(self, field: str) -> object:
         if field not in QUERY_FIELDS:
             raise CatalogError(f"unknown field: {field}")
         values = {
             "id": self.id, "path": self.path.as_posix(), "serial": self.serial,
-            "sequence": self.sequence, "route_position": self.route_position,
-            "track_id": self.track_id, "track_position": self.track_position,
+            "sequence": self.sequence,
             "title": self.title, "stage": self.stage,
-            "kind": self.kind, "status": self.status,
+            "kind": self.kind,
             "tradecraft": self.tradecraft, "difficulty": self.difficulty,
             "prerequisites": self.prerequisites, "teaches": self.teaches,
             "requires": self.requires, "workspace_mode": self.workspace.mode,
@@ -186,12 +165,10 @@ class Exercise:
             "workspace_additions": self.workspace.additions,
             "workspace_module_artifact": self.workspace.module_artifact,
             "readme": self.resources.readme,
-            "check": self.resources.check, "host_check": self.resources.host_check,
+            "host_check": self.resources.host_check,
             "hint": self.resources.hint, "solution": self.resources.solution,
             "verification_timeout": self.verification.timeout_seconds,
-            "verification_capabilities": self.verification.capabilities,
             "verification_tools": self.verification.tools,
-            "verification_cleanup": self.verification.cleanup_required,
         }
         return values[field]
 
@@ -200,41 +177,21 @@ class Catalog:
     def __init__(self, root: Path):
         self.root = root.resolve()
         (self.revision, self.default_module_artifact, self.exercise_roots,
-         self.required_route, raw_tracks, self.tradecraft_tags,
-         self.capabilities, self.tools, self.assumptions, self.sections,
+         self.required_route, self.tradecraft_tags,
+         self.tools, self.assumptions, self.sections,
          self.concepts) = self._read_course()
         self.concept_by_id = {item.id: item for item in self.concepts}
         raw = self._read_exercises()
         self.by_id = {item.id: item for item in raw}
         self.aliases = self._generate_aliases()
-        self.elective_tracks = self._generate_track_aliases(raw_tracks)
-        self.track_aliases = {
-            track.serial: track.id for track in self.elective_tracks
-        }
         reverse_alias = {exercise_id: alias for alias, exercise_id in self.aliases.items()}
-        route_positions = {
+        display_positions = {
             exercise_id: position
             for position, exercise_id in enumerate(self.required_route)
         }
-        track_membership = {
-            exercise_id: (track.id, position)
-            for track in self.elective_tracks
-            for position, exercise_id in enumerate(track.members)
-        }
-        display_ids = list(self.required_route) + [
-            exercise_id
-            for track in self.elective_tracks
-            for exercise_id in track.members
-        ]
-        display_positions = {
-            exercise_id: position for position, exercise_id in enumerate(display_ids)
-        }
         self.exercises = [
             Exercise(**{**item.__dict__, "serial": reverse_alias.get(item.id, ""),
-                        "sequence": display_positions.get(item.id, -1),
-                        "route_position": route_positions.get(item.id, -1),
-                        "track_id": track_membership.get(item.id, ("", -1))[0],
-                        "track_position": track_membership.get(item.id, ("", -1))[1]})
+                        "sequence": display_positions.get(item.id, -1)})
             for item in raw
         ]
         self.by_id = {item.id: item for item in self.exercises}
@@ -249,13 +206,10 @@ class Catalog:
         required = {
             "schema_version", "revision", "default_module_artifact",
             "exercise_roots", "required_route",
-            "tradecraft_tags", "capabilities", "tools", "assumptions",
+            "tradecraft_tags", "tools", "assumptions",
             "sections", "concepts",
         }
-        expected = required
-        if "elective_tracks" in data:
-            expected.add("elective_tracks")
-        _exact_fields(data, expected, Path("course.toml"))
+        _exact_fields(data, required, Path("course.toml"))
         if data["schema_version"] != 2 or isinstance(data["schema_version"], bool):
             raise CatalogError("course.toml: schema_version must be integer 2")
         revision = _string(data, "revision", Path("course.toml"))
@@ -267,19 +221,13 @@ class Catalog:
             if not (self.root / root).is_dir():
                 raise CatalogError(f"course.toml: exercise root must be a directory: {root}")
         route = tuple(_id_list(data, "required_route", Path("course.toml")))
-        elective_tracks = tuple(_elective_track_rows(data))
         assumptions = tuple(_rows(data, "assumptions", {"concept", "competency"}, Assumption, "concept"))
         sections = tuple(_rows(data, "sections", {"id", "label"}, Section, "id"))
         concepts = tuple(_rows(data, "concepts", {"id", "label"}, Concept, "id"))
         tradecraft_tags = tuple(_rows(data, "tradecraft_tags", {"id", "label"}, Concept, "id"))
-        capabilities = tuple(_rows(
-            data, "capabilities", {"id", "label"}, Concept, "id",
-            allow_empty=True,
-        ))
         tools = tuple(_tool_rows(data, self.root))
-        return (revision, default_module_artifact, roots, route, elective_tracks,
-                tradecraft_tags,
-                capabilities, tools, assumptions, sections, concepts)
+        return (revision, default_module_artifact, roots, route, tradecraft_tags,
+                tools, assumptions, sections, concepts)
 
     def _generate_aliases(self) -> dict[str, str]:
         prefixes = {"lesson": "L", "milestone": "M", "final-project": "C"}
@@ -299,24 +247,6 @@ class Catalog:
                 raise CatalogError(f"generated serial is out of range: {serial}")
             aliases[serial] = exercise_id
         return aliases
-
-    def _generate_track_aliases(
-        self,
-        tracks: tuple[ElectiveTrack, ...],
-    ) -> tuple[ElectiveTrack, ...]:
-        result = []
-        for position, track in enumerate(tracks):
-            serial = f"E{position + 1:02d}"
-            if not TRACK_SERIAL_RE.fullmatch(serial):
-                raise CatalogError(f"generated track serial is out of range: {serial}")
-            result.append(ElectiveTrack(
-                track.id,
-                track.label,
-                track.members,
-                serial,
-                position,
-            ))
-        return tuple(result)
 
     def _read_exercises(self) -> list[Exercise]:
         files = sorted(
@@ -342,7 +272,6 @@ class Catalog:
             items.append(Exercise(
                 id=exercise_id, path=path, title=_string(data, "title", relative),
                 stage=_token(data, "stage", relative), kind=_token(data, "kind", relative),
-                status=_token(data, "status", relative),
                 tradecraft=tuple(_token_list(data, "tradecraft", relative)),
                 difficulty=_token(data, "difficulty", relative),
                 prerequisites=tuple(_id_list(data, "prerequisites", relative)),
@@ -414,22 +343,18 @@ class Catalog:
     def _verification(self, value, path):
         if not isinstance(value, dict):
             raise CatalogError(f"{path}: verification must be a table")
-        expected = VERIFICATION_FIELDS | ({"cases"} if "cases" in value else set())
-        _exact_fields(value, expected, path / "verification")
+        _exact_fields(value, VERIFICATION_FIELDS, path / "verification")
         timeout = value["timeout_seconds"]
         if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout <= 0:
             raise CatalogError(f"{path}: verification timeout must be a positive integer")
-        cleanup = value["cleanup_required"]
-        if not isinstance(cleanup, bool):
-            raise CatalogError(f"{path}: verification cleanup must be boolean")
-        raw_cases = value.get("cases", ())
-        if "cases" in value and not isinstance(raw_cases, list):
+        raw_cases = value["cases"]
+        if not isinstance(raw_cases, list):
             raise CatalogError(f"{path}: verification cases must be an array of tables")
         cases = tuple(
             self._verification_case(case, path, index)
             for index, case in enumerate(raw_cases)
         )
-        if "cases" in value and not cases:
+        if not cases:
             raise CatalogError(f"{path}: verification cases must be non-empty")
         case_ids = [case.id for case in cases]
         case_labels = [case.label.casefold() for case in cases]
@@ -437,35 +362,39 @@ class Catalog:
             raise CatalogError(f"{path}: duplicate verification case ids")
         if len(case_labels) != len(set(case_labels)):
             raise CatalogError(f"{path}: duplicate verification case labels")
-        if cases:
-            if not any(case.expect_build == "pass" for case in cases):
+        if not any(case.expect_build == "pass" for case in cases):
+            raise CatalogError(
+                f"{path}: verification cases require a successful control"
+            )
+        saw_failure = False
+        for case in cases:
+            if case.expect_build == "fail":
+                saw_failure = True
+            elif saw_failure:
                 raise CatalogError(
-                    f"{path}: verification cases require a successful control"
+                    f"{path}: successful verification cases must precede failures"
                 )
-            saw_failure = False
-            for case in cases:
-                if case.expect_build == "fail":
-                    saw_failure = True
-                elif saw_failure:
-                    raise CatalogError(
-                        f"{path}: successful verification cases must precede failures"
-                    )
-        return Verification(timeout, tuple(_token_list(value, "capabilities", path)),
-                            tuple(_token_list(value, "tools", path)), cleanup, cases)
+        return Verification(timeout, tuple(_token_list(value, "tools", path)), cases)
 
     def _verification_case(self, value, path, index):
         case_path = path / "verification" / "cases" / str(index)
         if not isinstance(value, dict):
             raise CatalogError(f"{case_path}: verification case must be a table")
-        expected = VERIFICATION_CASE_FIELDS | (
-            {"check_arguments"} if "check_arguments" in value else set()
+        fields = set(value)
+        missing = VERIFICATION_CASE_REQUIRED_FIELDS - fields
+        unknown = fields - (
+            VERIFICATION_CASE_REQUIRED_FIELDS | VERIFICATION_CASE_OPTIONAL_FIELDS
         )
-        _exact_fields(value, expected, case_path)
+        if missing or unknown:
+            raise CatalogError(
+                f"{case_path}: fields mismatch "
+                f"(missing={sorted(missing)}, unknown={sorted(unknown)})"
+            )
         case_id = _identifier(value["id"], case_path)
         label = _bounded_printable(value["label"], "label", case_path, empty=False)
         if label != label.strip():
             raise CatalogError(f"{case_path}: label must not have surrounding whitespace")
-        variables = value["build_variables"]
+        variables = value.get("build_variables", {})
         if not isinstance(variables, dict):
             raise CatalogError(f"{case_path}: build_variables must be a table")
         normalized = []
@@ -481,9 +410,11 @@ class Catalog:
         expect_build = value["expect_build"]
         if not isinstance(expect_build, str) or expect_build not in {"pass", "fail"}:
             raise CatalogError(f"{case_path}: expect_build must be 'pass' or 'fail'")
-        check = _optional_path(value["check"], case_path, self.root)
+        check = _optional_path(value.get("check", ""), case_path, self.root)
         output = _bounded_printable(
-            value["build_output_contains"], "build_output_contains", case_path,
+            value.get("build_output_contains", ""),
+            "build_output_contains",
+            case_path,
             empty=True,
         )
         if expect_build == "pass":
@@ -532,13 +463,14 @@ class Catalog:
             raise CatalogError("course.toml: required_route contains duplicates")
         actual = set(self.by_id)
         route = set(self.required_route)
-        required = {item.id for item in self.exercises if item.status == "required"}
-        if route != required:
-            raise CatalogError(f"required_route mismatch (missing={sorted(required-route)}, unknown={sorted(route-required)})")
+        if route != actual:
+            raise CatalogError(
+                "required_route mismatch "
+                f"(missing={sorted(actual-route)}, unknown={sorted(route-actual)})"
+            )
         if set(self.aliases.values()) != route:
             raise CatalogError("generated serial aliases must cover the required route")
         self._validate_required_route()
-        self._validate_elective_tracks(actual)
         section_ids = {item.id for item in self.sections}
         if len(section_ids) != len(self.sections):
             raise CatalogError("course.toml: duplicate section ids")
@@ -549,19 +481,17 @@ class Catalog:
         tradecraft_ids = {item.id for item in self.tradecraft_tags}
         if len(tradecraft_ids) != len(self.tradecraft_tags):
             raise CatalogError("course.toml: duplicate tradecraft tag ids")
-        capability_ids = {item.id for item in self.capabilities}
         tool_ids = {item.id for item in self.tools}
         _unique_registry(self.assumptions, "concept", "competency", "assumptions")
         _unique_registry(self.sections, "id", "label", "sections")
         _unique_registry(self.concepts, "id", "label", "concepts")
         _unique_registry(self.tradecraft_tags, "id", "label", "tradecraft tags")
-        _unique_registry(self.capabilities, "id", "label", "capabilities")
         _unique_registry(self.tools, "id", "binary", "tools")
         teachers = {}
         for item in self.exercises:
             self._validate_bundle_path(item)
-            if item.stage not in section_ids or item.kind not in KINDS or item.status not in STATUSES:
-                raise CatalogError(f"{item.path}: invalid stage, kind, or status")
+            if item.stage not in section_ids or item.kind not in KINDS:
+                raise CatalogError(f"{item.path}: invalid stage or kind")
             if item.serial.startswith("L") and item.kind != "lesson":
                 raise CatalogError(f"{item.path}: L alias requires kind='lesson'")
             if item.serial.startswith("C") and item.kind != "final-project":
@@ -574,8 +504,6 @@ class Catalog:
                 raise CatalogError(f"{item.path}: invalid tradecraft tag or difficulty")
             if item.workspace.mode not in WORKSPACE_MODES or item.workspace.baseline not in BASELINES:
                 raise CatalogError(f"{item.path}: invalid workspace mode or baseline")
-            if set(item.verification.capabilities) - capability_ids:
-                raise CatalogError(f"{item.path}: unknown VM capabilities")
             if set(item.verification.tools) - tool_ids:
                 raise CatalogError(f"{item.path}: unknown verification tools")
             if not item.teaches or len(set(item.teaches)) != len(item.teaches):
@@ -624,70 +552,18 @@ class Catalog:
         used_tradecraft = {tag for item in self.exercises for tag in item.tradecraft}
         if used_tradecraft != tradecraft_ids:
             raise CatalogError(f"course.toml: unused tradecraft tags: {sorted(tradecraft_ids-used_tradecraft)}")
-        used_capabilities = {value for item in self.exercises for value in item.verification.capabilities}
-        if used_capabilities != capability_ids:
-            raise CatalogError(f"course.toml: capability registry usage mismatch: {sorted(capability_ids-used_capabilities)}")
         used_tools = {value for item in self.exercises for value in item.verification.tools}
         if used_tools != tool_ids:
             raise CatalogError(f"course.toml: tool registry usage mismatch: {sorted(tool_ids-used_tools)}")
 
     def _validate_bundle_path(self, item: Exercise) -> None:
-        """Keep required bundle names tied to route-derived serials."""
-        if item.status != "required":
-            return
+        """Keep bundle names tied to route-derived serials."""
         expected_name = f"{item.serial}-{item.id}"
         roots = tuple(Path(root) for root in self.exercise_roots)
         if item.path.parent not in roots or item.path.name != expected_name:
             expected = roots[0] / expected_name
             raise CatalogError(
                 f"{item.path}: required bundle path must be {expected}"
-            )
-
-    def _validate_elective_tracks(self, exercise_ids: set[str]) -> None:
-        _unique_registry(
-            self.elective_tracks,
-            "id",
-            "label",
-            "elective track",
-        )
-        if set(self.track_aliases.values()) != {
-            track.id for track in self.elective_tracks
-        }:
-            raise CatalogError("generated track aliases must cover elective tracks")
-        track_members = [
-            exercise_id
-            for track in self.elective_tracks
-            for exercise_id in track.members
-        ]
-        if len(track_members) != len(set(track_members)):
-            raise CatalogError(
-                "course.toml: an exercise may belong to only one elective track"
-            )
-        for track in self.elective_tracks:
-            if track.id in exercise_ids:
-                raise CatalogError(
-                    f"course.toml: elective track ID conflicts with exercise ID: {track.id}"
-                )
-            for exercise_id in track.members:
-                item = self.by_id.get(exercise_id)
-                if item is None:
-                    raise CatalogError(
-                        f"course.toml: elective track {track.id!r} contains unknown "
-                        f"exercise {exercise_id!r}"
-                    )
-                if item.status != "elective":
-                    raise CatalogError(
-                        f"course.toml: elective track {track.id!r} member "
-                        f"{exercise_id!r} must have status='elective'"
-                    )
-        electives = {
-            item.id for item in self.exercises if item.status == "elective"
-        }
-        if set(track_members) != electives:
-            raise CatalogError(
-                "course.toml: elective track membership mismatch "
-                f"(missing={sorted(electives-set(track_members))}, "
-                f"unknown={sorted(set(track_members)-electives)})"
             )
 
     def _validate_required_route(self) -> None:
@@ -741,8 +617,6 @@ class Catalog:
 
     def _validate_paths(self, item):
         required_files = [item.resources.readme, item.resources.hint]
-        if not item.verification.cases:
-            required_files.append(item.resources.check)
         optional_files = [item.resources.host_check]
         for value in required_files:
             if not value or not (self.root / value).is_file():
@@ -775,9 +649,6 @@ class Catalog:
                 )
         if not set(item.workspace.editable) <= set(item.workspace.files):
             raise CatalogError(f"{item.path}: editable paths must be listed in workspace files")
-        if not item.verification.cleanup_required:
-            raise CatalogError(f"{item.path}: verification must require cleanup")
-
     def _validate_dag(self):
         visiting, visited = set(), set()
         def visit(exercise_id):
@@ -837,26 +708,8 @@ class Catalog:
             )
         raise CatalogError(f"unknown exercise: {selector}")
 
-    def ordered(self) -> list[Exercise]:
-        """Return the required route in canonical order (compatibility API)."""
-        return list(self.required())
-
     def required(self) -> tuple[Exercise, ...]:
         return tuple(self.by_id[value] for value in self.required_route)
-
-    def track_for(self, item: Exercise) -> ElectiveTrack | None:
-        if not item.track_id:
-            return None
-        return next(
-            track for track in self.elective_tracks if track.id == item.track_id
-        )
-
-    def display_order(self) -> tuple[Exercise, ...]:
-        return self.required() + tuple(
-            self.by_id[exercise_id]
-            for track in self.elective_tracks
-            for exercise_id in track.members
-        )
 
     def module_artifact(self, item: Exercise) -> str:
         """Resolve the module output name from its sparse workspace contract."""
@@ -1211,14 +1064,6 @@ class Catalog:
     def all_concepts(self, item: Exercise) -> set[str]:
         return {value.concept for value in self.assumptions} | self.prerequisite_concepts(item)
 
-    def verification_cases(self, item: Exercise) -> tuple[VerificationCase, ...]:
-        """Return explicit cases, or the compatible single success case."""
-        if item.verification.cases:
-            return item.verification.cases
-        return (VerificationCase(
-            "default", "Default", (), "pass", item.resources.check, ""
-        ),)
-
     def assumption(self, concept_id: str) -> Assumption | None:
         return next((item for item in self.assumptions if item.concept == concept_id), None)
 
@@ -1235,11 +1080,11 @@ def _exact_fields(data, expected, path):
         raise CatalogError(f"{path}: fields mismatch (missing={sorted(missing)}, unknown={sorted(unknown)})")
 
 
-def _rows(data, key, fields, cls, id_field, *, allow_empty=False):
+def _rows(data, key, fields, cls, id_field):
     value = data[key]
     if not isinstance(value, list):
         raise CatalogError(f"course.toml: {key} must be an array of tables")
-    if not value and not allow_empty:
+    if not value:
         raise CatalogError(f"course.toml: {key} must be non-empty")
     result = []
     for index, row in enumerate(value):
@@ -1248,29 +1093,6 @@ def _rows(data, key, fields, cls, id_field, *, allow_empty=False):
         if not isinstance(ident, str) or not TOKEN_RE.fullmatch(ident) or not isinstance(label, str) or not label.strip():
             raise CatalogError(f"course.toml: invalid {key} row {index}")
         result.append(cls(ident, label.strip()))
-    return result
-
-
-def _elective_track_rows(data) -> list[ElectiveTrack]:
-    value = data.get("elective_tracks", [])
-    if not isinstance(value, list):
-        raise CatalogError("course.toml: elective_tracks must be an array of tables")
-    result = []
-    for index, row in enumerate(value):
-        path = Path(f"course.toml/elective_tracks/{index}")
-        if not isinstance(row, dict):
-            raise CatalogError(f"{path}: elective track must be a table")
-        _exact_fields(row, {"id", "label", "members"}, path)
-        track_id = _identifier(row["id"], path)
-        label = _bounded_printable(row["label"], "label", path, empty=False)
-        if label != label.strip():
-            raise CatalogError(f"{path}: label must not have surrounding whitespace")
-        members = tuple(_id_list(row, "members", path))
-        if not members:
-            raise CatalogError(f"{path}: members must not be empty")
-        if len(members) != len(set(members)):
-            raise CatalogError(f"{path}: duplicate values in members")
-        result.append(ElectiveTrack(track_id, label, members))
     return result
 
 

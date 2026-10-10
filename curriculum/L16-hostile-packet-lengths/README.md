@@ -92,7 +92,7 @@ Do not read options or payload; only validate their declared bounds.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 

@@ -138,7 +138,7 @@ static int run_concurrent(void)
 	struct start_gate gate;
 	pthread_t threads[CONCURRENT_THREADS];
 	struct concurrent_case cases[CONCURRENT_THREADS];
-	atomic_int failed = ATOMIC_VAR_INIT(0);
+	atomic_int failed = 0;
 	unsigned int created = 0;
 	unsigned int index;
 
@@ -201,7 +201,7 @@ static int run_stress(const char *seconds_text)
 	pthread_t threads[CONCURRENT_THREADS];
 	struct stress_case cases[CONCURRENT_THREADS];
 	struct timespec deadline;
-	atomic_int failed = ATOMIC_VAR_INIT(0);
+	atomic_int failed = 0;
 	char *end = NULL;
 	long seconds;
 	unsigned int created = 0;

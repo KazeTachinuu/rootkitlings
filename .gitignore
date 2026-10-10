@@ -25,5 +25,3 @@ __pycache__/
 # Learner state and workspaces
 .rootkitlings/
 /work/
-vm/tools/*
-!vm/tools/*.c

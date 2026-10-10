@@ -1,8 +1,8 @@
 # Assemble and verify the complete rootkit
 
-The main course branches now work alone.
-This project joins their tested components into one loadable module with one
-startup, one rollback path, and one authenticated control channel:
+You have built and tested each subsystem separately.
+This project joins them into one loadable module with one initialization
+sequence, one rollback path, and one authenticated control channel:
 
 ```text
 local control ----> authorization ----> credential action
@@ -52,8 +52,8 @@ Authenticate requests before parsing and replies before framing.
 Send ready only after all resources exist, and reverse every acquisition on
 failure or unload.
 Keep remote command processing blocked until initialization is complete.
-Import, but do not reimplement, the tested packet, AES-GCM, and signal
-components.
+The workspace already includes the tested packet, AES-GCM, and signal
+components; do not reimplement them.
 Start the supplied packet switchboard before announcing ready and stop it before
 destroying resident state.
 

@@ -2,7 +2,6 @@ schema_version = 2
 revision = "2026.10-project-route"
 default_module_artifact = "rootkitlings.ko"
 exercise_roots = ["curriculum"]
-capabilities = []
 
 required_route = [
   "module-build-lifecycle",
@@ -229,23 +228,23 @@ competency = "Understand paths, ownership, permission bits, and file descriptors
 
 [[sections]]
 id = "module-core"
-label = "Module core"
+label = "Kernel module foundations"
 
 [[sections]]
 id = "control-execution"
-label = "Control and execution"
+label = "Control and kernel workers"
 
 [[sections]]
 id = "identity-observation"
-label = "Identity and observation"
+label = "Identity, privilege, and probes"
 
 [[sections]]
 id = "views-detection"
-label = "Views and detection"
+label = "Concealment and evidence"
 
 [[sections]]
 id = "network-state"
-label = "Network state"
+label = "Packets and call-home"
 
 [[sections]]
 id = "persistence"
@@ -257,7 +256,7 @@ label = "Authenticated operations"
 
 [[sections]]
 id = "final-project"
-label = "Final project"
+label = "Complete rootkit"
 
 [[concepts]]
 id = "accept-by-default-observation"

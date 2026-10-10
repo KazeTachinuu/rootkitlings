@@ -14,11 +14,13 @@ trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
 cp -a "$HERE/../../L02-owned-kernel-state/solution/." "$baseline/"
 cp -a "$HERE/../../L03-proc-publication/solution/." "$baseline/"
 cp -a "$baseline/." "$work/"
-while IFS= read -r -d '' source; do
-	relative=${source#"$HERE/../starter/"}
-	mkdir -p "$work/$(dirname "$relative")"
-	cp -p "$source" "$work/$relative"
-done < <(find "$HERE/../starter" -type f -print0)
+if [[ -d $HERE/../starter ]]; then
+	while IFS= read -r -d '' source; do
+		relative=${source#"$HERE/../starter/"}
+		mkdir -p "$work/$(dirname "$relative")"
+		cp -p "$source" "$work/$relative"
+	done < <(find "$HERE/../starter" -type f -print0)
+fi
 while IFS= read -r -d '' source; do
 	relative=${source#"$HERE/../solution/"}
 	mkdir -p "$work/$(dirname "$relative")"

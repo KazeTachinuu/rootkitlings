@@ -63,7 +63,12 @@ when a shared key exists.
 Return `RK_PROTECTION_UNAVAILABLE` when conditions are missing or either input
 contains an unknown bit.
 
-Run `./rootkitlings check`.
+Run:
+
+```sh
+./rootkitlings check
+```
+
 The checker covers every selection, overlap and boundary behavior, XOR key
 recovery and bit flipping, module-string evidence, `W=1`, and the guest
 self-test.

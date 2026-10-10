@@ -80,7 +80,7 @@ Then implement the worker, start, stop, and snapshot functions declared in
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -89,7 +89,7 @@ binary framing; oversized drain; cancellation in every blocking phase; the
 publish/stop race; idempotent stop; and exactly one release.
 The Linux guest verifies loopback, blocked-receive unload, rollback, and reload.
 
-## Linux v7.2 references
+## References
 
 - [Kernel socket operations and `sock_release()`][1]
 - [`kernel_sendmsg()`, `kernel_recvmsg()`, connect, shutdown, and release][2]

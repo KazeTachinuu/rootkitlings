@@ -34,7 +34,7 @@ Use this scan:
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -84,9 +84,7 @@ The checker demonstrates the boundary:
   `copy_file_range`, `io_uring`, and in-kernel `kernel_read`.
 - Not filtered: a `vfs_read` result larger than 512 bytes.
 
-Other paths may expose the contents; this is not reliable concealment.
-
-## Linux v7.2 references
+## References
 
 - [`vfs_read`, `ksys_read`, and positional reads][1]
 - [Splice and sendfile paths][2]

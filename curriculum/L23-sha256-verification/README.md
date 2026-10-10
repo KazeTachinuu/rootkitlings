@@ -60,7 +60,7 @@ instrumented host implementation.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 

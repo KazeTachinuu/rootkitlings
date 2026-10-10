@@ -108,7 +108,7 @@ module is loaded or cleaned up.
 
 From the repository root, run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -124,7 +124,7 @@ sysfs.
 Kernel logs may outlive the module, so they are useful diagnostics but not
 cleanup evidence.
 
-## Official references
+## References
 
 - [Building external modules](https://docs.kernel.org/kbuild/modules.html)
 - [Driver basics: `module_init()` and `module_exit()`][ref-1]

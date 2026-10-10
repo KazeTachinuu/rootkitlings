@@ -123,14 +123,14 @@ ownership unchanged.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
 The checker stresses ABI decoding, hostile pointers, concurrent correlation,
 rollback, unload during calls, reload, and registry cleanup.
 
-## Official Linux v7.2 references
+## References
 
 - [Kretprobe entry, return, private-data, capacity, and registry contracts][1]
 - [`register_kretprobe()`, `nmissed`, and unregistration][2]

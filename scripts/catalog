@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """Query and validate rootkitlings exercise metadata."""
 
 from __future__ import annotations
@@ -98,7 +98,7 @@ def main() -> int:
         elif args.command == "concept-label":
             print(catalog.concept_label(args.concept))
         elif args.command == "list":
-            for item in catalog.display_order():
+            for item in catalog.required():
                 if args.difficulty and item.difficulty != args.difficulty:
                     continue
                 if args.concept and args.concept not in item.teaches and args.concept not in item.requires:
@@ -115,19 +115,11 @@ def main() -> int:
             print(path)
         elif args.command == "export":
             records = []
-            for item in catalog.display_order():
-                track = catalog.track_for(item)
+            for item in catalog.required():
                 records.append({
                     "id": item.id, "serial": item.serial, "sequence": item.sequence,
-                    "route_position": (
-                        item.route_position if item.route_position >= 0 else None
-                    ),
-                    "track_id": track.id if track else None,
-                    "track_position": (
-                        item.track_position if item.track_position >= 0 else None
-                    ),
                     "path": item.path.as_posix(), "title": item.title,
-                    "stage": item.stage, "kind": item.kind, "status": item.status,
+                    "stage": item.stage, "kind": item.kind,
                     "tradecraft": list(item.tradecraft), "difficulty": item.difficulty,
                     "prerequisites": list(item.prerequisites),
                     "teaches": list(item.teaches), "requires": list(item.requires),
@@ -142,15 +134,13 @@ def main() -> int:
                         "module_artifact_override": item.workspace.module_artifact or None,
                     },
                     "resources": {
-                        "readme": item.resources.readme, "check": item.resources.check,
+                        "readme": item.resources.readme,
                         "host_check": item.resources.host_check or None,
                         "hint": item.resources.hint, "solution": item.resources.solution,
                     },
                     "verification": {
                         "timeout_seconds": item.verification.timeout_seconds,
-                        "capabilities": list(item.verification.capabilities),
                         "tools": list(item.verification.tools),
-                        "cleanup_required": item.verification.cleanup_required,
                         "cases": [
                             {
                                 "id": case.id,
@@ -161,23 +151,13 @@ def main() -> int:
                                 "build_output_contains": case.build_output_contains,
                                 "check_arguments": list(case.check_arguments),
                             }
-                            for case in catalog.verification_cases(item)
+                            for case in item.verification.cases
                         ],
                     },
                 })
             print(json.dumps({
                 "revision": catalog.revision,
                 "default_module_artifact": catalog.default_module_artifact,
-                "elective_tracks": [
-                    {
-                        "id": track.id,
-                        "serial": track.serial,
-                        "position": track.position,
-                        "label": track.label,
-                        "members": list(track.members),
-                    }
-                    for track in catalog.elective_tracks
-                ],
                 "exercises": records,
             }, indent=2))
     except (CatalogError, WorkspaceError) as exc:

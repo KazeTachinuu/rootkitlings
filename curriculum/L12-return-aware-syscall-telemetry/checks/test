@@ -143,7 +143,6 @@ fi
 
 bash -n "$HERE/test" "$HERE/host-check"
 sh -n "$HERE/success-check" "$HERE/probe-failure-check.in"
-make -s -C "$ROOT" vm/tools/rmdir_telemetry_test
 
 sed -e 's/@EXPECTED_ERRNO@/12/g' \
 	-e 's/@LABEL@/Probe cleanup after procfs publication failure/g' \

@@ -86,7 +86,7 @@ Edit these three files:
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
@@ -94,7 +94,7 @@ The checker covers every accepted form, malformed input, exact error codes,
 partial user copies, offsets, state preservation, repeated writes, concurrent
 reads and writes, permissions, reload, and an open descriptor during unload.
 
-## Official Linux v7.2 references
+## References
 
 - [procfs declarations][ref-1]
 - [procfs callback wrappers][ref-2]

@@ -81,7 +81,7 @@ Do not linearize, pull, allocate, or write to the packet.
 
 Run:
 
-```bash
+```sh
 ./rootkitlings check
 ```
 
