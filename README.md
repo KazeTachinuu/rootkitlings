@@ -31,11 +31,6 @@ GDB, Bear, clangd, and ShellCheck are optional development tools.
 - **Unsupported:** native Windows, WSL1, macOS, and ARM64 hosts.
   Use an x86-64 Linux VM or remote host.
 
-On Windows, clone with Linux Git from the WSL terminal.
-Windows-mounted filesystems are slower and may alter executable scripts.
-QEMU on macOS is insufficient because the build also needs Linux ELF tools and
-Linux host interfaces.
-
 ## Start
 
 ```sh
