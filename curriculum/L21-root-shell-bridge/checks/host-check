@@ -1,0 +1,50 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR MODULE"
+build=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found"
+module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found"
+
+[[ -f $module && ! -L $module ]] || die "module must be a regular file"
+for relative in Kbuild core/main.c execution/root_shell.c \
+		include/root_shell.h; do
+	[[ -f $build/$relative && ! -L $build/$relative ]] ||
+		die "build is missing regular file: $relative"
+done
+
+defines()
+{
+	local object=$1 symbol=$2
+
+	nm "$object" |
+		awk -v symbol="$symbol" \
+			'$2 == "T" && $3 == symbol { found = 1 } END { exit !found }'
+}
+
+uses()
+{
+	local object=$1 symbol=$2
+
+	nm -u "$object" |
+		awk -v symbol="$symbol" \
+			'$2 == symbol { found = 1 } END { exit !found }'
+}
+
+object=$build/execution/root_shell.o
+for symbol in rk_root_shell_init rk_root_shell_request rk_root_shell_stop; do
+	defines "$object" "$symbol" || die "root shell does not define $symbol"
+done
+for symbol in sock_create_kern kernel_connect sock_alloc_file \
+		get_unused_fd_flags fd_install call_usermodehelper_setup \
+		call_usermodehelper_exec kernel_sock_shutdown kill_pgrp kill_pid \
+		cancel_delayed_work_sync cancel_work_sync; do
+	uses "$object" "$symbol" || die "root shell does not use $symbol"
+done
+for symbol in rk_root_shell_init rk_root_shell_request rk_root_shell_stop; do
+	uses "$build/core/main.o" "$symbol" ||
+		die "module lifecycle does not call $symbol"
+done
+
+printf '[+] root-shell ownership structure passed\n'

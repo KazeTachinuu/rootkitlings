@@ -1,0 +1,141 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /vm/checks/lib.sh
+
+begin "Authenticated root reverse shell"
+
+key=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+session=72623859790382856
+root=/etc/modules-load.d
+status=/proc/rootkitlings_agent
+core=/proc/rootkitlings
+work=/tmp/rootkitlings-authenticated-shell
+helper=secure_agent_fixture
+fixture_pid=
+
+cleanup()
+{
+	if test -d /sys/module/rootkitlings; then
+		rmmod rootkitlings 2>/dev/null || true
+	fi
+	if test -n "$fixture_pid"; then
+		kill "$fixture_pid" 2>/dev/null || true
+		wait "$fixture_pid" 2>/dev/null || true
+	fi
+	umount "$root" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+wait_file()
+{
+	path=$1 index=0
+	while test ! -s "$path" && test "$index" -lt 1000; do
+		sleep 0.01
+		index=$((index + 1))
+	done
+	test -s "$path"
+}
+
+wait_field()
+{
+	field=$1 minimum=$2 index=0
+	while test "$index" -lt 1000; do
+		value=$(sed -n "s/^$field=//p" "$status" 2>/dev/null)
+		if test -n "$value" && test "$value" -ge "$minimum" 2>/dev/null
+		then
+			return 0
+		fi
+		sleep 0.01
+		index=$((index + 1))
+	done
+	return 1
+}
+
+mkdir -p "$root" "$work"
+mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
+chmod 0700 "$root"
+printf 'operator-original\n' > "$root/rootkitlings.conf"
+chmod 0600 "$root/rootkitlings.conf"
+cp "$root/rootkitlings.conf" "$work/original"
+ifconfig lo 127.0.0.1 up
+
+if ! command -v "$helper" >/dev/null 2>&1; then
+	helper=$work/secure_agent_fixture
+	sed -n '/^__ROOTKITLINGS_SECURE_FIXTURE__$/,$p' /check |
+		sed '1d' | busybox base64 -d | busybox gzip -d > "$helper"
+	chmod 0755 "$helper"
+fi
+"$helper" reserve "$work/port"
+port=$(cat "$work/port")
+
+load rootkitlings.ko "peer_port=$port" retry_base_ms=20 retry_max_ms=80 \
+	"control_key=$key" "session_id=$session" shell_timeout_ms=60000
+assert_loaded rootkitlings
+assert_exists "$status"
+assert_contains "$status" "session=$session"
+assert_absent /sys/module/rootkitlings/parameters/control_key
+assert_absent /sys/module/rootkitlings/parameters/session_id
+if wait_field retries 2 && wait_field transport_errors 2; then
+	_ok "refused control connections enter bounded retry"
+else
+	_fail "retry evidence did not advance"
+fi
+
+mkdir -p "$work/server"
+"$helper" serve "$work/server" "$port" > "$work/server.log" 2>&1 &
+fixture_pid=$!
+wait_file "$work/server/ready" || _fail "secure listener did not start"
+wait_file "$work/server/replay_rejected" ||
+	_fail "replayed control request was not rejected"
+wait_file "$work/server/tamper_rejected" ||
+	_fail "tampered control request was not rejected"
+wait_file "$work/server/control_complete" ||
+	_fail "authenticated resident commands did not complete"
+wait_file "$work/server/root_shell_complete" ||
+	_fail "root shell did not return UID 0 and command output"
+wait_file "$work/server/shell_replay_rejected" ||
+	_fail "replayed shell request opened a shell"
+wait_file "$work/server/shell_tamper_rejected" ||
+	_fail "tampered shell request opened a shell"
+wait_file "$work/server/blocked_receive" ||
+	_fail "final control session did not block in receive"
+wait_file "$work/server/blocked_shell" ||
+	_fail "final root shell did not remain live"
+
+if wait_field connections 6 && wait_field commands 15 &&
+		wait_field protocol_errors 5; then
+	_ok "commands and rejected envelopes updated separate counters"
+else
+	_fail "agent counters do not match the exercised behavior"
+fi
+if test "$(sed -n 's/^marker=//p' "$status")" = alpha_7; then
+	_ok "authenticated MARK stored its bounded label"
+else
+	_fail "MARK state is wrong"
+fi
+
+unload rootkitlings
+if wait_file "$work/server/eof"; then
+	_ok "unload cancelled blocked control and shell sockets"
+else
+	_fail "unload left a blocked socket"
+fi
+wait "$fixture_pid" || _fail "secure peer fixture failed"
+fixture_pid=
+assert_absent "$status"
+assert_absent "$core"
+assert_absent /proc/rootkitlings_events
+assert_absent /proc/rootkitlings_evidence
+if cmp -s "$work/original" "$root/rootkitlings.conf" &&
+		test ! -e "$root/.rootkitlings.conf.rootkitlings"; then
+	_ok "unload restored the guarded boot request"
+else
+	_fail "unload left a boot-request edit"
+fi
+if dmesg | grep -Eqi '(BUG:|WARNING:|Oops:|KASAN:|UBSAN:|hung task)'
+then
+	_fail "kernel log contains a fault report"
+else
+	_ok "kernel log is clean"
+fi
+summary

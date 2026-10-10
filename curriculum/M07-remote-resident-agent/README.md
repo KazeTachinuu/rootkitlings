@@ -1,16 +1,21 @@
-# Call home and request loading at boot
+# Call home and stage a reversible load request
 
 The resident module can run and conceal one worker, but the operator still needs
 a local procfs write.
-Give it a bounded call-home channel and a reversible request to load at the next
-boot.
+Give it a bounded call-home channel and stage one reversible `modules-load.d`
+request in the disposable guest.
+
+This exercise proves the request's exact bytes, guarded replacement, and
+rollback on failure or unload.
+It does not install the module, update module dependencies, reboot the guest, or
+prove that a later boot loads anything.
 
 This project adds two behaviors:
 
 - call one control point, exchange a small command, and reconnect if the point
   is unavailable;
-- replace one `modules-load.d` request without destroying a file owned by
-  someone else.
+- stage one `modules-load.d` request without destroying a file owned by someone
+  else.
 
 The control point is a loopback listener in the disposable guest.
 C00 later protects this channel with authenticated encryption.
@@ -48,7 +53,7 @@ Under the publication lock, stop sets its gate and shuts down an active socket.
 It then wakes retry and joins; the worker performs the matching
 `sock_release()`.
 
-## Leave a reversible boot request
+## Stage a reversible load request
 
 The request file contains exactly:
 
@@ -62,8 +67,9 @@ restores only while both names still match retained identity, metadata, and
 bytes.
 Foreign change suppresses rollback.
 
-This requests a later boot; it neither installs the module nor updates
-dependencies or proves reboot loading.
+`modules-load.d` is only a request consumed by boot tooling.
+The course VM has no persistent guest disk, and this checker performs one boot.
+The transaction therefore proves safe staging and rollback, not persistence.
 
 ## Your task
 
@@ -81,7 +87,7 @@ In `Kbuild`, add the supplied components to the cumulative module.
 In `network/agent.c`, implement the worker, retry policy, fixed command
 dispatch, socket ownership, stop, and snapshot functions declared in
 `include/agent.h`.
-In `core/main.c`, add the agent and boot request to one acquisition and
+In `core/main.c`, add the agent and load request to one acquisition and
 reverse-release graph.
 
 The added resources are acquired after the inherited process-view hooks.
@@ -98,7 +104,7 @@ Run:
 ```
 
 The checker covers commands, retry after refusal, two sessions, blocked-receive
-unload, inherited behavior, the exact boot request and rollback, and guest logs.
+unload, inherited behavior, the exact load request and rollback, and guest logs.
 
 ## References
 

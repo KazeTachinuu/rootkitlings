@@ -1,5 +1,5 @@
 schema_version = 2
-revision = "2026.10-project-route"
+revision = "2026.10-root-shell-route"
 default_module_artifact = "rootkitlings.ko"
 exercise_roots = ["curriculum"]
 
@@ -31,14 +31,14 @@ required_route = [
   "writable-packet-mutation",
   "kernel-socket-ownership",
   "tcp-framing-cancellation",
-  "bounded-dns-wire-name",
+  "root-shell-bridge",
   "guarded-file-transaction",
   "remote-resident-agent",
   "protection-property-selection",
   "sha256-verification",
   "authenticated-replay-safe-message",
   "authenticated-encryption",
-  "authenticated-dns-signal",
+  "authenticated-reverse-shell",
   "complete-rootkit",
 ]
 
@@ -219,10 +219,6 @@ concept = "transport-endpoint-basics"
 competency = "Recognize addresses, ports, stream sockets, and datagram sockets."
 
 [[assumptions]]
-concept = "dns-name-basics"
-competency = "Recognize a DNS name as labels terminated by the root label."
-
-[[assumptions]]
 concept = "linux-file-permission-basics"
 competency = "Understand paths, ownership, permission bits, and file descriptors."
 
@@ -279,12 +275,12 @@ id = "atomic-operations"
 label = "Atomic operations"
 
 [[concepts]]
-id = "authenticated-dns-signals"
-label = "Authenticated DNS signals"
-
-[[concepts]]
 id = "authenticated-encryption"
 label = "Authenticated encryption"
+
+[[concepts]]
+id = "authenticated-reverse-shell"
+label = "Authenticated reverse shell"
 
 [[concepts]]
 id = "authorization-vs-authentication"
@@ -303,8 +299,12 @@ id = "blocked-io-cancellation"
 label = "Blocked I/O cancellation"
 
 [[concepts]]
-id = "boot-load-persistence"
-label = "Boot-time module persistence"
+id = "boot-load-request"
+label = "Reversible boot-load request"
+
+[[concepts]]
+id = "bounded-child-lifecycle"
+label = "Bounded child lifecycle"
 
 [[concepts]]
 id = "bounded-event-admission"
@@ -389,14 +389,6 @@ label = "Deferred work lifecycle"
 [[concepts]]
 id = "directory-cookie-preservation"
 label = "Directory cookie preservation"
-
-[[concepts]]
-id = "dns-name-basics"
-label = "DNS name basics"
-
-[[concepts]]
-id = "dns-wire-encoding"
-label = "DNS wire encoding"
 
 [[concepts]]
 id = "errno-propagation"
@@ -615,10 +607,6 @@ id = "packet-redirection"
 label = "Packet redirection"
 
 [[concepts]]
-id = "paired-network-detection"
-label = "Paired network detection"
-
-[[concepts]]
 id = "partial-stream-io"
 label = "Partial stream I/O"
 
@@ -683,6 +671,10 @@ id = "resource-ownership"
 label = "Resource ownership"
 
 [[concepts]]
+id = "root-shell-execution"
+label = "Root shell execution"
+
+[[concepts]]
 id = "return-correlation"
 label = "Return correlation"
 
@@ -713,6 +705,10 @@ label = "Safe sk_buff access"
 [[concepts]]
 id = "socket-lifecycle"
 label = "Socket lifecycle"
+
+[[concepts]]
+id = "socket-file-bridge"
+label = "Socket file-descriptor bridge"
 
 [[concepts]]
 id = "spinlocked-event-ring"
@@ -753,6 +749,10 @@ label = "Transport endpoint basics"
 [[concepts]]
 id = "udp-datagram-boundaries"
 label = "UDP datagram boundaries"
+
+[[concepts]]
+id = "usermode-helper"
+label = "User-mode helper execution"
 
 [[concepts]]
 id = "wait-queues"

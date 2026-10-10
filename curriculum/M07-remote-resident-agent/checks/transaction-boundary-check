@@ -2,7 +2,7 @@
 # shellcheck source=/dev/null
 . /vm/checks/lib.sh
 
-begin "Boot-request transaction boundaries"
+begin "Reversible load-request transaction"
 
 root=/etc/modules-load.d
 target=$root/rootkitlings.conf

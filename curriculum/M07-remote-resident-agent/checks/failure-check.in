@@ -40,7 +40,10 @@ attempt=1
 while test "$attempt" -le 2; do
 	parameters="peer_port=47023 retry_base_ms=20 retry_max_ms=80"
 	if test "$mode" = complete-rootkit; then
-		parameters="$parameters session_id=72623859790382856 signal_id=4660"
+		key=000102030405060708090a0b0c0d0e0f
+		key=${key}101112131415161718191a1b1c1d1e1f
+		parameters="$parameters control_key=$key"
+		parameters="$parameters session_id=72623859790382856"
 	fi
 	if module_load_params /rootkitlings/rootkitlings.ko "$expected_errno" \
 			"$parameters"; then
@@ -53,9 +56,15 @@ while test "$attempt" -le 2; do
 	assert_absent /proc/rootkitlings_events
 	assert_absent /proc/rootkitlings_evidence
 	assert_absent /proc/rootkitlings_agent
-	if test "$(grep -c '__x64_sys_rmdir' /sys/kernel/debug/kprobes/list || true)" = "$rmdir_before" &&
-	   test "$(grep -c 'filldir64' /sys/kernel/debug/kprobes/list || true)" = "$filldir_before" &&
-	   test "$(grep -c 'iterate_dir' /sys/kernel/debug/kprobes/list || true)" = "$iterate_before"; then
+	rmdir_after=$(grep -c '__x64_sys_rmdir' \
+		/sys/kernel/debug/kprobes/list || true)
+	filldir_after=$(grep -c 'filldir64' \
+		/sys/kernel/debug/kprobes/list || true)
+	iterate_after=$(grep -c 'iterate_dir' \
+		/sys/kernel/debug/kprobes/list || true)
+	if test "$rmdir_after" = "$rmdir_before" &&
+	   test "$filldir_after" = "$filldir_before" &&
+	   test "$iterate_after" = "$iterate_before"; then
 		_ok "attempt $attempt restores every probe count"
 	else
 		_fail "attempt $attempt left a probe registered"
@@ -63,7 +72,9 @@ while test "$attempt" -le 2; do
 	workers=0
 	for comm in /proc/[0-9]*/comm; do
 		test -r "$comm" || continue
-		case $(cat "$comm") in rkling_core|rkling_agent) workers=$((workers + 1)) ;; esac
+		case $(cat "$comm") in
+			rkling_core|rkling_agent) workers=$((workers + 1)) ;;
+		esac
 	done
 	if test "$workers" -eq 0; then
 		_ok "attempt $attempt leaves no worker"
@@ -71,9 +82,9 @@ while test "$attempt" -le 2; do
 		_fail "attempt $attempt left $workers workers"
 	fi
 	if cmp -s "$original" "$target" && test ! -e "$sibling"; then
-		_ok "attempt $attempt restores the boot request names and bytes"
+		_ok "attempt $attempt restores the load-request names and bytes"
 	else
-		_fail "attempt $attempt left a boot-request edit"
+		_fail "attempt $attempt left a load-request edit"
 	fi
 	attempt=$((attempt + 1))
 done

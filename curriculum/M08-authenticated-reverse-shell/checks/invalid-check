@@ -1,0 +1,71 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /vm/checks/lib.sh
+
+begin "Private control provisioning"
+
+key=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+zero=0000000000000000000000000000000000000000000000000000000000000000
+root=/etc/modules-load.d
+status=/proc/rootkitlings_agent
+
+cleanup()
+{
+	if test -d /sys/module/rootkitlings; then
+		rmmod rootkitlings 2>/dev/null || true
+	fi
+	umount "$root" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+expect_rejected()
+{
+	label=$1
+	shift
+	if insmod /module/rootkitlings.ko peer_port=47023 "$@" 2>/dev/null; then
+		_fail "$label was accepted"
+		rmmod rootkitlings 2>/dev/null || true
+	else
+		_ok "$label is rejected"
+	fi
+}
+
+expect_rejected "missing key"
+expect_rejected "short key" control_key=0011
+expect_rejected "nonhex key" \
+	control_key=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1g
+expect_rejected "all-zero key" "control_key=$zero"
+
+mkdir -p "$root"
+mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
+chmod 0700 "$root"
+printf 'operator-original\n' > "$root/rootkitlings.conf"
+chmod 0600 "$root/rootkitlings.conf"
+ifconfig lo 127.0.0.1 up
+
+load rootkitlings.ko peer_port=47023 retry_base_ms=5000 \
+	retry_max_ms=5000 "control_key=$key"
+first=$(sed -n 's/^session=//p' "$status")
+case $first in ''|0|*[!0-9]*) _fail "random session is invalid" ;; esac
+assert_absent /sys/module/rootkitlings/parameters/control_key
+assert_absent /sys/module/rootkitlings/parameters/session_id
+unload rootkitlings
+
+load rootkitlings.ko peer_port=47023 retry_base_ms=5000 \
+	retry_max_ms=5000 "control_key=$key"
+second=$(sed -n 's/^session=//p' "$status")
+case $second in ''|0|*[!0-9]*) _fail "second random session is invalid" ;; esac
+if test "$first" != "$second"; then
+	_ok "default loads use fresh nonzero sessions"
+else
+	_fail "two default loads reused one session"
+fi
+unload rootkitlings
+
+if dmesg | grep -Eqi '(BUG:|WARNING:|Oops:|KASAN:|UBSAN:|hung task)'
+then
+	_fail "kernel log contains a fault report"
+else
+	_ok "rejected and accepted loads left a clean kernel log"
+fi
+summary

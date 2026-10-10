@@ -18,16 +18,14 @@ tradecraft = [
 difficulty = "challenge"
 prerequisites = [
   "writable-packet-mutation",
-  "remote-resident-agent",
-  "authenticated-encryption",
-  "authenticated-dns-signal",
+  "authenticated-reverse-shell",
 ]
 teaches = ["complete-rootkit-integration"]
 requires = [
   "resident-core-integration",
   "authorized-telemetry-integration",
   "namespace-aware-process-view-filtering",
-  "boot-load-persistence",
+  "boot-load-request",
   "remote-agent-integration",
   "packet-redirection",
   "packet-copy-on-write",
@@ -35,7 +33,7 @@ requires = [
   "authenticated-encryption",
   "replay-resistant-state",
   "sensitive-state-zeroization",
-  "authenticated-dns-signals",
+  "authenticated-reverse-shell",
   "machine-readable-evidence-map",
 ]
 
@@ -50,29 +48,24 @@ files = [
   "core/state.c",
   "crypto/aead.c",
   "crypto/aead_platform.c",
-  "crypto/auth_platform.c",
   "execution/scheduler.c",
+  "execution/root_shell.c",
   "execution/worker.c",
   "include/aead.h",
   "include/aead_platform.h",
   "include/agent.h",
   "include/agent_status.h",
-  "include/authenticated.h",
-  "include/authenticated_dns.h",
-  "include/auth_platform.h",
   "include/dirent_filter.h",
-  "include/dns_query.h",
   "include/framing.h",
   "include/ipv4_parser.h",
   "include/packet_redirect.h",
   "include/platform.h",
   "include/protocol.h",
   "include/rootkit.h",
+  "include/root_shell.h",
   "include/skb_access.h",
   "include/secure_control.h",
-  "include/status_signal.h",
   "include/transaction.h",
-  "include/transport.h",
   "include/udp_classifier.h",
   "include/udp_redirect.h",
   "include/writable.h",
@@ -84,7 +77,6 @@ files = [
   "interface/agent_status.c",
   "interface/evidence.c",
   "interface/proc.c",
-  "message/authenticated.c",
   "mutation/udp_redirect.c",
   "mutation/writable.c",
   "network/agent.c",
@@ -95,29 +87,31 @@ files = [
   "persistence/transaction.c",
   "privilege/credentials.c",
   "security/control.c",
-  "signal/authenticated_dns.c",
-  "signal/status.c",
-  "transport/udp.c",
-  "wire/dns_query.c",
+  "security/clear.c",
 ]
 editable = [
   "Kbuild",
   "core/main.c",
-  "include/agent.h",
-  "include/framing.h",
-  "include/protocol.h",
-  "network/agent.c",
-  "network/protocol.c",
-  "security/control.c",
 ]
 build = "."
 baseline = "parent"
-parent = "remote-resident-agent"
-additions = "curriculum/C00-complete-rootkit/starter"
-imports = [
-  { exercise = "authenticated-dns-signal", files = ["crypto/auth_platform.c", "include/authenticated.h", "include/authenticated_dns.h", "include/auth_platform.h", "include/dns_query.h", "include/transport.h", "message/authenticated.c", "signal/authenticated_dns.c", "transport/udp.c", "wire/dns_query.c"] },
-  { exercise = "authenticated-encryption", files = ["crypto/aead.c", "crypto/aead_platform.c", "include/aead.h", "include/aead_platform.h"] },
-  { exercise = "writable-packet-mutation", files = ["access/skb_access.c", "classifier/udp.c", "include/ipv4_parser.h", "include/packet_redirect.h", "include/skb_access.h", "include/udp_classifier.h", "include/udp_redirect.h", "include/writable.h", "instrumentation/netfilter_observer.c", "mutation/udp_redirect.c", "mutation/writable.c", "parser/ipv4.c"] },
+parent = "authenticated-reverse-shell"
+
+[[workspace.imports]]
+exercise = "writable-packet-mutation"
+files = [
+  "access/skb_access.c",
+  "classifier/udp.c",
+  "include/ipv4_parser.h",
+  "include/packet_redirect.h",
+  "include/skb_access.h",
+  "include/udp_classifier.h",
+  "include/udp_redirect.h",
+  "include/writable.h",
+  "instrumentation/netfilter_observer.c",
+  "mutation/udp_redirect.c",
+  "mutation/writable.c",
+  "parser/ipv4.c",
 ]
 
 [resources]
@@ -285,21 +279,13 @@ check_arguments = ["12", "Agent status publication", "complete-rootkit"]
 ROOTKITLINGS_FAIL_POINT = "13"
 
 [[verification.cases]]
-id = "status-signal-rollback"
-label = "Status-signal failure rolls back the complete module"
-expect_build = "pass"
-check = "curriculum/C00-complete-rootkit/checks/signal-failure-check"
-[verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "14"
-
-[[verification.cases]]
 id = "packet-redirect-registration-rejection"
 label = "Packet redirect registration rejection"
 expect_build = "pass"
 check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["4", "Packet redirect registration", "complete-rootkit"]
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "15"
+ROOTKITLINGS_FAIL_POINT = "14"
 
 [[verification.cases]]
 id = "unknown-failure-point"

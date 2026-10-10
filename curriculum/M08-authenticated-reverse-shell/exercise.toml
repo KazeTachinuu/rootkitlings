@@ -1,0 +1,130 @@
+schema_version = 2
+id = "authenticated-reverse-shell"
+title = "Open a root reverse shell"
+stage = "authenticated-operations"
+kind = "milestone"
+tradecraft = [
+  "control",
+  "execution",
+  "privilege",
+  "networking",
+  "cryptography",
+  "lifecycle",
+]
+difficulty = "advanced"
+prerequisites = [
+  "remote-resident-agent",
+  "root-shell-bridge",
+  "authenticated-replay-safe-message",
+  "authenticated-encryption",
+]
+teaches = ["authenticated-reverse-shell"]
+requires = [
+  "connect-back-agent",
+  "replay-resistant-state",
+  "authenticated-encryption",
+  "root-shell-execution",
+  "sensitive-state-zeroization",
+]
+
+[workspace]
+mode = "cumulative"
+files = [
+  "Kbuild",
+  "core/main.c",
+  "core/state.c",
+  "include/rootkit.h",
+  "interface/proc.c",
+  "execution/worker.c",
+  "execution/scheduler.c",
+  "execution/root_shell.c",
+  "control/authorization.c",
+  "privilege/credentials.c",
+  "instrumentation/events.c",
+  "instrumentation/return_probe.c",
+  "include/dirent_filter.h",
+  "instrumentation/dirent_filter.c",
+  "instrumentation/getdents_probe.c",
+  "interface/evidence.c",
+  "include/aead.h",
+  "include/aead_platform.h",
+  "include/agent.h",
+  "include/agent_status.h",
+  "include/framing.h",
+  "include/platform.h",
+  "include/protocol.h",
+  "include/root_shell.h",
+  "include/secure_control.h",
+  "include/transaction.h",
+  "crypto/aead.c",
+  "crypto/aead_platform.c",
+  "interface/agent_status.c",
+  "network/agent.c",
+  "network/framing.c",
+  "network/protocol.c",
+  "persistence/platform.c",
+  "persistence/transaction.c",
+  "security/control.c",
+  "security/clear.c",
+]
+editable = [
+  "Kbuild",
+  "core/main.c",
+  "include/agent.h",
+  "include/protocol.h",
+  "interface/agent_status.c",
+  "network/agent.c",
+  "network/protocol.c",
+  "security/control.c",
+]
+build = "."
+baseline = "parent"
+parent = "remote-resident-agent"
+additions = "curriculum/M08-authenticated-reverse-shell/starter"
+
+[[workspace.imports]]
+exercise = "root-shell-bridge"
+files = ["include/root_shell.h", "execution/root_shell.c"]
+
+[[workspace.imports]]
+exercise = "authenticated-encryption"
+files = [
+  "include/aead.h",
+  "include/aead_platform.h",
+  "crypto/aead.c",
+  "crypto/aead_platform.c",
+]
+
+[resources]
+readme = "curriculum/M08-authenticated-reverse-shell/README.md"
+host_check = "curriculum/M08-authenticated-reverse-shell/checks/host-check"
+hint = "curriculum/M08-authenticated-reverse-shell/hint"
+solution = "curriculum/M08-authenticated-reverse-shell/solution"
+
+[verification]
+timeout_seconds = 360
+tools = ["secure-agent-fixture", "module-load-params"]
+
+[[verification.cases]]
+id = "authenticated-shell"
+label = "Authenticated root reverse shell"
+expect_build = "pass"
+check = "curriculum/M08-authenticated-reverse-shell/checks/success-check"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "control-provisioning"
+label = "Private control provisioning"
+expect_build = "pass"
+check = "curriculum/M08-authenticated-reverse-shell/checks/invalid-check"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "99"

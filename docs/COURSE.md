@@ -7,22 +7,39 @@ The required route contains 26 lessons, nine milestones, and one final project.
 ## Dependency spine
 
 ```text
-L00-L07 -> M00 resident core
-              |
-              +-> L08-L10 -> M01 one-use operator key
-              |                 `-> L11-L12 -> M02 activity recorder
-              |                                   `-> L13-L15 -> M03 blind spot
-              |
-              `-> L16-L19 -> M04 packet switchboard
+L00 -> L01 -> L02 -> L03 -> L04 -> L05
+L05 -> L06
+L05 -> L07
+L06 + L07 -> M00 resident core
 
+L04 -> L08 -> L09
+L05 + L09 -> L10 -> M01 one-use operator key
+L05 -> L11 -> L12
+L11 -> L13
+M00 + M01 + L12 -> M02 activity recorder
+L12 + L13 -> L14
+L12 + L13 -> L15
+M02 + L14 -> M03 concealment evidence map
+
+L16 -> L17
+L07 -> L18
+L17 + L18 -> L19 -> M04 packet redirector
+
+L03 -> L20
 L07 + L20 -> M05 stoppable call-home session
-L03 -> M06 reversible file swap
-M03 + M05 + M06 -> M07 call-home station
-L22 -> L23 -> L24 authenticated message
-         `-> L25 authenticated encryption
-L13 + L20 + L21 + L24 -> M08 authenticated status flare
-M04 + M07 + L25 + M08 -> C00 complete rootkit
+L06 + L09 + L20 -> L21 bounded root-shell bridge
+L03 -> M06 guarded file transaction
+M03 + M05 + M06 -> M07 call-home agent and reversible load request
+
+L02 + L22 -> L23
+M01 + L23 -> L24 replay-safe authenticated message
+L23 -> L25 authenticated encryption
+M07 + L21 + L25 -> M08 root reverse shell with authenticated trigger
+
+M04 + M08 -> C00 complete rootkit
 ```
+
+`+` means that every listed exercise is a direct prerequisite.
 
 Each lesson isolates a reusable mechanism.
 Each milestone turns nearby mechanisms into a visible result.
@@ -87,6 +104,9 @@ The host kernel and headers are outside the build contract.
 KVM is optional.
 The guest has no persistent disk, host mount, or network unless a check requests
 that capability.
+
+M07 writes and rolls back a guarded module-load request.
+It does not reboot the guest or claim that the module survives a reboot.
 
 Kernel-version-sensitive API choices and primary references are documented in
 the README for the lesson that uses them.

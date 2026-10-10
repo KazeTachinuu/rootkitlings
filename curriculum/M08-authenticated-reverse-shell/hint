@@ -1,0 +1,13 @@
+Start at the boundary: no command parser sees bytes until
+`rk_secure_open_request()` succeeds.
+
+Keep one secure channel inside the agent.
+Start it before the worker and stop it after the worker joins.
+The frame remains transport; the secure envelope is its payload.
+
+For `SHELL port`, parse into a temporary command, require the action gate, and
+delegate only admission to `rk_root_shell_request()`.
+The imported component owns the shell lifetime.
+
+On unload, close and join the control agent first.
+Then stop the root shell.

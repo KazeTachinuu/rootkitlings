@@ -1,0 +1,123 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../scripts/lesson-env"
+ROOT=$ROOTKITLINGS_ROOT
+scratch=$(mktemp -d \
+	"${TMPDIR:-/tmp}/rootkitlings-authenticated-shell.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+[[ $(uname -m) == x86_64 ]] || {
+	printf '[x] authenticated shell requires x86_64\n' >&2
+	exit 1
+}
+for option in CC_IS_GCC CRYPTO_GCM CRYPTO_AES KPROBES KRETPROBES \
+		KRETPROBE_ON_RETHOOK KPROBES_ON_FTRACE KALLSYMS KALLSYMS_ALL \
+		DEBUG_FS MODULES MODULE_UNLOAD MULTIUSER USER_NS PID_NS NET \
+		NET_NS INET PROC_FS; do
+	grep -Eq "^CONFIG_$option=[ym]$" "$KDIR/.config" || {
+		printf '[x] milestone requires CONFIG_%s\n' "$option" >&2
+		exit 1
+	}
+done
+for command in base64 gcc gzip make nm; do
+	command -v "$command" >/dev/null || {
+		printf '[x] %s is required\n' "$command" >&2
+		exit 1
+	}
+done
+for script in test host-check success-check invalid-check; do
+	bash -n "$HERE/$script"
+done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
+	shellcheck -x -s sh "$HERE/success-check" \
+		"$HERE/invalid-check"
+fi
+
+materialize()
+{
+	local tree=$1 destination=$2
+	"$ROOT/scripts/catalog" materialize "$tree" M08 "${destination%/*}" \
+		--name "${destination##*/}" >/dev/null
+}
+
+materialize starter "$scratch/starter"
+make -s -C "$KDIR" M="$scratch/starter" W=1 modules \
+	> "$scratch/starter.log" 2>&1
+if "$HERE/host-check" "$scratch/starter" \
+		"$scratch/starter/rootkitlings.ko" \
+		> "$scratch/starter-host.log" 2>&1; then
+	printf '[x] host checker accepted unfinished secure control\n' >&2
+	exit 1
+fi
+
+materialize solution "$scratch/solution"
+make -s -C "$KDIR" M="$scratch/solution" W=1 modules \
+	> "$scratch/solution.log" 2>&1
+if grep -q 'warning:' "$scratch/solution.log"; then
+	cat "$scratch/solution.log" >&2
+	exit 1
+fi
+"$HERE/host-check" "$scratch/solution" \
+	"$scratch/solution/rootkitlings.ko"
+
+mutant()
+{
+	local name=$1 edit=$2 directory=$scratch/mutant-$1
+	materialize solution "$directory"
+	perl -0pi -e "$edit" "$directory/security/control.c"
+	cmp -s "$HERE/../solution/security/control.c" \
+		"$directory/security/control.c" && {
+		printf '[x] mutant edit did not apply: %s\n' "$name" >&2
+		exit 1
+	}
+	make -s -C "$KDIR" M="$directory" W=1 modules \
+		> "$directory.log" 2>&1 || {
+		cat "$directory.log" >&2
+		exit 1
+	}
+	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+			> "$scratch/$name-host.log" 2>&1; then
+		printf '[x] host checker accepted mutant: %s\n' "$name" >&2
+		exit 1
+	fi
+}
+
+mutant same-direction-nonce 's/ \| \(kind == RK_SECURE_REPLY\)//'
+mutant no-request-advance \
+	's/channel->next_request = sequence \+ 1;/channel->next_request = sequence;/'
+
+gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
+	-o "$scratch/secure_agent_fixture" \
+	"$ROOT/vm/tools/secure_agent_fixture.c"
+mkdir -p "$scratch/checks"
+
+run_guest()
+{
+	local check=$1 module=$2 label=$3 output
+	shift 3
+	if ! output=$("$ROOT/vm/boot" --check "$check" "$@" \
+			"$module" 2>&1); then
+		printf '%s\n[x] guest rejected %s\n' "$output" "$label" >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+}
+
+cp "$HERE/success-check" "$scratch/checks/success-check"
+printf '\n__ROOTKITLINGS_SECURE_FIXTURE__\n' \
+	>> "$scratch/checks/success-check"
+gzip -c "$scratch/secure_agent_fixture" | base64 -w 76 \
+	>> "$scratch/checks/success-check"
+chmod 0755 "$scratch/checks/success-check"
+run_guest "$scratch/checks/success-check" \
+	"$scratch/solution/rootkitlings.ko" solution
+
+run_guest "$HERE/invalid-check" \
+	"$scratch/solution/rootkitlings.ko" control-provisioning \
+	--tool vm/tools/module_load_params
+
+printf '[+] authenticated root reverse shell passed\n'

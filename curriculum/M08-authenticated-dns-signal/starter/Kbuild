@@ -1,6 +1,0 @@
-obj-m += rootkitlings.o
-rootkitlings-y := core/main.o crypto/auth_platform.o message/authenticated.o \
-	signal/authenticated_dns.o transport/udp.o wire/dns_query.o tests/selftest.o
-ROOTKITLINGS_FAIL_POINT ?= 0
-ccflags-y += -I$(src)/include
-ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)

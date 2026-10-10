@@ -1,0 +1,29 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /vm/checks/lib.sh
+
+begin "Root shell configuration"
+
+if insmod /rootkitlings/rootkitlings.ko shell_port=0 \
+		shell_timeout_ms=1000 2>/dev/null; then
+	_fail "zero port loaded"
+	rmmod rootkitlings 2>/dev/null || true
+else
+	_ok "zero port was rejected"
+fi
+if insmod /rootkitlings/rootkitlings.ko shell_port=46126 \
+		shell_timeout_ms=0 2>/dev/null; then
+	_fail "zero timeout loaded"
+	rmmod rootkitlings 2>/dev/null || true
+else
+	_ok "zero timeout was rejected"
+fi
+if insmod /rootkitlings/rootkitlings.ko shell_port=46126 \
+		shell_timeout_ms=300001 2>/dev/null; then
+	_fail "oversized timeout loaded"
+	rmmod rootkitlings 2>/dev/null || true
+else
+	_ok "oversized timeout was rejected"
+fi
+assert_absent /sys/module/rootkitlings
+summary

@@ -2,7 +2,7 @@
 # shellcheck source=/dev/null
 . /vm/checks/lib.sh
 
-begin "Foreign boot-request state is preserved"
+begin "Foreign load-request state is preserved"
 
 root=/etc/modules-load.d
 target=$root/rootkitlings.conf

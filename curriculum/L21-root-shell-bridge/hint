@@ -1,0 +1,13 @@
+Keep ownership in one direction.
+
+The worker owns the socket until `sock_alloc_file()` succeeds.
+After that, the file owns the socket and cleanup must use `fput()`, not
+`sock_release()`.
+
+Publish borrowed pointers only under the mutex.
+Timeout and stop may shut them down or signal them, but the worker performs the
+matching release.
+
+The helper setup callback runs in the future userspace process.
+Reserve exact descriptors 0, 1, and 2, take one file reference for each, then
+publish a referenced PID only after all three descriptors are installed.

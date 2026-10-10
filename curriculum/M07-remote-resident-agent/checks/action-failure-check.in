@@ -40,8 +40,10 @@ fi
 attempt=1
 while test "$attempt" -le 2; do
 	if test "$mode" = complete-rootkit; then
+		key=000102030405060708090a0b0c0d0e0f
+		key=${key}101112131415161718191a1b1c1d1e1f
 		load rootkitlings.ko peer_port=47023 retry_base_ms=200 retry_max_ms=200 \
-			session_id=72623859790382856 signal_id=4660
+			"control_key=$key" session_id=72623859790382856
 	else
 		load rootkitlings.ko peer_port=47023 retry_base_ms=200 retry_max_ms=200
 	fi
@@ -74,9 +76,9 @@ while test "$attempt" -le 2; do
 	fi
 	unload rootkitlings
 	if cmp -s "$original" "$target" && test ! -e "$sibling"; then
-		_ok "attempt $attempt restores the boot request"
+		_ok "attempt $attempt restores the load request"
 	else
-		_fail "attempt $attempt left a boot-request edit"
+		_fail "attempt $attempt left a load-request edit"
 	fi
 	attempt=$((attempt + 1))
 done

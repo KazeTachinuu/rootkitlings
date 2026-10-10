@@ -62,10 +62,11 @@ Run `./rootkitlings help` for the complete command list.
 - **L11–L12, M02:** syscall probes and an activity recorder.
 - **L13–L15, M03:** bounded view filters and independent evidence.
 - **L16–L19, M04:** packet parsing, observation, and redirection.
-- **L20, M05, L21:** sockets, framed sessions, and DNS names.
-- **M06–M07:** a reversible file swap and call-home control.
-- **L22–L25, M08:** authentication, replay defense, encryption, and signaling.
-- **C00:** integrate the course subsystems into one complete rootkit.
+- **L20, M05, L21:** sockets, framed sessions, and a bounded root shell.
+- **M06–M07:** a reversible load request and call-home agent.
+- **L22–L25:** authentication, replay defense, and encryption.
+- **M08:** open the root shell through the authenticated control channel.
+- **C00:** combine the resident agent, shell, and packet redirector.
 
 Lessons isolate mechanisms.
 Milestones turn them into a small tool or a visible system behavior.

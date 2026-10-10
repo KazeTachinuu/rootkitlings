@@ -193,9 +193,9 @@ fi
 if test "$(cat "$target")" = rootkitlings &&
 		test "$(wc -c < "$target")" -eq 13 &&
 		cmp -s "$fixtures/original" "$sibling"; then
-	_ok "the exact modules-load request replaced the retained original"
+	_ok "the exact load request replaced the retained original"
 else
-	_fail "the modules-load transaction has the wrong names or bytes"
+	_fail "the load-request transaction has the wrong names or bytes"
 fi
 if grep -Fxq 'boot_request_state=applied' "$status" &&
 		grep -Fxq 'boot_request_exchanged=1' "$status"; then
@@ -217,7 +217,7 @@ assert_absent "$status"
 if cmp -s "$fixtures/original" "$target" && test ! -e "$sibling"; then
 	_ok "unload restored the original request and removed its candidate"
 else
-	_fail "unload did not restore the boot request transaction"
+	_fail "unload did not restore the load-request transaction"
 fi
 assert_no_workers "blocked-receive unload"
 
