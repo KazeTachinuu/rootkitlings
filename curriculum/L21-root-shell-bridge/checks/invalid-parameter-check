@@ -4,26 +4,25 @@
 
 begin "Root shell configuration"
 
-if insmod /rootkitlings/rootkitlings.ko shell_port=0 \
-		shell_timeout_ms=1000 2>/dev/null; then
-	_fail "zero port loaded"
-	rmmod rootkitlings 2>/dev/null || true
-else
-	_ok "zero port was rejected"
-fi
-if insmod /rootkitlings/rootkitlings.ko shell_port=46126 \
-		shell_timeout_ms=0 2>/dev/null; then
-	_fail "zero timeout loaded"
-	rmmod rootkitlings 2>/dev/null || true
-else
-	_ok "zero timeout was rejected"
-fi
-if insmod /rootkitlings/rootkitlings.ko shell_port=46126 \
-		shell_timeout_ms=300001 2>/dev/null; then
-	_fail "oversized timeout loaded"
-	rmmod rootkitlings 2>/dev/null || true
-else
-	_ok "oversized timeout was rejected"
-fi
+module=/rootkitlings/rootkitlings.ko
+
+expect_einval()
+{
+	label=$1 parameters=$2
+	if load_errno "$module" 22 "$parameters"; then
+		_ok "$label returns EINVAL"
+	else
+		_fail "$label returned the wrong result"
+	fi
+	assert_absent /sys/module/rootkitlings
+}
+
+assert_exists "$module"
+expect_einval "invalid peer address" \
+	"peer_address=not-an-ip shell_port=46126 shell_timeout_ms=1000"
+expect_einval "zero port" "shell_port=0 shell_timeout_ms=1000"
+expect_einval "zero timeout" "shell_port=46126 shell_timeout_ms=0"
+expect_einval "oversized timeout" \
+	"shell_port=46126 shell_timeout_ms=300001"
 assert_absent /sys/module/rootkitlings
 summary

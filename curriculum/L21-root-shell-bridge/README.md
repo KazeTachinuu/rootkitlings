@@ -1,4 +1,4 @@
-# Hand a loopback socket to a root shell
+# Hand a TCP socket to a root shell
 
 A kernel thread cannot become an interactive userspace shell.
 It has no userspace address space, executable image, or file-descriptor table.
@@ -6,12 +6,12 @@ It has no userspace address space, executable image, or file-descriptor table.
 Build the boundary instead:
 
 ```text
-loopback listener <-> kernel TCP socket <-> stdin, stdout, stderr <-> /bin/sh
+peer listener <-> kernel TCP socket <-> stdin, stdout, stderr <-> /bin/sh
 ```
 
-The module connects only to `127.0.0.1` in the disposable guest.
-It starts one shell, stops it after a fixed timeout, and leaves no socket,
-process, work item, or reference behind on unload.
+The supplied module parses `peer_address=` as IPv4 and defaults to `127.0.0.1`.
+It starts one shell at a time, stops it after a fixed timeout, and leaves no
+socket, process, work item, or reference behind on unload.
 
 ## The handoff
 
@@ -33,8 +33,22 @@ The helper starts a new session before the final shell:
 ```
 
 The process keeps the same PID and becomes its process-group leader.
-That lets timeout and unload terminate the shell and commands it started.
+Timeout and unload signal that leader and its current process group.
+A descendant that deliberately creates another session or process group is
+outside this exercise's cleanup boundary.
 No learner-controlled text reaches `sh -c`.
+
+Before the handoff, send this exact prelude on the socket:
+
+```text
+RKSH <8-hex request id> <16-hex cookie>\n
+```
+
+Generate a fresh nonzero cookie for every accepted request.
+The peer compares the prelude with the ticket returned by
+`rk_root_shell_request()` before it trusts the raw shell stream.
+This binds one accepted connection to its request; it does not encrypt the shell
+stream.
 
 ## One owned session
 
@@ -43,15 +57,17 @@ It rejects a concurrent request, a zero port, or a stopped component without
 changing live state.
 A completed, refused, or timed-out request leaves the component ready for
 another port.
+`rk_root_shell_snapshot()` reports the latest request ID, state, and errno.
 
 The work item owns every blocking operation:
 
 1. create and publish the socket;
 2. arm the timeout;
-3. connect to the fixed loopback address;
-4. convert the socket into a file;
-5. run and wait for the helper;
-6. cancel the timeout and release every reference.
+3. connect to the requested peer address;
+4. send the ownership prelude;
+5. convert the socket into a file;
+6. run and wait for the helper;
+7. publish its final state and release every reference.
 
 The timeout and stop paths set their gate under the mutex, shut down the
 published socket, and send `SIGKILL` to both the process group and its leader.
@@ -78,9 +94,9 @@ Run:
 ./rootkitlings check
 ```
 
-The checker opens a real loopback shell, proves its UID is zero, forces its
-timeout, unloads it while blocked, exercises a refused connection, reloads the
-module, and checks the kernel log.
+The checker verifies the prelude, opens two sequential UID-0 shells, observes
+refusal and timeout results, unloads a blocked shell, rejects an invalid peer,
+and checks the kernel log.
 
 ## References
 

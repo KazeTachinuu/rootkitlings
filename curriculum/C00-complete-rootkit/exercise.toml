@@ -11,12 +11,13 @@ tradecraft = [
   "instrumentation",
   "concealment",
   "networking",
-  "persistence",
+  "boot-staging",
   "cryptography",
   "detection",
 ]
 difficulty = "challenge"
 prerequisites = [
+  "bounded-rendered-filter",
   "writable-packet-mutation",
   "authenticated-reverse-shell",
 ]
@@ -35,6 +36,8 @@ requires = [
   "sensitive-state-zeroization",
   "authenticated-reverse-shell",
   "machine-readable-evidence-map",
+  "bounded-rendered-filter",
+  "binary-safe-equal-width-replacement",
 ]
 
 [workspace]
@@ -57,10 +60,13 @@ files = [
   "include/agent_status.h",
   "include/dirent_filter.h",
   "include/framing.h",
+  "include/ipv4.h",
   "include/ipv4_parser.h",
   "include/packet_redirect.h",
   "include/platform.h",
   "include/protocol.h",
+  "include/provision.h",
+  "include/replace.h",
   "include/rootkit.h",
   "include/root_shell.h",
   "include/skb_access.h",
@@ -68,11 +74,13 @@ files = [
   "include/transaction.h",
   "include/udp_classifier.h",
   "include/udp_redirect.h",
+  "include/visibility.h",
   "include/writable.h",
   "instrumentation/dirent_filter.c",
   "instrumentation/events.c",
   "instrumentation/getdents_probe.c",
   "instrumentation/netfilter_observer.c",
+  "instrumentation/replace.c",
   "instrumentation/return_probe.c",
   "interface/agent_status.c",
   "interface/evidence.c",
@@ -81,12 +89,14 @@ files = [
   "mutation/writable.c",
   "network/agent.c",
   "network/framing.c",
+  "network/ipv4.c",
   "network/protocol.c",
   "parser/ipv4.c",
-  "persistence/platform.c",
-  "persistence/transaction.c",
+  "staging/platform.c",
+  "staging/transaction.c",
   "privilege/credentials.c",
   "security/control.c",
+  "security/provision.c",
   "security/clear.c",
 ]
 editable = [
@@ -96,6 +106,7 @@ editable = [
 build = "."
 baseline = "parent"
 parent = "authenticated-reverse-shell"
+additions = "curriculum/C00-complete-rootkit/starter"
 
 [[workspace.imports]]
 exercise = "writable-packet-mutation"
@@ -114,11 +125,22 @@ files = [
   "parser/ipv4.c",
 ]
 
+[[workspace.imports]]
+exercise = "bounded-rendered-filter"
+files = [
+  "include/replace.h",
+  "instrumentation/replace.c",
+]
+
 [resources]
 readme = "curriculum/C00-complete-rootkit/README.md"
 host_check = "curriculum/C00-complete-rootkit/checks/host-check"
 hint = "curriculum/C00-complete-rootkit/hint"
 solution = "curriculum/C00-complete-rootkit/solution"
+
+[play]
+profile = "complete-rootkit"
+script = "vm/play/complete-rootkit"
 
 [verification]
 timeout_seconds = 600
@@ -126,6 +148,8 @@ tools = [
   "secure-agent-fixture",
   "module-load-params",
   "getdents64-test",
+  "read-result-test",
+  "packet-mutation-test",
   "event-stream-test",
   "status-field-test",
   "proc-write-test",
@@ -144,20 +168,35 @@ check = "curriculum/C00-complete-rootkit/checks/success-check"
 ROOTKITLINGS_FAIL_POINT = "0"
 
 [[verification.cases]]
-id = "concealment-evidence-regression"
-label = "Process view, evidence, and local control"
-expect_build = "pass"
-check = "curriculum/M03-concealment-evidence-map/checks/success-check"
-check_arguments = ["complete-rootkit"]
-[verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "0"
-
-[[verification.cases]]
 id = "authorized-actions-regression"
 label = "Credential action and syscall telemetry"
 expect_build = "pass"
 check = "curriculum/M02-authorized-actions-telemetry/checks/success-check"
 check_arguments = ["complete-rootkit"]
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "selected-view-concealment"
+label = "Selected-view concealment and evidence"
+expect_build = "pass"
+check = "curriculum/C00-complete-rootkit/checks/visibility-check"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "control-provisioning-regression"
+label = "Private control provisioning"
+expect_build = "pass"
+check = "curriculum/M08-authenticated-reverse-shell/checks/invalid-check"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "configuration-boundaries"
+label = "Complete rootkit configuration boundaries"
+expect_build = "pass"
+check = "curriculum/C00-complete-rootkit/checks/config-check"
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "0"
 
@@ -286,6 +325,14 @@ check = "curriculum/M07-remote-resident-agent/checks/failure-check.in"
 check_arguments = ["4", "Packet redirect registration", "complete-rootkit"]
 [verification.cases.build_variables]
 ROOTKITLINGS_FAIL_POINT = "14"
+
+[[verification.cases]]
+id = "visibility-read-target-rejection"
+label = "Missing visibility read target"
+expect_build = "pass"
+check = "curriculum/C00-complete-rootkit/checks/visibility-failure-check"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "15"
 
 [[verification.cases]]
 id = "unknown-failure-point"

@@ -37,7 +37,7 @@ mapfile -t changed_files < <(
 	printf '[x] expected one learner file, found %d\n' "${#changed_files[@]}" >&2
 	exit 1
 }
-[[ ${changed_files[0]} == persistence/transaction.c ]] || exit 1
+[[ ${changed_files[0]} == staging/transaction.c ]] || exit 1
 
 build_tree()
 {
@@ -68,7 +68,7 @@ build_mutant()
 	local name=$1 mutator=$2
 	local directory=$scratch/$name log=$scratch/$name.log
 	cp -a "$HERE/../solution" "$directory"
-	"$mutator" "$directory/persistence/transaction.c"
+	"$mutator" "$directory/staging/transaction.c"
 	make -s -C "$KDIR" M="$directory" W=1 modules > "$log" 2>&1 || {
 		cat "$log" >&2
 		exit 1
@@ -120,7 +120,7 @@ build_mutant records-exchange-late mutate_late_exchange
 
 cp -a "$HERE/../solution" "$scratch/alternate"
 cp "$HERE/../fixtures/alternate/transaction.c" \
-	"$scratch/alternate/persistence/transaction.c"
+	"$scratch/alternate/staging/transaction.c"
 build_tree "$scratch/alternate" "$scratch/alternate-build"
 "$HERE/host-check" "$scratch/alternate-build" \
 	"$scratch/alternate-build/rootkitlings.ko"
@@ -138,10 +138,10 @@ run_guest()
 }
 
 run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" solution \
-	--tool vm/tools/module_load_test
+	--tool vm/tools/module_load_test --tool vm/tools/module_load_params
 run_guest "$HERE/success-check" \
 	"$scratch/alternate-build/rootkitlings.ko" alternate \
-	--tool vm/tools/module_load_test
+	--tool vm/tools/module_load_test --tool vm/tools/module_load_params
 run_guest "$HERE/failure-check" "$scratch/starter/rootkitlings.ko" starter \
 	--tool vm/tools/module_load_test
 

@@ -22,7 +22,7 @@ static int rk_agent_status_show(struct seq_file *output, void *unused)
 	(void)unused;
 	rk_agent_snapshot(status_context.agent, &status);
 	seq_printf(output,
-		   "state=%s\nconnected=%u\npeer_address=127.0.0.1\n"
+		   "state=%s\nconnected=%u\npeer_address=%pI4\n"
 		   "peer_port=%u\nretry_base_ms=%u\nretry_max_ms=%u\n"
 		   "retry_delay_ms=%u\nattempts=%llu\nconnections=%llu\n"
 		   "commands=%llu\nretries=%llu\ntransport_errors=%llu\n"
@@ -31,7 +31,8 @@ static int rk_agent_status_show(struct seq_file *output, void *unused)
 		   "boot_request_state=%s\nboot_request_exchanged=%u\n"
 		   "boot_request_error=%d\n",
 		   status.running ? "running" : "stopped",
-		   status.connected ? 1U : 0U, status.peer_port,
+		   status.connected ? 1U : 0U, &status.peer_address,
+		   status.peer_port,
 		   status.retry_base_ms, status.retry_max_ms,
 		   status.retry_delay_ms, status.attempts, status.connections,
 		   status.commands, status.retries, status.transport_errors,

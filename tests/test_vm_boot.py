@@ -12,6 +12,46 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class VMBootTests(unittest.TestCase):
+    def test_play_options_require_a_complete_play_configuration(self) -> None:
+        result = subprocess.run(
+            [ROOT / "vm/boot", "--play-profile", "authenticated-agent"],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env={**os.environ, "NO_COLOR": "1"},
+        )
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("play options require --play", result.stdout)
+
+    def test_play_rejects_an_invalid_key_before_building_the_guest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            script = path / "play"
+            module = path / "module.ko"
+            key = path / "control.key"
+            script.write_text("#!/bin/sh\n", encoding="utf-8")
+            module.write_bytes(b"module")
+            key.write_text("bad\n", encoding="ascii")
+            result = subprocess.run(
+                [
+                    ROOT / "vm/boot",
+                    "--play", script,
+                    "--play-profile", "authenticated-agent",
+                    "--play-key-file", key,
+                    "--play-control-port", "40001",
+                    "--play-shell-port", "40002",
+                    module,
+                ],
+                check=False,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                env={**os.environ, "NO_COLOR": "1"},
+            )
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("64 hexadecimal digits and a newline", result.stdout)
+
     def test_gdb_mode_reports_its_optional_dependency_directly(self) -> None:
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
             path = Path(directory)

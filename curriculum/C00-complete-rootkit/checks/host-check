@@ -39,4 +39,6 @@ for object in core/main.o instrumentation/netfilter_observer.o \
 		die "packet integration component is missing: $object"
 done
 
+"$here/visibility-host-check" "$build" "$module"
+
 printf '[+] complete-rootkit host integration passed\n'

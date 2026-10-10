@@ -99,32 +99,34 @@ helper=agent_fixture
 "$helper" reserve "$fixtures/port"
 port=$(cat "$fixtures/port")
 
-if insmod /rootkitlings/rootkitlings.ko peer_port=0 2>/dev/null; then
-	_fail "zero peer port was accepted"
-	rmmod rootkitlings 2>/dev/null || true
+if load_errno /rootkitlings/rootkitlings.ko 22 \
+		"peer_port=$port peer_address=not-an-ip"; then
+	_ok "an invalid peer address is rejected with EINVAL"
 else
-	_ok "zero peer port is rejected"
+	_fail "an invalid peer address returned the wrong error"
 fi
-if insmod /rootkitlings/rootkitlings.ko peer_port="$port" \
-		retry_base_ms=100 retry_max_ms=99 2>/dev/null; then
-	_fail "an inverted retry range was accepted"
-	rmmod rootkitlings 2>/dev/null || true
+if load_errno /rootkitlings/rootkitlings.ko 22 "peer_port=0"; then
+	_ok "zero peer port is rejected with EINVAL"
 else
-	_ok "an inverted retry range is rejected"
+	_fail "zero peer port returned the wrong error"
 fi
-if insmod /rootkitlings/rootkitlings.ko peer_port="$port" \
-		retry_base_ms=0 retry_max_ms=80 2>/dev/null; then
-	_fail "a zero retry base was accepted"
-	rmmod rootkitlings 2>/dev/null || true
+if load_errno /rootkitlings/rootkitlings.ko 22 \
+		"peer_port=$port retry_base_ms=100 retry_max_ms=99"; then
+	_ok "an inverted retry range is rejected with EINVAL"
 else
-	_ok "a zero retry base is rejected"
+	_fail "an inverted retry range returned the wrong error"
 fi
-if insmod /rootkitlings/rootkitlings.ko peer_port="$port" \
-		retry_base_ms=20 retry_max_ms=5001 2>/dev/null; then
-	_fail "an excessive retry maximum was accepted"
-	rmmod rootkitlings 2>/dev/null || true
+if load_errno /rootkitlings/rootkitlings.ko 22 \
+		"peer_port=$port retry_base_ms=0 retry_max_ms=80"; then
+	_ok "a zero retry base is rejected with EINVAL"
 else
-	_ok "an excessive retry maximum is rejected"
+	_fail "a zero retry base returned the wrong error"
+fi
+if load_errno /rootkitlings/rootkitlings.ko 22 \
+		"peer_port=$port retry_base_ms=20 retry_max_ms=5001"; then
+	_ok "an excessive retry maximum is rejected with EINVAL"
+else
+	_fail "an excessive retry maximum returned the wrong error"
 fi
 if test ! -d /sys/module/rootkitlings &&
 	test ! -e /proc/rootkitlings &&
@@ -136,10 +138,24 @@ if test ! -d /sys/module/rootkitlings &&
 	test "$(probe_count r iterate_dir)" -eq "$iterate_before" &&
 	test "$(worker_count)" -eq 0 &&
 	cmp -s "$fixtures/original" "$target" && test ! -e "$sibling"; then
-	_ok "parameter rejection leaves files, probes, endpoints, and workers untouched"
+	_ok "parameter rejection leaves no state behind"
 else
 	_fail "parameter rejection changed state before returning"
 fi
+
+nc -l -p "$port" -s 127.0.0.2 -e /bin/cat > /dev/null 2>&1 &
+fixture_pid=$!
+load rootkitlings.ko "peer_port=$port" peer_address=127.0.0.2 \
+	retry_base_ms=20 retry_max_ms=80
+if wait_for_field connected 1 &&
+		grep -Fxq 'peer_address=127.0.0.2' "$status"; then
+	_ok "the agent connects to the configured IPv4 address"
+else
+	_fail "the agent ignored its configured IPv4 address"
+fi
+unload rootkitlings
+wait "$fixture_pid" || _fail "configured-address listener failed"
+fixture_pid=
 
 load rootkitlings.ko "peer_port=$port" retry_base_ms=20 retry_max_ms=80
 assert_loaded rootkitlings
@@ -147,6 +163,7 @@ assert_exists /proc/rootkitlings
 assert_exists /proc/rootkitlings_events
 assert_exists /proc/rootkitlings_evidence
 assert_exists "$status"
+assert_contains "$status" "peer_address=127.0.0.1"
 if test "$(stat -c '%a:%u:%g' "$status")" = 400:0:0; then
 	_ok "agent status is root-owned and read-only"
 else
@@ -163,7 +180,8 @@ case $delay in 20|40|80) _ok "retry delay stays within the declared bounds" ;;
 esac
 sleep 0.2
 attempts=$(sed -n 's/^attempts=//p' "$status")
-if test "$attempts" -ge 2 2>/dev/null && test "$attempts" -le 20 2>/dev/null; then
+if test "$attempts" -ge 2 2>/dev/null &&
+		test "$attempts" -le 20 2>/dev/null; then
 	_ok "retry waiting bounds the attempt rate"
 else
 	_fail "retry attempt rate is unbounded: ${attempts:-missing}"
@@ -180,7 +198,10 @@ else
 	_fail "the two framed sessions did not complete"
 fi
 if wait_for_field connections 2 && wait_for_field commands 6 &&
-		wait_for_field protocol_errors 2; then
+		wait_for_field protocol_errors 2 &&
+	test "$(sed -n 's/^connections=//p' "$status")" -eq 2 &&
+	test "$(sed -n 's/^commands=//p' "$status")" -eq 6 &&
+	test "$(sed -n 's/^protocol_errors=//p' "$status")" -eq 2; then
 	_ok "fixed commands, invalid input, and oversized input updated counters"
 else
 	_fail "agent counters did not reach their behavioral values"
@@ -233,7 +254,9 @@ else
 fi
 assert_no_workers "retry-wait unload"
 
-if dmesg | grep -Eqi '(BUG:|WARNING:|Oops:|KASAN:|UBSAN:|use-after-free|general protection fault)'; then
+faults='(BUG:|WARNING:|Oops:|KASAN:|UBSAN:|'
+faults=${faults}'use-after-free|general protection fault)'
+if dmesg | grep -Eqi "$faults"; then
 	_fail "kernel log contains a fault report"
 else
 	_ok "kernel log contains no fault report"

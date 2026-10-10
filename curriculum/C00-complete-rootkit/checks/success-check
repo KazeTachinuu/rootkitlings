@@ -4,7 +4,15 @@
 
 begin "Complete rootkit"
 
-key=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+key=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | xxd -p -c 32)
+case $key in
+	0000000000000000000000000000000000000000000000000000000000000000)
+		_fail "generated control key is invalid"; exit 1 ;;
+	*[!0-9a-f]*)
+		_fail "generated control key is invalid"; exit 1 ;;
+	????????????????????????????????????????????????????????????????) ;;
+	*) _fail "could not generate a 32-byte control key"; exit 1 ;;
+esac
 root=/etc/modules-load.d
 target=$root/rootkitlings.conf
 sibling=$root/.rootkitlings.conf.rootkitlings
@@ -12,9 +20,7 @@ status=/proc/rootkitlings_agent
 core=/proc/rootkitlings
 work=/tmp/rootkitlings-complete-rootkit
 helper=secure_agent_fixture
-redirect_capture=$work/redirected-datagram
 fixture_pid=
-redirect_listener=
 
 cleanup()
 {
@@ -24,10 +30,6 @@ cleanup()
 	if test -n "$fixture_pid"; then
 		kill "$fixture_pid" 2>/dev/null || true
 		wait "$fixture_pid" 2>/dev/null || true
-	fi
-	if test -n "$redirect_listener"; then
-		kill "$redirect_listener" 2>/dev/null || true
-		wait "$redirect_listener" 2>/dev/null || true
 	fi
 	umount "$root" 2>/dev/null || true
 }
@@ -76,21 +78,34 @@ fi
 "$helper" reserve "$work/port"
 port=$(cat "$work/port")
 
-nc -u -l -p 5401 -s 127.0.0.1 > "$redirect_capture" 2>/dev/null &
-redirect_listener=$!
-sleep 0.1
-load rootkitlings.ko "peer_port=$port" retry_base_ms=20 retry_max_ms=80 \
-	"control_key=$key" session_id=72623859790382856 shell_timeout_ms=60000
+load rootkitlings.ko peer_address=127.0.0.2 "peer_port=$port" \
+	retry_base_ms=20 retry_max_ms=80 "control_key=$key" \
+	shell_timeout_ms=3000 redirect_from_port=5488 \
+	redirect_to_port=5489
 assert_loaded rootkitlings
 assert_exists "$status"
+assert_contains "$status" "peer_address=127.0.0.2"
+assert_contains "$status" "retry_base_ms=20"
+assert_contains "$status" "retry_max_ms=80"
+if packet_mutation_test unchanged 5488 5489; then
+	_ok "disabled packet switchboard leaves matched UDP unchanged"
+else
+	_fail "disabled packet switchboard changed matched UDP"
+fi
 if wait_field retries 2 && wait_field transport_errors 2; then
 	_ok "refused loopback connections enter bounded retry"
 else
 	_fail "retry evidence did not advance"
 fi
+delay=$(sed -n 's/^retry_delay_ms=//p' "$status")
+case $delay in
+	20|40|80) _ok "retry delay stays within the configured bounds" ;;
+	*) _fail "retry delay escaped its configured bounds: $delay" ;;
+esac
 
 mkdir -p "$work/server"
-"$helper" serve "$work/server" "$port" > "$work/server.log" 2>&1 &
+"$helper" serve "$work/server" "$port" 127.0.0.2 "$key" \
+	> "$work/server.log" 2>&1 &
 fixture_pid=$!
 wait_file "$work/server/ready" || _fail "secure listener did not start"
 if wait_file "$work/server/replay_rejected"; then
@@ -123,6 +138,27 @@ if wait_file "$work/server/shell_tamper_rejected"; then
 else
 	_fail "tampered shell request opened a shell"
 fi
+if wait_file "$work/server/shell_refused"; then
+	_ok "refused shell result is observable"
+else
+	_fail "refused shell result was not observable"
+fi
+if wait_file "$work/server/shell_timeout"; then
+	_ok "timed-out shell result is observable"
+else
+	_fail "timed-out shell result was not observable"
+fi
+if wait_file "$work/server/fresh_sessions"; then
+	_ok "each shell request receives a fresh ticket"
+else
+	_fail "shell tickets were not fresh"
+fi
+if wait_file "$work/server/blocked_receive" &&
+		wait_file "$work/server/blocked_shell"; then
+	_ok "control and shell sockets are live before unload"
+else
+	_fail "control or shell socket did not reach its live session"
+fi
 index=0
 while test "$index" -lt 1000; do
 	actions=$(sed -n 's/^actions=//p' "$core" 2>/dev/null)
@@ -141,35 +177,28 @@ else
 	_fail "remote resident-core state is wrong"
 fi
 
-printf enable > "$core"
-printf switchboard | nc -u -w 1 127.0.0.1 5400
-wait_file "$redirect_capture" || _fail "redirected UDP datagram did not arrive"
-printf disable > "$core"
-kill "$redirect_listener" 2>/dev/null || true
-wait "$redirect_listener" 2>/dev/null || true
-redirect_listener=
-if test "$(cat "$redirect_capture")" = switchboard; then
-	_ok "enabled packet switchboard redirected one UDP datagram"
+if packet_mutation_test redirect 5488 5489 &&
+	packet_mutation_test direct 5488 5489 &&
+	packet_mutation_test alternate 5488 5489 &&
+	packet_mutation_test gso 5488 5489; then
+	_ok "packet switchboard preserves matched and unrelated UDP payloads"
 else
-	_fail "packet switchboard changed the datagram"
+	_fail "packet switchboard delivery behavior is wrong"
 fi
 if wait_file "$work/server/quit_complete"; then
 	_ok "authenticated QUIT closed one session"
 else
 	_fail "QUIT did not close its session"
 fi
-if wait_file "$work/server/blocked_receive" &&
-		wait_file "$work/server/blocked_shell"; then
-	_ok "control and shell sockets are live before unload"
-else
-	_fail "control or shell socket did not reach its live session"
-fi
 
-if wait_field connections 6 && wait_field commands 15 &&
-		wait_field protocol_errors 5; then
-	_ok "fixed commands and rejected envelopes updated independent counters"
+connections=$(sed -n 's/^connections=//p' "$status")
+commands=$(sed -n 's/^commands=//p' "$status")
+protocol_errors=$(sed -n 's/^protocol_errors=//p' "$status")
+if test "$connections" -eq 6 && test "$commands" -ge 22 &&
+		test "$protocol_errors" -eq 5; then
+	_ok "six sessions and five protocol rejections are counted"
 else
-	_fail "agent counters do not match exercised behavior"
+	_fail "agent counters are $connections/$commands/$protocol_errors"
 fi
 if test "$(sed -n 's/^marker=//p' "$status")" = alpha_7; then
 	_ok "authenticated MARK stored the bounded label"

@@ -177,8 +177,33 @@ summary() {
 
 # -- module operations -------------------------------------------------------
 
+_shell_quote() {
+    local value
+
+    case $1 in
+        '') printf "''" ;;
+        *[!A-Za-z0-9_./:=,@%+-]*)
+            value=$(printf '%s' "$1" | sed "s/'/'\"'\"'/g")
+            printf "'%s'" "$value"
+            ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+_show_command() {
+    local argument command quoted
+
+    command=
+    for argument in "$@"; do
+        quoted=$(_shell_quote "$argument")
+        command="${command}${command:+ }$quoted"
+    done
+    ui_transcript "$command"
+}
+
 load() {
     local mod="$1"; shift
+    _show_command insmod "/rootkitlings/$mod" "$@"
     if insmod "/rootkitlings/$mod" "$@"; then
         _ok "loaded $mod"
     else
@@ -188,6 +213,7 @@ load() {
 
 unload() {
     local mod="$1"
+    _show_command rmmod "$mod"
     if rmmod "$mod" && [ ! -d "/sys/module/$mod" ] &&
        ! grep -q "^$mod " /proc/modules; then
         _ok "unloaded $mod"
@@ -198,15 +224,28 @@ unload() {
 
 load_fail() {
     local mod="$1"; shift
-    if insmod "/rootkitlings/$mod" "$@" 2>/dev/null; then
+    _show_command insmod "/rootkitlings/$mod" "$@"
+    if insmod "/rootkitlings/$mod" "$@"; then
         _fail "expected $mod to be rejected, but it loaded"
     else
         _ok "$mod correctly rejected"
     fi
 }
 
+load_errno() {
+    local module="$1" expected="$2" parameters="${3-}"
+
+    _show_command module_load_params "$module" "$expected" "$parameters"
+    module_load_params "$module" "$expected" "$parameters"
+}
+
 write_param() {
     local mod="$1" param="$2" value="$3"
+    local path="/sys/module/$mod/parameters/$param" quoted_path quoted_value
+
+    quoted_path=$(_shell_quote "$path")
+    quoted_value=$(_shell_quote "$value")
+    ui_transcript "printf %s $quoted_value > $quoted_path"
     printf '%s' "$value" > "/sys/module/$mod/parameters/$param"
 }
 

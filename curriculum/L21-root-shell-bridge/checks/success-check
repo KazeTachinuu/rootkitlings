@@ -8,6 +8,22 @@ capture=/tmp/rootkitlings-root-shell
 rm -f "$capture"
 ifconfig lo 127.0.0.1 up
 
+valid_ticket()
+{
+	value=$1
+	printf '%s\n' "$value" |
+		grep -Eq '^[0-9a-f]{8} [0-9a-f]{16}$' || return 1
+	case $value in
+		00000000\ *|*\ 0000000000000000) return 1 ;;
+	esac
+}
+
+show_capture()
+{
+	_hdr "$2"
+	cat "$1"
+}
+
 {
 	# Expansion belongs to the remote shell.
 	# shellcheck disable=SC2016
@@ -16,11 +32,15 @@ ifconfig lo 127.0.0.1 up
 		'printf "dir=%s\n" "$PWD"' \
 		'printf "marker=rootkitlings-shell\n"' \
 		'exit'
-} | nc -l -p "$port" -s 127.0.0.1 >"$capture" 2>&1 &
+} | nc -l -p "$port" -s 127.0.0.2 >"$capture" 2>&1 &
 listener=$!
 sleep 0.1
 
-load rootkitlings.ko "shell_port=$port" shell_timeout_ms=5000
+load rootkitlings.ko peer_address=127.0.0.2 "shell_port=$port" \
+	shell_timeout_ms=5000
+assert_contains /sys/module/rootkitlings/parameters/peer_address \
+	127.0.0.2
+first_ticket=$(cat /sys/module/rootkitlings/parameters/shell_ticket)
 attempt=0
 while kill -0 "$listener" 2>/dev/null && [ "$attempt" -lt 100 ]; do
 	sleep 0.05
@@ -29,8 +49,16 @@ done
 if kill -0 "$listener" 2>/dev/null; then
 	_fail "root shell did not finish"
 	kill "$listener" 2>/dev/null || true
+	wait "$listener" 2>/dev/null || true
 else
 	wait "$listener" || _fail "loopback shell transport failed"
+fi
+show_capture "$capture" "First shell transcript"
+
+if test "$(head -n 1 "$capture")" = "RKSH $first_ticket"; then
+	_ok "shell prelude proves the accepted request and cookie"
+else
+	_fail "shell prelude does not match the published ticket"
 fi
 
 if grep -qx 'uid=0' "$capture"; then
@@ -51,7 +79,7 @@ fi
 
 port=46122
 printf '%s\n' 'echo marker=second-shell' 'exit' |
-	nc -l -p "$port" -s 127.0.0.1 >"$capture.second" 2>&1 &
+	nc -l -p "$port" -s 127.0.0.2 >"$capture.second" 2>&1 &
 listener=$!
 sleep 0.1
 attempt=0
@@ -67,11 +95,37 @@ while kill -0 "$listener" 2>/dev/null && [ "$attempt" -lt 100 ]; do
 	sleep 0.05
 	attempt=$((attempt + 1))
 done
-wait "$listener" || _fail "second shell transport failed"
+if kill -0 "$listener" 2>/dev/null; then
+	_fail "second root shell did not finish"
+	kill "$listener" 2>/dev/null || true
+	wait "$listener" 2>/dev/null || true
+else
+	wait "$listener" || _fail "second shell transport failed"
+fi
+show_capture "$capture.second" "Second shell transcript"
+second_ticket=$(cat /sys/module/rootkitlings/parameters/shell_ticket)
+second_id=${second_ticket%% *}
+if test "$(head -n 1 "$capture.second")" = "RKSH $second_ticket"; then
+	_ok "a later request receives a fresh ownership cookie"
+else
+	_fail "later shell prelude does not match its ticket"
+fi
+if valid_ticket "$first_ticket" && valid_ticket "$second_ticket" &&
+	test "$first_ticket" != "$second_ticket"; then
+	_ok "request IDs and cookies are nonzero and distinct"
+else
+	_fail "shell tickets are zero, malformed, or reused"
+fi
 if grep -qx 'marker=second-shell' "$capture.second"; then
 	_ok "an exited shell released capacity for a later request"
 else
 	_fail "second shell did not run"
+fi
+if test "$(cat /sys/module/rootkitlings/parameters/shell_status)" = \
+		"$second_id exited 0"; then
+	_ok "completed shell reports its exact request and result"
+else
+	_fail "completed shell status is not honest"
 fi
 
 unload rootkitlings

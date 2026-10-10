@@ -8,6 +8,7 @@ key=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
 zero=0000000000000000000000000000000000000000000000000000000000000000
 root=/etc/modules-load.d
 status=/proc/rootkitlings_agent
+module=/rootkitlings/rootkitlings.ko
 
 cleanup()
 {
@@ -22,19 +23,26 @@ expect_rejected()
 {
 	label=$1
 	shift
-	if insmod /module/rootkitlings.ko peer_port=47023 "$@" 2>/dev/null; then
-		_fail "$label was accepted"
-		rmmod rootkitlings 2>/dev/null || true
+	parameters=peer_port=47023
+	for parameter in "$@"; do
+		parameters="$parameters $parameter"
+	done
+	if load_errno "$module" 22 "$parameters"; then
+		_ok "$label returns EINVAL"
 	else
-		_ok "$label is rejected"
+		_fail "$label returned the wrong result"
 	fi
+	assert_absent /sys/module/rootkitlings
 }
 
+assert_exists "$module"
 expect_rejected "missing key"
 expect_rejected "short key" control_key=0011
 expect_rejected "nonhex key" \
 	control_key=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1g
 expect_rejected "all-zero key" "control_key=$zero"
+expect_rejected "invalid peer address" "control_key=$key" \
+	peer_address=not-an-ip
 
 mkdir -p "$root"
 mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
@@ -45,20 +53,12 @@ ifconfig lo 127.0.0.1 up
 
 load rootkitlings.ko peer_port=47023 retry_base_ms=5000 \
 	retry_max_ms=5000 "control_key=$key"
-first=$(sed -n 's/^session=//p' "$status")
-case $first in ''|0|*[!0-9]*) _fail "random session is invalid" ;; esac
+assert_contains "$status" "peer_address=127.0.0.1"
 assert_absent /sys/module/rootkitlings/parameters/control_key
-assert_absent /sys/module/rootkitlings/parameters/session_id
-unload rootkitlings
-
-load rootkitlings.ko peer_port=47023 retry_base_ms=5000 \
-	retry_max_ms=5000 "control_key=$key"
-second=$(sed -n 's/^session=//p' "$status")
-case $second in ''|0|*[!0-9]*) _fail "second random session is invalid" ;; esac
-if test "$first" != "$second"; then
-	_ok "default loads use fresh nonzero sessions"
+if test "$(sed -n 's/^session=//p' "$status")" = 0; then
+	_ok "no control session exists before a connection"
 else
-	_fail "two default loads reused one session"
+	_fail "status published a session without a connection"
 fi
 unload rootkitlings
 

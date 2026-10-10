@@ -212,19 +212,19 @@ static int rk_agent_worker(void *argument)
 	return 0;
 }
 
-int rk_agent_start(struct rk_agent *agent, u16 peer_port,
+int rk_agent_start(struct rk_agent *agent, __be32 peer_address, u16 peer_port,
 		   unsigned int retry_base_ms, unsigned int retry_max_ms)
 {
 	struct task_struct *task;
 
-	if (!agent || !peer_port || !retry_base_ms ||
+	if (!agent || !peer_address || !peer_port || !retry_base_ms ||
 	    retry_base_ms > retry_max_ms || retry_max_ms > 5000)
 		return -EINVAL;
 	memset(agent, 0, sizeof(*agent));
 	mutex_init(&agent->lock);
 	init_waitqueue_head(&agent->retry_wait);
 	agent->peer.sin_family = AF_INET;
-	agent->peer.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	agent->peer.sin_addr.s_addr = peer_address;
 	agent->peer.sin_port = htons(peer_port);
 	agent->retry_base_ms = retry_base_ms;
 	agent->retry_max_ms = retry_max_ms;
@@ -279,6 +279,7 @@ void rk_agent_snapshot(struct rk_agent *agent, struct rk_agent_status *status)
 	status->running = agent->task != NULL;
 	status->connected = agent->connected;
 	status->stopping = agent->stopping;
+	status->peer_address = agent->peer.sin_addr.s_addr;
 	status->peer_port = ntohs(agent->peer.sin_port);
 	status->retry_base_ms = agent->retry_base_ms;
 	status->retry_max_ms = agent->retry_max_ms;

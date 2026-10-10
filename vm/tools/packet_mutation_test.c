@@ -230,6 +230,8 @@ int main(int argc, char **argv)
 		       replacement_port + 1;
 	if (!strcmp(argv[1], "redirect"))
 		run_delivery("127.0.0.1", match_port, replacement_port, 1, 0);
+	else if (!strcmp(argv[1], "unchanged"))
+		run_delivery("127.0.0.1", match_port, match_port, 1, 0);
 	else if (!strcmp(argv[1], "burst"))
 		run_delivery("127.0.0.1", match_port, replacement_port, 257,
 			     1000000L);

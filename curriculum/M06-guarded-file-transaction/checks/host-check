@@ -12,9 +12,8 @@ trap 'rm -rf -- "$scratch"' EXIT
 
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
 for relative in Kbuild core/main.c include/interface.h include/platform.h \
-		include/transaction.h interface/proc.c persistence/platform.c \
-		persistence/platform.o persistence/transaction.c \
-		persistence/transaction.o; do
+		include/transaction.h interface/proc.c staging/platform.c \
+		staging/platform.o staging/transaction.c staging/transaction.o; do
 	[[ -f $build_dir/$relative && ! -L $build_dir/$relative ]] ||
 		die "build is missing regular file: $relative"
 done
@@ -22,12 +21,12 @@ done
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
 	-fsanitize=address,undefined -fno-omit-frame-pointer \
 	-I"$build_dir/include" "$here/../fixtures/host/transaction_test.c" \
-	"$build_dir/persistence/transaction.c" -o "$scratch/transaction-test"
+	"$build_dir/staging/transaction.c" -o "$scratch/transaction-test"
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 	"$scratch/transaction-test"
 
-undefined=$(nm -u "$build_dir/persistence/transaction.o" | awk '{ print $NF }')
+undefined=$(nm -u "$build_dir/staging/transaction.o" | awk '{ print $NF }')
 while read -r symbol; do
 	[[ -n $symbol ]] || continue
 	case $symbol in
@@ -41,12 +40,12 @@ while read -r symbol; do
 		*) die "transaction has unexpected dependency: $symbol" ;;
 	esac
 done <<< "$undefined"
-if nm "$build_dir/persistence/transaction.o" |
+if nm "$build_dir/staging/transaction.o" |
 	grep -Eq '[[:space:]][bBdD][[:space:]]'; then
 	die "transaction must not own mutable or persistent object state"
 fi
 for symbol in security_path_rename security_path_unlink vfs_rename vfs_unlink; do
-	nm -u "$build_dir/persistence/platform.o" |
+	nm -u "$build_dir/staging/platform.o" |
 		awk '{ print $NF }' | grep -qx "$symbol" ||
 		die "platform is missing required VFS dependency: $symbol"
 done

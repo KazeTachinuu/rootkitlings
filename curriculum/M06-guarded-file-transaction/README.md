@@ -22,7 +22,7 @@ filesystem.
 
 Edit one file:
 
-- `persistence/transaction.c`
+- `staging/transaction.c`
 
 Implement the four functions declared in `include/transaction.h`.
 The supplied platform layer performs fixed-path lookup, the locked VFS exchange,

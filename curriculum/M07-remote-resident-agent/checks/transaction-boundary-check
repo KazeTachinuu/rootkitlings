@@ -33,7 +33,7 @@ expect_load_error()
 {
 	expected=$1
 	label=$2
-	if module_load_params /rootkitlings/rootkitlings.ko "$expected" \
+	if load_errno /rootkitlings/rootkitlings.ko "$expected" \
 			"peer_port=47023 retry_base_ms=200 retry_max_ms=200"; then
 		_ok "$label returns errno $expected"
 	else
@@ -65,15 +65,8 @@ fi
 reset_target
 printf 'foreign-sibling\n' > "$sibling"
 chmod 0600 "$sibling"
-if insmod /rootkitlings/rootkitlings.ko peer_port=47023 \
-		retry_base_ms=200 retry_max_ms=200 2>/dev/null; then
-	_fail "occupied sibling loaded the module"
-	rmmod rootkitlings 2>/dev/null || true
-else
-	_ok "occupied sibling is rejected"
-fi
-assert_absent /sys/module/rootkitlings
-assert_absent /proc/rootkitlings_agent
+# The module loader maps an init return of EEXIST to EBUSY.
+expect_load_error 16 "occupied sibling"
 if test "$(cat "$target")" = operator-original &&
 		test "$(cat "$sibling")" = foreign-sibling; then
 	_ok "occupied sibling remains untouched"

@@ -1,4 +1,5 @@
+Compile the imported IPv4, provisioning, replacement, and packet objects.
+Start visibility only after the agent task exists.
 Register the packet switchboard before enabling remote commands.
-Stop it before resident state is destroyed.
-Keep the inherited agent, authenticated channel, and root shell unchanged.
-On failure, unwind the packet switchboard before the procfs and agent resources.
+On failure, unwind visibility before the agent and restore the file transaction
+before releasing resident state.

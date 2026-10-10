@@ -64,6 +64,19 @@ fi
 "$HERE/host-check" "$scratch/solution" \
 	"$scratch/solution/rootkitlings.ko"
 
+materialize solution "$scratch/unknown"
+if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
+		ROOTKITLINGS_FAIL_POINT=99 modules \
+		> "$scratch/unknown.log" 2>&1; then
+	printf '[x] unknown failure point compiled\n' >&2
+	exit 1
+fi
+grep -Fq 'unknown ROOTKITLINGS_FAIL_POINT' "$scratch/unknown.log" || {
+	cat "$scratch/unknown.log" >&2
+	printf '[x] unknown failure point failed for the wrong reason\n' >&2
+	exit 1
+}
+
 mutant()
 {
 	local name=$1 edit=$2 directory=$scratch/mutant-$1
@@ -93,6 +106,31 @@ mutant no-request-advance \
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
 	-o "$scratch/secure_agent_fixture" \
 	"$ROOT/vm/tools/secure_agent_fixture.c"
+"$scratch/secure_agent_fixture" selftest
+
+check_fixture_key()
+{
+	local expected=$1 label=$2 candidate=$3 status
+
+	set +e
+	"$scratch/secure_agent_fixture" serve "$scratch/rejected" 1 \
+		not-an-address "$candidate" > /dev/null 2>&1
+	status=$?
+	set -e
+	if [[ $status -ne $expected ]]; then
+		printf '[x] fixture key parser accepted %s\n' "$label" >&2
+		exit 1
+	fi
+}
+
+fixture_key=9f42c6e18b57a30dd4e2716c08bf953a
+fixture_key+=5e19c78432ad60f1b7ce849d26f503ab
+check_fixture_key 1 'a valid key as invalid' "$fixture_key"
+check_fixture_key 2 'a short key' 0011
+check_fixture_key 2 'a nonhex key' "${fixture_key%?}g"
+check_fixture_key 2 'an overlong key' "${fixture_key}00"
+check_fixture_key 2 'an all-zero key' \
+	0000000000000000000000000000000000000000000000000000000000000000
 mkdir -p "$scratch/checks"
 
 run_guest()

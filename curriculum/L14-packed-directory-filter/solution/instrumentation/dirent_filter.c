@@ -20,28 +20,30 @@ static unsigned short rk_record_length(const unsigned char *record)
 	return length;
 }
 
-static bool rk_record_matches(const unsigned char *record, const char *target,
-			      size_t target_length)
+static bool rk_record_matches(const unsigned char *record,
+			      rk_dirent_matcher_t matcher,
+			      const void *context)
 {
 	const char *name = (const char *)record + RK_DIRENT_NAME_OFFSET;
 	const size_t name_length = strlen(name);
 
-	return name_length == target_length &&
-	       memcmp(name, target, target_length) == 0;
+	return matcher(name, name_length, context);
 }
 
 enum rk_dirent_filter_result
-rk_filter_dirents64(void *buffer, size_t length,
-		    const char *target, size_t target_length,
-		    size_t *output_length)
+rk_filter_dirents64_if(void *buffer, size_t length,
+		       rk_dirent_matcher_t matcher, const void *context,
+		       size_t *output_length)
 {
 	unsigned char *bytes = buffer;
 	size_t offset = 0;
 	size_t write_offset = 0;
 	size_t previous_retained = SIZE_MAX;
-	size_t matches = 0;
+	size_t match_count = 0;
 	size_t records = 0;
 
+	if (!buffer || !matcher || !output_length)
+		return RK_DIRENT_FILTER_INVALID;
 	*output_length = length;
 	while (offset < length) {
 		const unsigned char *record = bytes + offset;
@@ -72,13 +74,12 @@ rk_filter_dirents64(void *buffer, size_t length,
 					 sizeof(u64));
 		if (record_length != canonical_length)
 			return RK_DIRENT_FILTER_INVALID;
-		if (name_length == target_length &&
-		    memcmp(name, target, target_length) == 0)
-			matches++;
+		if (matcher(name, name_length, context))
+			match_count++;
 		records++;
 		offset += record_length;
 	}
-	if (matches == 0 || matches == records)
+	if (match_count == 0 || match_count == records)
 		return RK_DIRENT_FILTER_UNCHANGED;
 
 	offset = 0;
@@ -86,7 +87,7 @@ rk_filter_dirents64(void *buffer, size_t length,
 		unsigned char *record = bytes + offset;
 		const unsigned short record_length = rk_record_length(record);
 
-		if (rk_record_matches(record, target, target_length)) {
+		if (rk_record_matches(record, matcher, context)) {
 			if (previous_retained != SIZE_MAX)
 				memcpy(bytes + previous_retained +
 				       offsetof(struct linux_dirent64, d_off),
@@ -102,4 +103,34 @@ rk_filter_dirents64(void *buffer, size_t length,
 	}
 	*output_length = write_offset;
 	return RK_DIRENT_FILTER_CHANGED;
+}
+
+struct rk_exact_match {
+	const char *target;
+	size_t length;
+};
+
+static bool rk_matches_exact(const char *name, size_t length,
+			     const void *context)
+{
+	const struct rk_exact_match *exact = context;
+
+	return length == exact->length &&
+	       memcmp(name, exact->target, length) == 0;
+}
+
+enum rk_dirent_filter_result
+rk_filter_dirents64(void *buffer, size_t length,
+		    const char *target, size_t target_length,
+		    size_t *output_length)
+{
+	const struct rk_exact_match exact = {
+		.target = target,
+		.length = target_length,
+	};
+
+	if (!target)
+		return RK_DIRENT_FILTER_INVALID;
+	return rk_filter_dirents64_if(buffer, length, rk_matches_exact, &exact,
+				      output_length);
 }

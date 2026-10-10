@@ -36,7 +36,7 @@ M01 + L23 -> L24 replay-safe authenticated message
 L23 -> L25 authenticated encryption
 M07 + L21 + L25 -> M08 root reverse shell with authenticated trigger
 
-M04 + M08 -> C00 complete rootkit
+L15 + M04 + M08 -> C00 complete rootkit
 ```
 
 `+` means that every listed exercise is a direct prerequisite.

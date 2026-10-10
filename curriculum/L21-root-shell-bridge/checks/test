@@ -108,9 +108,10 @@ grep -Fq 'unknown ROOTKITLINGS_FAIL_POINT' "$scratch/unknown.log" || {
 guest()
 {
 	local check=$1 label=$2 output
+	shift 2
 
 	if ! output=$("$here/../../../vm/boot" --check "$check" \
-			"$scratch/solution/rootkitlings.ko" 2>&1); then
+			"$@" "$scratch/solution/rootkitlings.ko" 2>&1); then
 		printf '%s\n[x] guest rejected %s\n' "$output" "$label" >&2
 		exit 1
 	fi
@@ -121,6 +122,7 @@ guest "$here/success-check" solution
 guest "$here/timeout-check" timeout
 guest "$here/unload-check" unload
 guest "$here/refused-check" refused
-guest "$here/invalid-parameter-check" invalid-configuration
+guest "$here/invalid-parameter-check" invalid-configuration \
+	--tool vm/tools/module_load_params
 
 printf '[+] root-shell bridge checker regression passed\n'

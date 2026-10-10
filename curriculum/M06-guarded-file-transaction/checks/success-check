@@ -109,22 +109,21 @@ fi
 reset_target
 printf 'occupied' > "$sibling"
 chmod 0600 "$sibling"
-if insmod /rootkitlings/rootkitlings.ko 2>/dev/null; then
-	_fail "an occupied sibling loaded the module"
-	rmmod rootkitlings 2>/dev/null || true
+# The module loader maps an init return of EEXIST to EBUSY.
+if load_errno /rootkitlings/rootkitlings.ko 16 ""; then
+	_ok "an occupied sibling reaches userspace as EBUSY"
 else
-	_ok "an occupied sibling is rejected"
+	_fail "an occupied sibling returned the wrong error"
 fi
 [ "$(cat "$sibling")" = occupied ] || _fail "occupied sibling was changed"
 
 reset_target
 rm -f "$target"
 ln -s "$original" "$target"
-if insmod /rootkitlings/rootkitlings.ko 2>/dev/null; then
-	_fail "a symlink target loaded the module"
-	rmmod rootkitlings 2>/dev/null || true
+if load_errno /rootkitlings/rootkitlings.ko 40 ""; then
+	_ok "a symlink target is rejected with ELOOP"
 else
-	_ok "a symlink target is rejected"
+	_fail "a symlink target returned the wrong error"
 fi
 [ -L "$target" ] || _fail "symlink target was changed"
 
@@ -142,11 +141,11 @@ fi
 printf 'original' > "$original"
 for step in 1 2 3 4 5 6 7 8 9 10; do
 	reset_target
-	if insmod /rootkitlings/rootkitlings.ko "fail_step=$step" 2>/dev/null; then
-		_fail "apply failure step $step loaded the module"
-		rmmod rootkitlings 2>/dev/null || true
+	if load_errno /rootkitlings/rootkitlings.ko 5 \
+			"fail_step=$step"; then
+		_ok "apply failure step $step returns EIO"
 	else
-		_ok "apply failure step $step is rejected"
+		_fail "apply failure step $step returned the wrong error"
 	fi
 	assert_original_only
 done
@@ -189,7 +188,8 @@ if [ "$(cat "$target")" = foreign ] && cmp -s "$original" "$sibling"; then
 else
 	_fail "foreign target content was overwritten or lost"
 fi
-if [ "$(dmesg | grep -c 'transaction incomplete; stopping without further changes')" -ge 1 ]; then
+if [ "$(dmesg | grep -c \
+		'transaction incomplete; stopping without further changes')" -ge 1 ]; then
 	_ok "suppressed rollback records one concise warning"
 else
 	_fail "suppressed rollback warning is missing"

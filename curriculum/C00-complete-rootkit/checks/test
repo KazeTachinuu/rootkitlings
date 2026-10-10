@@ -5,8 +5,8 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
 ROOT=$ROOTKITLINGS_ROOT
-REMOTE_AGENT=$HERE/../../M07-remote-resident-agent
-CONCEALMENT=$HERE/../../M03-concealment-evidence-map
+SECURE_AGENT=$HERE/../../M08-authenticated-reverse-shell
+AUTHORIZED=$HERE/../../M02-authorized-actions-telemetry
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-complete-rootkit.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
@@ -23,48 +23,95 @@ for option in CC_IS_GCC CRYPTO_GCM CRYPTO_AES CRYPTO_HMAC CRYPTO_SHA256 \
 		exit 1
 	}
 done
-for command in base64 gcc gzip make nm; do
+for command in base64 gcc gzip make nm python3; do
 	command -v "$command" >/dev/null || {
 		printf '[x] %s is required\n' "$command" >&2
 		exit 1
 	}
 done
-for script in test host-check success-check; do
+for script in test host-check success-check config-check \
+		visibility-check visibility-failure-check visibility-host-check; do
 	bash -n "$HERE/$script"
 done
 if command -v shellcheck >/dev/null; then
-	shellcheck -x -s bash "$HERE/test" "$HERE/host-check"
-	shellcheck -x -s sh "$HERE/success-check"
+	shellcheck -x -s bash "$HERE/test" "$HERE/host-check" \
+		"$HERE/visibility-host-check"
+	shellcheck -x -s sh "$HERE/success-check" "$HERE/config-check" \
+		"$HERE/visibility-check" "$HERE/visibility-failure-check"
 fi
 
 materialize()
 {
 	local tree=$1 destination=$2
-	"$ROOT/scripts/catalog" materialize "$tree" C00 "${destination%/*}" \
-		--name "${destination##*/}" >/dev/null
+	local -a command=("$ROOT/scripts/catalog" materialize "$tree" C00
+		"${destination%/*}" --name "${destination##*/}")
+	show_command "${command[@]}"
+	"${command[@]}"
+}
+
+show_command()
+{
+	local argument rendered=
+	for argument in "$@"; do
+		printf -v rendered '%s%q ' "$rendered" "$argument"
+	done
+	ui_transcript "${rendered% }"
+}
+
+build_tree()
+{
+	local directory=$1 point=${2:-0}
+	local log=$directory.log
+	local -a command=(make -s -C "$KDIR" M="$directory" W=1
+		"ROOTKITLINGS_FAIL_POINT=$point" modules)
+	show_command "${command[@]}"
+	if ! "${command[@]}" 2>&1 | tee "$log"; then
+		printf '[x] build failed: %s failpoint %s\n' \
+			"${directory##*/}" "$point" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		printf '[x] build warned: %s\n' "${directory##*/}" >&2
+		exit 1
+	fi
 }
 
 materialize starter "$scratch/starter"
-make -s -C "$KDIR" M="$scratch/starter" W=1 modules \
-	> "$scratch/starter.log" 2>&1
-if "$HERE/host-check" "$scratch/starter" "$scratch/starter/rootkitlings.ko" \
-		> "$scratch/starter-host.log" 2>&1; then
-	printf '[x] host checker accepted unfinished learner file\n' >&2; exit 1
+
+starter_build=(make -s -C "$KDIR" M="$scratch/starter" W=1 modules)
+show_command "${starter_build[@]}"
+if ! "${starter_build[@]}" 2>&1 | tee "$scratch/starter.log"; then
+	printf '[x] unfinished project does not compile\n' >&2
+	exit 1
+fi
+starter_host=("$HERE/host-check" "$scratch/starter"
+	"$scratch/starter/rootkitlings.ko")
+show_command "${starter_host[@]}"
+if "${starter_host[@]}" 2>&1 | tee "$scratch/starter-host.log"; then
+	printf '[x] checker accepted the unfinished project\n' >&2
+	exit 1
 fi
 
 materialize solution "$scratch/solution"
-make -s -C "$KDIR" M="$scratch/solution" W=1 modules \
-	> "$scratch/solution.log" 2>&1
-! grep -q 'warning:' "$scratch/solution.log" || {
-	cat "$scratch/solution.log"
+build_tree "$scratch/solution"
+solution_host=("$HERE/host-check" "$scratch/solution"
+	"$scratch/solution/rootkitlings.ko")
+show_command "${solution_host[@]}"
+"${solution_host[@]}"
+
+materialize solution "$scratch/unknown"
+unknown_build=(make -s -C "$KDIR" M="$scratch/unknown" W=1
+	ROOTKITLINGS_FAIL_POINT=99 modules)
+show_command "${unknown_build[@]}"
+if "${unknown_build[@]}" 2>&1 | tee "$scratch/unknown.log"; then
+	printf '[x] unknown failure point compiled\n' >&2
+	exit 1
+fi
+grep -Fq 'unknown ROOTKITLINGS_FAIL_POINT' "$scratch/unknown.log" || {
+	cat "$scratch/unknown.log" >&2
+	printf '[x] unknown failure point failed for the wrong reason\n' >&2
 	exit 1
 }
-"$HERE/host-check" "$scratch/solution" "$scratch/solution/rootkitlings.ko"
-
-materialize solution "$scratch/fail-14"
-make -s -C "$KDIR" M="$scratch/fail-14" W=1 \
-	ROOTKITLINGS_FAIL_POINT=14 modules > "$scratch/fail-14.log" 2>&1
-
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -static \
 	-o "$scratch/secure_agent_fixture" "$ROOT/vm/tools/secure_agent_fixture.c"
 mkdir -p "$scratch/checks"
@@ -72,12 +119,78 @@ mkdir -p "$scratch/checks"
 run_guest()
 {
 	local check=$1 module=$2 label=$3 output
+	local -a command
 	shift 3
-	if ! output=$("$ROOT/vm/boot" --check "$check" "$@" "$module" 2>&1); then
+	command=("$ROOT/vm/boot" --check "$check" "$@" "$module")
+	show_command "${command[@]}"
+	if ! output=$("${command[@]}" </dev/null 2>&1); then
 		printf '%s\n[x] guest rejected %s\n' "$output" "$label" >&2; exit 1
 	fi
 	printf '%s\n' "$output"
 }
+
+failure_matrix()
+{
+	local manifest=$HERE/../exercise.toml
+	python3 - "$manifest" <<'PY'
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as stream:
+    cases = tomllib.load(stream)["verification"]["cases"]
+
+rows = {}
+for case in cases:
+    raw = case.get("build_variables", {}).get("ROOTKITLINGS_FAIL_POINT")
+    if raw is None or not raw.isdecimal() or not 1 <= int(raw) <= 15:
+        continue
+    point = int(raw)
+    if point in rows:
+        raise SystemExit(f"duplicate C00 failpoint: {point}")
+    arguments = case.get("check_arguments", [])
+    if len(arguments) > 3:
+        raise SystemExit(f"too many checker arguments for failpoint {point}")
+    fields = [raw, case["id"], case["check"], *arguments]
+    rows[point] = fields + [""] * (6 - len(fields))
+
+expected = set(range(1, 16))
+if set(rows) != expected:
+    raise SystemExit(f"C00 failpoints must be 1..15: {sorted(rows)}")
+for point in sorted(rows):
+    print("\x1f".join(rows[point]))
+PY
+}
+
+failure_tools()
+{
+	case ${1##*/} in
+		action-failure-check.in)
+			printf '%s\n' vm/tools/run_as vm/tools/cred_trigger_test ;;
+		failure-check.in|visibility-failure-check)
+			printf '%s\n' vm/tools/module_load_params ;;
+		*)
+			printf '[x] unsupported failure checker: %s\n' "$1" >&2
+			return 1 ;;
+	esac
+}
+
+show_command python3 - "$HERE/../exercise.toml"
+failure_matrix > "$scratch/failure-matrix"
+while IFS=$'\x1f' read -r point case_id check arg1 arg2 arg3; do
+	directory=$scratch/fail-$point
+	materialize solution "$directory"
+	build_tree "$directory" "$point"
+	guest_args=()
+	for argument in "$arg1" "$arg2" "$arg3"; do
+		[[ -z $argument ]] || guest_args+=(--check-arg "$argument")
+	done
+	tools=$(failure_tools "$check") || exit 1
+	while IFS= read -r tool; do
+		guest_args+=(--tool "$tool")
+	done <<< "$tools"
+	run_guest "$ROOT/$check" "$directory/rootkitlings.ko" "$case_id" \
+		"${guest_args[@]}"
+done < "$scratch/failure-matrix"
 
 append_binary()
 {
@@ -91,20 +204,27 @@ cp "$HERE/success-check" "$scratch/checks/success-check"
 append_binary __ROOTKITLINGS_SECURE_FIXTURE__ \
 	"$scratch/secure_agent_fixture" "$scratch/checks/success-check"
 run_guest "$scratch/checks/success-check" \
-	"$scratch/solution/rootkitlings.ko" solution
+	"$scratch/solution/rootkitlings.ko" solution \
+	--tool vm/tools/packet_mutation_test
 
-run_guest "$REMOTE_AGENT/checks/failure-check.in" \
-	"$scratch/fail-14/rootkitlings.ko" packet-redirect-rollback \
-	--check-arg 4 --check-arg 'Packet redirect registration' \
-	--check-arg complete-rootkit --tool vm/tools/module_load_params
+run_guest "$AUTHORIZED/checks/success-check" \
+	"$scratch/solution/rootkitlings.ko" authorized-actions \
+	--check-arg complete-rootkit --tool vm/tools/event_stream_test \
+	--tool vm/tools/status_field_test --tool vm/tools/proc_write_test \
+	--tool vm/tools/proc_read_test --tool vm/tools/cred_trigger_test \
+	--tool vm/tools/rmdir_telemetry_test --tool vm/tools/run_as
+run_guest "$SECURE_AGENT/checks/invalid-check" \
+	"$scratch/solution/rootkitlings.ko" control-provisioning \
+	--tool vm/tools/module_load_params
 
-cp "$CONCEALMENT/checks/success-check" "$scratch/concealment-regression"
-chmod 0755 "$scratch/concealment-regression"
-run_guest "$scratch/concealment-regression" \
-	"$scratch/solution/rootkitlings.ko" \
-	inherited-regression --check-arg complete-rootkit \
+run_guest "$HERE/config-check" \
+	"$scratch/solution/rootkitlings.ko" configuration-boundaries \
+	--tool vm/tools/module_load_params
+
+run_guest "$HERE/visibility-check" \
+	"$scratch/solution/rootkitlings.ko" selected-view-concealment \
 	--tool vm/tools/run_as --tool vm/tools/getdents64_test \
 	--tool vm/tools/status_field_test --tool vm/tools/proc_write_test \
-	--tool vm/tools/proc_read_test
+	--tool vm/tools/proc_read_test --tool vm/tools/read_result_test
 
 printf '[+] complete-rootkit passed\n'

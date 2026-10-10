@@ -6,8 +6,15 @@ begin "Refused root shell connection"
 ifconfig lo 127.0.0.1 up
 
 load rootkitlings.ko shell_port=46125 shell_timeout_ms=250
+ticket=$(cat /sys/module/rootkitlings/parameters/shell_ticket)
+request_id=${ticket%% *}
 sleep 0.4
-_ok "a refused connection released its worker and socket"
+if test "$(cat /sys/module/rootkitlings/parameters/shell_status)" = \
+		"$request_id refused -111"; then
+	_ok "refusal reports the exact request and releases its resources"
+else
+	_fail "refused connection status is missing or incorrect"
+fi
 
 capture=/tmp/rootkitlings-root-shell-retry
 printf '%s\n' 'echo retry=ok' 'exit' |

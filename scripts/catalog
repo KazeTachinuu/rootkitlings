@@ -138,6 +138,13 @@ def main() -> int:
                         "host_check": item.resources.host_check or None,
                         "hint": item.resources.hint, "solution": item.resources.solution,
                     },
+                    "play": (
+                        {
+                            "profile": item.play.profile,
+                            "script": item.play.script,
+                        }
+                        if item.play else None
+                    ),
                     "verification": {
                         "timeout_seconds": item.verification.timeout_seconds,
                         "tools": list(item.verification.tools),

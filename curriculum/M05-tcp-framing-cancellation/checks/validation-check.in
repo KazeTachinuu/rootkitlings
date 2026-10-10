@@ -7,7 +7,7 @@ label=${2:?validation label argument is required}
 
 begin "$label"
 
-if module_load_params "/rootkitlings/$module" 22 'peer_port=47023'; then
+if load_errno "/rootkitlings/$module" 22 'peer_port=47023'; then
 	_ok "$module was rejected by instrumented behavior tests"
 else
 	_fail "$module returned the wrong error"

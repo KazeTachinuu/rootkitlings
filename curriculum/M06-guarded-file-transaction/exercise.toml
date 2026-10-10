@@ -1,9 +1,9 @@
 schema_version = 2
 id = "guarded-file-transaction"
 title = "Leave a reversible note in an owned file"
-stage = "persistence"
+stage = "boot-staging"
 kind = "milestone"
-tradecraft = ["persistence", "lifecycle", "detection"]
+tradecraft = ["boot-staging", "lifecycle", "detection"]
 difficulty = "advanced"
 prerequisites = ["proc-publication"]
 teaches = ["bounded-kernel-file-io", "exclusive-staging-file", "atomic-file-exchange", "file-and-directory-fsync", "file-identity-guard", "compare-before-rollback", "kernel-file-context-constraints"]
@@ -11,8 +11,8 @@ requires = ["kernel-allocation", "resource-ownership", "linux-file-permission-ba
 
 [workspace]
 mode = "project"
-files = ["Kbuild", "core/main.c", "include/interface.h", "include/platform.h", "include/transaction.h", "interface/proc.c", "persistence/platform.c", "persistence/transaction.c"]
-editable = ["persistence/transaction.c"]
+files = ["Kbuild", "core/main.c", "include/interface.h", "include/platform.h", "include/transaction.h", "interface/proc.c", "staging/platform.c", "staging/transaction.c"]
+editable = ["staging/transaction.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/M06-guarded-file-transaction/starter"
@@ -25,7 +25,7 @@ solution = "curriculum/M06-guarded-file-transaction/solution"
 
 [verification]
 timeout_seconds = 360
-tools = ["module-load-test"]
+tools = ["module-load-test", "module-load-params"]
 
 [[verification.cases]]
 id = "guarded-transaction"

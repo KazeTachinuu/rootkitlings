@@ -98,34 +98,41 @@ fi
 
 expect_mutation_rejected()
 {
-	local name=$1 expression=$2 replacement=$3 tree=$scratch/mutation-$1
+	local name=$1 expression=$2 tree=$scratch/mutation-$1
+	local source=$tree/instrumentation/dirent_filter.c before after
 	cp -a "$scratch/success" "$tree"
-	sed -i "$expression" "$tree/instrumentation/dirent_filter.c"
+	before=$(cksum "$source")
+	sed -i "$expression" "$source"
+	after=$(cksum "$source")
+	[[ $before != "$after" ]] || {
+		printf '[x] mutation did not change the source: %s\n' "$name" >&2
+		exit 1
+	}
 	if "$HERE/host-check" "$tree" "$tree/rootkitlings.ko" \
 		> "$scratch/mutation-$name.log" 2>&1; then
 		printf '[x] host checker accepted mutation: %s\n' "$name" >&2
 		exit 1
 	fi
-	: "$replacement"
 }
 
-expect_mutation_rejected memcpy-overlap 's/memmove(/memcpy(/' semantic
-expect_mutation_rejected one-pass-partial \
-	's/matches++;/memmove(bytes, bytes + record_length, remaining - record_length); matches++;/' semantic
+expect_mutation_rejected memcpy-overlap 's/memmove(/memcpy(/'
+one_pass='s/match_count++;/memmove(bytes, bytes + record_length, '
+one_pass+='remaining - record_length); match_count++;/'
+expect_mutation_rejected one-pass-partial "$one_pass"
 expect_mutation_rejected prefix-match \
-	's/name_length == target_length &&/name_length <= target_length \&\&/; s/memcmp(name, target, target_length)/memcmp(name, target, name_length)/g' semantic
+	's/length == exact->length \&\&/length <= exact->length \&\&/'
 expect_mutation_rejected hard-coded-target \
 	'/\*output_length = length;/i\
-\ttarget = "rootkitlings_hidden"; target_length = sizeof("rootkitlings_hidden") - 1;' semantic
+\ttarget = "rootkitlings_hidden"; target_length = sizeof("rootkitlings_hidden") - 1;'
 expect_mutation_rejected missing-output-length \
-	's/\*output_length = write_offset;/\/\* missing length \*\//' semantic
+	's/\*output_length = write_offset;/\/\* missing length \*\//'
 expect_mutation_rejected all-match-zero \
-	's/return RK_DIRENT_FILTER_UNCHANGED;/\* hostile all-match \*\/ *output_length = 0; return RK_DIRENT_FILTER_CHANGED;/' semantic
+	's/return RK_DIRENT_FILTER_UNCHANGED;/\* hostile all-match \*\/ *output_length = 0; return RK_DIRENT_FILTER_CHANGED;/'
 expect_mutation_rejected missing-cookie \
-	's/memcpy(bytes + previous_retained/if (0) memcpy(bytes + previous_retained/' semantic
+	's/memcpy(bytes + previous_retained/if (0) memcpy(bytes + previous_retained/'
 expect_mutation_rejected corrupt-retained-record \
 	'/previous_retained = write_offset;/i\
-\t\t\tbytes[write_offset + offsetof(struct linux_dirent64, d_type)] ^= 1;' semantic
+\t\t\tbytes[write_offset + offsetof(struct linux_dirent64, d_type)] ^= 1;'
 
 render_failure()
 {

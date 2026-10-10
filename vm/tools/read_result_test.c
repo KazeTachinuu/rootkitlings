@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <errno.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -180,6 +181,7 @@ static void usage(const char *name)
 		"error METHOD PATH ERRNO | "
 		"position-error PATH ERRNO HEX | "
 		"check METHOD PATH OFFSET REQUEST HEX | "
+		"contains|excludes METHOD PATH TEXT | "
 		"proc PATH HEX | stress PATH ITERATIONS HEX [ALTERNATE_HEX]\n",
 		name);
 }
@@ -355,6 +357,40 @@ static int check_read(const char *method, const char *path,
 	free(expected);
 	free(actual);
 	return 0;
+}
+
+static bool contains_bytes(const unsigned char *bytes, size_t length,
+			   const char *text)
+{
+	const size_t text_length = strlen(text);
+	size_t index;
+
+	if (!text_length)
+		return true;
+	if (text_length > length)
+		return false;
+	for (index = 0; index <= length - text_length; index++) {
+		if (memcmp(bytes + index, text, text_length) == 0)
+			return true;
+	}
+	return false;
+}
+
+static int check_contains(const char *method, const char *path,
+			  const char *text, bool expected)
+{
+	unsigned char buffer[4096];
+	ssize_t result;
+	int descriptor;
+
+	descriptor = open(path, O_RDONLY | O_CLOEXEC);
+	if (descriptor < 0)
+		return 2;
+	result = read_by_method(method, descriptor, buffer, sizeof(buffer), 0);
+	close(descriptor);
+	if (result < 0)
+		return 2;
+	return contains_bytes(buffer, (size_t)result, text) == expected ? 0 : 1;
 }
 
 static int invalid_read(const char *path)
@@ -597,6 +633,10 @@ int main(int argc, char **argv)
 		return expect_position_error(argv[2], argv[3], argv[4]);
 	if (argc == 7 && strcmp(argv[1], "check") == 0)
 		return check_read(argv[2], argv[3], argv[4], argv[5], argv[6]);
+	if (argc == 5 && strcmp(argv[1], "contains") == 0)
+		return check_contains(argv[2], argv[3], argv[4], true);
+	if (argc == 5 && strcmp(argv[1], "excludes") == 0)
+		return check_contains(argv[2], argv[3], argv[4], false);
 	if (argc == 4 && strcmp(argv[1], "proc") == 0)
 		return check_proc(argv[2], argv[3]);
 	if (argc == 5 && strcmp(argv[1], "stress") == 0)

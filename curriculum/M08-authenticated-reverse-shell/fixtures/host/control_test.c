@@ -65,7 +65,7 @@ static void test_commands(void)
 	struct rk_command before;
 	static const char *const invalid_shells[] = {
 		"SHELL", "SHELL ", "SHELL 0", "SHELL 01", "SHELL +1",
-		"SHELL 65536", "SHELL 1 ", "SHELL 1x",
+		"SHELL 65536", "SHELL 1 ", "SHELL 1x", "SHELL STATUS ",
 	};
 	static const struct {
 		const char *text;
@@ -86,6 +86,7 @@ static void test_commands(void)
 	expect_command("MARK alpha_7", RK_COMMAND_MARK);
 	expect_command("SHELL 1", RK_COMMAND_SHELL);
 	expect_command("SHELL 65535", RK_COMMAND_SHELL);
+	expect_command("SHELL STATUS", RK_COMMAND_SHELL_STATUS);
 	CHECK(rk_command_parse((const unsigned char *)"SHELL 4444", 10,
 			       &command) == 0);
 	CHECK(command.kind == RK_COMMAND_SHELL && command.shell_port == 4444);

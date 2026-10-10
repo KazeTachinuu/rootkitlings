@@ -1,6 +1,6 @@
 schema_version = 2
 id = "root-shell-bridge"
-title = "Hand a loopback socket to a root shell"
+title = "Hand a TCP socket to a root shell"
 stage = "network-state"
 kind = "lesson"
 tradecraft = ["execution", "privilege", "networking", "lifecycle"]
@@ -72,7 +72,7 @@ ROOTKITLINGS_FAIL_POINT = "0"
 
 [[verification.cases]]
 id = "refused-connection"
-label = "Refused loopback connection"
+label = "Refused peer connection"
 expect_build = "pass"
 check = "curriculum/L21-root-shell-bridge/checks/refused-check"
 [verification.cases.build_variables]

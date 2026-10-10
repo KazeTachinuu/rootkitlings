@@ -1,9 +1,9 @@
 schema_version = 2
 id = "remote-resident-agent"
 title = "Call home and stage a reversible load request"
-stage = "persistence"
+stage = "boot-staging"
 kind = "milestone"
-tradecraft = ["control", "networking", "persistence", "lifecycle"]
+tradecraft = ["control", "networking", "boot-staging", "lifecycle"]
 difficulty = "advanced"
 prerequisites = ["concealment-evidence-map", "tcp-framing-cancellation", "guarded-file-transaction"]
 teaches = ["resident-client-retry", "connect-back-agent", "remote-agent-integration", "boot-load-request"]
@@ -11,7 +11,7 @@ requires = ["machine-readable-evidence-map", "tcp-length-framing", "blocked-io-c
 
 [workspace]
 mode = "cumulative"
-files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interface/proc.c", "execution/worker.c", "execution/scheduler.c", "control/authorization.c", "privilege/credentials.c", "instrumentation/events.c", "instrumentation/return_probe.c", "include/dirent_filter.h", "instrumentation/dirent_filter.c", "instrumentation/getdents_probe.c", "interface/evidence.c", "include/agent.h", "include/agent_status.h", "include/framing.h", "include/platform.h", "include/protocol.h", "include/transaction.h", "interface/agent_status.c", "network/agent.c", "network/framing.c", "network/protocol.c", "persistence/platform.c", "persistence/transaction.c"]
+files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interface/proc.c", "execution/worker.c", "execution/scheduler.c", "control/authorization.c", "privilege/credentials.c", "instrumentation/events.c", "instrumentation/return_probe.c", "include/dirent_filter.h", "instrumentation/dirent_filter.c", "instrumentation/getdents_probe.c", "interface/evidence.c", "include/agent.h", "include/agent_status.h", "include/framing.h", "include/ipv4.h", "include/platform.h", "include/protocol.h", "include/transaction.h", "interface/agent_status.c", "network/agent.c", "network/framing.c", "network/ipv4.c", "network/protocol.c", "staging/platform.c", "staging/transaction.c"]
 editable = ["Kbuild", "core/main.c", "network/agent.c"]
 build = "."
 baseline = "parent"
@@ -19,7 +19,7 @@ parent = "concealment-evidence-map"
 additions = "curriculum/M07-remote-resident-agent/starter"
 imports = [
   { exercise = "tcp-framing-cancellation", files = ["include/framing.h", "network/framing.c"] },
-  { exercise = "guarded-file-transaction", files = ["include/transaction.h", "persistence/transaction.c"] },
+  { exercise = "guarded-file-transaction", files = ["include/transaction.h", "staging/transaction.c"] },
 ]
 
 [resources]

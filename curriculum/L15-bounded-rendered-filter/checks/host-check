@@ -18,6 +18,7 @@ trap 'rm -rf -- "$scratch"' EXIT
 supplied=(
 	Kbuild
 	core/main.c
+	include/replace.h
 	include/rootkit.h
 	instrumentation/read_filter.c
 	interface/proc.c
@@ -34,6 +35,7 @@ for command in gcc timeout nm objdump strings; do
 done
 gcc -DRK_STANDALONE_HELPER -std=c11 -Wall -Wextra -Werror -pedantic \
 	-fsanitize=address,undefined -fno-omit-frame-pointer \
+	-I "$success_dir/include" \
 	"$learner" "$root/vm/tools/read_result_test.c" -o "$scratch/helper"
 ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 timeout 15 "$scratch/helper" \
 	> "$scratch/helper.log" 2>&1 || {

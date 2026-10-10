@@ -16,10 +16,6 @@
 #define RK_READ_RETURN_CAPACITY 32U
 #define RK_READ_TARGET "/tmp/rootkitlings-read-target"
 
-size_t rk_replace_equal(unsigned char *bytes, size_t length,
-			const unsigned char *from,
-			const unsigned char *to, size_t width);
-
 __must_check int rk_read_target_retain(void);
 void rk_read_target_release(void);
 __must_check int rk_read_filter_start(void);

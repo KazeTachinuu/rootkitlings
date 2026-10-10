@@ -71,8 +71,8 @@ id = "networking"
 label = "Networking"
 
 [[tradecraft_tags]]
-id = "persistence"
-label = "Persistence"
+id = "boot-staging"
+label = "Boot staging"
 
 [[tradecraft_tags]]
 id = "cryptography"
@@ -243,8 +243,8 @@ id = "network-state"
 label = "Packets and call-home"
 
 [[sections]]
-id = "persistence"
-label = "Persistence and remote control"
+id = "boot-staging"
+label = "Boot staging and remote control"
 
 [[sections]]
 id = "authenticated-operations"

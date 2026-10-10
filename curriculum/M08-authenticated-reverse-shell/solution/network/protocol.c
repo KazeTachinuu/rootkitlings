@@ -61,6 +61,8 @@ int rk_command_parse(const unsigned char *bytes, size_t length,
 		parsed.kind = RK_COMMAND_DISABLE;
 	else if (rk_bytes_equal(bytes, length, "RUN", 3))
 		parsed.kind = RK_COMMAND_RUN;
+	else if (rk_bytes_equal(bytes, length, "SHELL STATUS", 12))
+		parsed.kind = RK_COMMAND_SHELL_STATUS;
 	else if (length > 6 && length <= 11 &&
 		 !memcmp(bytes, "SHELL ", 6)) {
 		if (rk_shell_port(bytes + 6, length - 6, &parsed.shell_port))

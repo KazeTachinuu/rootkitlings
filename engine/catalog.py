@@ -36,6 +36,7 @@ TOP_FIELDS = {
     "tradecraft", "difficulty", "prerequisites", "teaches", "requires",
     "workspace", "resources", "verification",
 }
+PLAY_FIELDS = {"profile", "script"}
 RESOURCE_FIELDS = {"readme", "host_check", "hint", "solution"}
 VERIFICATION_FIELDS = {"timeout_seconds", "tools", "cases"}
 VERIFICATION_CASE_REQUIRED_FIELDS = {"id", "label", "expect_build"}
@@ -49,7 +50,7 @@ QUERY_FIELDS = {
     "workspace_build", "workspace_baseline", "workspace_parent",
     "workspace_additions", "workspace_module_artifact",
     "readme", "host_check", "hint", "solution", "verification_timeout",
-    "verification_tools",
+    "verification_tools", "play_profile", "play_script",
 }
 
 
@@ -129,6 +130,14 @@ class Verification:
 
 
 @dataclass(frozen=True)
+class Play:
+    """Optional, manifest-owned reference demonstration."""
+
+    profile: str
+    script: str
+
+
+@dataclass(frozen=True)
 class Exercise:
     id: str
     path: Path
@@ -143,6 +152,7 @@ class Exercise:
     workspace: Workspace
     resources: Resources
     verification: Verification
+    play: Play | None = None
     serial: str = ""
     sequence: int = -1
 
@@ -169,6 +179,8 @@ class Exercise:
             "hint": self.resources.hint, "solution": self.resources.solution,
             "verification_timeout": self.verification.timeout_seconds,
             "verification_tools": self.verification.tools,
+            "play_profile": self.play.profile if self.play else "",
+            "play_script": self.play.script if self.play else "",
         }
         return values[field]
 
@@ -261,7 +273,11 @@ class Catalog:
                 data = tomllib.loads(file.read_text(encoding="utf-8"))
             except (OSError, tomllib.TOMLDecodeError) as exc:
                 raise CatalogError(f"cannot parse {relative}: {exc}") from exc
-            _exact_fields(data, TOP_FIELDS, relative)
+            _exact_fields(
+                data,
+                TOP_FIELDS | ({"play"} if "play" in data else set()),
+                relative,
+            )
             if data["schema_version"] != 2 or isinstance(data["schema_version"], bool):
                 raise CatalogError(f"{relative}: schema_version must be integer 2")
             exercise_id = _identifier(data["id"], relative)
@@ -269,6 +285,7 @@ class Catalog:
             workspace = self._workspace(data["workspace"], relative)
             resources = self._resources(data["resources"], relative)
             verification = self._verification(data["verification"], relative)
+            play = self._play(data["play"], relative) if "play" in data else None
             items.append(Exercise(
                 id=exercise_id, path=path, title=_string(data, "title", relative),
                 stage=_token(data, "stage", relative), kind=_token(data, "kind", relative),
@@ -277,9 +294,20 @@ class Catalog:
                 prerequisites=tuple(_id_list(data, "prerequisites", relative)),
                 teaches=tuple(_token_list(data, "teaches", relative)),
                 requires=tuple(_token_list(data, "requires", relative)),
-                workspace=workspace, resources=resources, verification=verification,
+                workspace=workspace, resources=resources,
+                verification=verification, play=play,
             ))
         return items
+
+    def _play(self, value, path):
+        play_path = path / "play"
+        if not isinstance(value, dict):
+            raise CatalogError(f"{play_path}: play must be a table")
+        _exact_fields(value, PLAY_FIELDS, play_path)
+        return Play(
+            profile=_token(value, "profile", play_path),
+            script=_safe_path(value["script"], play_path, self.root),
+        )
 
     def _workspace(self, value, path):
         if not isinstance(value, dict):
@@ -618,6 +646,8 @@ class Catalog:
     def _validate_paths(self, item):
         required_files = [item.resources.readme, item.resources.hint]
         optional_files = [item.resources.host_check]
+        if item.play is not None:
+            required_files.append(item.play.script)
         for value in required_files:
             if not value or not (self.root / value).is_file():
                 raise CatalogError(f"{item.path}: missing resource file: {value!r}")
@@ -959,22 +989,24 @@ class Catalog:
             raise CatalogError(
                 f"{item.path}: inherited workspace adds files but has no additions directory"
             )
-        if not new_files and additions:
-            raise CatalogError(
-                f"{item.path}: workspace additions are forbidden when no files are added"
-            )
         if additions:
             additions_root = self.root / additions
             if additions_root.is_symlink() or not additions_root.is_dir():
                 raise CatalogError(
                     f"{item.path}: workspace additions must be an existing real directory"
                 )
-            actual = _regular_tree(additions_root, item.path, new_files)
-            if actual != new_files:
+            actual = _regular_tree(additions_root, item.path)
+            missing = new_files - actual
+            unknown = actual - consumer_files
+            if not actual:
+                raise CatalogError(
+                    f"{item.path}: workspace additions must not be empty"
+                )
+            if missing or unknown:
                 raise CatalogError(
                     f"{item.path}: additions directory mismatch "
-                    f"(missing={sorted(new_files-actual)}, "
-                    f"unknown={sorted(actual-new_files)})"
+                    f"(missing={sorted(missing)}, "
+                    f"unknown={sorted(unknown)})"
                 )
 
     def validate_scaffold_lineage(
@@ -1293,7 +1325,6 @@ def _module_artifact(value, path):
 def _regular_tree(
     root: Path,
     owner: Path,
-    expected_files: set[str],
 ) -> set[str]:
     """Return an additions tree's files, rejecting links and special entries."""
     files: set[str] = set()
@@ -1316,7 +1347,7 @@ def _regular_tree(
             files.add(path.relative_to(root).as_posix())
     expected_directories = {
         parent.as_posix()
-        for value in expected_files
+        for value in files
         for parent in PurePosixPath(value).parents
         if parent != PurePosixPath(".")
     }

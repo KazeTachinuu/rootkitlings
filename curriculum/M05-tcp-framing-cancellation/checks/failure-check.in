@@ -37,7 +37,7 @@ while [ "$attempt" -le 2 ]; do
 	else
 		port=47023
 	fi
-	if module_load_params /rootkitlings/rootkitlings.ko "$expected_errno" \
+	if load_errno /rootkitlings/rootkitlings.ko "$expected_errno" \
 			"peer_port=$port"; then
 		_ok "attempt $attempt returned errno $expected_errno"
 	else

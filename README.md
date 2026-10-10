@@ -23,13 +23,7 @@ KVM is optional; QEMU falls back to slower TCG emulation.
 The course uses its pinned Linux 7.2.9 guest, not the host kernel or headers.
 GDB, Bear, clangd, and ShellCheck are optional development tools.
 
-### Host compatibility
-
-- **Supported:** x86-64 Linux.
-- **Expected, not acceptance-tested:** x86-64 WSL2.
-  Clone inside WSL into `~/rootkitlings`, not `/mnt/c`.
-- **Unsupported:** native Windows, WSL1, macOS, and ARM64 hosts.
-  Use an x86-64 Linux VM or remote host.
+The supported host is x86-64 Linux.
 
 ## Start
 
@@ -66,11 +60,13 @@ Run `./rootkitlings help` for the complete command list.
 - **M06–M07:** a reversible load request and call-home agent.
 - **L22–L25:** authentication, replay defense, and encryption.
 - **M08:** open the root shell through the authenticated control channel.
-- **C00:** combine the resident agent, shell, and packet redirector.
+- **C00:** combine the culminating subsystems into one tested rootkit.
 
 Lessons isolate mechanisms.
 Milestones turn them into a small tool or a visible system behavior.
 Use `list` for the route and `prereq` for direct dependencies.
+Use `./rootkitlings play C00` to operate the completed project in its restricted
+guest network.
 
 ## Recovery
 

@@ -18,7 +18,7 @@ for relative in include/framing.h network/framing.c; do
 	cmp -s "$framing/solution/$relative" "$build_dir/$relative" ||
 		die "imported framing changed: $relative"
 done
-for relative in include/transaction.h persistence/transaction.c; do
+for relative in include/transaction.h staging/transaction.c; do
 	cmp -s "$file_transaction/solution/$relative" "$build_dir/$relative" ||
 		die "imported file transaction changed: $relative"
 done
@@ -30,7 +30,8 @@ while IFS= read -r source; do
 done < <(find "$here/../starter" -type f | sort)
 
 for relative in core/main.o network/agent.o network/framing.o \
-		network/protocol.o persistence/platform.o persistence/transaction.o \
+		network/ipv4.o network/protocol.o staging/platform.o \
+		staging/transaction.o \
 		interface/agent_status.o; do
 	[[ -f $build_dir/$relative && ! -L $build_dir/$relative ]] ||
 		die "built component is missing: $relative"
@@ -50,7 +51,7 @@ gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
 	-fsanitize=address,undefined -fno-omit-frame-pointer \
 	-I"$build_dir/include" \
 	"$file_transaction/fixtures/host/transaction_test.c" \
-	"$build_dir/persistence/transaction.c" -o "$scratch/transaction-test"
+	"$build_dir/staging/transaction.c" -o "$scratch/transaction-test"
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 	"$scratch/transaction-test"
@@ -81,7 +82,7 @@ for symbol in rk_agent_start rk_agent_stop rk_transaction_apply \
 done
 
 for symbol in security_path_rename security_path_unlink vfs_rename vfs_unlink; do
-	nm -u "$build_dir/persistence/platform.o" |
+	nm -u "$build_dir/staging/platform.o" |
 		awk -v symbol="$symbol" '$2 == symbol { found = 1 } END { exit !found }' ||
 		die "guarded platform lacks VFS operation: $symbol"
 done

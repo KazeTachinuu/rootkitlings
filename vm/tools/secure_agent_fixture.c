@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,294 +11,467 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-struct vector {
-	const unsigned char *bytes;
-	size_t length;
+enum {
+	KEY_LENGTH = 32,
+	NONCE_LENGTH = 12,
+	TAG_LENGTH = 16,
+	HEADER_LENGTH = 18,
+	FRAME_MAX = 64,
+	REQUEST = 1,
+	REPLY = 2,
 };
 
-static const unsigned char request_1[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xd2, 0xb0,
-	0xfe, 0x11, 0xd6, 0x62, 0xc2, 0xe0, 0xb2, 0xf9, 0x1c, 0xeb,
-	0xb7, 0x56, 0x42, 0xbb, 0x74, 0x15, 0x07, 0x92,
+static uint8_t key[KEY_LENGTH];
+
+static const uint8_t sbox[256] = {
+	0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5,
+	0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
+	0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0,
+	0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0,
+	0xb7, 0xfd, 0x93, 0x26, 0x36, 0x3f, 0xf7, 0xcc,
+	0x34, 0xa5, 0xe5, 0xf1, 0x71, 0xd8, 0x31, 0x15,
+	0x04, 0xc7, 0x23, 0xc3, 0x18, 0x96, 0x05, 0x9a,
+	0x07, 0x12, 0x80, 0xe2, 0xeb, 0x27, 0xb2, 0x75,
+	0x09, 0x83, 0x2c, 0x1a, 0x1b, 0x6e, 0x5a, 0xa0,
+	0x52, 0x3b, 0xd6, 0xb3, 0x29, 0xe3, 0x2f, 0x84,
+	0x53, 0xd1, 0x00, 0xed, 0x20, 0xfc, 0xb1, 0x5b,
+	0x6a, 0xcb, 0xbe, 0x39, 0x4a, 0x4c, 0x58, 0xcf,
+	0xd0, 0xef, 0xaa, 0xfb, 0x43, 0x4d, 0x33, 0x85,
+	0x45, 0xf9, 0x02, 0x7f, 0x50, 0x3c, 0x9f, 0xa8,
+	0x51, 0xa3, 0x40, 0x8f, 0x92, 0x9d, 0x38, 0xf5,
+	0xbc, 0xb6, 0xda, 0x21, 0x10, 0xff, 0xf3, 0xd2,
+	0xcd, 0x0c, 0x13, 0xec, 0x5f, 0x97, 0x44, 0x17,
+	0xc4, 0xa7, 0x7e, 0x3d, 0x64, 0x5d, 0x19, 0x73,
+	0x60, 0x81, 0x4f, 0xdc, 0x22, 0x2a, 0x90, 0x88,
+	0x46, 0xee, 0xb8, 0x14, 0xde, 0x5e, 0x0b, 0xdb,
+	0xe0, 0x32, 0x3a, 0x0a, 0x49, 0x06, 0x24, 0x5c,
+	0xc2, 0xd3, 0xac, 0x62, 0x91, 0x95, 0xe4, 0x79,
+	0xe7, 0xc8, 0x37, 0x6d, 0x8d, 0xd5, 0x4e, 0xa9,
+	0x6c, 0x56, 0xf4, 0xea, 0x65, 0x7a, 0xae, 0x08,
+	0xba, 0x78, 0x25, 0x2e, 0x1c, 0xa6, 0xb4, 0xc6,
+	0xe8, 0xdd, 0x74, 0x1f, 0x4b, 0xbd, 0x8b, 0x8a,
+	0x70, 0x3e, 0xb5, 0x66, 0x48, 0x03, 0xf6, 0x0e,
+	0x61, 0x35, 0x57, 0xb9, 0x86, 0xc1, 0x1d, 0x9e,
+	0xe1, 0xf8, 0x98, 0x11, 0x69, 0xd9, 0x8e, 0x94,
+	0x9b, 0x1e, 0x87, 0xe9, 0xce, 0x55, 0x28, 0xdf,
+	0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68,
+	0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16,
 };
-static const unsigned char request_2[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x9a, 0x5c,
-	0xc9, 0x70, 0xb6, 0x48, 0xeb, 0xdf, 0x06, 0x91, 0x1d, 0x6d,
-	0x3f, 0x8e, 0xed, 0x43, 0x38, 0x27, 0xc3, 0x26,
+
+struct channel {
+	uint64_t session;
+	uint64_t request_sequence;
+	uint64_t reply_sequence;
 };
-static const unsigned char request_3[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xbd, 0x48,
-	0x10, 0x48, 0xfe, 0x64, 0xf8, 0x8e, 0x42, 0x58, 0x8d, 0xa5,
-	0x01, 0xfd, 0x48, 0xe5, 0x14, 0x32, 0xc4, 0x9e, 0x55, 0xa3,
-	0xb9, 0xac, 0x5c, 0xf5, 0x60, 0xf8,
-};
-static const unsigned char request_4[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x92, 0xd9,
-	0x9f, 0x5d, 0x38, 0x9f, 0x8a, 0x65, 0x40, 0x52, 0x7f, 0x24,
-	0x42, 0x6b, 0x6f, 0x8b, 0x22, 0xb7, 0x26, 0x77, 0x83, 0x12,
-	0x4b,
-};
-static const unsigned char request_5[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x9e, 0x73,
-	0xc2, 0xea, 0x24, 0xff, 0x0f, 0x50, 0xa1, 0x62, 0x5a, 0xc8,
-	0x3d, 0x1d, 0xc2, 0xa3, 0xd3, 0xf9, 0xcf, 0xa1, 0xc1, 0x68,
-};
-static const unsigned char request_6[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x4a, 0x98,
-	0x76, 0xa0, 0xc1, 0x18, 0xbe, 0x65, 0xf7, 0xdb, 0x21, 0x37,
-	0x87, 0xe6, 0x3d, 0xe8, 0xe3, 0x94, 0x34, 0xc5, 0xee, 0x73,
-	0x68, 0xea, 0x9c, 0xe9, 0xe0,
-};
-static const unsigned char request_7[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0xb5, 0x56,
-	0x54, 0x9f, 0x26, 0x83, 0x93, 0xaa, 0x8b, 0x6a, 0xcb, 0x4c,
-	0xec, 0xb3, 0x24, 0xe6, 0x2b, 0xc3, 0x3c, 0xd8, 0xf5, 0x37,
-};
-static const unsigned char request_8[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0xd2, 0xb5,
-	0x47, 0xc2, 0xaf, 0x73, 0xd9, 0x09, 0x87, 0x73, 0x01, 0x24,
-	0xdd, 0x6d, 0x0e, 0x6e, 0xf8, 0x14, 0x43, 0x36, 0x01, 0xff,
-	0xa3, 0x0e, 0x04, 0x49, 0x44,
-};
-static const unsigned char request_9[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, 0x3e, 0x2e,
-	0x4e, 0xf9, 0x03, 0x79, 0x76, 0xa5, 0xb8, 0xd4, 0x29, 0x7f,
-	0xdb, 0x0c, 0x2d, 0x5c, 0xf3, 0xa6, 0x47, 0xa4, 0xbe, 0x0c,
-	0x4e, 0xe1, 0x7c, 0x24, 0x59,
-};
-static const unsigned char request_10[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0xfd, 0x05,
-	0xee, 0x5f, 0x00, 0x47, 0xaa, 0xd3, 0x31, 0xc0, 0xf1, 0x5d,
-	0x51, 0xee, 0x93, 0xa8, 0x71, 0xe9, 0x7d,
-};
-static const unsigned char request_11[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0b, 0x5f, 0x01,
-	0x30, 0x23, 0x65, 0x64, 0x78, 0xd7, 0x14, 0x57, 0x2b, 0xa5,
-	0x8a, 0x6c, 0x08, 0x0d, 0x09, 0x5c, 0x4d, 0x84, 0x18, 0x95,
-	0xe8,
-};
-static const unsigned char request_12[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0c, 0x22, 0x73,
-	0x55, 0xd7, 0x29, 0x6f, 0x20, 0x05, 0xe4, 0x76, 0x0a, 0x8c,
-	0xc9, 0xe0, 0x14, 0x5a, 0x57, 0xed, 0x6e, 0x10, 0x7c, 0x86,
-	0xaf, 0x33, 0x77, 0xd6, 0xd1,
-};
-static const unsigned char request_13[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d, 0xc2, 0x8d,
-	0x22, 0x40, 0x35, 0xb0, 0xa3, 0x28, 0x72, 0x26, 0x8c, 0x06,
-	0xa5, 0xfe, 0xab, 0x95, 0x3a, 0x5b, 0xb0, 0x95,
-};
-static const unsigned char request_14[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0e, 0x4f, 0x26,
-	0x8b, 0xa0, 0xb1, 0x6e, 0x6c, 0xdf, 0x27, 0x56, 0x3d, 0x16,
-	0x70, 0xdf, 0x51, 0xc2, 0xaa, 0xbc, 0x29, 0x89, 0x10, 0x46,
-};
-static const unsigned char request_15[] = {
-	0x01, 0x01, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x05, 0xbe,
-	0xab, 0xa3, 0x43, 0x1f, 0xd1, 0x15, 0xf2, 0x84, 0xfc, 0x73,
-	0x86, 0x62, 0x6d, 0x26, 0xe4, 0x59, 0x7f, 0x07, 0x43, 0x43,
-	0xfd, 0x62, 0x02, 0x70, 0x66,
-};
-static const unsigned char reply_1[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x4a, 0x1e,
-	0xcf, 0x31, 0x35, 0x6f, 0x09, 0xa8, 0x03, 0x93, 0xf7, 0xdd,
-	0x55, 0x40, 0xdc, 0x4a, 0x1d, 0x8a, 0x06, 0x84,
-};
-static const unsigned char reply_2[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x75, 0x78,
-	0xeb, 0xc0, 0x59, 0x7e, 0x28, 0xa9, 0xbe, 0xfc, 0x5c, 0x72,
-	0xa3, 0xe2, 0x6e, 0x6c, 0x7d, 0x23, 0x1f, 0x53, 0x88, 0xcb,
-	0x20, 0x0b, 0x39, 0xa9, 0x95, 0x91, 0x40, 0xa2, 0x5b, 0x29,
-	0x54,
-};
-static const unsigned char reply_3[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xcb, 0x20,
-	0xd1, 0x66, 0xf4, 0x45, 0x03, 0x27, 0x48, 0xbd, 0xbb, 0xf1,
-	0x10, 0x78, 0xcb, 0xd0, 0x6b, 0x68, 0xd8, 0xd8, 0x9b, 0x2c,
-	0x6a, 0x32, 0xbc, 0x79, 0x66, 0x02, 0x2a, 0x20,
-};
-static const unsigned char reply_4[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x14, 0xa8,
-	0xa3, 0x98, 0x3a, 0xfd, 0xe3, 0x1c, 0xa5, 0x10, 0x1a, 0x7b,
-	0x46, 0xce, 0x13, 0x14, 0x81, 0x93, 0x2e,
-};
-static const unsigned char reply_5[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0xfa, 0xfd,
-	0xd4, 0x6c, 0x22, 0xff, 0x73, 0xbd, 0xc7, 0xe4, 0x56, 0x74,
-	0x0a, 0xd1, 0xfe, 0xc1, 0x98, 0x99, 0xbd, 0x39, 0x0b, 0xaa,
-	0x8a, 0x6e, 0xf6, 0x2f,
-};
-static const unsigned char reply_6[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0xe9, 0x4b,
-	0x20, 0xea, 0xd9, 0xa6, 0x39, 0xdd, 0x58, 0x3e, 0x94, 0x01,
-	0xf9, 0x8d, 0x31, 0x38, 0x3a, 0x05, 0xed, 0x7d, 0x45, 0x1c,
-	0x86, 0xce, 0x4e, 0xd8, 0x1a, 0x0c,
-};
-static const unsigned char reply_7[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x26, 0xf8,
-	0x83, 0x71, 0x78, 0x97, 0x65, 0x61, 0x9a, 0x5d, 0xde, 0x8a,
-	0xcf, 0xbe, 0xa8, 0x45, 0xe8, 0x8f, 0xcc, 0x4b, 0xef, 0x94,
-	0x59,
-};
-static const unsigned char reply_8[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x72, 0xa1,
-	0x82, 0x34, 0xd9, 0x47, 0x5f, 0x2e, 0xbe, 0xff, 0x70, 0x9b,
-	0xa6, 0x9c, 0x9e, 0x06, 0x19, 0x99, 0x65, 0x7f, 0x5f, 0x3d,
-	0xb5, 0x09, 0x62, 0x61, 0x7e, 0x8a, 0xc9,
-};
-static const unsigned char reply_9[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, 0x36, 0xf9,
-	0x94, 0xa7, 0xf9, 0x93, 0x54, 0x76, 0x8d, 0x73, 0x4b, 0x9f,
-	0x9a, 0xf8, 0x60, 0x1a, 0xfa, 0xad, 0x0e, 0x0d, 0xf3, 0xb8,
-	0x33, 0xbc,
-};
-static const unsigned char reply_10_queued[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x16, 0x96,
-	0x29, 0xd7, 0x2c, 0x8d, 0x6d, 0x9f, 0xbd, 0x08, 0x3c, 0x9e,
-	0xc8, 0xe8, 0xc6, 0x01, 0xb1, 0xc4, 0x17, 0xaf, 0x37, 0x78,
-};
-static const unsigned char reply_10_busy[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x02, 0x91,
-	0x3e, 0xa2, 0x0b, 0xbc, 0x43, 0x94, 0x92, 0x0e, 0x18, 0xd0,
-	0x8d, 0x54, 0x9c, 0x83, 0x28, 0x03, 0xa1, 0x78, 0x2f, 0x69,
-	0xa6, 0x98,
-};
-static const unsigned char reply_11[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0b, 0xd2, 0x2a,
-	0xef, 0x41, 0x9c, 0x24, 0xea, 0x41, 0xc4, 0x0c, 0x97, 0xd5,
-	0x2b, 0x87, 0xce, 0x02, 0x2a, 0x8a, 0x5a, 0xb2, 0xae, 0x38,
-	0xd6, 0x17,
-};
-static const unsigned char reply_12[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0c, 0x40, 0x3e,
-	0x9b, 0xc3, 0x08, 0x1e, 0x0b, 0x89, 0x72, 0x09, 0x4f, 0xc3,
-	0x10, 0x23, 0x3d, 0xad, 0x02, 0x56, 0x92, 0x21, 0x59, 0xe4,
-	0xb7, 0x6e, 0x3e, 0xf2, 0x80, 0x60,
-};
-static const unsigned char reply_13[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d, 0x5e, 0x0a,
-	0xb6, 0x8c, 0x60, 0x19, 0xb3, 0x22, 0x9a, 0x64, 0xe2, 0xb0,
-	0xab, 0xa9, 0xfe, 0x52, 0x86, 0x3b, 0x25, 0x10, 0x07, 0xf7,
-	0x88,
-};
-static const unsigned char reply_14[] = {
-	0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0e, 0x1d, 0x71,
-	0x96, 0x91, 0x9c, 0x3c, 0x54, 0x03, 0x19, 0x3a, 0x86, 0x83,
-	0x95, 0xbc, 0x5e, 0x17, 0x12, 0x9a, 0x35, 0x3f, 0x76, 0x59,
-	0xf9, 0x6e, 0x7e, 0x32, 0xf0, 0xd2, 0xdb,
-};
+
 static void fail(const char *operation)
 {
 	perror(operation);
 	exit(EXIT_FAILURE);
 }
 
-static void write_all(int fd, const void *buffer, size_t length)
+static int hex_value(char character)
 {
-	const unsigned char *bytes = buffer;
+	if (character >= '0' && character <= '9')
+		return character - '0';
+	if (character >= 'a' && character <= 'f')
+		return character - 'a' + 10;
+	if (character >= 'A' && character <= 'F')
+		return character - 'A' + 10;
+	return -1;
+}
+
+static int parse_key(const char *text)
+{
+	uint8_t candidate[KEY_LENGTH];
+	uint8_t combined = 0;
+	size_t index;
+
+	if (!text || strlen(text) != KEY_LENGTH * 2)
+		return -1;
+	for (index = 0; index < KEY_LENGTH; index++) {
+		int high = hex_value(text[index * 2]);
+		int low = hex_value(text[index * 2 + 1]);
+
+		if (high < 0 || low < 0) {
+			memset(candidate, 0, sizeof(candidate));
+			return -1;
+		}
+		candidate[index] = (uint8_t)((high << 4) | low);
+		combined |= candidate[index];
+	}
+	if (!combined) {
+		memset(candidate, 0, sizeof(candidate));
+		return -1;
+	}
+	memcpy(key, candidate, sizeof(key));
+	memset(candidate, 0, sizeof(candidate));
+	return 0;
+}
+
+static uint8_t xtime(uint8_t value)
+{
+	return (uint8_t)((value << 1) ^ ((value >> 7) * 0x1b));
+}
+
+static void key_expand(const uint8_t input[32], uint8_t expanded[240])
+{
+	uint8_t rcon = 1;
+	size_t generated = 32;
+
+	memcpy(expanded, input, 32);
+	while (generated < 240) {
+		uint8_t word[4];
+		size_t index;
+
+		memcpy(word, expanded + generated - 4, sizeof(word));
+		if (generated % 32 == 0) {
+			uint8_t first = word[0];
+
+			word[0] = sbox[word[1]];
+			word[1] = sbox[word[2]];
+			word[2] = sbox[word[3]];
+			word[3] = sbox[first];
+			word[0] ^= rcon;
+			rcon = xtime(rcon);
+		} else if (generated % 32 == 16) {
+			for (index = 0; index < 4; index++)
+				word[index] = sbox[word[index]];
+		}
+		for (index = 0; index < 4; index++) {
+			expanded[generated] =
+				expanded[generated - 32] ^ word[index];
+			generated++;
+		}
+	}
+}
+
+static void shift_rows(uint8_t state[16])
+{
+	uint8_t temporary;
+
+	temporary = state[1];
+	state[1] = state[5];
+	state[5] = state[9];
+	state[9] = state[13];
+	state[13] = temporary;
+	temporary = state[2];
+	state[2] = state[10];
+	state[10] = temporary;
+	temporary = state[6];
+	state[6] = state[14];
+	state[14] = temporary;
+	temporary = state[3];
+	state[3] = state[15];
+	state[15] = state[11];
+	state[11] = state[7];
+	state[7] = temporary;
+}
+
+static void mix_columns(uint8_t state[16])
+{
+	size_t column;
+
+	for (column = 0; column < 4; column++) {
+		uint8_t *value = state + column * 4;
+		uint8_t all = value[0] ^ value[1] ^ value[2] ^ value[3];
+		uint8_t first = value[0];
+
+		value[0] ^= all ^ xtime(value[0] ^ value[1]);
+		value[1] ^= all ^ xtime(value[1] ^ value[2]);
+		value[2] ^= all ^ xtime(value[2] ^ value[3]);
+		value[3] ^= all ^ xtime(value[3] ^ first);
+	}
+}
+
+static void aes_encrypt(const uint8_t input[16], uint8_t output[16])
+{
+	uint8_t expanded[240];
+	uint8_t state[16];
+	size_t index;
+	unsigned int round;
+
+	key_expand(key, expanded);
+	for (index = 0; index < 16; index++)
+		state[index] = input[index] ^ expanded[index];
+	for (round = 1; round < 14; round++) {
+		for (index = 0; index < 16; index++)
+			state[index] = sbox[state[index]];
+		shift_rows(state);
+		mix_columns(state);
+		for (index = 0; index < 16; index++)
+			state[index] ^= expanded[round * 16 + index];
+	}
+	for (index = 0; index < 16; index++)
+		state[index] = sbox[state[index]];
+	shift_rows(state);
+	for (index = 0; index < 16; index++)
+		output[index] = state[index] ^ expanded[224 + index];
+	memset(expanded, 0, sizeof(expanded));
+	memset(state, 0, sizeof(state));
+}
+
+static void block_xor(uint8_t target[16], const uint8_t source[16])
+{
+	size_t index;
+
+	for (index = 0; index < 16; index++)
+		target[index] ^= source[index];
+}
+
+static void gf_multiply(uint8_t value[16], const uint8_t factor[16])
+{
+	uint8_t product[16] = { 0 };
+	uint8_t current[16];
+	size_t bit;
+
+	memcpy(current, factor, sizeof(current));
+	for (bit = 0; bit < 128; bit++) {
+		unsigned int selected =
+			(value[bit / 8] >> (7 - bit % 8)) & 1U;
+		unsigned int carry = current[15] & 1U;
+		int index;
+
+		if (selected)
+			block_xor(product, current);
+		for (index = 15; index > 0; index--)
+			current[index] = (uint8_t)(
+				(current[index] >> 1) |
+				((current[index - 1] & 1U) << 7));
+		current[0] >>= 1;
+		if (carry)
+			current[0] ^= 0xe1;
+	}
+	memcpy(value, product, sizeof(product));
+}
+
+static void ghash_bytes(uint8_t hash[16], const uint8_t h[16],
+			const uint8_t *bytes, size_t length)
+{
+	while (length) {
+		uint8_t block[16] = { 0 };
+		size_t count = length < sizeof(block) ? length : sizeof(block);
+
+		memcpy(block, bytes, count);
+		block_xor(hash, block);
+		gf_multiply(hash, h);
+		bytes += count;
+		length -= count;
+	}
+}
+
+static void write_be64(uint8_t output[8], uint64_t value)
+{
+	int index;
+
+	for (index = 7; index >= 0; index--) {
+		output[index] = (uint8_t)value;
+		value >>= 8;
+	}
+}
+
+static uint64_t read_be64(const uint8_t input[8])
+{
+	uint64_t value = 0;
+	size_t index;
+
+	for (index = 0; index < 8; index++)
+		value = (value << 8) | input[index];
+	return value;
+}
+
+static void increment_counter(uint8_t counter[16])
+{
+	int index;
+
+	for (index = 15; index >= 12; index--)
+		if (++counter[index])
+			break;
+}
+
+static void make_nonce(uint64_t session, uint64_t sequence, uint8_t kind,
+		       uint8_t nonce[12])
+{
+	uint32_t counter = (uint32_t)(sequence << 1) | (kind == REPLY);
+
+	write_be64(nonce, session);
+	nonce[8] = (uint8_t)(counter >> 24);
+	nonce[9] = (uint8_t)(counter >> 16);
+	nonce[10] = (uint8_t)(counter >> 8);
+	nonce[11] = (uint8_t)counter;
+}
+
+static void gcm_crypt(const uint8_t nonce[12], const uint8_t *aad,
+		      size_t aad_length, const uint8_t *input,
+		      size_t input_length, uint8_t *output, uint8_t tag[16],
+		      int decrypt)
+{
+	uint8_t h[16] = { 0 };
+	uint8_t j0[16] = { 0 };
+	uint8_t counter[16];
+	uint8_t hash[16] = { 0 };
+	uint8_t lengths[16] = { 0 };
+	uint8_t mask[16];
 	size_t offset = 0;
 
-	while (offset < length) {
-		ssize_t count = write(fd, bytes + offset, length - offset);
+	aes_encrypt(h, h);
+	memcpy(j0, nonce, 12);
+	j0[15] = 1;
+	memcpy(counter, j0, sizeof(counter));
+	while (offset < input_length) {
+		uint8_t stream[16];
+		size_t count = input_length - offset;
+		size_t index;
+
+		if (count > sizeof(stream))
+			count = sizeof(stream);
+		increment_counter(counter);
+		aes_encrypt(counter, stream);
+		for (index = 0; index < count; index++)
+			output[offset + index] = input[offset + index] ^ stream[index];
+		offset += count;
+	}
+	ghash_bytes(hash, h, aad, aad_length);
+	ghash_bytes(hash, h, decrypt ? input : output, input_length);
+	write_be64(lengths, (uint64_t)aad_length * 8);
+	write_be64(lengths + 8, (uint64_t)input_length * 8);
+	block_xor(hash, lengths);
+	gf_multiply(hash, h);
+	aes_encrypt(j0, mask);
+	block_xor(hash, mask);
+	memcpy(tag, hash, TAG_LENGTH);
+}
+
+static int tag_equal(const uint8_t left[16], const uint8_t right[16])
+{
+	unsigned int difference = 0;
+	size_t index;
+
+	for (index = 0; index < 16; index++)
+		difference |= left[index] ^ right[index];
+	return difference == 0;
+}
+
+static size_t seal_envelope(uint8_t kind, uint64_t session,
+			    uint64_t sequence, const char *plaintext,
+			    uint8_t envelope[FRAME_MAX])
+{
+	uint8_t nonce[NONCE_LENGTH];
+	uint8_t tag[TAG_LENGTH];
+	size_t length = strlen(plaintext);
+
+	if (length > FRAME_MAX - HEADER_LENGTH - TAG_LENGTH)
+		fail("plaintext too long");
+	envelope[0] = 1;
+	envelope[1] = kind;
+	write_be64(envelope + 2, session);
+	write_be64(envelope + 10, sequence);
+	make_nonce(session, sequence, kind, nonce);
+	gcm_crypt(nonce, envelope, HEADER_LENGTH,
+		  (const uint8_t *)plaintext, length,
+		  envelope + HEADER_LENGTH, tag, 0);
+	memcpy(envelope + HEADER_LENGTH + length, tag, sizeof(tag));
+	return HEADER_LENGTH + length + TAG_LENGTH;
+}
+
+static int open_envelope(const uint8_t *envelope, size_t length,
+			 uint8_t kind, uint64_t session, uint64_t sequence,
+			 char plaintext[FRAME_MAX])
+{
+	uint8_t nonce[NONCE_LENGTH];
+	uint8_t tag[TAG_LENGTH];
+	size_t cipher_length;
+
+	if (length < HEADER_LENGTH + TAG_LENGTH || length > FRAME_MAX ||
+	    envelope[0] != 1 || envelope[1] != kind ||
+	    read_be64(envelope + 2) != session ||
+	    read_be64(envelope + 10) != sequence)
+		return -1;
+	cipher_length = length - HEADER_LENGTH - TAG_LENGTH;
+	make_nonce(session, sequence, kind, nonce);
+	gcm_crypt(nonce, envelope, HEADER_LENGTH,
+		  envelope + HEADER_LENGTH, cipher_length,
+		  (uint8_t *)plaintext, tag, 1);
+	if (!tag_equal(tag, envelope + HEADER_LENGTH + cipher_length)) {
+		memset(plaintext, 0, cipher_length);
+		return -1;
+	}
+	plaintext[cipher_length] = '\0';
+	return 0;
+}
+
+static void write_all(int fd, const void *buffer, size_t length)
+{
+	const uint8_t *bytes = buffer;
+
+	while (length) {
+		ssize_t count = write(fd, bytes, length);
+
 		if (count < 0 && errno == EINTR)
 			continue;
 		if (count <= 0)
 			fail("write");
-		offset += (size_t)count;
+		bytes += count;
+		length -= (size_t)count;
 	}
 }
 
 static void read_all(int fd, void *buffer, size_t length)
 {
-	unsigned char *bytes = buffer;
-	size_t offset = 0;
+	uint8_t *bytes = buffer;
 
-	while (offset < length) {
-		ssize_t count = read(fd, bytes + offset, length - offset);
+	while (length) {
+		ssize_t count = read(fd, bytes, length);
+
 		if (count < 0 && errno == EINTR)
 			continue;
-		if (count <= 0)
+		if (count <= 0) {
+			if (!count)
+				errno = EPIPE;
 			fail("read");
-		offset += (size_t)count;
+		}
+		bytes += count;
+		length -= (size_t)count;
 	}
 }
 
-static void send_vector(int fd, struct vector vector)
+static void send_frame(int fd, const uint8_t *bytes, size_t length)
 {
-	unsigned char header[2] = { vector.length >> 8, vector.length };
+	uint8_t header[2] = {
+		(uint8_t)(length >> 8),
+		(uint8_t)length,
+	};
 
-	write_all(fd, header, 1);
-	write_all(fd, header + 1, 1);
-	for (size_t index = 0; index < vector.length; index++)
-		write_all(fd, vector.bytes + index, 1);
+	write_all(fd, header, sizeof(header));
+	write_all(fd, bytes, length);
 }
 
-static void expect_vector(int fd, struct vector expected)
+static size_t receive_frame(int fd, uint8_t bytes[FRAME_MAX])
 {
-	unsigned char bytes[64];
-	unsigned char header[2];
+	uint8_t header[2];
 	size_t length;
 
 	read_all(fd, header, sizeof(header));
 	length = ((size_t)header[0] << 8) | header[1];
-	if (length != expected.length || length > sizeof(bytes)) {
+	if (!length || length > FRAME_MAX) {
 		errno = EPROTO;
-		fail("reply length");
+		fail("frame length");
 	}
 	read_all(fd, bytes, length);
-	if (memcmp(bytes, expected.bytes, length)) {
-		errno = EPROTO;
-		fail("reply bytes");
-	}
+	return length;
 }
 
-static void expect_either(int fd, struct vector first, struct vector second)
+static void expect_eof(int fd)
 {
-	unsigned char bytes[64];
-	unsigned char header[2];
-	size_t length;
+	uint8_t byte;
+	ssize_t count;
 
-	read_all(fd, header, sizeof(header));
-	length = ((size_t)header[0] << 8) | header[1];
-	if (length > sizeof(bytes)) {
+	do {
+		count = read(fd, &byte, 1);
+	} while (count < 0 && errno == EINTR);
+	if (count != 0) {
 		errno = EPROTO;
-		fail("reply length");
-	}
-	read_all(fd, bytes, length);
-	if ((length != first.length || memcmp(bytes, first.bytes, length)) &&
-	    (length != second.length || memcmp(bytes, second.bytes, length))) {
-		errno = EPROTO;
-		fail("reply bytes");
+		fail("expected EOF");
 	}
 }
 
@@ -311,25 +485,46 @@ static void expect_no_peer(int server)
 	} while (ready < 0 && errno == EINTR);
 	if (ready < 0)
 		fail("poll shell listener");
-	if (ready != 0) {
+	if (ready) {
 		errno = EPROTO;
 		fail("unexpected shell connection");
 	}
 }
 
-static void expect_eof(int fd)
+static int listener(const char *address_text, unsigned short requested,
+		    unsigned short *actual, int listen_now)
 {
-	unsigned char byte;
-	ssize_t count;
+	struct sockaddr_in address = {
+		.sin_family = AF_INET,
+		.sin_port = htons(requested),
+	};
+	socklen_t length = sizeof(address);
+	int reuse = 1;
+	int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, IPPROTO_TCP);
 
-	do {
-		count = read(fd, &byte, 1);
-	} while (count < 0 && errno == EINTR);
-	if (count != 0) {
-		if (count > 0)
-			errno = EPROTO;
-		fail("expected EOF");
+	if (inet_pton(AF_INET, address_text, &address.sin_addr) != 1) {
+		errno = EINVAL;
+		fail("listener address");
 	}
+	if (fd < 0 || setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse,
+				 sizeof(reuse)) < 0 ||
+	    bind(fd, (struct sockaddr *)&address, sizeof(address)) < 0 ||
+	    getsockname(fd, (struct sockaddr *)&address, &length) < 0 ||
+	    (listen_now && listen(fd, 4) < 0))
+		fail("listener");
+	*actual = ntohs(address.sin_port);
+	return fd;
+}
+
+static int accept_peer(int server)
+{
+	struct timeval timeout = { .tv_sec = 10 };
+	int peer = accept4(server, NULL, NULL, SOCK_CLOEXEC);
+
+	if (peer < 0 || setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+				   sizeof(timeout)) < 0)
+		fail("accept");
+	return peer;
 }
 
 static void marker(const char *directory, const char *name)
@@ -347,67 +542,105 @@ static void marker(const char *directory, const char *name)
 		fail("marker");
 }
 
-static int listener(unsigned short requested, unsigned short *actual,
-		    int listen_now)
+static uint64_t receive_hello(int peer, uint64_t previous,
+			      struct channel *channel)
 {
-	struct sockaddr_in address = {
-		.sin_family = AF_INET,
-		.sin_addr.s_addr = htonl(INADDR_LOOPBACK),
-		.sin_port = htons(requested),
-	};
-	socklen_t length = sizeof(address);
-	int reuse = 1;
-	int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, IPPROTO_TCP);
+	uint8_t envelope[FRAME_MAX];
+	char plaintext[FRAME_MAX];
+	size_t length = receive_frame(peer, envelope);
+	uint64_t session;
 
-	if (fd < 0 || setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse,
-				 sizeof(reuse)) < 0 ||
-	    bind(fd, (struct sockaddr *)&address, sizeof(address)) < 0 ||
-	    getsockname(fd, (struct sockaddr *)&address, &length) < 0 ||
-	    (listen_now && listen(fd, 4) < 0))
-		fail("listener");
-	*actual = ntohs(address.sin_port);
-	return fd;
+	if (length < HEADER_LENGTH || envelope[0] != 1 ||
+	    envelope[1] != REPLY) {
+		errno = EPROTO;
+		fail("HELLO header");
+	}
+	session = read_be64(envelope + 2);
+	if (!session || session == previous ||
+	    open_envelope(envelope, length, REPLY, session, 1, plaintext) ||
+	    strcmp(plaintext, "HELLO")) {
+		errno = EPROTO;
+		fail("authenticated HELLO");
+	}
+	channel->session = session;
+	channel->request_sequence = 1;
+	channel->reply_sequence = 2;
+	return session;
 }
 
-static int reserve(const char *path)
+static void command(int peer, struct channel *channel, const char *request,
+		    char reply[FRAME_MAX])
 {
-	unsigned short port;
-	FILE *stream;
-	int fd = listener(0, &port, 0);
+	uint8_t envelope[FRAME_MAX];
+	size_t length;
 
-	close(fd);
-	stream = fopen(path, "w");
-	if (!stream || fprintf(stream, "%u\n", port) < 0 || fclose(stream))
-		fail("reserve");
-	return 0;
+	length = seal_envelope(REQUEST, channel->session,
+			       channel->request_sequence++, request, envelope);
+	send_frame(peer, envelope, length);
+	length = receive_frame(peer, envelope);
+	if (open_envelope(envelope, length, REPLY, channel->session,
+			  channel->reply_sequence++, reply)) {
+		errno = EPROTO;
+		fail("authenticated reply");
+	}
 }
 
-static int accept_peer(int server)
+static void expect_reply(int peer, struct channel *channel,
+			 const char *request, const char *expected)
 {
-	struct timeval timeout = { .tv_sec = 10 };
-	int peer = accept4(server, NULL, NULL, SOCK_CLOEXEC);
+	char reply[FRAME_MAX];
 
-	if (peer < 0 || setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, &timeout,
-				   sizeof(timeout)) < 0)
-		fail("accept");
+	command(peer, channel, request, reply);
+	if (strcmp(reply, expected)) {
+		errno = EPROTO;
+		fail("reply text");
+	}
+}
+
+static void parse_ticket(const char *reply, uint32_t *request_id,
+			 uint64_t *cookie)
+{
+	unsigned int parsed_id;
+	unsigned long long parsed_cookie;
+	char tail;
+
+	if (sscanf(reply, "OPEN %8x %16llx%c", &parsed_id,
+		   &parsed_cookie, &tail) != 2 || !parsed_id || !parsed_cookie) {
+		errno = EPROTO;
+		fail("shell ticket");
+	}
+	*request_id = parsed_id;
+	*cookie = parsed_cookie;
+}
+
+static int accept_shell(int server, uint32_t request_id, uint64_t cookie)
+{
+	char expected[32];
+	char prelude[31];
+	int peer = accept_peer(server);
+
+	if (snprintf(expected, sizeof(expected), "RKSH %08x %016llx\n",
+		     request_id, (unsigned long long)cookie) !=
+	    (int)sizeof(prelude)) {
+		errno = EPROTO;
+		fail("shell prelude format");
+	}
+	read_all(peer, prelude, sizeof(prelude));
+	if (memcmp(prelude, expected, sizeof(prelude))) {
+		errno = EACCES;
+		fail("shell ownership cookie");
+	}
 	return peer;
 }
 
-static int accept_shell(int server)
+static void run_shell(int peer)
 {
 	static const char commands[] =
 		"id -u\nprintf 'rootkitlings-shell\\n'\n";
-	int peer = accept_peer(server);
-
-	write_all(peer, commands, sizeof(commands) - 1);
-	return peer;
-}
-
-static void finish_shell(int peer)
-{
 	static const char expected[] = "0\nrootkitlings-shell\n";
 	char output[sizeof(expected) - 1];
 
+	write_all(peer, commands, sizeof(commands) - 1);
 	if (shutdown(peer, SHUT_WR) < 0)
 		fail("shutdown shell input");
 	read_all(peer, output, sizeof(output));
@@ -419,15 +652,91 @@ static void finish_shell(int peer)
 	close(peer);
 }
 
-#define V(bytes) ((struct vector){ (bytes), sizeof(bytes) })
-
-static int serve(const char *directory, const char *port_text)
+static void wait_shell_state(int peer, struct channel *channel,
+			     uint32_t request_id, const char *state,
+			     int result)
 {
-	unsigned char tampered[sizeof(request_15)];
+	char expected[FRAME_MAX];
+	char reply[FRAME_MAX];
+	unsigned int attempt;
+
+	if (snprintf(expected, sizeof(expected), "STATE %08x %s %d",
+		     request_id, state, result) >= (int)sizeof(expected))
+		fail("state text");
+	for (attempt = 0; attempt < 500; attempt++) {
+		command(peer, channel, "SHELL STATUS", reply);
+		if (!strcmp(reply, expected))
+			return;
+		usleep(10000);
+	}
+	errno = ETIMEDOUT;
+	fail("shell state");
+}
+
+static int reserve(const char *path)
+{
+	unsigned short port;
+	FILE *stream;
+	int fd = listener("127.0.0.1", 0, &port, 0);
+
+	close(fd);
+	stream = fopen(path, "w");
+	if (!stream || fprintf(stream, "%u\n", port) < 0 || fclose(stream))
+		fail("reserve");
+	return 0;
+}
+
+static int crypto_selftest(void)
+{
+	static const uint8_t zero_key[32] = { 0 };
+	static const uint8_t nonce[12] = { 0 };
+	static const uint8_t plaintext[16] = { 0 };
+	static const uint8_t ciphertext[16] = {
+		0xce, 0xa7, 0x40, 0x3d, 0x4d, 0x60, 0x6b, 0x6e,
+		0x07, 0x4e, 0xc5, 0xd3, 0xba, 0xf3, 0x9d, 0x18,
+	};
+	static const uint8_t expected_tag[16] = {
+		0xd0, 0xd1, 0xc8, 0xa7, 0x99, 0x99, 0x6b, 0xf0,
+		0x26, 0x5b, 0x98, 0xb5, 0xd4, 0x8a, 0xb9, 0x19,
+	};
+	uint8_t saved[32];
+	uint8_t output[16];
+	uint8_t tag[16];
+
+	memcpy(saved, key, sizeof(saved));
+	memcpy(key, zero_key, sizeof(zero_key));
+	gcm_crypt(nonce, NULL, 0, plaintext, sizeof(plaintext), output, tag, 0);
+	memcpy(key, saved, sizeof(saved));
+	if (memcmp(output, ciphertext, sizeof(output)) ||
+	    memcmp(tag, expected_tag, sizeof(tag))) {
+		fputs("AES-256-GCM self-test failed\n", stderr);
+		return 1;
+	}
+	return 0;
+}
+
+static void quit_session(int peer, struct channel *channel)
+{
+	uint8_t envelope[FRAME_MAX];
+	size_t length = seal_envelope(
+		REQUEST, channel->session, channel->request_sequence++,
+		"QUIT", envelope);
+
+	send_frame(peer, envelope, length);
+	expect_eof(peer);
+	close(peer);
+}
+
+static int serve(const char *directory, const char *port_text,
+		 const char *address_text)
+{
 	unsigned long parsed = strtoul(port_text, NULL, 10);
-	unsigned short port, shell_port;
+	unsigned short port;
+	unsigned short shell_port;
+	uint64_t previous = 0;
+	uint8_t saved_shell[FRAME_MAX];
+	size_t saved_shell_length = 0;
 	int shell_server;
-	int shell_peer;
 	int server;
 	int peer;
 
@@ -435,78 +744,155 @@ static int serve(const char *directory, const char *port_text)
 		errno = EINVAL;
 		fail("port");
 	}
-	server = listener((unsigned short)parsed, &port, 1);
-	if (port != parsed) {
+	server = listener(address_text, (unsigned short)parsed, &port, 1);
+	shell_server = listener(address_text, 47024, &shell_port, 1);
+	if (port != parsed || shell_port != 47024) {
 		errno = EPROTO;
 		fail("bound port");
 	}
-	shell_server = listener(47024, &shell_port, 1);
-	if (shell_port != 47024) {
-		errno = EPROTO;
-		fail("shell port");
-	}
 	marker(directory, "ready");
 
-	peer = accept_peer(server);
-	send_vector(peer, V(request_1)); expect_vector(peer, V(reply_1));
-	send_vector(peer, V(request_2)); expect_vector(peer, V(reply_2));
-	send_vector(peer, V(request_3)); expect_vector(peer, V(reply_3));
-	send_vector(peer, V(request_4)); expect_vector(peer, V(reply_4));
-	send_vector(peer, V(request_4)); expect_eof(peer);
-	close(peer);
-	marker(directory, "replay_rejected");
+	{
+		struct channel channel;
+		uint8_t replay[FRAME_MAX];
+		size_t replay_length;
 
-	peer = accept_peer(server);
-	send_vector(peer, V(request_5)); expect_vector(peer, V(reply_5));
-	memcpy(tampered, request_7, sizeof(request_7));
-	tampered[sizeof(request_7) - 1] ^= 1;
-	send_vector(peer, (struct vector){ tampered, sizeof(request_7) });
-	expect_eof(peer);
-	close(peer);
-	marker(directory, "tamper_rejected");
+		peer = accept_peer(server);
+		previous = receive_hello(peer, previous, &channel);
+		expect_reply(peer, &channel, "PING", "PONG");
+		expect_reply(peer, &channel, "INFO", "INFO rootkitlings");
+		expect_reply(peer, &channel, "MARK alpha_7", "MARKED alpha_7");
+		expect_reply(peer, &channel, "UNKNOWN", "ERR");
+		replay_length = seal_envelope(
+			REQUEST, channel.session, channel.request_sequence - 1,
+			"UNKNOWN", replay);
+		send_frame(peer, replay, replay_length);
+		expect_eof(peer);
+		close(peer);
+		marker(directory, "replay_rejected");
+	}
 
-	peer = accept_peer(server);
-	send_vector(peer, V(request_6)); expect_vector(peer, V(reply_6));
-	expect_no_peer(shell_server);
-	send_vector(peer, V(request_7)); expect_vector(peer, V(reply_7));
-	send_vector(peer, V(request_8)); expect_vector(peer, V(reply_8));
-	shell_peer = accept_shell(shell_server);
-	send_vector(peer, V(request_9)); expect_vector(peer, V(reply_9));
-	finish_shell(shell_peer);
-	marker(directory, "root_shell_complete");
-	send_vector(peer, V(request_10));
-	expect_either(peer, V(reply_10_queued), V(reply_10_busy));
-	send_vector(peer, V(request_11)); expect_vector(peer, V(reply_11));
-	send_vector(peer, V(request_12)); expect_vector(peer, V(reply_12));
-	marker(directory, "control_complete");
-	send_vector(peer, V(request_13)); expect_eof(peer);
-	close(peer);
-	marker(directory, "quit_complete");
+	{
+		struct channel channel;
+		uint8_t tampered[FRAME_MAX];
+		size_t length;
+		char reply[FRAME_MAX];
 
-	peer = accept_peer(server);
-	send_vector(peer, V(request_8)); expect_eof(peer);
-	close(peer);
-	expect_no_peer(shell_server);
-	marker(directory, "shell_replay_rejected");
+		peer = accept_peer(server);
+		previous = receive_hello(peer, previous, &channel);
+		command(peer, &channel, "STATUS", reply);
+		if (strncmp(reply, "STATUS ", 7)) {
+			errno = EPROTO;
+			fail("status reply");
+		}
+		length = seal_envelope(REQUEST, channel.session,
+				       channel.request_sequence, "PING", tampered);
+		tampered[length - 1] ^= 1;
+		send_frame(peer, tampered, length);
+		expect_eof(peer);
+		close(peer);
+		marker(directory, "tamper_rejected");
+	}
 
-	peer = accept_peer(server);
-	send_vector(peer, V(request_14)); expect_vector(peer, V(reply_13));
-	memcpy(tampered, request_15, sizeof(tampered));
-	tampered[sizeof(tampered) - 1] ^= 1;
-	send_vector(peer, V(tampered)); expect_eof(peer);
-	close(peer);
-	expect_no_peer(shell_server);
-	marker(directory, "shell_tamper_rejected");
+	{
+		struct channel channel;
+		char reply[FRAME_MAX];
+		uint32_t request_id;
+		uint64_t cookie;
+		int shell_peer;
 
-	peer = accept_peer(server);
-	send_vector(peer, V(request_15)); expect_vector(peer, V(reply_14));
-	shell_peer = accept_peer(shell_server);
-	marker(directory, "blocked_shell");
-	marker(directory, "blocked_receive");
-	expect_eof(peer);
-	expect_eof(shell_peer);
-	close(shell_peer);
-	close(peer);
+		peer = accept_peer(server);
+		previous = receive_hello(peer, previous, &channel);
+		expect_reply(peer, &channel, "SHELL 47024", "ERR disabled");
+		expect_no_peer(shell_server);
+		expect_reply(peer, &channel, "ENABLE", "ENABLED");
+		saved_shell_length = seal_envelope(
+			REQUEST, channel.session, channel.request_sequence,
+			"SHELL 47024", saved_shell);
+		command(peer, &channel, "SHELL 47024", reply);
+		parse_ticket(reply, &request_id, &cookie);
+		shell_peer = accept_shell(shell_server, request_id, cookie);
+		wait_shell_state(peer, &channel, request_id, "running", -115);
+		expect_reply(peer, &channel, "SHELL 47024", "ERR busy");
+		run_shell(shell_peer);
+		wait_shell_state(peer, &channel, request_id, "exited", 0);
+		marker(directory, "root_shell_complete");
+		command(peer, &channel, "RUN", reply);
+		if (strcmp(reply, "QUEUED") && strcmp(reply, "ERR busy")) {
+			errno = EPROTO;
+			fail("RUN reply");
+		}
+		expect_reply(peer, &channel, "DISABLE", "DISABLED");
+		expect_reply(peer, &channel, "SHELL 47024", "ERR disabled");
+		marker(directory, "control_complete");
+		quit_session(peer, &channel);
+		marker(directory, "quit_complete");
+	}
+
+	{
+		struct channel channel;
+
+		peer = accept_peer(server);
+		previous = receive_hello(peer, previous, &channel);
+		send_frame(peer, saved_shell, saved_shell_length);
+		expect_eof(peer);
+		close(peer);
+		expect_no_peer(shell_server);
+		marker(directory, "shell_replay_rejected");
+	}
+
+	{
+		struct channel channel;
+		uint8_t tampered[FRAME_MAX];
+		size_t length;
+
+		peer = accept_peer(server);
+		previous = receive_hello(peer, previous, &channel);
+		length = seal_envelope(REQUEST, channel.session, 1,
+				       "SHELL 47024", tampered);
+		tampered[length - 1] ^= 1;
+		send_frame(peer, tampered, length);
+		expect_eof(peer);
+		close(peer);
+		expect_no_peer(shell_server);
+		marker(directory, "shell_tamper_rejected");
+	}
+
+	{
+		struct channel channel;
+		char reply[FRAME_MAX];
+		uint32_t request_id;
+		uint64_t cookie;
+		int shell_peer;
+
+		peer = accept_peer(server);
+		previous = receive_hello(peer, previous, &channel);
+		expect_reply(peer, &channel, "ENABLE", "ENABLED");
+		command(peer, &channel, "SHELL 47025", reply);
+		parse_ticket(reply, &request_id, &cookie);
+		wait_shell_state(peer, &channel, request_id, "refused", -111);
+		marker(directory, "shell_refused");
+
+		command(peer, &channel, "SHELL 47024", reply);
+		parse_ticket(reply, &request_id, &cookie);
+		shell_peer = accept_shell(shell_server, request_id, cookie);
+		wait_shell_state(peer, &channel, request_id, "timed-out", -110);
+		expect_eof(shell_peer);
+		close(shell_peer);
+		marker(directory, "shell_timeout");
+
+		command(peer, &channel, "SHELL 47024", reply);
+		parse_ticket(reply, &request_id, &cookie);
+		shell_peer = accept_shell(shell_server, request_id, cookie);
+		marker(directory, "fresh_sessions");
+		marker(directory, "blocked_shell");
+		marker(directory, "blocked_receive");
+		expect_eof(peer);
+		expect_eof(shell_peer);
+		close(shell_peer);
+		close(peer);
+	}
+
 	close(shell_server);
 	close(server);
 	marker(directory, "eof");
@@ -515,11 +901,23 @@ static int serve(const char *directory, const char *port_text)
 
 int main(int argc, char **argv)
 {
+	if (argc == 2 && !strcmp(argv[1], "selftest"))
+		return crypto_selftest();
 	if (argc == 3 && !strcmp(argv[1], "reserve"))
 		return reserve(argv[2]);
-	if (argc == 4 && !strcmp(argv[1], "serve"))
-		return serve(argv[2], argv[3]);
-	fprintf(stderr, "usage: %s reserve FILE | serve DIRECTORY PORT\n",
-		argv[0]);
+	if (argc == 6 && !strcmp(argv[1], "serve")) {
+		int result;
+
+		if (parse_key(argv[5])) {
+			fputs("invalid key: expected 64 hexadecimal digits; "
+			      "key must not be all zero\n", stderr);
+			return 2;
+		}
+		result = serve(argv[2], argv[3], argv[4]);
+		memset(key, 0, sizeof(key));
+		return result;
+	}
+	fprintf(stderr, "usage: %s selftest | reserve FILE | "
+		"serve DIRECTORY PORT ADDRESS KEY_HEX\n", argv[0]);
 	return 2;
 }

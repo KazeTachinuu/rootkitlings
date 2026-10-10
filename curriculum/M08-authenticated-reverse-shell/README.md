@@ -1,53 +1,72 @@
 # Open a root reverse shell
 
-The resident agent already connects to a loopback control point.
-Protect that control channel, then let one authenticated command open the root
-shell built in L21.
+Protect the resident control channel, then let one authenticated command open
+the root shell built in L21.
 
 ```text
-operator -- authenticated SHELL port --> resident agent
-operator <------- plain shell stream ---- root /bin/sh
+operator -- authenticated control --> resident agent
+operator <------ plain TCP shell ---- root /bin/sh
 ```
 
-Only the trigger and control replies use authenticated encryption.
-The shell stream is a separate loopback lab connection and is not encrypted.
+`peer_address=` selects the IPv4 peer for both connections and defaults to
+`127.0.0.1`.
+The shell stream is a separate lab transport and is not encrypted.
 
-## Provision control state
+## Provision the key
 
 Load the module with `control_key=` followed by exactly 64 hexadecimal digits.
-Reject a missing, malformed, or all-zero key.
-The parameter is permission 0, so sysfs never exposes it.
-Decode it into a private 32-byte buffer, clear the text immediately, and clear
-every remaining copy after channel setup.
+The supplied provisioning component rejects missing, malformed, or all-zero
+keys, decodes the value into 32 private bytes, and clears the text buffer.
+The parameter has mode `0000`, so sysfs never exposes it.
 
-A fresh nonzero session comes from `get_random_u64()` and appears as `session=`
-in `/proc/rootkitlings_agent`.
-The peer needs that public value to construct its nonce and authenticated
-header.
-`session_id=` is a permission-0 test hook; zero keeps the random default.
+The resident agent retains one key copy and clears it after the worker stops.
 
-## Authenticate before dispatch
+## Start every connection cleanly
 
-Each framed request contains a version, direction, session, sequence,
-ciphertext, and tag.
-Authenticate the complete header before publishing any plaintext.
-Accept only the next request sequence.
-Keep independent request and reply counters and reject replay, gaps, wrong
-direction, wrong session, or a bad tag by closing that control connection.
+Generate a fresh nonzero session after each TCP connection.
+Start a new secure channel, then send `HELLO` as the first authenticated reply.
+Its authenticated header tells the peer which session to use.
+A reconnect gets a different session and fresh request and reply sequences.
 
-Add one exact command:
+Authenticate the complete envelope before dispatch.
+Reject replay, gaps, the wrong direction or session, and a bad tag by closing
+that connection.
+
+## Open and observe the shell
+
+Add these exact commands:
 
 ```text
 SHELL port
+SHELL STATUS
 ```
 
-The decimal port is 1 through 65535 with no sign, whitespace, or leading zero.
-Require the resident action gate to be enabled.
-Then call `rk_root_shell_request()` and return `SHELL OPENING`, `ERR busy`, or
-`ERR shell` through the authenticated channel.
+The port is 1 through 65535 with no sign, whitespace, or leading zero.
+Require the resident action gate for `SHELL port`.
+
+An accepted request returns an encrypted reply:
+
+```text
+OPEN <8-hex request id> <16-hex cookie>
+```
+
+The shell connection starts with the matching plaintext prelude:
+
+```text
+RKSH <8-hex request id> <16-hex cookie>\n
+```
+
+The operator must verify it before using the raw stream.
+The one-use cookie prevents another guest process from winning the listener
+race.
+It authenticates ownership of that connection; it does not encrypt later shell
+bytes.
+
+`SHELL STATUS` returns the latest request ID, state, and result.
+Refusal, timeout, normal exit, and a live shell are therefore visible instead of
+being collapsed into the initial queue result.
 
 The imported shell owns its socket, helper, timeout, and stop path.
-The agent only requests a session.
 Stop the control agent before the shell so no new request can race teardown.
 
 ## Your task
@@ -73,9 +92,9 @@ Run:
 ./rootkitlings check
 ```
 
-The checker uses independent ciphertext vectors, rejects replay and tampering,
-opens a real UID-0 shell, verifies retry and busy behavior, and unloads while
-both control and shell sockets are blocked.
+The checker authenticates each fresh `HELLO`, rejects replay and tampering,
+verifies the shell cookie, opens sequential UID-0 shells, observes refusal and
+timeout, checks busy behavior, and unloads blocked control and shell sockets.
 
 ## References
 

@@ -28,6 +28,7 @@ for _word in $_cmdline; do
 	case "$_word" in
 		rootkitlings=check) _check=1 ;;
 		rootkitlings=network) _network=1 ;;
+		rootkitlings=play) _play=1 ;;
 		rootkitlings=color) _color=1 ;;
 	esac
 done
@@ -55,6 +56,33 @@ if [ "${_check:-}" = 1 ]; then
 		printf 'ROOTKITLINGS_RESULT=fail:%s\n' "$_rc"
 	fi
 	reboot -f
+	while :; do sleep 1; done
+fi
+
+if [ "${_play:-}" = 1 ]; then
+	{
+		read -r _play_profile
+		read -r _play_key
+		read -r _play_peer
+		read -r _play_control_port
+		read -r _play_shell_port
+	} < /play.args
+	_play_command="/play $_play_profile <control-key> $_play_peer"
+	_play_command="$_play_command $_play_control_port $_play_shell_port"
+	show "$_play_command"
+	/play "$_play_profile" "$_play_key" "$_play_peer" \
+		"$_play_control_port" "$_play_shell_port"
+	_play_status=$?
+	if [ "$_play_status" -eq 0 ]; then
+		ui_success 'Play setup complete; waiting for the host operator'
+		case $_play_profile in
+			complete-rootkit)
+				printf 'ROOTKITLINGS_PLAY_ENABLE_DONE\n' ;;
+			*) printf 'ROOTKITLINGS_PLAY_READY\n' ;;
+		esac
+	else
+		ui_error "Play setup failed with exit $_play_status"
+	fi
 	while :; do sleep 1; done
 fi
 

@@ -6,9 +6,10 @@ rootkitlings-y := core/main.o core/state.o interface/proc.o \
 	control/authorization.o privilege/credentials.o \
 	instrumentation/return_probe.o instrumentation/events.o \
 	instrumentation/dirent_filter.o instrumentation/getdents_probe.o \
-	interface/evidence.o network/framing.o network/protocol.o \
-	network/agent.o persistence/platform.o persistence/transaction.o \
+	interface/evidence.o network/framing.o network/ipv4.o \
+	network/protocol.o \
+	network/agent.o staging/platform.o staging/transaction.o \
 	interface/agent_status.o crypto/aead.o crypto/aead_platform.o \
-	security/clear.o security/control.o
+	security/clear.o security/control.o security/provision.o
 ccflags-y += -I$(src)/include
 ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)

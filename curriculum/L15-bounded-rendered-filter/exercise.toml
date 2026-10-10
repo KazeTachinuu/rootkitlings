@@ -11,7 +11,15 @@ requires = ["kretprobes", "nofault-user-copy", "kernel-abi-contract", "managed-h
 
 [workspace]
 mode = "cumulative"
-files = ["Kbuild", "core/main.c", "include/rootkit.h", "instrumentation/read_filter.c", "instrumentation/replace.c", "interface/proc.c"]
+files = [
+  "Kbuild",
+  "core/main.c",
+  "include/replace.h",
+  "include/rootkit.h",
+  "instrumentation/read_filter.c",
+  "instrumentation/replace.c",
+  "interface/proc.c",
+]
 editable = ["instrumentation/replace.c"]
 build = "."
 baseline = "starter"

@@ -30,6 +30,7 @@ struct rk_agent {
 	bool commands_ready;
 	struct rk_state *state;
 	struct rk_root_shell *shell;
+	u8 key[RK_AEAD_KEY_LENGTH];
 	unsigned int retry_base_ms;
 	unsigned int retry_max_ms;
 	unsigned int retry_delay_ms;
@@ -48,6 +49,7 @@ struct rk_agent_status {
 	bool running;
 	bool connected;
 	bool stopping;
+	__be32 peer_address;
 	u16 peer_port;
 	unsigned int retry_base_ms;
 	unsigned int retry_max_ms;
@@ -62,10 +64,11 @@ struct rk_agent_status {
 	char marker[RK_MARKER_MAX + 1];
 };
 
-__must_check int rk_agent_start(struct rk_agent *agent, u16 peer_port,
+__must_check int rk_agent_start(struct rk_agent *agent,
+				__be32 peer_address, u16 peer_port,
 				unsigned int retry_base_ms,
 				unsigned int retry_max_ms, const u8 *key,
-				size_t key_length, u64 session,
+				size_t key_length,
 				struct rk_state *state,
 				struct rk_root_shell *shell);
 void rk_agent_enable_commands(struct rk_agent *agent);

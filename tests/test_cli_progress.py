@@ -160,7 +160,7 @@ class LearnerCLITests(unittest.TestCase):
             name: (lambda _arguments: None)
             for name in (
                 "setup", "read", "start", "build", "check", "hint",
-                "solution", "run", "gdb", "status", "list", "prereq",
+                "solution", "run", "play", "gdb", "status", "list", "prereq",
                 "restore", "reset", "clean",
             )
         }
@@ -173,7 +173,7 @@ class LearnerCLITests(unittest.TestCase):
                 self.globals["main"]([command])
                 self.assertEqual(
                     bool(gated),
-                    command in {"build", "check", "run", "gdb"},
+                    command in {"build", "check", "run", "play", "gdb"},
                 )
         finally:
             self.globals["CMDS"] = original_commands
@@ -219,6 +219,7 @@ class LearnerCLITests(unittest.TestCase):
         self.assertNotIn("progress-reset", help_text)
         self.assertIn("current exercise is used", help_text)
         self.assertIn("or a unique prefix", help_text)
+        self.assertIn("play [EXERCISE]", help_text)
 
     def test_standard_help_flags_show_help(self) -> None:
         for flag in ("-h", "--help"):
@@ -655,6 +656,64 @@ class LearnerCLITests(unittest.TestCase):
             self.assertEqual(after, before)
         finally:
             self.globals["solution_output"] = original_output
+
+    def test_play_uses_a_reference_copy_without_mutating_progress(self) -> None:
+        item = self.globals["CAT"].by_id[self.globals["ROUTE"][-1]]
+        self.assertIsNotNone(item.play)
+        first = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
+        with self.globals["STORE"].locked() as state:
+            state.exercise(first.id).attempts = 2
+        workspace = self._workspace(first.id, "learner work\n")
+        marker = workspace / "learner.c"
+        before_state = self.globals["STATE"].read_bytes()
+        before_workspace = marker.read_bytes()
+        calls: dict[str, object] = {}
+        catalog = self.globals["CAT"]
+        original_materialize = catalog.materialize_solution
+        original_build = self.globals["build_source"]
+        original_play = self.globals["run_reference_play"]
+
+        def fake_materialize(selected, destination, stable_id):
+            calls["materialize"] = (selected, destination, stable_id)
+            source = destination / stable_id
+            source.mkdir()
+            return source
+
+        def fake_build(selected, source, destination):
+            calls["build"] = (selected, source, destination)
+            module = destination / "rootkitlings.ko"
+            module.parent.mkdir()
+            module.write_bytes(b"reference module")
+            return module
+
+        def fake_play(*args, **kwargs):
+            calls["play"] = (args, kwargs)
+            return 0
+
+        try:
+            catalog.materialize_solution = fake_materialize
+            self.globals["build_source"] = fake_build
+            self.globals["run_reference_play"] = fake_play
+            with redirect_stdout(io.StringIO()):
+                self.globals["cmd_play"]([item.serial])
+        finally:
+            catalog.materialize_solution = original_materialize
+            self.globals["build_source"] = original_build
+            self.globals["run_reference_play"] = original_play
+
+        self.assertEqual(self.globals["STATE"].read_bytes(), before_state)
+        self.assertEqual(marker.read_bytes(), before_workspace)
+        self.assertEqual(calls["materialize"][0], item)
+        self.assertEqual(calls["materialize"][2], "source")
+        play_args, play_kwargs = calls["play"]
+        self.assertEqual(play_args[0], ROOT)
+        self.assertEqual(play_args[2], item.play.profile)
+        self.assertEqual(play_args[3], ROOT / item.play.script)
+        self.assertTrue(Path(play_args[1]).name.endswith(".ko"))
+        self.assertEqual(
+            set(play_kwargs),
+            {"transcript", "output", "success", "warning"},
+        )
 
     def test_start_records_starter_and_inherited_baseline_provenance(self) -> None:
         first, second = (

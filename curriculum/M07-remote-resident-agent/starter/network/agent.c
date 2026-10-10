@@ -4,7 +4,7 @@
 
 #include "agent.h"
 
-int rk_agent_start(struct rk_agent *agent, u16 peer_port,
+int rk_agent_start(struct rk_agent *agent, __be32 peer_address, u16 peer_port,
 		   unsigned int retry_base_ms, unsigned int retry_max_ms)
 {
 	/* TODO: own one reconnecting worker and one published socket. */

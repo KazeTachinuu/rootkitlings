@@ -1,0 +1,3 @@
+# Keep learner source visible to editor search while Git ignores workspaces.
+!work/
+!work/**

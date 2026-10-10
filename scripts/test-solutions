@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import sys
 import tempfile
 
@@ -14,7 +15,11 @@ sys.path.insert(0, str(ROOT))
 
 from engine.catalog import Catalog, CatalogError  # noqa: E402
 from engine.console import Console  # noqa: E402
-from engine.process import ProcessError, ProcessTimeout, run_process  # noqa: E402
+from engine.process import (  # noqa: E402
+    ProcessError,
+    ProcessTimeout,
+    run_process,
+)
 from engine.verification import (  # noqa: E402
     VerificationError,
     build_verification_cases,
@@ -26,6 +31,47 @@ class SolutionCheckError(RuntimeError):
 
 
 UI = Console("rootkitlings.solution-tests")
+
+
+def require_compiled_sources(source: Path, build_relative: str) -> None:
+    build = source if build_relative == "." else source / build_relative
+    kbuild = build / "Kbuild"
+    try:
+        lines = kbuild.read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        raise SolutionCheckError(f"cannot read {kbuild}: {error}") from error
+    logical_lines: list[str] = []
+    current = ""
+    for line in lines:
+        content = line.split("#", 1)[0].rstrip()
+        if content.endswith("\\"):
+            current += content[:-1] + " "
+            continue
+        logical_lines.append(current + content)
+        current = ""
+    if current:
+        logical_lines.append(current)
+    objects: set[str] = set()
+    assignment = re.compile(
+        r"^\s*rootkitlings-(?:y|objs)\s*(?::=|\+=|=)\s*(.*)$"
+    )
+    object_token = re.compile(r"^(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.o$")
+    for line in logical_lines:
+        match = assignment.match(line)
+        if not match:
+            continue
+        objects.update(
+            token for token in match.group(1).split()
+            if object_token.fullmatch(token)
+        )
+    missing = []
+    for candidate in sorted(build.rglob("*.c")):
+        relative = candidate.relative_to(build).as_posix()
+        if f"{relative[:-2]}.o" not in objects:
+            missing.append(relative)
+    if missing:
+        joined = ", ".join(missing)
+        raise SolutionCheckError(f"Kbuild omits declared C source: {joined}")
 
 
 def run(command: list[str], timeout: int | None = None):
@@ -54,6 +100,7 @@ def verify_item(
     catalog: Catalog, item, solution_root: Path, kernel_build_dir: Path
 ) -> None:
     source = catalog.materialize_solution(item, solution_root, item.id)
+    require_compiled_sources(source, item.workspace.build)
     timeout = item.verification.timeout_seconds
     arguments = boot_arguments(catalog, item)
     with build_verification_cases(
@@ -69,7 +116,9 @@ def verify_item(
         outcomes = verification.outcomes
         host_check_pending = bool(item.resources.host_check)
         for index, outcome in enumerate(outcomes, 1):
-            UI.progress(f"Case {index} of {len(outcomes)}  {outcome.case.label}")
+            UI.progress(
+                f"Case {index} of {len(outcomes)}  {outcome.case.label}"
+            )
             if outcome.artifact is None:
                 UI.success("Build rejected as required")
                 continue
@@ -103,7 +152,9 @@ def verify_item(
                     f"guest check failed: {outcome.case.label}"
                 )
         if host_check_pending:
-            raise SolutionCheckError("no successful artifact was available for host checks")
+            raise SolutionCheckError(
+                "no successful artifact was available for host checks"
+            )
 
 
 def main(arguments: list[str]) -> int:
@@ -123,10 +174,16 @@ def main(arguments: list[str]) -> int:
     failed = 0
     located = run([str(ROOT / "scripts/kernel"), "build-dir"], 10)
     kernel_build_dir = Path((located.stdout or "").strip())
-    if located.returncode or not kernel_build_dir.is_dir() or kernel_build_dir.is_symlink():
+    if (
+        located.returncode
+        or not kernel_build_dir.is_dir()
+        or kernel_build_dir.is_symlink()
+    ):
         UI.error("course kernel is not ready; run: scripts/kernel ensure")
         return 1
-    with tempfile.TemporaryDirectory(prefix="rootkitlings-solutions-") as temporary:
+    with tempfile.TemporaryDirectory(
+        prefix="rootkitlings-solutions-"
+    ) as temporary:
         solution_root = Path(temporary)
         for item in items:
             shown = item.serial or item.id

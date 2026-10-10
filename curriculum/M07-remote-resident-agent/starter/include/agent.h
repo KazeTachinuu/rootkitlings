@@ -40,6 +40,7 @@ struct rk_agent_status {
 	bool running;
 	bool connected;
 	bool stopping;
+	__be32 peer_address;
 	u16 peer_port;
 	unsigned int retry_base_ms;
 	unsigned int retry_max_ms;
@@ -53,7 +54,8 @@ struct rk_agent_status {
 	char marker[RK_MARKER_MAX + 1];
 };
 
-__must_check int rk_agent_start(struct rk_agent *agent, u16 peer_port,
+__must_check int rk_agent_start(struct rk_agent *agent,
+				__be32 peer_address, u16 peer_port,
 				unsigned int retry_base_ms,
 				unsigned int retry_max_ms);
 void rk_agent_stop(struct rk_agent *agent);

@@ -8,6 +8,8 @@
 #include <string.h>
 #endif
 
+#include "replace.h"
+
 size_t rk_replace_equal(unsigned char *bytes, size_t length,
 			const unsigned char *from,
 			const unsigned char *to, size_t width)

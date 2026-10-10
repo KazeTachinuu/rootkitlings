@@ -1,3 +1,7 @@
 Publish the socket and the stop gate under one lock.
 Keep shutdown in stop, release in the worker, and put every later acquisition
 behind a matching reverse-order label in main.c.
+
+Parse `peer_address=` once during module initialization.
+Store the resulting network-order address in the agent; do not parse text in its
+retry loop.

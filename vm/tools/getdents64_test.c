@@ -22,6 +22,13 @@ struct linux_dirent64 {
 	char d_name[];
 };
 
+struct linux_dirent_native {
+	unsigned long d_ino;
+	unsigned long d_off;
+	unsigned short d_reclen;
+	char d_name[];
+};
+
 struct reuse_context {
 	int target;
 	const char *proc_path;
@@ -295,6 +302,58 @@ static int enumerate(const char *path, size_t capacity, const char *target,
 	return require_target < 0 || found == (require_target != 0) ? 0 : 1;
 }
 
+static int enumerate_legacy(const char *path, const char *target)
+{
+	char buffer[32768];
+	int descriptor;
+	bool found = false;
+
+	descriptor = open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	if (descriptor < 0)
+		return 2;
+	for (;;) {
+		long count = syscall(SYS_getdents, descriptor, buffer,
+				     sizeof(buffer));
+		size_t offset = 0;
+
+		if (count < 0) {
+			close(descriptor);
+			return 2;
+		}
+		if (count == 0)
+			break;
+		while (offset < (size_t)count) {
+			struct linux_dirent_native *entry =
+				(void *)(buffer + offset);
+			size_t name_capacity;
+
+			if ((size_t)count - offset <
+				offsetof(struct linux_dirent_native, d_name) + 1 ||
+			    entry->d_reclen <
+				offsetof(struct linux_dirent_native, d_name) + 1 ||
+			    entry->d_reclen > (size_t)count - offset) {
+				close(descriptor);
+				return 3;
+			}
+			name_capacity = entry->d_reclen -
+				offsetof(struct linux_dirent_native, d_name);
+			if (!memchr(entry->d_name, '\0', name_capacity)) {
+				close(descriptor);
+				return 3;
+			}
+			if (strcmp(entry->d_name, target) == 0)
+				found = true;
+			offset += entry->d_reclen;
+		}
+		if (offset != (size_t)count) {
+			close(descriptor);
+			return 3;
+		}
+	}
+	close(descriptor);
+	return found ? 0 : 1;
+}
+
 static int write_all(int descriptor, const char *text)
 {
 	size_t length = strlen(text);
@@ -376,8 +435,9 @@ static void usage(const char *name)
 	fprintf(stderr,
 		"usage: %s visible|hidden|either|cookies PATH CAPACITY NAME\n"
 		"       %s isolate PATH CONTROL NAME\n"
-		"       %s fdreuse PROC_PATH ORDINARY_PATH ITERATIONS NAME\n",
-		name, name, name);
+		"       %s fdreuse PROC_PATH ORDINARY_PATH ITERATIONS NAME\n"
+		"       %s legacy PATH NAME\n",
+		name, name, name, name);
 }
 
 int main(int argc, char **argv)
@@ -394,6 +454,8 @@ int main(int argc, char **argv)
 			return 2;
 		return fd_reuse_stress(argv[2], argv[3], capacity, argv[5]);
 	}
+	if (argc == 4 && strcmp(argv[1], "legacy") == 0)
+		return enumerate_legacy(argv[2], argv[3]);
 	if (argc == 5 && strcmp(argv[1], "isolate") == 0)
 		return isolate_all_match(argv[2], argv[3], argv[4]);
 	if (argc != 5) {

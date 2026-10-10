@@ -6,7 +6,7 @@ import tomllib
 import unittest
 
 from engine.catalog import (
-    Catalog, CatalogError, Exercise, Resources, Verification,
+    Catalog, CatalogError, Exercise, Play, Resources, Verification,
     VerificationCase, Workspace, WorkspaceImport,
 )
 from engine.workspace import WorkspaceError
@@ -285,6 +285,51 @@ class VerificationCaseTests(unittest.TestCase):
         explicit = Exercise(**{**item.__dict__, "verification": verification})
         with self.assertRaisesRegex(CatalogError, "missing verification case check"):
             catalog._validate_paths(explicit)
+
+
+class PlayMetadataTests(unittest.TestCase):
+    def test_optional_play_metadata_is_manifest_owned_and_queryable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = root / "demo/play"
+            script.parent.mkdir()
+            script.write_text("#!/bin/sh\n", encoding="utf-8")
+            catalog = Catalog.__new__(Catalog)
+            catalog.root = root
+            play = catalog._play(
+                {"profile": "authenticated-agent", "script": "demo/play"},
+                Path("curriculum/L00-example/exercise.toml"),
+            )
+        self.assertEqual(
+            play,
+            Play("authenticated-agent", "demo/play"),
+        )
+
+    def test_play_metadata_rejects_unknown_fields_and_unsafe_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = Catalog.__new__(Catalog)
+            catalog.root = Path(directory)
+            for value in (
+                {"profile": "agent", "script": "../escape"},
+                {"profile": "agent", "script": "play", "extra": True},
+            ):
+                with self.subTest(value=value):
+                    with self.assertRaises(CatalogError):
+                        catalog._play(value, Path("exercise.toml"))
+
+    def test_final_project_has_its_own_guest_demonstration(self) -> None:
+        catalog = Catalog(ROOT)
+        milestone = catalog.by_id["authenticated-reverse-shell"]
+        final = catalog.by_id["complete-rootkit"]
+
+        self.assertEqual(milestone.play.profile, "authenticated-agent")
+        self.assertEqual(final.play.profile, "complete-rootkit")
+        self.assertEqual(
+            milestone.play.script,
+            "vm/play/authenticated-agent",
+        )
+        self.assertEqual(final.play.script, "vm/play/complete-rootkit")
+        self.assertNotEqual(milestone.play.script, final.play.script)
 
 
 def _exercise(
@@ -655,14 +700,22 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             (root / "provider/Kbuild").write_text("base build\n")
             (root / "provider/main.c").write_text("base main\n")
             (root / "additions/supplied.c").write_text("supplied\n")
+            (root / "additions/main.c").write_text("starter main\n")
             (root / "consumer/main.c").write_text("completed main\n")
 
             catalog = self.catalog((provider, consumer))
             catalog.root = root
+            catalog.validate_workspace_lineage(consumer)
+            starter = catalog.starter_tree(consumer)
+            self.assertEqual(starter["main.c"].data, b"starter main\n")
             tree = catalog.solution_tree(consumer)
             self.assertEqual(tree["Kbuild"].data, b"base build\n")
             self.assertEqual(tree["main.c"].data, b"completed main\n")
             self.assertEqual(tree["supplied.c"].data, b"supplied\n")
+
+            (root / "additions/main.c").write_text("base main\n")
+            with self.assertRaisesRegex(WorkspaceError, "byte-identical"):
+                catalog.starter_tree(consumer)
 
     def test_additive_inheritance_rejects_missing_additions_directory(self) -> None:
         provider = _exercise("provider", "starter")
@@ -679,7 +732,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             with self.assertRaisesRegex(CatalogError, "existing real directory"):
                 catalog.validate_workspace_lineage(consumer)
 
-    def test_additions_presence_matches_actual_file_delta(self) -> None:
+    def test_additions_supply_new_files_or_replace_inherited_files(self) -> None:
         provider = _exercise("provider", "starter")
         missing = _exercise(
             "missing",
@@ -691,15 +744,39 @@ class WorkspaceInheritanceTests(unittest.TestCase):
         with self.assertRaisesRegex(CatalogError, "no additions directory"):
             catalog.validate_workspace_lineage(missing)
 
-        unnecessary = _exercise(
-            "unnecessary",
+        replacement = _exercise(
+            "replacement",
             "parent",
             additions="additions",
             parent="provider",
         )
-        catalog = self.catalog((provider, unnecessary))
-        with self.assertRaisesRegex(CatalogError, "forbidden when no files"):
-            catalog.validate_workspace_lineage(unnecessary)
+        catalog = self.catalog((provider, replacement))
+        with tempfile.TemporaryDirectory() as directory:
+            catalog.root = Path(directory)
+            additions = catalog.root / "additions"
+            additions.mkdir()
+            (additions / "main.c").write_text("replacement\n")
+            catalog.validate_workspace_lineage(replacement)
+
+    def test_replacement_additions_reject_empty_and_undeclared_files(self) -> None:
+        provider = _exercise("provider", "starter")
+        replacement = _exercise(
+            "replacement",
+            "parent",
+            additions="additions",
+            parent="provider",
+        )
+        catalog = self.catalog((provider, replacement))
+        with tempfile.TemporaryDirectory() as directory:
+            catalog.root = Path(directory)
+            additions = catalog.root / "additions"
+            additions.mkdir()
+            with self.assertRaisesRegex(CatalogError, "must not be empty"):
+                catalog.validate_workspace_lineage(replacement)
+
+            (additions / "other.c").write_text("undeclared\n")
+            with self.assertRaisesRegex(CatalogError, "directory mismatch"):
+                catalog.validate_workspace_lineage(replacement)
 
     def test_module_artifact_uses_default_override_and_provider(self) -> None:
         defaulted = _exercise("defaulted", "starter")

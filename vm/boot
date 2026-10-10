@@ -17,12 +17,26 @@ GDB=
 NETWORK=
 GUEST_COLOR=
 ACCEL=auto
+PLAY=
+PLAY_PROFILE=
+PLAY_KEY=
+PLAY_KEY_FILE=
+PLAY_CONTROL_PORT=
+PLAY_SHELL_PORT=
 declare -a TOOLS=() TOOL_PATHS=() CHECK_ARGS=()
 while (( $# )); do
     case $1 in
         --check) CHECK=${2:?--check requires an argument}; shift 2 ;;
         --check-arg) CHECK_ARGS+=("${2:?--check-arg requires an argument}"); shift 2 ;;
         --gdb)   GDB=1; shift ;;
+        --play) PLAY=${2:?--play requires an argument}; shift 2 ;;
+        --play-profile) PLAY_PROFILE=${2:?--play-profile requires an argument}; shift 2 ;;
+        --play-key-file)
+            PLAY_KEY_FILE=${2:?--play-key-file requires an argument}
+            shift 2
+            ;;
+        --play-control-port) PLAY_CONTROL_PORT=${2:?--play-control-port requires an argument}; shift 2 ;;
+        --play-shell-port) PLAY_SHELL_PORT=${2:?--play-shell-port requires an argument}; shift 2 ;;
         --tool)  TOOLS+=("${2:?--tool requires an argument}"); shift 2 ;;
         --accel)
             ACCEL=${2:?--accel requires an argument}
@@ -47,6 +61,29 @@ done
 if (( ${#CHECK_ARGS[@]} )) && [[ -z $CHECK ]]; then
 	ui_die "--check-arg requires --check"
 fi
+if [[ -n $PLAY ]]; then
+    [[ -z $CHECK && -z $GDB && -n $MODULE ]] ||
+        ui_die "--play requires one module and forbids --check and --gdb"
+    [[ -n $PLAY_PROFILE && $PLAY_PROFILE =~ ^[a-z0-9][a-z0-9-]*$ ]] ||
+        ui_die "--play-profile must be a slug"
+    [[ -f $PLAY_KEY_FILE && ! -L $PLAY_KEY_FILE ]] ||
+        ui_die "--play-key-file must name a regular file"
+    [[ $(wc -c < "$PLAY_KEY_FILE") -eq 65 ]] ||
+        ui_die "play key file must contain 64 hexadecimal digits and a newline"
+    IFS= read -r PLAY_KEY < "$PLAY_KEY_FILE" ||
+        ui_die "could not read the play key file"
+    [[ $PLAY_KEY =~ ^[0-9a-f]{64}$ ]] ||
+        ui_die "play key file must contain 64 lowercase hexadecimal digits"
+    for port in "$PLAY_CONTROL_PORT" "$PLAY_SHELL_PORT"; do
+        if [[ ! $port =~ ^[0-9]+$ ]] ||
+            (( port < 1 || port > 65535 )); then
+            ui_die "play forwarding ports must be from 1 through 65535"
+        fi
+    done
+elif [[ -n $PLAY_PROFILE || -n $PLAY_KEY_FILE ||
+        -n $PLAY_CONTROL_PORT || -n $PLAY_SHELL_PORT ]]; then
+    ui_die "play options require --play"
+fi
 if [[ -n $GDB ]] && ! command -v pwndbg >/dev/null && ! command -v gdb >/dev/null; then
 	ui_die "GDB not found; install gdb or run make doctor for the package name"
 fi
@@ -70,7 +107,9 @@ KERNEL=$("$ROOT_DIR/scripts/kernel" image) || ui_die "Course kernel is not ready
 VMLINUX=$("$ROOT_DIR/scripts/kernel" vmlinux) || ui_die "Course kernel is not ready; run: ./rootkitlings setup"
 BUSYBOX=$(command -v busybox || true)
 
-readonly VM_DIR ROOT_DIR RELEASE KERNEL VMLINUX BUSYBOX WORK ROOTFS INITRAMFS MODULE CHECK GDB NETWORK GUEST_COLOR ACCEL
+readonly VM_DIR ROOT_DIR RELEASE KERNEL VMLINUX BUSYBOX WORK ROOTFS INITRAMFS
+readonly MODULE CHECK GDB NETWORK GUEST_COLOR ACCEL PLAY PLAY_PROFILE PLAY_KEY
+readonly PLAY_KEY_FILE PLAY_CONTROL_PORT PLAY_SHELL_PORT
 
 resolve_tools()
 {
@@ -124,7 +163,8 @@ check_prerequisites()
     command -v cpio >/dev/null || ui_die "cpio not found"
     command -v qemu-system-x86_64 >/dev/null || ui_die "QEMU not found"
     command -v python3 >/dev/null || ui_die "python3 not found"
-    if [[ -n $NETWORK ]] && ! qemu-system-x86_64 -netdev help 2>&1 | grep -q '^user$'; then
+    if [[ -n $NETWORK || -n $PLAY ]] &&
+        ! qemu-system-x86_64 -netdev help 2>&1 | grep -q '^user$'; then
         ui_die "QEMU user networking was requested but SLIRP support is unavailable"
     fi
     if [[ -n $GDB ]] && ! python3 - 2>/dev/null <<'PY'
@@ -138,6 +178,7 @@ PY
     fi
     [[ -z $MODULE || -f $MODULE ]] || ui_die "Module not found: $MODULE"
     [[ -z $CHECK  || -f $CHECK  ]] || ui_die "Check script not found: $CHECK"
+    [[ -z $PLAY || -f $PLAY ]] || ui_die "Play script not found: $PLAY"
     ui_success "Prerequisites verified for Linux $RELEASE"
 }
 
@@ -176,6 +217,14 @@ build_rootfs()
             printf '%s\0' "${CHECK_ARGS[@]}" > "$ROOTFS/check.args"
         fi
         ui_success "Check script copied to /check"
+    fi
+    if [[ -n $PLAY ]]; then
+        cp "$PLAY" "$ROOTFS/play"
+        chmod 755 "$ROOTFS/play"
+        printf '%s\n' "$PLAY_PROFILE" "$PLAY_KEY" 10.0.2.100 47023 47024 \
+            > "$ROOTFS/play.args"
+        chmod 0600 "$ROOTFS/play.args"
+        ui_success "Play script copied to /play"
     fi
     for tool in "${TOOL_PATHS[@]}"; do
 		install -m 0755 -- "$tool" "$ROOTFS/bin/$(basename "$tool")"
@@ -228,8 +277,11 @@ run_vm()
     if [[ -n $CHECK ]]; then
         cmdline+=' rootkitlings=check'
     fi
-    if [[ -n $NETWORK ]]; then
+    if [[ -n $NETWORK || -n $PLAY ]]; then
         cmdline+=' rootkitlings=network'
+    fi
+    if [[ -n $PLAY ]]; then
+        cmdline+=' rootkitlings=play'
     fi
     if [[ -n $GUEST_COLOR ]]; then
         cmdline+=' rootkitlings=color'
@@ -263,7 +315,11 @@ run_vm()
         -nographic
     )
 
-    if [[ -n $NETWORK ]]; then
+    if [[ -n $PLAY ]]; then
+        qemu_args+=(-nic "user,model=virtio-net-pci,restrict=on,\
+guestfwd=tcp:10.0.2.100:47023-tcp:127.0.0.1:$PLAY_CONTROL_PORT,\
+guestfwd=tcp:10.0.2.100:47024-tcp:127.0.0.1:$PLAY_SHELL_PORT")
+    elif [[ -n $NETWORK ]]; then
         qemu_args+=(-nic 'user,model=virtio-net-pci')
     else
         qemu_args+=(-nic none)

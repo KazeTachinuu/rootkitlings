@@ -51,7 +51,9 @@ files = [
   "include/agent.h",
   "include/agent_status.h",
   "include/framing.h",
+  "include/ipv4.h",
   "include/platform.h",
+  "include/provision.h",
   "include/protocol.h",
   "include/root_shell.h",
   "include/secure_control.h",
@@ -61,11 +63,13 @@ files = [
   "interface/agent_status.c",
   "network/agent.c",
   "network/framing.c",
+  "network/ipv4.c",
   "network/protocol.c",
-  "persistence/platform.c",
-  "persistence/transaction.c",
+  "staging/platform.c",
+  "staging/transaction.c",
   "security/control.c",
   "security/clear.c",
+  "security/provision.c",
 ]
 editable = [
   "Kbuild",
@@ -100,6 +104,10 @@ readme = "curriculum/M08-authenticated-reverse-shell/README.md"
 host_check = "curriculum/M08-authenticated-reverse-shell/checks/host-check"
 hint = "curriculum/M08-authenticated-reverse-shell/hint"
 solution = "curriculum/M08-authenticated-reverse-shell/solution"
+
+[play]
+profile = "authenticated-agent"
+script = "vm/play/authenticated-agent"
 
 [verification]
 timeout_seconds = 360

@@ -17,8 +17,9 @@ This project adds two behaviors:
 - stage one `modules-load.d` request without destroying a file owned by someone
   else.
 
-The control point is a loopback listener in the disposable guest.
-C00 later protects this channel with authenticated encryption.
+`peer_address=` selects one IPv4 control point and defaults to `127.0.0.1`.
+Reject a malformed address before acquiring any module resource.
+M08 later protects this channel with authenticated encryption.
 
 The agent does not accept shell commands.
 Its complete command set is:
@@ -40,7 +41,7 @@ For each attempt it:
 
 1. creates one `init_net` IPv4 TCP socket;
 2. publishes the socket under the agent lock before blocking in `connect`;
-3. connects only to `127.0.0.1` and the configured port;
+3. connects to the validated IPv4 address and configured port;
 4. handles one framed session;
 5. shuts down and releases the socket;
 6. waits before the next attempt.

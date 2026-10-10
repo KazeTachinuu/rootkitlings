@@ -33,16 +33,19 @@ uses()
 }
 
 object=$build/execution/root_shell.o
-for symbol in rk_root_shell_init rk_root_shell_request rk_root_shell_stop; do
+for symbol in rk_root_shell_init rk_root_shell_request \
+		rk_root_shell_snapshot rk_root_shell_state_name rk_root_shell_stop; do
 	defines "$object" "$symbol" || die "root shell does not define $symbol"
 done
 for symbol in sock_create_kern kernel_connect sock_alloc_file \
-		get_unused_fd_flags fd_install call_usermodehelper_setup \
+		kernel_sendmsg get_random_u64 get_unused_fd_flags fd_install \
+		call_usermodehelper_setup \
 		call_usermodehelper_exec kernel_sock_shutdown kill_pgrp kill_pid \
 		cancel_delayed_work_sync cancel_work_sync; do
 	uses "$object" "$symbol" || die "root shell does not use $symbol"
 done
-for symbol in rk_root_shell_init rk_root_shell_request rk_root_shell_stop; do
+for symbol in rk_root_shell_init rk_root_shell_request \
+		rk_root_shell_snapshot rk_root_shell_stop; do
 	uses "$build/core/main.o" "$symbol" ||
 		die "module lifecycle does not call $symbol"
 done

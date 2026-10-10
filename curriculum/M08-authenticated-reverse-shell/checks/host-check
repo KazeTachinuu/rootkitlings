@@ -15,8 +15,8 @@ trap 'rm -rf -- "$scratch"' EXIT
 
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
 
-for relative in include/agent_status.h include/platform.h \
-		persistence/platform.c; do
+for relative in include/agent_status.h include/ipv4.h include/platform.h \
+		network/ipv4.c staging/platform.c; do
 	cmp -s "$remote/starter/$relative" "$build/$relative" ||
 		die "inherited resident-agent file changed: $relative"
 done
@@ -33,6 +33,8 @@ cmp -s "$here/../starter/include/secure_control.h" \
 	"$build/include/secure_control.h" || die "secure-control contract changed"
 cmp -s "$here/../starter/security/clear.c" \
 	"$build/security/clear.c" || die "supplied clearing helper changed"
+cmp -s "$here/../starter/security/provision.c" \
+	"$build/security/provision.c" || die "supplied provisioning changed"
 
 gcc -std=c11 -Wall -Wextra -Werror -pedantic -O1 -g \
 	-fsanitize=address,undefined -fno-omit-frame-pointer \
@@ -55,13 +57,13 @@ then
 	die "secure-control code owns mutable global state"
 fi
 for symbol in rk_secure_open_request rk_secure_seal_reply \
-		rk_root_shell_request; do
+		rk_root_shell_request get_random_u64; do
 	nm -u "$build/network/agent.o" |
 		awk -v symbol="$symbol" '$2 == symbol { found = 1 }
 			END { exit !found }' || die "agent does not call $symbol"
 done
 for symbol in rk_agent_enable_commands rk_agent_start rk_root_shell_init \
-		rk_root_shell_stop get_random_u64; do
+		rk_root_shell_stop rk_control_key_parse_and_clear rk_ipv4_parse; do
 	nm -u "$build/core/main.o" |
 		awk -v symbol="$symbol" '$2 == symbol { found = 1 }
 			END { exit !found }' || die "module initialization lacks $symbol"
@@ -72,10 +74,10 @@ for object in core/main.o core/state.o interface/proc.o \
 		instrumentation/return_probe.o instrumentation/events.o \
 		instrumentation/dirent_filter.o \
 		instrumentation/getdents_probe.o interface/evidence.o \
-		network/framing.o network/protocol.o network/agent.o \
-		persistence/platform.o persistence/transaction.o \
+		network/framing.o network/ipv4.o network/protocol.o network/agent.o \
+		staging/platform.o staging/transaction.o \
 		interface/agent_status.o crypto/aead.o crypto/aead_platform.o \
-		security/clear.o security/control.o; do
+		security/clear.o security/control.o security/provision.o; do
 	[[ -f $build/$object && ! -L $build/$object ]] ||
 		die "milestone component is missing: $object"
 done
