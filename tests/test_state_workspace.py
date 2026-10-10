@@ -274,6 +274,17 @@ class WorkspaceTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkspaceError, "already exists"):
             materialize(self.starter, self.work, "module-core", self.files)
 
+    def test_materialize_accepts_serial_names_but_rejects_unsafe_names(self) -> None:
+        workspace = materialize(self.starter, self.work, "L00", self.files)
+        self.assertEqual(workspace, self.work / "L00")
+        for name in ("../L00", "L00/source", ".", "_L00"):
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(
+                    WorkspaceError,
+                    "invalid generated-tree name",
+                ):
+                    materialize(self.starter, self.work, name, self.files)
+
     def test_materialize_normalizes_snapshot_style_modes_for_learning(self) -> None:
         (self.starter / "Kbuild").chmod(0o444)
         (self.starter / "src/main.c").chmod(0o555)

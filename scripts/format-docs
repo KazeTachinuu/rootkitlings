@@ -151,6 +151,19 @@ def overlong_prose(source: str) -> list[int]:
 	return result
 
 
+def course_documents(root: Path = ROOT) -> tuple[Path, ...]:
+	"""Return maintained prose without entering learner or runtime trees."""
+	documents = set(root.rglob("*.md"))
+	documents.update((root / "curriculum").glob("*/hint"))
+	result = []
+	for path in sorted(documents):
+		relative = path.relative_to(root)
+		if relative.parts[0] in {".git", ".rootkitlings", "work"}:
+			continue
+		result.append(path)
+	return tuple(result)
+
+
 def main() -> int:
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--check", action="store_true")
@@ -158,11 +171,7 @@ def main() -> int:
 	changed: list[Path] = []
 	overlong: list[tuple[Path, int]] = []
 
-	documents = set(ROOT.rglob("*.md"))
-	documents.update((ROOT / "curriculum").glob("*/hint"))
-	for path in sorted(documents):
-		if ".git" in path.parts or ".rootkitlings" in path.parts:
-			continue
+	for path in course_documents():
 		before = path.read_text(encoding="utf-8")
 		after = format_markdown(before)
 		overlong.extend(

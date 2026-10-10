@@ -12,7 +12,7 @@ import tomllib
 from typing import Iterable, Mapping
 
 
-ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
+NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*\Z")
 MANIFEST = "snapshot.toml"
 
 
@@ -40,9 +40,10 @@ def _relative(value: str) -> PurePosixPath:
     return path
 
 
-def _stable_id(value: str) -> str:
-    if not ID_RE.fullmatch(value):
-        raise WorkspaceError(f"invalid stable ID: {value!r}")
+def _safe_name(value: str) -> str:
+    """Validate one filesystem component used for a generated tree."""
+    if not NAME_RE.fullmatch(value):
+        raise WorkspaceError(f"invalid generated-tree name: {value!r}")
     return value
 
 
@@ -114,7 +115,7 @@ def _copy_declared(
 
 def materialize(starter: Path, work_root: Path, stable_id: str, declared_files: Iterable[str]) -> Path:
     """Atomically create one workspace from an immutable starter."""
-    stable_id = _stable_id(stable_id)
+    stable_id = _safe_name(stable_id)
     starter = _real_directory(Path(starter), "starter")
     work_root = _real_directory(Path(work_root), "workspace root")
     destination = work_root / stable_id
@@ -140,7 +141,7 @@ def materialize_imported(
     imported_files: Mapping[str, tuple[bytes, int]],
 ) -> Path:
     """Create a workspace from local starter files and reference imports."""
-    stable_id = _stable_id(stable_id)
+    stable_id = _safe_name(stable_id)
     starter = _real_directory(Path(starter), "starter")
     work_root = _real_directory(Path(work_root), "workspace root")
     local = _declared(starter_files)
@@ -180,7 +181,7 @@ def materialize_inherited(
     imported_files: Mapping[str, tuple[bytes, int]] | None = None,
 ) -> Path:
     """Combine a learner snapshot with local additions and reference imports."""
-    stable_id = _stable_id(stable_id)
+    stable_id = _safe_name(stable_id)
     snapshot = _real_directory(Path(snapshot), "provider snapshot")
     work_root = _real_directory(Path(work_root), "workspace root")
     verify_snapshot(snapshot)
@@ -300,7 +301,7 @@ def _validate_additions_tree(root: Path, expected_files: set[str]) -> None:
 
 def archive_workspace(workspace: Path, archive_root: Path, stable_id: str) -> Path:
     """Copy a safe workspace to a deterministic content-addressed archive."""
-    stable_id = _stable_id(stable_id)
+    stable_id = _safe_name(stable_id)
     workspace = _real_directory(Path(workspace), "workspace")
     archive_root = _real_directory(Path(archive_root), "archive root")
     files = _scan_regular_tree(workspace)
@@ -329,7 +330,7 @@ def archive_workspace(workspace: Path, archive_root: Path, stable_id: str) -> Pa
 def _replace_workspace(source: Path, work_root: Path, stable_id: str, declared_files: Iterable[str]) -> Path:
     source = _real_directory(Path(source), "restore source")
     work_root = _real_directory(Path(work_root), "workspace root")
-    destination = work_root / _stable_id(stable_id)
+    destination = work_root / _safe_name(stable_id)
     if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
         raise WorkspaceError(f"workspace destination must be a real directory: {destination}")
     paths = _declared(declared_files)
@@ -357,7 +358,7 @@ def restore_workspace(work_root: Path, archive_root: Path, stable_id: str, basel
                       declared_files: Iterable[str]) -> tuple[Path, Path]:
     """Archive current work, then restore its recorded starting baseline."""
     work_root = _real_directory(Path(work_root), "workspace root")
-    workspace = work_root / _stable_id(stable_id)
+    workspace = work_root / _safe_name(stable_id)
     archive = archive_workspace(workspace, archive_root, stable_id)
     return _replace_workspace(baseline, work_root, stable_id, declared_files), archive
 
@@ -367,7 +368,7 @@ def archive_and_remove_workspaces(work_root: Path, archive_root: Path,
     """Archive every present workspace, then remove them as one recoverable set."""
     work_root = _real_directory(Path(work_root), "workspace root")
     archive_root = _real_directory(Path(archive_root), "archive root")
-    stable_ids = tuple(sorted({_stable_id(value) for value in stable_ids}))
+    stable_ids = tuple(sorted({_safe_name(value) for value in stable_ids}))
     workspaces: dict[str, Path] = {}
     archives: dict[str, Path] = {}
     for stable_id in stable_ids:

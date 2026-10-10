@@ -47,7 +47,9 @@ Every required concept must be entry knowledge or taught by a prerequisite.
 
 ## Workspace composition
 
-A learner edits an isolated tree under `.rootkitlings/work/`.
+A learner edits an isolated tree under `work/<serial>/`.
+Build outputs, internal state, snapshots, and backups stay under
+`.rootkitlings/`.
 Bundles contain:
 
 ```text

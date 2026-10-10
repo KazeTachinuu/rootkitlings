@@ -1,4 +1,4 @@
-"""Generate stable clangd commands for the physical curriculum sources."""
+"""Generate stable clangd commands for course and learner sources."""
 
 from __future__ import annotations
 
@@ -30,6 +30,26 @@ def bundle_source_files(root: Path = ROOT) -> set[Path]:
         for directory in ("starter", "solution"):
             sources.update((bundle / directory).glob("**/*.c"))
     return sources
+
+
+def learner_source_files(root: Path = ROOT) -> set[Path]:
+    """Return C sources in materialized learner workspaces."""
+    work = root / "work"
+    if not work.is_dir() or work.is_symlink():
+        return set()
+    result: set[Path] = set()
+    for workspace in work.iterdir():
+        if not workspace.is_dir() or workspace.is_symlink():
+            continue
+        boundary = workspace.resolve()
+        for source in workspace.glob("**/*.c"):
+            if (
+                source.is_file()
+                and not source.is_symlink()
+                and source.resolve().is_relative_to(boundary)
+            ):
+                result.add(source)
+    return result
 
 
 def entry_file(entry: dict[str, object]) -> Path:
@@ -82,8 +102,19 @@ def source_include_directories(
 ) -> tuple[Path, ...]:
     try:
         relative = source.resolve().relative_to((root / "curriculum").resolve())
-    except ValueError as error:
-        raise CompileDatabaseError(f"source is outside the curriculum: {source}") from error
+    except ValueError:
+        try:
+            relative = source.resolve().relative_to((root / "work").resolve())
+        except ValueError as error:
+            raise CompileDatabaseError(
+                f"source is outside the course trees: {source}"
+            ) from error
+        if len(relative.parts) < 2:
+            raise CompileDatabaseError(
+                f"source is not inside a learner workspace: {source}"
+            )
+        include = root / "work" / relative.parts[0] / "include"
+        return (include.resolve(),) if include.is_dir() else ()
     if len(relative.parts) < 3 or relative.parts[1] not in {"starter", "solution"}:
         raise CompileDatabaseError(f"source is not in a starter or solution tree: {source}")
     bundle = root / "curriculum" / relative.parts[0]
@@ -120,11 +151,28 @@ def source_include_directories(
 
 def source_defines(source: Path, root: Path = ROOT) -> tuple[str, ...]:
     """Derive course-specific preprocessor defaults from the owning Kbuilds."""
-    relative = source.resolve().relative_to((root / "curriculum").resolve())
-    bundle = root / "curriculum" / relative.parts[0]
-    own_tree = relative.parts[1]
-    other_tree = "solution" if own_tree == "starter" else "starter"
-    kbuilds = (bundle / own_tree / "Kbuild", bundle / other_tree / "Kbuild")
+    try:
+        relative = source.resolve().relative_to((root / "curriculum").resolve())
+    except ValueError:
+        try:
+            relative = source.resolve().relative_to((root / "work").resolve())
+        except ValueError as error:
+            raise CompileDatabaseError(
+                f"source is outside the course trees: {source}"
+            ) from error
+        if len(relative.parts) < 2:
+            raise CompileDatabaseError(
+                f"source is not inside a learner workspace: {source}"
+            )
+        kbuilds = (root / "work" / relative.parts[0] / "Kbuild",)
+    else:
+        bundle = root / "curriculum" / relative.parts[0]
+        own_tree = relative.parts[1]
+        other_tree = "solution" if own_tree == "starter" else "starter"
+        kbuilds = (
+            bundle / own_tree / "Kbuild",
+            bundle / other_tree / "Kbuild",
+        )
     for kbuild in kbuilds:
         if kbuild.is_file() and "ROOTKITLINGS_FAIL_POINT" in kbuild.read_text(
             encoding="utf-8"
@@ -244,15 +292,18 @@ def captured_database(catalog: Catalog, temporary_root: Path) -> list[dict[str, 
         if relative.endswith(".c")
     }
     base = base_compile_entry(captured, reference_sources)
+    sources = bundle_source_files(catalog.root) | learner_source_files(
+        catalog.root
+    )
     return [
         expanded_entry(base, source, catalog.root, catalog)
-        for source in sorted(bundle_source_files(catalog.root))
+        for source in sorted(sources)
     ]
 
 
 def write_database(database: list[dict[str, object]], path: Path = DATABASE) -> None:
     if not database:
-        raise CompileDatabaseError("the curriculum contains no physical C sources")
+        raise CompileDatabaseError("the course contains no physical C sources")
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=".compile_commands.", suffix=".json", dir=path.parent
     )

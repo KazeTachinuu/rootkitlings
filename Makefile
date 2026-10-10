@@ -1,5 +1,6 @@
 KDIR ?=
 MODULE_DIR ?=
+MODULE_OUT ?=
 TOOL_OUT ?= vm/tools
 ROOTKITLINGS_FAIL_POINT ?= 0
 GUEST_TOOL_NAMES := \
@@ -48,9 +49,14 @@ module:
 	if test -z "$$kdir"; then \
 		kdir="$$("$(CURDIR)/scripts/kernel" build-dir)" || exit; \
 	fi; \
+	if test -n "$(MODULE_OUT)"; then \
+		set -- "MO=$(MODULE_OUT)"; \
+	else \
+		set --; \
+	fi; \
 	env -i PATH="$$PATH" LC_ALL=C LANG=C TZ=UTC \
 		make -C "$$kdir" M="$(MODULE_DIR)" W=1 ARCH=x86_64 CC=gcc HOSTCC=gcc \
-		ROOTKITLINGS_FAIL_POINT="$(ROOTKITLINGS_FAIL_POINT)" modules
+		ROOTKITLINGS_FAIL_POINT="$(ROOTKITLINGS_FAIL_POINT)" "$$@" modules
 
 tools: $(GUEST_TOOLS)
 

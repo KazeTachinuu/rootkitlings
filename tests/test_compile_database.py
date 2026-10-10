@@ -11,6 +11,7 @@ from engine.compile_database import (
     bundle_source_files,
     captured_database,
     expanded_entry,
+    learner_source_files,
     source_include_directories,
 )
 from engine.catalog import Catalog
@@ -46,6 +47,19 @@ class CompileDatabaseTests(unittest.TestCase):
             (unowned / "ignored.c").write_text("int ignored;\n")
 
             self.assertEqual(bundle_source_files(root), {starter, solution})
+
+    def test_discovers_real_learner_sources_without_following_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = root / "work/L00"
+            workspace.mkdir(parents=True)
+            source = workspace / "main.c"
+            source.write_text("int learner;\n")
+            outside = root / "outside.c"
+            outside.write_text("int outside;\n")
+            (workspace / "linked.c").symlink_to(outside)
+
+            self.assertEqual(learner_source_files(root), {source})
 
     def test_selects_only_the_captured_reference_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -114,6 +128,20 @@ class CompileDatabaseTests(unittest.TestCase):
         includes = source_include_directories(source, root, catalog)
 
         self.assertIn(expected.resolve(), includes)
+
+    def test_learner_source_uses_its_workspace_include_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "work/L00/core/main.c"
+            include = root / "work/L00/include"
+            source.parent.mkdir(parents=True)
+            include.mkdir(parents=True)
+            source.write_text("int learner;\n")
+
+            self.assertEqual(
+                source_include_directories(source, root),
+                (include.resolve(),),
+            )
 
 
 if __name__ == "__main__":

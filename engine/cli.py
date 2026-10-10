@@ -19,6 +19,7 @@ from engine.workspace import (
     WorkspaceError,
     archive_and_remove_workspaces,
     canonical_tree_hash,
+    clean_paths,
     create_snapshot,
     materialize,
     materialize_imported,
@@ -30,9 +31,10 @@ from engine.workspace import (
 ROOT = Path(__file__).resolve().parent.parent
 RT = ROOT / '.rootkitlings'
 STATE = RT / 'state.toml'
-WORK = RT / 'work'
-PASSED = RT / 'passed'
-ARCHIVE = RT / 'archive'
+WORK = ROOT / 'work'
+BUILD = RT / 'build'
+SNAPSHOTS = RT / 'snapshots'
+BACKUPS = RT / 'backups'
 DOCTOR_TIMEOUT = 30
 KERNEL_PREP_TIMEOUT = 3600
 SETUP_PROBE_TIMEOUT = 180
@@ -79,11 +81,18 @@ STORE = StateStore(
 
 
 def initialize_runtime():
-    for path in (RT, WORK, PASSED, ARCHIVE):
-        path.mkdir(parents=True, exist_ok=True)
+    for path in (RT, WORK, BUILD, SNAPSHOTS, BACKUPS):
         if path.is_symlink():
             relative = path.relative_to(ROOT)
             die(f'Runtime directory must not be a symlink: {relative}')
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            relative = path.relative_to(ROOT)
+            die(f'Cannot create runtime directory {relative}: {error}')
+        if not path.is_dir():
+            relative = path.relative_to(ROOT)
+            die(f'Runtime path must be a directory: {relative}')
 
 
 def course_kernel_ready():
@@ -145,6 +154,11 @@ def cmd_setup(a):
 
 def label(item):
     return item.serial or item.id
+
+
+def workspace_name(item):
+    """Return the short learner-facing directory name for an exercise."""
+    return getattr(item, 'serial', '') or item.id
 
 
 def kind_label(item):
@@ -220,11 +234,19 @@ def available(x, state):
 
 
 def wp(x):
-    return WORK / x.id
+    return WORK / workspace_name(x)
+
+
+def shown_editable(x):
+    return tuple(shown(wp(x) / relative) for relative in x.workspace.editable)
 
 
 def bd(x):
     return wp(x) if x.workspace.build == '.' else wp(x) / x.workspace.build
+
+
+def build_output(x):
+    return BUILD / workspace_name(x)
 
 
 def need(x):
@@ -238,8 +260,8 @@ def need(x):
 
 
 def snap(content_hash):
-    verify_snapshot(PASSED / content_hash, content_hash)
-    return PASSED / content_hash
+    verify_snapshot(SNAPSHOTS / content_hash, content_hash)
+    return SNAPSHOTS / content_hash
 
 
 def baseline(x, state):
@@ -254,7 +276,7 @@ def baseline(x, state):
 
 def materialize_workspace(x, state):
     if getattr(x.workspace, 'baseline', '') == 'scaffold':
-        return CAT.materialize_starter(x, WORK, x.id)
+        return CAT.materialize_starter(x, WORK, workspace_name(x))
     source = baseline(x, state)
     provider = CAT.baseline_provider(x)
     imported = {}
@@ -271,7 +293,7 @@ def materialize_workspace(x, state):
             source,
             ROOT / x.workspace.additions if x.workspace.additions else None,
             WORK,
-            x.id,
+            workspace_name(x),
             provider.workspace.files,
             x.workspace.files,
             imported,
@@ -280,12 +302,12 @@ def materialize_workspace(x, state):
         return materialize_imported(
             source,
             WORK,
-            x.id,
+            workspace_name(x),
             CAT.local_workspace_files(x),
             x.workspace.files,
             imported,
         )
-    return materialize(source, WORK, x.id, x.workspace.files)
+    return materialize(source, WORK, workspace_name(x), x.workspace.files)
 
 
 def one(a, command):
@@ -349,7 +371,11 @@ def cmd_start(a):
                 die(f'Workspace exists without recorded baseline: {relative}')
         else:
             materialize_workspace(x, s)
-            r.baseline_hash, _ = create_snapshot(p, PASSED, x.workspace.files)
+            r.baseline_hash, _ = create_snapshot(
+                p,
+                SNAPSHOTS,
+                x.workspace.files,
+            )
             provider = CAT.baseline_provider(x)
             r.baseline_provider = provider.id if provider else ''
             r.workspace_hash = canonical_tree_hash(p, x.workspace.files)
@@ -357,8 +383,8 @@ def cmd_start(a):
         state = 'created' if created else 'already exists'
         UI.success(f'Workspace {state}: {shown(p)}')
         UI.section('Edit')
-        for relative in x.workspace.editable:
-            UI.bullet(relative)
+        for path in shown_editable(x):
+            UI.bullet(path)
         UI.section('Next')
         UI.command(f'./rootkitlings check {label(x)}')
 
@@ -498,10 +524,19 @@ def solution_output(x, completed):
 
 def build_workspace(x):
     need(x)
-    build_directory = bd(x)
-    if build_directory.is_symlink() or not build_directory.is_dir():
-        die(f'Unsafe build directory: {shown(build_directory)}')
-    artifact = build_directory / CAT.module_artifact(x)
+    source_directory = bd(x)
+    if source_directory.is_symlink() or not source_directory.is_dir():
+        die(f'Unsafe source directory: {shown(source_directory)}')
+    output_directory = build_output(x)
+    if output_directory.is_symlink():
+        die(f'Build output must not be a symlink: {shown(output_directory)}')
+    try:
+        output_directory.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        die(f'Cannot create build output {shown(output_directory)}: {error}')
+    if not output_directory.is_dir():
+        die(f'Build output must be a directory: {shown(output_directory)}')
+    artifact = output_directory / CAT.module_artifact(x)
     if artifact.is_symlink():
         die(f'Expected artifact must not be a symlink: {shown(artifact)}')
     if artifact.exists():
@@ -517,7 +552,8 @@ def build_workspace(x):
         '-C',
         str(ROOT),
         f'KDIR={kdir}',
-        f'MODULE_DIR={bd(x)}',
+        f'MODULE_DIR={source_directory}',
+        f'MODULE_OUT={output_directory}',
         'W=1',
         '--quiet',
         'module',
@@ -553,32 +589,13 @@ def run_host_check(x, build_directory, artifact, timeout):
 
 
 def cmd_build(a):
-    with STORE.locked() as s:
+    with STORE.read_locked() as s:
         x = resolve(one(a, 'build'), s)
         available(x, s)
-        workspace = wp(x)
-        record = s.exercise(x.id)
-        if workspace.exists():
-            if workspace.is_symlink() or not workspace.is_dir():
-                die(f'Unsafe workspace: {workspace.relative_to(ROOT)}')
-            if not record.baseline_hash:
-                die(
-                    'Workspace exists without recorded baseline: '
-                    f'{workspace.relative_to(ROOT)}'
-                )
-        else:
-            materialize_workspace(x, s)
-            record.baseline_hash, _ = create_snapshot(
-                workspace,
-                PASSED,
-                x.workspace.files,
-            )
-            provider = CAT.baseline_provider(x)
-            record.baseline_provider = provider.id if provider else ''
-            record.workspace_hash = canonical_tree_hash(
-                workspace,
-                x.workspace.files,
-            )
+        record = s.exercises.get(x.id)
+        workspace = need(x)
+        if not record or not record.baseline_hash:
+            die(f'{label(x)} has no recorded starting snapshot')
     module = build_workspace(x)
     UI.success(f'Built {label(x)}: {shown(module)}')
 
@@ -663,7 +680,7 @@ def record_attempt(x, passed, verified_source=None, verified_hash=None):
             else:
                 content_hash, _ = create_snapshot(
                     verified_source,
-                    PASSED,
+                    SNAPSHOTS,
                     x.workspace.files,
                 )
                 if content_hash != verified_hash:
@@ -863,9 +880,31 @@ def cmd_status(a):
         workspace = wp(x)
         if workspace.is_dir() and not workspace.is_symlink():
             UI.field('Workspace', shown(workspace))
+            record = s.exercises.get(x.id)
+            try:
+                live_hash = canonical_tree_hash(
+                    workspace,
+                    x.workspace.files,
+                )
+            except WorkspaceError:
+                workspace_state = 'Invalid'
+                state_style = 'error'
+            else:
+                if record and record.passed_snapshot == live_hash:
+                    workspace_state = 'Passed'
+                    state_style = 'success'
+                elif record and record.baseline_hash == live_hash:
+                    workspace_state = 'Unchanged'
+                    state_style = 'dim'
+                else:
+                    workspace_state = 'Modified'
+                    state_style = 'warning'
+            UI.field('State', workspace_state, value_style=state_style)
+            if record and record.attempts:
+                UI.field('Attempts', str(record.attempts))
             UI.section('Files to edit')
-            for relative in x.workspace.editable:
-                UI.bullet(relative)
+            for path in shown_editable(x):
+                UI.bullet(path)
         else:
             UI.field('Workspace', 'Not started', value_style='warning')
         show_next(s, kernel_ready=kernel_ready)
@@ -955,8 +994,8 @@ def cmd_restore(a):
             die(f'{label(x)} has no recorded baseline')
         restored, arch = restore_workspace(
             WORK,
-            ARCHIVE,
-            x.id,
+            BACKUPS,
+            workspace_name(x),
             snap(r.baseline_hash),
             x.workspace.files,
         )
@@ -964,7 +1003,7 @@ def cmd_restore(a):
     UI.success(f'Edits archived: {shown(arch)}')
     UI.success(f'Starting files restored for {label(x)}; progress unchanged')
     UI.section('Edit')
-    for path in x.workspace.editable:
+    for path in shown_editable(x):
         UI.bullet(path)
     UI.section('Next')
     UI.command(f'./rootkitlings check {label(x)}')
@@ -1002,11 +1041,21 @@ def cmd_reset(a):
     with STORE.locked() as s:
         selected = None if reset_all else resolve(a[0], s)
         affected = progress_reset_ids(selected)
-        archives = archive_and_remove_workspaces(WORK, ARCHIVE, affected)
+        workspace_names = (
+            workspace_name(CAT.by_id[stable_id])
+            for stable_id in affected
+            if stable_id in s.exercises
+            and s.exercises[stable_id].baseline_hash
+        )
+        archives = archive_and_remove_workspaces(
+            WORK,
+            BACKUPS,
+            workspace_names,
+        )
         s.clear_progress(affected)
     if archives:
         UI.success(
-            f'Archived {len(archives)} workspace(s) under {shown(ARCHIVE)}'
+            f'Archived {len(archives)} workspace(s) under {shown(BACKUPS)}'
         )
     scope = (
         'all course progress'
@@ -1020,13 +1069,11 @@ def cmd_clean(a):
     with STORE.read_locked() as s:
         x = resolve(one(a, 'clean'), s)
     need(x)
-    k = course_kernel_build_dir()
-    if run(
-        ['make', '-C', str(k), f'M={bd(x)}', 'clean'],
-        visible=True,
-    ).returncode:
-        die(f'Could not clean {label(x)}')
-    UI.success(f'Cleaned {label(x)} build outputs')
+    clean_paths(BUILD, (workspace_name(x),))
+    UI.success(f'Cleaned build outputs for {label(x)}')
+    UI.field('Sources', shown(wp(x)))
+    UI.section('Next')
+    UI.command(f'./rootkitlings build {label(x)}')
 
 
 def usage():
@@ -1113,7 +1160,7 @@ def main(a):
         CMDS[command](arguments)
         return 0
     initialize_runtime()
-    if command in {'start', 'build', 'check', 'run', 'gdb'}:
+    if command in {'build', 'check', 'run', 'gdb'}:
         require_setup()
     CMDS[command](arguments)
     return 0

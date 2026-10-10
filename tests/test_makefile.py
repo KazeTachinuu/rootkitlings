@@ -63,17 +63,20 @@ class MakefileTests(unittest.TestCase):
             temporary = Path(directory)
             fake_kernel = temporary / "kernel"
             module = temporary / "module"
+            output = temporary / "output"
             fake_kernel.mkdir()
             module.mkdir()
+            output.mkdir()
             record = temporary / "record"
             (fake_kernel / "Makefile").write_text(
                 "modules:\n"
-                f"\t@printf '%s\\n' '$(M)|$(ARCH)|$(CC)|$(HOSTCC)|$(W)|$(ROOTKITLINGS_FAIL_POINT)' > {record}\n",
+                f"\t@printf '%s\\n' '$(M)|$(MO)|$(ARCH)|$(CC)|$(HOSTCC)|$(W)|$(ROOTKITLINGS_FAIL_POINT)' > {record}\n",
                 encoding="utf-8",
             )
             result = make(
                 f"KDIR={fake_kernel}",
                 f"MODULE_DIR={module}",
+                f"MODULE_OUT={output}",
                 "ARCH=arm64",
                 "CC=false",
                 "HOSTCC=false",
@@ -83,7 +86,7 @@ class MakefileTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertEqual(
                 record.read_text(encoding="utf-8").strip(),
-                f"{module}|x86_64|gcc|gcc|1|7",
+                f"{module}|{output}|x86_64|gcc|gcc|1|7",
             )
 
     def test_tool_output_rejects_empty_root_and_custom_clean_paths(self) -> None:

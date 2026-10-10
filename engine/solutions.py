@@ -13,7 +13,7 @@ import shutil
 import tempfile
 from typing import Iterable, Mapping
 
-from .workspace import WorkspaceError, _real_directory, _relative, _stable_id
+from .workspace import WorkspaceError, _real_directory, _relative, _safe_name
 
 
 @dataclass(frozen=True)
@@ -156,7 +156,7 @@ def materialize_solution_tree(
     stable_id: str,
 ) -> Path:
     """Atomically materialize a validated composed solution under destination_root."""
-    stable_id = _stable_id(stable_id)
+    stable_id = _safe_name(stable_id)
     destination_root = _real_directory(Path(destination_root), "solution destination root")
     destination = destination_root / stable_id
     if destination.exists() or destination.is_symlink():

@@ -323,14 +323,14 @@ class Validator:
                 failures.append(f"{item.id}: tree composition failed: {error}")
 
         tracked = self.require_command(
-            ["git", "ls-files", "--", ".rootkitlings"],
+            ["git", "ls-files", "--", ".rootkitlings", "work"],
             "could not inspect tracked runtime files",
             capture=True,
         ).output.splitlines()
         for relative in tracked:
             if (self.root / relative).is_file():
                 failures.append(
-                    f"shipped file remains under .rootkitlings: {relative}"
+                    f"shipped learner runtime file remains: {relative}"
                 )
         if failures:
             raise ValidationError("catalog assets:\n  " + "\n  ".join(failures))

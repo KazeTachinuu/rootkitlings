@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import runpy
+import tempfile
 import unittest
 
 
@@ -9,6 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 FORMAT = runpy.run_path(ROOT / "scripts/format-docs")
 format_markdown = FORMAT["format_markdown"]
 overlong_prose = FORMAT["overlong_prose"]
+course_documents = FORMAT["course_documents"]
 
 
 class MarkdownFormatTests(unittest.TestCase):
@@ -80,6 +82,19 @@ class MarkdownFormatTests(unittest.TestCase):
             + "\n"
         )
         self.assertEqual(overlong_prose(source), [5])
+
+    def test_document_discovery_excludes_runtime_and_learner_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            maintained = root / "docs/guide.md"
+            learner = root / "work/L00/notes.md"
+            runtime = root / ".rootkitlings/log.md"
+            hint = root / "curriculum/L00-example/hint"
+            for path in (maintained, learner, runtime, hint):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("text\n", encoding="utf-8")
+
+            self.assertEqual(set(course_documents(root)), {maintained, hint})
 
 
 if __name__ == "__main__":

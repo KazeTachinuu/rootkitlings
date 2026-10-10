@@ -26,9 +26,10 @@ class LearnerCLITests(unittest.TestCase):
         values = {
             "RT": runtime,
             "STATE": runtime / "state.toml",
-            "WORK": runtime / "work",
-            "PASSED": runtime / "passed",
-            "ARCHIVE": runtime / "archive",
+            "WORK": Path(self.temporary.name) / "work",
+            "BUILD": runtime / "build",
+            "SNAPSHOTS": runtime / "snapshots",
+            "BACKUPS": runtime / "backups",
         }
         self.globals.update(values)
         self.globals["STORE"] = self.globals["StateStore"](
@@ -45,7 +46,13 @@ class LearnerCLITests(unittest.TestCase):
         self.temporary.cleanup()
 
     def _workspace(self, stable_id: str, content: str) -> Path:
-        workspace = self.globals["WORK"] / stable_id
+        exercise = self.globals["CAT"].by_id.get(stable_id)
+        name = (
+            self.globals["workspace_name"](exercise)
+            if exercise is not None
+            else stable_id
+        )
+        workspace = self.globals["WORK"] / name
         workspace.mkdir()
         (workspace / "learner.c").write_text(content, encoding="utf-8")
         return workspace
@@ -167,7 +174,7 @@ class LearnerCLITests(unittest.TestCase):
                 self.globals["main"]([command])
                 self.assertEqual(
                     bool(gated),
-                    command in {"start", "build", "check", "run", "gdb"},
+                    command in {"build", "check", "run", "gdb"},
                 )
         finally:
             self.globals["CMDS"] = original_commands
@@ -262,9 +269,10 @@ class LearnerCLITests(unittest.TestCase):
 
     def test_build_pins_kdir_and_removes_exact_stale_artifact(self) -> None:
         exercise = self._build_exercise()
-        workspace = self.globals["WORK"] / exercise.id
+        workspace = self.globals["wp"](exercise)
         workspace.mkdir()
-        artifact = workspace / "rootkitlings.ko"
+        artifact = self.globals["build_output"](exercise) / "rootkitlings.ko"
+        artifact.parent.mkdir(parents=True)
         artifact.write_bytes(b"stale")
         original_catalog = self.globals["CAT"]
         original_run = self.globals["run"]
@@ -299,9 +307,10 @@ class LearnerCLITests(unittest.TestCase):
 
     def test_failed_build_cannot_reuse_stale_artifact(self) -> None:
         exercise = self._build_exercise()
-        workspace = self.globals["WORK"] / exercise.id
+        workspace = self.globals["wp"](exercise)
         workspace.mkdir()
-        artifact = workspace / "hello.ko"
+        artifact = self.globals["build_output"](exercise) / "hello.ko"
+        artifact.parent.mkdir(parents=True)
         artifact.write_bytes(b"stale")
         original_run = self.globals["run"]
         calls = 0
@@ -325,10 +334,11 @@ class LearnerCLITests(unittest.TestCase):
 
     def test_build_rejects_symlink_and_special_artifact_paths(self) -> None:
         exercise = self._build_exercise()
-        workspace = self.globals["WORK"] / exercise.id
+        workspace = self.globals["wp"](exercise)
         workspace.mkdir()
-        artifact = workspace / "hello.ko"
-        target = workspace / "outside"
+        artifact = self.globals["build_output"](exercise) / "hello.ko"
+        artifact.parent.mkdir(parents=True)
+        target = artifact.parent / "outside"
         target.write_bytes(b"outside")
         artifact.symlink_to(target)
         with self.assertRaisesRegex(self.globals["CLIError"], "symlink"):
@@ -340,7 +350,7 @@ class LearnerCLITests(unittest.TestCase):
 
     def test_host_check_receives_build_and_exact_artifact_abi(self) -> None:
         exercise = self._build_exercise(host_check="support/host-check")
-        workspace = self.globals["WORK"] / exercise.id
+        workspace = self.globals["wp"](exercise)
         workspace.mkdir()
         artifact = workspace / "rootkitlings.ko"
         artifact.write_bytes(b"module")
@@ -365,7 +375,7 @@ class LearnerCLITests(unittest.TestCase):
         exercise = self.globals["CAT"].ordered()[0]
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             self.globals["cmd_start"]([exercise.serial])
-        build_root = self.globals["WORK"] / exercise.id
+        build_root = self.globals["wp"](exercise)
         artifact = build_root / self.globals["CAT"].module_artifact(exercise)
         artifact.write_bytes(b"module")
         success = SimpleNamespace(
@@ -467,7 +477,7 @@ class LearnerCLITests(unittest.TestCase):
         exercise = self.globals["CAT"].ordered()[0]
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             self.globals["cmd_start"]([exercise.serial])
-        workspace = self.globals["WORK"] / exercise.id
+        workspace = self.globals["wp"](exercise)
         frozen_parent = Path(self.temporary.name) / "frozen"
         frozen_parent.mkdir()
         frozen = self.globals["materialize"](
@@ -500,7 +510,7 @@ class LearnerCLITests(unittest.TestCase):
         exercise = self.globals["CAT"].ordered()[0]
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             self.globals["cmd_start"]([exercise.serial])
-        workspace = self.globals["WORK"] / exercise.id
+        workspace = self.globals["wp"](exercise)
         artifact = workspace / self.globals["CAT"].module_artifact(exercise)
         artifact.write_bytes(b"module")
         outcome = SimpleNamespace(
@@ -693,12 +703,17 @@ class LearnerCLITests(unittest.TestCase):
         with self.globals["STORE"].locked() as state:
             state.completed.update((earlier, selected, later))
             for stable_id in (earlier, selected, later):
-                state.exercise(stable_id).attempts = 2
+                record = state.exercise(stable_id)
+                record.attempts = 2
+                record.baseline_hash = "a" * 64
+                record.baseline_provider = self.globals[
+                    "BASELINE_PROVIDERS"
+                ][stable_id] or ""
 
         earlier_workspace = self._workspace(earlier, "keep\n")
         selected_workspace = self._workspace(selected, "archive selected\n")
         later_workspace = self._workspace(later, "archive later\n")
-        marker = self.globals["PASSED"] / "untouched"
+        marker = self.globals["SNAPSHOTS"] / "untouched"
         marker.write_text("snapshot", encoding="utf-8")
 
         output = self._reset([selected])
@@ -710,7 +725,7 @@ class LearnerCLITests(unittest.TestCase):
         self.assertFalse(selected_workspace.exists())
         self.assertFalse(later_workspace.exists())
         self.assertTrue(marker.exists())
-        archives = list(self.globals["ARCHIVE"].iterdir())
+        archives = list(self.globals["BACKUPS"].iterdir())
         self.assertEqual(len(archives), 2)
         self.assertIn("Reset progress from L01 onward", output)
 
@@ -729,6 +744,20 @@ class LearnerCLITests(unittest.TestCase):
             self.assertEqual(state.completed, set())
             self.assertEqual(state.exercises, {})
         self.assertIn("Reset all course progress", output)
+
+    def test_reset_never_removes_an_unrecorded_visible_directory(self) -> None:
+        exercise = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
+        workspace = self.globals["wp"](exercise)
+        workspace.mkdir()
+        marker = workspace / "personal.txt"
+        marker.write_text("not owned by course state\n", encoding="utf-8")
+
+        self._reset([exercise.serial])
+
+        self.assertEqual(
+            marker.read_text(encoding="utf-8"),
+            "not owned by course state\n",
+        )
 
     def test_elective_reset_includes_only_elective_descendants(self) -> None:
         workspace = SimpleNamespace(parent="")
@@ -907,6 +936,23 @@ class LearnerCLITests(unittest.TestCase):
         self.assertIn("./rootkitlings check L00", output.getvalue())
         self.assertNotIn("./rootkitlings start L00", output.getvalue())
 
+    def test_start_uses_a_short_visible_workspace_and_complete_edit_paths(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.globals["cmd_start"](["L00"])
+
+        text = output.getvalue()
+        exercise = self.globals["CAT"].by_id["module-build-lifecycle"]
+        workspace = self.globals["wp"](exercise)
+        self.assertIn(f"Workspace created: {workspace}", text)
+        self.assertIn(f"- {workspace}/Kbuild", text)
+        self.assertIn(f"- {workspace}/core/main.c", text)
+        self.assertNotIn(".rootkitlings/work", text)
+        self.assertEqual(
+            workspace,
+            self.globals["WORK"] / "L00",
+        )
+
     def test_read_uses_bat_without_paging_and_respects_redirected_output(self) -> None:
         calls = []
         original_which = self.globals["shutil"].which
@@ -975,7 +1021,19 @@ class LearnerCLITests(unittest.TestCase):
                 self.globals["cmd_status"]([])
             status = output.getvalue()
             self.assertIn("Files to edit", status)
+            self.assertIn("work/L00/Kbuild", status)
+            self.assertIn("work/L00/core/main.c", status)
+            self.assertRegex(status, r"State +Unchanged")
             self.assertIn("./rootkitlings check L00", status)
+
+            editable = self.globals["wp"](
+                self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
+            ) / "core/main.c"
+            editable.write_text("modified\n", encoding="utf-8")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.globals["cmd_status"]([])
+            self.assertRegex(output.getvalue(), r"State +Modified")
 
             with self.globals["STORE"].locked() as state:
                 state.completed.add(self.globals["ROUTE"][0])
@@ -1003,7 +1061,8 @@ class LearnerCLITests(unittest.TestCase):
         exercise = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
         with redirect_stdout(io.StringIO()):
             self.globals["cmd_start"]([exercise.serial])
-        artifact = self.globals["bd"](exercise) / self.globals["CAT"].module_artifact(exercise)
+        artifact = self.globals["build_output"](exercise) / self.globals["CAT"].module_artifact(exercise)
+        artifact.parent.mkdir(parents=True)
         artifact.write_bytes(b"module")
         kernel = Path(self.temporary.name) / "kernel"
         kernel.mkdir()
@@ -1041,11 +1100,10 @@ class LearnerCLITests(unittest.TestCase):
             output = io.StringIO()
             with redirect_stdout(output):
                 self.globals["cmd_clean"]([exercise.serial])
-            clean_command = calls[-1][0]
-            self.assertEqual(clean_command[:3], ["make", "-C", str(kernel)])
-            self.assertIn(f"M={self.globals['bd'](exercise)}", clean_command)
-            self.assertEqual(clean_command[-1], "clean")
-            self.assertIn("Cleaned L00", output.getvalue())
+            self.assertFalse(self.globals["build_output"](exercise).exists())
+            self.assertTrue(self.globals["wp"](exercise).is_dir())
+            self.assertIn("Cleaned build outputs for L00", output.getvalue())
+            self.assertIn("work/L00", output.getvalue())
         finally:
             self.globals["build_workspace"] = original_build
             self.globals["course_kernel_build_dir"] = original_kernel
@@ -1085,37 +1143,21 @@ class LearnerCLITests(unittest.TestCase):
             self.globals["available"](second, state)
             self.globals["available"](first, state)
 
-    def test_build_on_fresh_workspace_records_baseline_and_reopen_is_idempotent(self) -> None:
+    def test_build_requires_an_explicitly_started_workspace(self) -> None:
         exercise = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
-        original_build = self.globals["build_workspace"]
-        try:
-            self.globals["build_workspace"] = lambda item: (
-                self.globals["bd"](item) / self.globals["CAT"].module_artifact(item)
-            )
+        with self.assertRaisesRegex(
+            self.globals["CLIError"],
+            "Run: ./rootkitlings start L00",
+        ):
             with redirect_stdout(io.StringIO()):
                 self.globals["cmd_build"]([exercise.serial])
-            with self.globals["STORE"].read_locked() as state:
-                record = state.exercises[exercise.id]
-                baseline = record.baseline_hash
-                workspace_hash = record.workspace_hash
-                self.assertTrue(baseline)
-            output = io.StringIO()
-            with redirect_stdout(output):
-                self.globals["cmd_start"]([exercise.serial])
-            self.assertIn("Workspace already exists", output.getvalue())
-            with self.globals["STORE"].read_locked() as state:
-                record = state.exercises[exercise.id]
-                self.assertEqual(record.baseline_hash, baseline)
-                self.assertEqual(record.workspace_hash, workspace_hash)
-        finally:
-            self.globals["build_workspace"] = original_build
 
     def test_successful_check_records_snapshot_and_advances_the_route(self) -> None:
         exercise = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
         with redirect_stdout(io.StringIO()):
             self.globals["cmd_start"]([exercise.serial])
-        workspace = self.globals["WORK"] / exercise.id
-        artifact = self.globals["bd"](exercise) / self.globals["CAT"].module_artifact(exercise)
+        workspace = self.globals["wp"](exercise)
+        artifact = workspace / self.globals["CAT"].module_artifact(exercise)
         artifact.write_bytes(b"module")
         case = SimpleNamespace(
             id="success",
@@ -1168,7 +1210,7 @@ class LearnerCLITests(unittest.TestCase):
         exercise = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
         with redirect_stdout(io.StringIO()):
             self.globals["cmd_start"]([exercise.serial])
-        editable = self.globals["WORK"] / exercise.id / exercise.workspace.editable[0]
+        editable = self.globals["wp"](exercise) / exercise.workspace.editable[0]
         original = editable.read_bytes()
         editable.write_bytes(original + b"\nchanged\n")
         with self.globals["STORE"].locked() as state:
@@ -1178,7 +1220,7 @@ class LearnerCLITests(unittest.TestCase):
         with redirect_stdout(io.StringIO()):
             self.globals["cmd_restore"]([exercise.serial])
         self.assertEqual(editable.read_bytes(), original)
-        self.assertEqual(len(tuple(self.globals["ARCHIVE"].iterdir())), 1)
+        self.assertEqual(len(tuple(self.globals["BACKUPS"].iterdir())), 1)
         with self.globals["STORE"].read_locked() as state:
             record = state.exercises[exercise.id]
             self.assertEqual(record.attempts, 4)

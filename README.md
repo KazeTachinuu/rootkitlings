@@ -102,10 +102,11 @@ curriculum/<serial>-<stable-id>/   lessons, workspaces, and checks
 rootkitlings                       learner command
 engine/                            catalog, state, and verification
 vm/                                pinned guest runtime and tools
-.rootkitlings/                     learner work, state, and archives
+work/<serial>/                     learner source code
+.rootkitlings/                     builds, state, snapshots, and backups
 ```
 
-Learner edits belong under `.rootkitlings/`.
+Learner edits belong under `work/`.
 Files under `curriculum/` define the immutable course bundles.
 
 See [`docs/COURSE.md`](docs/COURSE.md) for course design and
