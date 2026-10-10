@@ -294,7 +294,13 @@ class FramingTests(unittest.TestCase):
             (b"printf ok\r", False),
         )
         self.assertEqual(_shell_input(b"exit\r", line), (b"exit\r", True))
-        self.assertEqual(_shell_input(b"\x04", line), (b"", True))
+        self.assertEqual(_shell_input(b"\x04", line), (b"\x04", True))
+
+    def test_shell_input_keeps_midline_control_d_interactive(self) -> None:
+        line = bytearray()
+
+        self.assertEqual(_shell_input(b"echo ok", line), (b"echo ok", False))
+        self.assertEqual(_shell_input(b"\x04", line), (b"\x04", False))
 
     def test_shell_wait_rejects_wrong_ticket_then_accepts_peer(self) -> None:
         listener = _test_listener()

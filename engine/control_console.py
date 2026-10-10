@@ -961,7 +961,11 @@ def _shell_input(data: bytes, line: bytearray) -> tuple[bytes, bool]:
     close_input = False
     for byte in data:
         if byte == 4:
-            close_input = True
+            # The remote process owns a PTY.  Forward VEOF so its line
+            # discipline, not the TCP stream, gives Bash terminal EOF.
+            forwarded.append(byte)
+            close_input = not line
+            line.clear()
             continue
         forwarded.append(byte)
         if byte in (10, 13):
