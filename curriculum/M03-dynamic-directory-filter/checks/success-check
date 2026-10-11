@@ -1,0 +1,89 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /vm/checks/lib.sh
+
+begin "Dynamic file hiding"
+
+endpoint=/proc/rootkitlings
+testdir=/tmp/rootkitlings-dirent-test
+
+cleanup()
+{
+	if test -d /sys/module/rootkitlings; then
+		rmmod rootkitlings 2>/dev/null || true
+	fi
+	rm -rf "$testdir"
+}
+trap cleanup EXIT INT TERM
+
+mkdir -p "$testdir"
+touch "$testdir/rkling_test_a"
+touch "$testdir/rkling_test_b"
+touch "$testdir/normal_file"
+
+load rootkitlings.ko
+assert_loaded rootkitlings
+assert_exists "$endpoint"
+
+# Before hiding, all files should be visible.
+if ls "$testdir" | grep -q rkling_test_a; then
+	_ok "rkling_test_a visible before hide"
+else
+	_fail "rkling_test_a not visible before hide"
+fi
+
+# Add the prefix to the file hide list.
+echo "hide file rkling_test" > "$endpoint"
+
+# Files matching the prefix should be hidden.
+if ls "$testdir" | grep -q rkling_test; then
+	_fail "rkling_test files still visible after hide"
+else
+	_ok "rkling_test files hidden after hide"
+fi
+
+# Non-matching files should still be visible.
+if ls "$testdir" | grep -q normal_file; then
+	_ok "normal_file still visible"
+else
+	_fail "normal_file was incorrectly hidden"
+fi
+
+# Verify the target list shows the entry.
+if grep -q rkling_test "$endpoint"; then
+	_ok "target list shows the entry"
+else
+	_fail "target list does not show the entry"
+fi
+
+# Remove the prefix from the hide list.
+echo "unhide file 0" > "$endpoint"
+
+# Files should reappear.
+if ls "$testdir" | grep -q rkling_test_a; then
+	_ok "rkling_test_a reappears after unhide"
+else
+	_fail "rkling_test_a did not reappear"
+fi
+
+# Test overflow: add 16 entries (max), verify 17th fails.
+for i in $(seq 0 15); do
+	echo "hide file overflow_$i" > "$endpoint"
+done
+if printf 'hide file overflow_16\n' > "$endpoint" 2>/dev/null; then
+	_fail "17th target should have been rejected"
+else
+	_ok "17th target correctly rejected"
+fi
+
+unload rootkitlings
+assert_absent "$endpoint"
+
+# After unload, all files should be visible again.
+if ls "$testdir" | grep -q rkling_test_a; then
+	_ok "files visible after module unload"
+else
+	_fail "files still hidden after module unload"
+fi
+
+summary

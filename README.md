@@ -2,7 +2,7 @@
 
 Build a Linux kernel rootkit one mechanism at a time.
 
-The course has 26 lessons, nine milestones, and one final project.
+The course has 27 lessons, seven milestones, and one final project.
 Each exercise adds one bounded mechanism or integrates mechanisms already
 practiced.
 Modules run only in a disposable QEMU guest, never in the host kernel.
@@ -50,17 +50,15 @@ Run `./rootkitlings help` for the complete command list.
 
 ## Course
 
-- **L00–L03:** module lifecycle, owned state, and procfs rollback.
-- **L04–L07, M00:** bounded control and resident execution.
-- **L08–L10, M01:** task identity, credentials, and a one-use operator key.
-- **L11–L12, M02:** syscall probes and an activity recorder.
-- **L13–L15, M03:** bounded view filters and independent evidence.
-- **L16–L19, M04:** packet parsing, observation, and redirection.
-- **L20, M05, L21:** sockets, framed sessions, and a bounded root shell.
-- **M06–M07:** a reversible load request and call-home agent.
-- **L22–L25:** authentication, replay defense, and encryption.
-- **M08:** open the root shell through the authenticated control channel.
-- **C00:** combine the culminating subsystems into one tested rootkit.
+- **L00-L03:** module lifecycle, owned state, and procfs rollback.
+- **L04-L07, M00:** bounded control, resident execution, reversible persistence.
+- **L08-L12, M01:** task identity, credentials, probes, module cloaking.
+- **M02:** local covert control via mkdir hook, privilege escalation.
+- **L13-L15, M03:** view filters, directory hiding with dynamic target lists.
+- **L16-L21, M04:** packets, sockets, root shell bridge, callback shell.
+- **L22-L25, M05:** authentication, replay defense, encryption, authenticated channel.
+- **L26, M06:** tcp4_seq_show port hiding, content and port filter.
+- **C00:** wire all milestones into one operational rootkit.
 
 Lessons isolate mechanisms.
 Milestones turn them into a small tool or a visible system behavior.

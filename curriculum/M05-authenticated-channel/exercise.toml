@@ -1,0 +1,62 @@
+schema_version = 2
+id = "authenticated-channel"
+title = "Authenticate the control channel"
+stage = "authenticated-operations"
+kind = "milestone"
+tradecraft = ["control", "cryptography", "networking"]
+difficulty = "advanced"
+prerequisites = ["authenticated-encryption", "callback-shell", "authenticated-replay-safe-message"]
+teaches = ["authenticated-reverse-shell", "sensitive-state-zeroization"]
+requires = ["authenticated-encryption", "connect-back-agent", "root-shell-execution", "replay-resistant-state"]
+
+[workspace]
+mode = "project"
+files = [
+  "Kbuild",
+  "core/main.c",
+  "include/agent.h",
+  "include/aead.h",
+  "include/aead_platform.h",
+  "include/framing.h",
+  "include/ipv4.h",
+  "include/protocol.h",
+  "include/root_shell.h",
+  "include/secure_control.h",
+  "crypto/aead.c",
+  "crypto/aead_platform.c",
+  "network/agent.c",
+  "network/framing.c",
+  "network/ipv4.c",
+  "network/protocol.c",
+  "execution/root_shell.c",
+  "security/control.c",
+]
+editable = ["network/agent.c", "security/control.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/M05-authenticated-channel/starter"
+
+[resources]
+readme = "curriculum/M05-authenticated-channel/README.md"
+host_check = ""
+hint = "curriculum/M05-authenticated-channel/hint"
+solution = "curriculum/M05-authenticated-channel/solution"
+
+[runtime]
+setup = "vm/runtime/authenticated-agent"
+
+[verification]
+timeout_seconds = 360
+tools = ["secure-agent-fixture", "module-load-params"]
+
+[[verification.cases]]
+id = "authenticated-shell"
+label = "Authenticated control channel with shell"
+expect_build = "pass"
+check = "curriculum/M05-authenticated-channel/checks/success-check"
+
+[[verification.cases]]
+id = "invalid-key"
+label = "Reject commands with wrong key"
+expect_build = "pass"
+check = "curriculum/M05-authenticated-channel/checks/invalid-check"

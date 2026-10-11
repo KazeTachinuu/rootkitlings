@@ -1,0 +1,45 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /vm/checks/lib.sh
+
+begin "Module unhiding"
+
+endpoint=/proc/rootkitlings
+
+load rootkitlings.ko
+assert_loaded rootkitlings
+assert_exists "$endpoint"
+
+# Cloak then uncloak.
+echo hide > "$endpoint"
+if lsmod | grep -q rootkitlings; then
+	_fail "module visible after hide"
+else
+	_ok "module cloaked"
+fi
+
+echo unhide > "$endpoint"
+if lsmod | grep -q rootkitlings; then
+	_ok "module visible again after unhide"
+else
+	_fail "module still hidden after unhide"
+fi
+
+if grep -q 'hidden=false' "$endpoint"; then
+	_ok "status reports hidden=false after unhide"
+else
+	_fail "status does not report hidden=false"
+fi
+
+# Double uncloak should be a no-op.
+echo unhide > "$endpoint"
+if lsmod | grep -q rootkitlings; then
+	_ok "double unhide is a no-op"
+else
+	_fail "double unhide hid the module"
+fi
+
+unload rootkitlings
+assert_absent "$endpoint"
+
+summary

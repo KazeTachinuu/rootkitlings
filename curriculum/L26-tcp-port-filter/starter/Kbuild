@@ -1,0 +1,2 @@
+obj-m += rootkitlings.o
+rootkitlings-y := main.o

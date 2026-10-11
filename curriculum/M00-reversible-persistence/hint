@@ -1,0 +1,9 @@
+The init sequence is: platform_prepare, state_create, worker_start,
+proc_publish, scheduler_start. Each step that can fail needs a goto
+label that undoes it and everything before it in reverse order.
+
+The exit sequence is the reverse: proc_unpublish, scheduler_stop,
+worker_stop, transaction_restore, transaction_dispose, state_destroy,
+platform_finish. The transaction restore must happen after the worker
+stops (so no concurrent apply) and before platform_finish (so the
+filesystem is still reachable).

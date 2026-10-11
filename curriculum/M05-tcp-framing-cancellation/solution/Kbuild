@@ -1,7 +1,0 @@
-ROOTKITLINGS_FAIL_POINT ?= 0
-
-obj-m += rootkitlings.o
-rootkitlings-y := core/main.o interface/proc.o network/framing.o \
-	session/tcp_session.o tests/selftest.o
-ccflags-y += -I$(src)/include
-ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)

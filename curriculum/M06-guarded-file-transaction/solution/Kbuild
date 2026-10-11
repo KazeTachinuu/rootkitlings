@@ -1,3 +1,0 @@
-obj-m += rootkitlings.o
-rootkitlings-y := core/main.o interface/proc.o staging/platform.o staging/transaction.o
-ccflags-y += -I$(src)/include

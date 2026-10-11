@@ -1,0 +1,12 @@
+The mkdir syscall receives a struct filename pointer as its first
+argument (via regs_get_kernel_argument). Use strncpy_from_kernel_nofault
+to copy the path into a stack buffer safely.
+
+For escalation: prepare_kernel_cred(NULL) returns a new cred struct with
+uid/gid 0 and full capabilities. commit_creds() applies it to the
+calling task. Two function calls, check for NULL between them.
+
+To skip the real mkdir after handling a command, call
+override_function_with_return(regs) and return 1 from the pre-handler.
+Set the return value first with regs_set_return_value so the caller
+sees your chosen error code (0 for success, -ENOENT for unknown).

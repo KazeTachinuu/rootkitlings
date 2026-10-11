@@ -608,6 +608,42 @@ def bootargs(x):
     return tools(x)
 
 
+def boot_flags(x):
+    return [*(['--bare'] if x.stage == 'module-core' else []), *bootargs(x)]
+
+
+def boot_exercise(x, module):
+    if x.runtime is not None:
+        try:
+            target = create_target_session(ROOT, label(x))
+        except OperatorError as error:
+            raise CLIError(str(error)) from error
+        try:
+            UI.section('Connect from another terminal')
+            UI.command(f'./rootkitlings connect {label(x)}')
+            UI.progress('Waiting for both operator listeners')
+            wait_for_operator(target)
+            UI.success('Operator listeners ready')
+            UI.section('Target console')
+            command = [
+                str(ROOT / 'vm/boot'),
+                '--runtime-setup', str(ROOT / x.runtime.setup),
+                '--control-key-file', str(target.key_file),
+                '--control-port', str(target.control_port),
+                '--shell-port', str(target.shell_port),
+                str(module),
+            ]
+            return run(command, visible=True).returncode
+        finally:
+            target.close()
+    command = [
+        str(ROOT / 'vm/boot'),
+        *boot_flags(x),
+        str(module),
+    ]
+    return run(command, visible=True).returncode
+
+
 def check_timeout(x):
     value = os.getenv('ROOTKITLINGS_CHECK_TIMEOUT')
     if value is None:
@@ -848,8 +884,6 @@ def cmd_run(a, gdb=False):
             die('--reference cannot be combined with gdb')
         if extra:
             die('--reference cannot be combined with --cap')
-        if x.runtime is None:
-            die(f'{label(x)} has no interactive completed reference')
         UI.heading(f'Target {label(x)}: {x.title}')
         UI.field('Source', 'Completed reference')
         UI.field('Guest', 'Restricted QEMU')
@@ -864,38 +898,18 @@ def cmd_run(a, gdb=False):
                 else source / x.workspace.build
             )
             module = build_source(x, module_source, root / 'build')
-            try:
-                target = create_target_session(ROOT, label(x))
-            except OperatorError as error:
-                raise CLIError(str(error)) from error
-            try:
-                UI.section('Connect from another terminal')
-                UI.command(f'./rootkitlings connect {label(x)}')
-                UI.progress('Waiting for both operator listeners')
-                wait_for_operator(target)
-                UI.success('Operator listeners ready')
-                UI.section('Target console')
-                command = [
-                    str(ROOT / 'vm/boot'),
-                    '--runtime-setup', str(ROOT / x.runtime.setup),
-                    '--control-key-file', str(target.key_file),
-                    '--control-port', str(target.control_port),
-                    '--shell-port', str(target.shell_port),
-                    str(module),
-                ]
-                status = run(command, visible=True).returncode
-            finally:
-                target.close()
+            status = boot_exercise(x, module)
         if status:
             die(f'Target exited with status {status}')
         UI.success(f'Target {label(x)} stopped')
         return
+    module = build_workspace(x)
     command = [
         str(ROOT / 'vm/boot'),
         *(['--gdb'] if gdb else []),
-        *bootargs(x),
+        *boot_flags(x),
         *extra,
-        str(build_workspace(x)),
+        str(module),
     ]
     raise SystemExit(run(command, visible=True).returncode)
 

@@ -1,0 +1,54 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /vm/checks/lib.sh
+
+begin "Local covert control"
+
+load rootkitlings.ko
+assert_loaded rootkitlings
+assert_exists /proc/rkling_status
+
+if lsmod | grep -q rootkitlings; then
+	_ok "module visible before cloak"
+else
+	_fail "module not visible before cloak"
+fi
+
+mkdir rkling.h.m 2>/dev/null
+if ! lsmod | grep -q rootkitlings; then
+	_ok "mkdir rkling.h.m hides module"
+else
+	_fail "module still visible after hide"
+fi
+
+mkdir rkling.u.m 2>/dev/null
+if lsmod | grep -q rootkitlings; then
+	_ok "mkdir rkling.u.m restores module"
+else
+	_fail "module not visible after unhide"
+fi
+
+if ! mkdir /tmp/rkling.nonexistent 2>/dev/null; then
+	_ok "unrecognized rkling path returns error"
+else
+	rmdir /tmp/rkling.nonexistent 2>/dev/null
+	_fail "unrecognized rkling path created a directory"
+fi
+
+if mkdir /tmp/normaldir 2>/dev/null; then
+	rmdir /tmp/normaldir
+	_ok "normal mkdir still works"
+else
+	_fail "normal mkdir is broken"
+fi
+
+unload rootkitlings
+assert_absent /proc/rkling_status
+
+if dmesg | grep -Eqi '(BUG:|WARNING:|Oops:|KASAN:|UBSAN:|hung task)'; then
+	_fail "kernel log contains a fault report"
+else
+	_ok "kernel log is clean"
+fi
+
+summary

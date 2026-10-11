@@ -84,9 +84,9 @@ The borrowed pointer remains valid until both callback sources have stopped.
 
 ## Your task
 
-- `Kbuild` — link `execution/scheduler.o`
-- `core/main.c` — start after publication and stop before state destruction
-- `execution/scheduler.c` — implement both callbacks and their lifecycle
+- `Kbuild`: link `execution/scheduler.o`
+- `core/main.c`: start after publication and stop before state destruction
+- `execution/scheduler.c`: implement both callbacks and their lifecycle
 
 Run:
 

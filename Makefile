@@ -10,6 +10,7 @@ GUEST_TOOL_NAMES := \
 	event_stream_test \
 	getdents64_test \
 	module_load_params \
+	mkdir_escalation_test \
 	module_load_test \
 	netfilter_udp_test \
 	packet_classifier_test \
@@ -81,6 +82,9 @@ $(TOOL_OUT)/event_stream_test: vm/tools/event_stream_test.c | tool-output-direct
 
 $(TOOL_OUT)/getdents64_test: vm/tools/getdents64_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
+
+$(TOOL_OUT)/mkdir_escalation_test: vm/tools/mkdir_escalation_test.c | tool-output-directory
+	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
 
 $(TOOL_OUT)/module_load_params: vm/tools/module_load_params.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<

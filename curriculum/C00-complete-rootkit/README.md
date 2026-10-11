@@ -1,113 +1,84 @@
 # Assemble and verify the complete rootkit
 
-This project joins the course's culminating subsystems into one module.
-The work is integration: one startup order, one rollback path, and one clean
-unload.
+This capstone wires every operational milestone into one kernel module
+with a unified operator interface. The work is integration: one startup
+order, one rollback path, and one clean unload.
 
 ```text
-local token ------> root action ------> event record
-                         |
-selected views <---- resident core ----> reversible load request
-                         |
-AEAD control ------> root shell -------> TCP peer
-                         |
-UDP signal --------> packet redirect --> replacement port
+operator -----> AEAD control -----> authenticated agent (remote)
+                     |
+                     +--> hide file/pid     (M03: getdents64 probe)
+                     +--> hide content      (M06: vfs_read probe)
+                     +--> hide port         (M06: tcp4_seq_show probe)
+                     +--> hide module       (M01: list_del/list_add)
+                     +--> unhide module     (M01: list_add restore)
+                     +--> escalate PID      (M02: remote cred replace)
+                     +--> persist           (M00: modules-load.d)
+                     +--> shell             (M04: UMH reverse shell)
+                     +--> status            (agent state + target lists)
+
+local user ---> mkdir rkling.X -----> mkdir kprobe (local)
+                     |
+                     +--> rkling.e          escalate calling process
+                     +--> rkling.h.m        hide module
+                     +--> rkling.u.m        unhide module
+                     +--> rkling.h.f.NAME   hide file prefix
+                     +--> rkling.h.i.PID    hide process
+                     +--> rkling.h.c.STR    hide content
+                     +--> rkling.h.p.PORT   hide port
+                     +--> rkling.persist    stage boot-load
 ```
 
-The module provides:
+## Remote operator commands
 
-- a controllable resident worker;
-- one-use local privilege elevation and syscall telemetry;
-- selected directory and read filtering with an independent evidence map;
-- a reversible module-load request;
-- an authenticated, encrypted control connection;
-- a root reverse shell requested through that connection; and
-- a controlled UDP destination rewrite.
+All commands travel over the AES-256-GCM authenticated channel (M05):
 
-## Remote operation
+| Command | Wire protocol | Effect |
+|---------|---------------|--------|
+| hide file PREFIX | HIDE FILE PREFIX | Hide matching files from directory listings |
+| hide pid PID | HIDE PID PID | Hide PID from /proc |
+| hide content STRING | HIDE CONTENT STRING | Remove matching lines from file reads |
+| hide port PORT | HIDE PORT PORT | Hide port from /proc/net/tcp |
+| unhide CATEGORY N | UNHIDE CATEGORY N | Remove target at index N |
+| unhide all | UNHIDE ALL | Clear all hidden targets |
+| hide module | HIDE MODULE | Hide module from lsmod |
+| unhide module | UNHIDE MODULE | Restore module visibility |
+| escalate PID | ESCALATE PID | Escalate process to root |
+| persist | PERSIST | Stage boot-load request |
+| shell | SHELL port | Open interactive root Bash |
+| status | STATUS | Show agent state |
 
-Set `peer_address`, `peer_port`, and a nonzero 32-byte `control_key` when the
-module loads.
-The agent reconnects to that IPv4 peer and creates a fresh random session for
-every connection.
-An authenticated `HELLO` establishes the session before commands are accepted.
+## Local commands
 
-The fixed commands are:
+The mkdir kprobe (M02) provides a local control channel that works
+without network access. Any user on the system can issue commands:
 
-- `PING`, `INFO`, and `STATUS` for observation;
-- `ENABLE`, `DISABLE`, and `RUN` for the resident core;
-- `MARK label` for one bounded operator marker;
-- `SHELL port` and `SHELL STATUS` for the root shell; and
-- `QUIT` to close the control connection.
+| Command | Effect |
+|---------|--------|
+| mkdir rkling.e | Escalate calling process to root |
+| mkdir rkling.h.m | Hide module from lsmod |
+| mkdir rkling.u.m | Unhide module |
+| mkdir rkling.h.f.NAME | Hide file prefix |
+| mkdir rkling.h.i.PID | Hide PID |
+| mkdir rkling.h.c.STR | Hide content string |
+| mkdir rkling.h.p.PORT | Hide port |
+| mkdir rkling.persist | Stage boot-load request |
 
-An accepted shell request returns:
+## OPSEC
 
-```text
-OPEN <8-hex request id> <16-hex cookie>
-```
-
-The shell connection begins with the matching `RKSH` prelude.
-This binds the connection to the authenticated request.
-The following stream carries an interactive root Bash through a pseudoterminal.
-It includes terminal echo, prompts, CRLF line endings, and escape sequences.
-The ticket authenticates the connection, but the PTY bytes are not encrypted by
-the control channel.
-
-Run the completed reference in one terminal, then connect from another:
-
-```sh
-./rootkitlings run C00 --reference
-```
-
-```sh
-./rootkitlings connect C00
-```
-
-The disposable guest can reach only the two host-side listeners created for that
-session.
-
-## Visibility boundary
-
-When actions are enabled, selected `getdents64()` views omit the module's proc
-entries, resident PIDs, module file, load request, and sysfs module name.
-A bounded `read()` view masks the module token in `/proc/modules`.
-
-Direct paths, alternate directory and read APIs, socket tables, symbols, Kprobe
-records, the shell process, and kernel logs remain evidence.
-The root-only evidence endpoint states this scope and its runtime counters.
-
-The load-request transaction is also deliberately bounded.
-The RAM-only guest does not reboot, so the course proves safe staging and
-rollback, not persistence across boots.
+The complete rootkit leaves no trace in dmesg. Zero printk calls.
+The proc interface is at `/proc/rkling_status` (read-only, mode 0400).
+On init, the module adds "rkling" to the file target list so the proc
+entry, kernel threads, and .ko file are hidden by default.
 
 ## Your task
 
-Edit:
+In `core/main.c`, wire the init/exit sequence:
 
-- `Kbuild`
-- `core/main.c`
-
-Compile the supplied packet components and connect them to the module lifecycle.
-Start each component only after its dependencies exist.
-On failure and unload, stop command intake and release every acquired resource.
-
-Run:
-
-```sh
-./rootkitlings check C00
-```
-
-The checks exercise the integrated shell, control channel, privilege action,
-telemetry, visibility boundary, load-request rollback, and UDP behavior.
-They also force startup failures 1 through 15 and reject an unknown point.
-
-## References
-
-- Linux v7.2 user-mode helpers
-  <https://github.com/torvalds/linux/blob/v7.2/kernel/umh.c>
-- Linux v7.2 Kprobe interface
-  <https://github.com/torvalds/linux/blob/v7.2/include/linux/kprobes.h>
-- Linux v7.2 Netfilter interface
-  <https://github.com/torvalds/linux/blob/v7.2/include/linux/netfilter.h>
-- NIST SP 800-38D
-  <https://csrc.nist.gov/pubs/sp/800/38/d/final>
+1. Parse control key and peer address
+2. Init all four target lists (file, pid, content, port)
+3. Init root shell, start authenticated agent
+4. Register probes (getdents64, vfs_read, tcp4_seq_show, mkdir)
+5. Create /proc/rkling_status
+6. Auto-stealth: add "rkling" to file targets
+7. On exit: uncloak, remove proc, unregister all probes, stop agent/shell

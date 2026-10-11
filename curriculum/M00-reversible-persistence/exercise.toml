@@ -1,0 +1,59 @@
+schema_version = 2
+id = "reversible-persistence"
+title = "Stage a reversible boot-load request"
+stage = "control-execution"
+kind = "milestone"
+tradecraft = ["boot-staging", "execution", "lifecycle"]
+difficulty = "standard"
+prerequisites = ["timer-workqueue-scheduler", "event-driven-kernel-thread"]
+teaches = ["boot-load-request", "atomic-file-exchange", "exclusive-staging-file"]
+requires = [
+  "action-control-switch",
+  "kernel-threads",
+  "proc-write",
+]
+
+[workspace]
+mode = "project"
+files = [
+  "Kbuild", "core/main.c", "core/state.c",
+  "include/rootkit.h", "interface/proc.c",
+  "execution/worker.c",
+  "staging/platform.c", "staging/transaction.c",
+  "include/platform.h", "include/transaction.h",
+]
+editable = [
+  "Kbuild", "core/main.c", "core/state.c",
+  "include/rootkit.h", "interface/proc.c",
+  "execution/worker.c",
+  "staging/platform.c", "staging/transaction.c",
+]
+build = "."
+baseline = "starter"
+source = "curriculum/M00-reversible-persistence/starter"
+
+[resources]
+readme = "curriculum/M00-reversible-persistence/README.md"
+host_check = ""
+hint = "curriculum/M00-reversible-persistence/hint"
+solution = "curriculum/M00-reversible-persistence/solution"
+
+[verification]
+timeout_seconds = 240
+tools = ["module-load-test", "proc-write-test"]
+
+[[verification.cases]]
+id = "persistence-staged"
+label = "Load request staged and rolled back"
+expect_build = "pass"
+check = "curriculum/M00-reversible-persistence/checks/success-check"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "99"

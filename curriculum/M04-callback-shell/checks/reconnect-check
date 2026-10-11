@@ -1,0 +1,76 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /vm/checks/lib.sh
+
+begin "Agent reconnects after disconnect"
+
+fixture_dir=/tmp/rk-agent-reconnect
+test_port=9999
+
+mkdir -p "$fixture_dir"
+rm -f "$fixture_dir/ready" "$fixture_dir/first_complete" \
+      "$fixture_dir/second_connected" "$fixture_dir/eof"
+
+ifconfig lo 127.0.0.1 up
+
+agent_fixture serve "$fixture_dir" "$test_port" &
+fixture_pid=$!
+
+tries=0
+while [ ! -f "$fixture_dir/ready" ] && [ "$tries" -lt 20 ]; do
+	sleep 0.1
+	tries=$((tries + 1))
+done
+
+if [ ! -f "$fixture_dir/ready" ]; then
+	_fail "fixture did not start"
+	kill "$fixture_pid" 2>/dev/null
+	summary
+fi
+
+load rootkitlings.ko peer_address=127.0.0.1 peer_port="$test_port" \
+	retry_base_ms=25 retry_max_ms=200
+
+tries=0
+while [ ! -f "$fixture_dir/first_complete" ] && [ "$tries" -lt 100 ]; do
+	sleep 0.1
+	tries=$((tries + 1))
+done
+
+if [ -f "$fixture_dir/first_complete" ]; then
+	_ok "first session completed"
+else
+	_fail "first session did not complete"
+fi
+
+# Wait for the second connection and EOF (agent reconnects, then rmmod closes it)
+tries=0
+while [ ! -f "$fixture_dir/second_connected" ] && [ "$tries" -lt 50 ]; do
+	sleep 0.1
+	tries=$((tries + 1))
+done
+
+if [ -f "$fixture_dir/second_connected" ]; then
+	_ok "agent reconnected automatically"
+else
+	_fail "agent did not reconnect"
+fi
+
+unload rootkitlings
+
+tries=0
+while [ ! -f "$fixture_dir/eof" ] && [ "$tries" -lt 50 ]; do
+	sleep 0.1
+	tries=$((tries + 1))
+done
+
+if [ -f "$fixture_dir/eof" ]; then
+	_ok "agent disconnected cleanly on unload"
+else
+	_fail "agent did not disconnect on unload"
+fi
+
+wait "$fixture_pid" 2>/dev/null
+rm -rf "$fixture_dir"
+
+summary

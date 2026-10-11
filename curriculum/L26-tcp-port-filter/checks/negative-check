@@ -1,0 +1,38 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /vm/checks/lib.sh
+
+begin "Non-target ports remain visible"
+
+ifconfig lo 127.0.0.1 up
+
+hidden_port=9999
+other_port=8888
+
+# Bind listeners on both ports.
+busybox nc -l -s 0.0.0.0 -p "$hidden_port" -e /bin/true &
+hidden_pid=$!
+busybox nc -l -s 0.0.0.0 -p "$other_port" -e /bin/true &
+other_pid=$!
+sleep 1
+
+other_hex=$(printf '%04X' "$other_port")
+
+load rootkitlings.ko hidden_port="$hidden_port"
+assert_loaded rootkitlings
+
+# The other port must remain visible.
+if grep -qi ":${other_hex} " /proc/net/tcp 2>/dev/null; then
+	_ok "non-target port $other_port remains visible"
+else
+	_fail "non-target port $other_port was incorrectly hidden"
+fi
+
+unload rootkitlings
+
+kill "$hidden_pid" 2>/dev/null || true
+kill "$other_pid" 2>/dev/null || true
+wait "$hidden_pid" 2>/dev/null || true
+wait "$other_pid" 2>/dev/null || true
+
+summary

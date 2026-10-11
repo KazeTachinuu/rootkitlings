@@ -1,0 +1,237 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /vm/checks/lib.sh
+
+begin "Bounded line removal"
+
+endpoint=/proc/rootkitlings
+registry=/sys/kernel/debug/kprobes/list
+target=/tmp/rootkitlings-read-target
+other=/tmp/rootkitlings-read-other
+hardlink=/tmp/rootkitlings-read-hardlink
+renamed=/tmp/rootkitlings-read-renamed
+fixtures=/tmp/rootkitlings-read-fixtures
+# "kept1\nSECRET\nkept2\n" (19 bytes)
+original=6b657074310a5345435245540a6b657074320a
+# "kept1\nkept2\n" (12 bytes) -- SECRET line removed
+filtered=6b657074310a6b657074320a
+mkdir -p "$fixtures"
+
+probe_count()
+{
+	awk '$2 == "r" { split($3, name, "+"); if (name[1] == "vfs_read") count++ }
+		END { print count + 0 }' "$registry"
+}
+
+status_hex()
+{
+	printf 'limit=512\nredactions=%s\noversize_results=%s\ncopy_failures=%s\nreturn_capacity=32\nreturns_missed=0\n' \
+		"$1" "$2" "$3" | xxd -p | tr -d '\n'
+}
+
+assert_status()
+{
+	if read_result_test proc "$endpoint" "$(status_hex "$1" "$2" "$3")"; then
+		_ok "$4 returns the exact status through small reads, EOF, and rewind"
+	else
+		_fail "$4 returned an unexpected status"
+		cat "$endpoint" >&2 || true
+	fi
+}
+
+cleanup()
+{
+	if test -d /sys/module/rootkitlings; then
+		rmmod rootkitlings 2>/dev/null || true
+	fi
+	rm -rf "$fixtures" "$target" "$other" "$hardlink" "$renamed" \
+		2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+test -r "$registry" || {
+	_fail "Kprobe registry is not readable"
+	summary
+}
+case $(uname -r) in
+	7.2.*|7.2-*) _ok "guest runs the supported Linux 7.2 ABI" ;;
+	*) _fail "guest kernel is not Linux 7.2.x" ;;
+esac
+if [ "$(uname -m)" = x86_64 ]; then
+	_ok "guest architecture is x86_64"
+else
+	_fail "guest architecture is not x86_64"
+fi
+if awk '$3 == "vfs_read" { found = 1 } END { exit !found }' /proc/kallsyms; then
+	_ok "vfs_read exists in the running kernel"
+else
+	_fail "vfs_read is absent"
+fi
+if awk '$3 == "__rootkitlings_missing_kretprobe_target_7_2__" { found = 1 }
+	END { exit found }' /proc/kallsyms; then
+	_ok "negative-control probe target is absent"
+else
+	_fail "negative-control probe target unexpectedly exists"
+fi
+
+read_result_test write "$target" "$original"
+read_result_test write "$other" "$original"
+probe_before=$(probe_count)
+log_before=$(dmesg | wc -l)
+load rootkitlings.ko
+assert_loaded rootkitlings
+assert_exists "$endpoint"
+if [ "$(stat -c %a "$endpoint")" = 400 ]; then
+	_ok "status endpoint is read-only mode 0400"
+else
+	_fail "status endpoint mode is not 0400"
+fi
+if [ "$(probe_count)" -eq $((probe_before + 1)) ]; then
+	_ok "exactly one vfs_read return probe is registered"
+else
+	_fail "loaded state does not have exactly one vfs_read return probe"
+fi
+assert_status 0 0 0 "fresh load"
+
+if read_result_test check read "$target" 0 4096 "$filtered" &&
+	read_result_test check pread64 "$target" 0 4096 "$filtered"; then
+	_ok "read and pread64 remove lines containing the marker"
+else
+	_fail "read or pread64 did not remove the expected lines"
+fi
+assert_status 2 0 0 "two filtered reads"
+
+for method in readv preadv mmap sendfile; do
+	if read_result_test check "$method" "$target" 0 4096 "$original"; then
+		_ok "$method remains an independent unfiltered view"
+	else
+		_fail "$method did not preserve the underlying bytes"
+	fi
+done
+assert_status 2 0 0 "alternate read paths"
+
+if read_result_test check read "$other" 0 4096 "$original"; then
+	_ok "another inode is unchanged"
+else
+	_fail "another inode was filtered"
+fi
+busybox ln "$target" "$hardlink"
+if read_result_test check read "$hardlink" 0 4096 "$filtered"; then
+	_ok "a hard link selects the retained inode"
+else
+	_fail "a hard link to the retained inode was not filtered"
+fi
+busybox mv "$target" "$renamed"
+if read_result_test check read "$renamed" 0 4096 "$filtered"; then
+	_ok "renaming the retained inode keeps it selected"
+else
+	_fail "renamed retained inode was not filtered"
+fi
+read_result_test write "$target" "$original"
+if read_result_test check read "$target" 0 4096 "$original"; then
+	_ok "a new inode at the original path is not selected"
+else
+	_fail "a replacement inode was incorrectly selected"
+fi
+rm "$target" "$hardlink"
+busybox mv "$renamed" "$target"
+assert_status 4 0 0 "inode identity checks"
+
+if read_result_test invalid "$target"; then
+	_ok "an invalid destination keeps the underlying EFAULT"
+else
+	_fail "invalid destination did not return EFAULT"
+fi
+assert_status 4 0 0 "underlying read failure"
+
+# Test at exact buffer limit (512 bytes).  Build a 512-byte file
+# with SECRET1 so the filter removes it, proving the limit is hit.
+# printf 'aaa\nSECRET1\n' is 12 bytes (a,a,a,LF,S,E,C,R,E,T,1,LF).
+dd if=/dev/zero of="$target" bs=1 count=0 2>/dev/null
+printf 'aaa\nSECRET1\n' >> "$target"
+rest=$((512 - 12))
+dd if=/dev/zero bs=1 count="$rest" 2>/dev/null | tr '\0' 'z' >> "$target"
+result_len=$(dd if="$target" bs=512 count=1 2>/dev/null | wc -c)
+if [ "$result_len" -gt 0 ] && [ "$result_len" -lt 512 ]; then
+	_ok "512-byte file is within the filter limit"
+else
+	_fail "512-byte file produced unexpected length $result_len (expected < 512)"
+fi
+assert_status 5 0 0 "exact limit"
+
+# 513 bytes: oversize, not filtered
+dd if=/dev/zero of="$target" bs=1 count=0 2>/dev/null
+printf 'aaa\nSECRET1\n' >> "$target"
+rest=$((513 - 12))
+dd if=/dev/zero bs=1 count="$rest" 2>/dev/null | tr '\0' 'z' >> "$target"
+# Build expected hex from known content without reading the target file
+oversize_hex=$( { printf 'aaa\nSECRET1\n'; dd if=/dev/zero bs=1 count="$rest" 2>/dev/null | tr '\0' 'z'; } | xxd -p | tr -d '\n')
+if read_result_test check read "$target" 0 4096 "$oversize_hex"; then
+	_ok "a 513-byte result is left unchanged"
+else
+	_fail "a 513-byte result changed"
+fi
+assert_status 5 1 0 "oversize result"
+
+# Restore simple test data for remaining tests.
+read_result_test write "$target" "$original"
+if read_result_test check read "$target" 0 4096 "$filtered"; then
+	_ok "a large request with a short result is filtered"
+else
+	_fail "short result from a large request was not filtered"
+fi
+# No-match content: no SECRET, no removal.
+no_match=6b657074310a6b657074320a6b657074330a
+read_result_test write "$target" "$no_match"
+if read_result_test check read "$target" 0 4096 "$no_match"; then
+	_ok "content without the marker is unchanged"
+else
+	_fail "content without the marker was modified"
+fi
+assert_status 6 1 0 "no-match and short results"
+
+read_result_test write "$target" "$original"
+if read_result_test stress "$target" 100 "$filtered"; then
+	_ok "twelve concurrent pread64 callers receive complete line-removed results"
+else
+	_fail "concurrent filtered reads returned a torn result"
+fi
+assert_status 1206 1 0 "concurrent reads"
+
+read_result_test stress "$target" 100000 "$filtered" "$original" &
+stress_pid=$!
+sleep 1
+unload rootkitlings
+if wait "$stress_pid"; then
+	_ok "unload exposes only complete original or filtered results"
+else
+	_fail "read workload observed a torn result during unload"
+fi
+assert_absent "$endpoint"
+if [ "$(probe_count)" -eq "$probe_before" ]; then
+	_ok "unload removes the return probe"
+else
+	_fail "unload leaked the return probe"
+fi
+
+load rootkitlings.ko
+assert_loaded rootkitlings
+assert_status 0 0 0 "reload"
+unload rootkitlings
+assert_absent "$endpoint"
+if read_result_test check read "$target" 0 4096 "$original"; then
+	_ok "final unload restores the original read result"
+else
+	_fail "final unload did not restore the original view"
+fi
+
+new_log=$fixtures/new-log
+dmesg | tail -n "+$((log_before + 1))" > "$new_log"
+if grep -Eq 'BUG:|WARNING:|Oops:|KASAN:|UBSAN:|general protection fault|use-after-free' "$new_log"; then
+	_fail "kernel log contains a fault or warning"
+	cat "$new_log" >&2
+else
+	_ok "kernel log is clean"
+fi
+
+summary

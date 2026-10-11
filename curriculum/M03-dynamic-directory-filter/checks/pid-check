@@ -1,0 +1,64 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /vm/checks/lib.sh
+
+begin "Dynamic PID hiding"
+
+endpoint=/proc/rootkitlings
+
+# Start a background process whose PID we will hide.
+sleep 3600 &
+target_pid=$!
+
+cleanup()
+{
+	kill "$target_pid" 2>/dev/null || true
+	if test -d /sys/module/rootkitlings; then
+		rmmod rootkitlings 2>/dev/null || true
+	fi
+}
+trap cleanup EXIT INT TERM
+
+# Verify the PID directory exists in /proc before hiding.
+if [ -d "/proc/$target_pid" ]; then
+	_ok "PID $target_pid visible in /proc before hide"
+else
+	_fail "PID $target_pid not found in /proc"
+	summary
+fi
+
+load rootkitlings.ko
+assert_loaded rootkitlings
+assert_exists "$endpoint"
+
+# Add the PID to the hide list.
+echo "hide pid $target_pid" > "$endpoint"
+
+# The PID directory should be hidden from directory listing.
+if ls /proc 2>/dev/null | grep -q "^${target_pid}\$"; then
+	_fail "PID $target_pid still visible in ls /proc"
+else
+	_ok "PID $target_pid hidden from ls /proc"
+fi
+
+# Direct access to /proc/<pid> should still work (getdents hides
+# directory entries, not the actual /proc/<pid> subtree).
+if [ -d "/proc/$target_pid" ]; then
+	_ok "direct /proc/$target_pid access still works"
+else
+	_fail "direct /proc/$target_pid access broken"
+fi
+
+# Remove the PID from the hide list.
+echo "unhide pid 0" > "$endpoint"
+
+if ls /proc 2>/dev/null | grep -q "^${target_pid}\$"; then
+	_ok "PID $target_pid reappears after unhide"
+else
+	_fail "PID $target_pid did not reappear"
+fi
+
+unload rootkitlings
+assert_absent "$endpoint"
+
+summary

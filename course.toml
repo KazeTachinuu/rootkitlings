@@ -1,44 +1,60 @@
 schema_version = 2
-revision = "2026.10-root-shell-route"
+revision = "2026.10-operational-milestones"
 default_module_artifact = "rootkitlings.ko"
 exercise_roots = ["curriculum"]
 
 required_route = [
+  # Block 1: Module core (L00-L03)
   "module-build-lifecycle",
   "precise-init-failure",
   "owned-kernel-state",
   "proc-publication",
+
+  # Block 2: Control + execution (L04-L07, M00)
   "proc-read-contract",
   "bounded-control-switch",
   "timer-workqueue-scheduler",
   "event-driven-kernel-thread",
-  "controlled-resident-core",
+  "reversible-persistence",
+
+  # Block 3: Identity + instrumentation (L08-L12, M01)
   "current-task-attribution",
   "linux-credential-model",
   "transactional-credential-replacement",
-  "one-use-authorization",
   "managed-kprobe",
   "return-aware-syscall-telemetry",
-  "authorized-actions-telemetry",
+  "module-cloak",
+
+  # Block 3b: Local covert control (M02)
+  "local-covert-control",
+
+  # Block 4: Views + hiding (L13-L15, M03)
   "cross-view-evidence",
   "packed-directory-filter",
-  "bounded-rendered-filter",
-  "concealment-evidence-map",
+  "bounded-line-filter",
+  "dynamic-directory-filter",
+
+  # Block 5: Network + shell (L16-L21, M04)
   "hostile-packet-lengths",
   "safe-skb-access",
   "netfilter-observer",
   "validated-packet-classification",
-  "writable-packet-mutation",
   "kernel-socket-ownership",
-  "tcp-framing-cancellation",
   "root-shell-bridge",
-  "guarded-file-transaction",
-  "remote-resident-agent",
+  "callback-shell",
+
+  # Block 6: Crypto + auth (L22-L25, M05)
   "protection-property-selection",
   "sha256-verification",
   "authenticated-replay-safe-message",
   "authenticated-encryption",
-  "authenticated-reverse-shell",
+  "authenticated-channel",
+
+  # Block 7: Advanced hiding (L26, M06)
+  "tcp-port-filter",
+  "content-port-filter",
+
+  # Final project
   "complete-rootkit",
 ]
 
@@ -98,14 +114,14 @@ binary = "vm/tools/cred_trigger_test"
 source = "vm/tools/cred_trigger_test.c"
 
 [[tools]]
-id = "event-stream-test"
-binary = "vm/tools/event_stream_test"
-source = "vm/tools/event_stream_test.c"
-
-[[tools]]
 id = "getdents64-test"
 binary = "vm/tools/getdents64_test"
 source = "vm/tools/getdents64_test.c"
+
+[[tools]]
+id = "mkdir-escalation-test"
+binary = "vm/tools/mkdir_escalation_test"
+source = "vm/tools/mkdir_escalation_test.c"
 
 [[tools]]
 id = "module-load-params"
@@ -126,11 +142,6 @@ source = "vm/tools/netfilter_udp_test.c"
 id = "packet-classifier-test"
 binary = "vm/tools/packet_classifier_test"
 source = "vm/tools/packet_classifier_test.c"
-
-[[tools]]
-id = "packet-mutation-test"
-binary = "vm/tools/packet_mutation_test"
-source = "vm/tools/packet_mutation_test.c"
 
 [[tools]]
 id = "proc-read-test"
@@ -176,11 +187,6 @@ source = "vm/tools/status_field_test.c"
 id = "task-attribution-test"
 binary = "vm/tools/task_attribution_test"
 source = "vm/tools/task_attribution_test.c"
-
-[[tools]]
-id = "tcp-session-fixture"
-binary = "vm/tools/tcp_session_fixture"
-source = "vm/tools/tcp_session_fixture.c"
 
 [[assumptions]]
 concept = "c-functions-and-errors"
@@ -251,12 +257,48 @@ id = "authenticated-operations"
 label = "Authenticated operations"
 
 [[sections]]
+id = "advanced-hiding"
+label = "Content and port hiding"
+
+[[sections]]
 id = "final-project"
 label = "Complete rootkit"
 
 [[concepts]]
 id = "accept-by-default-observation"
 label = "Accept-by-default observation"
+
+[[concepts]]
+id = "beacon-jitter"
+label = "Beacon jitter"
+
+[[concepts]]
+id = "dynamic-content-hiding"
+label = "Dynamic content hiding"
+
+[[concepts]]
+id = "dynamic-port-hiding"
+label = "Dynamic port hiding"
+
+[[concepts]]
+id = "dynamic-target-list"
+label = "Dynamic target list"
+
+[[concepts]]
+id = "line-removal-filter"
+label = "Line removal filter"
+
+[[concepts]]
+id = "linux-file-permission-basics"
+label = "Linux file permission basics"
+
+[[concepts]]
+id = "list-del-module-hiding"
+label = "list_del module hiding"
+
+[[concepts]]
+id = "tcp-seq-show-suppression"
+label = "tcp4_seq_show suppression"
 
 [[concepts]]
 id = "action-control-switch"
@@ -283,22 +325,6 @@ id = "authenticated-reverse-shell"
 label = "Authenticated reverse shell"
 
 [[concepts]]
-id = "authorization-vs-authentication"
-label = "Authorization versus authentication"
-
-[[concepts]]
-id = "authorized-telemetry-integration"
-label = "Authorized telemetry integration"
-
-[[concepts]]
-id = "binary-safe-equal-width-replacement"
-label = "Binary-safe equal-width replacement"
-
-[[concepts]]
-id = "blocked-io-cancellation"
-label = "Blocked I/O cancellation"
-
-[[concepts]]
 id = "boot-load-request"
 label = "Reversible boot-load request"
 
@@ -311,20 +337,12 @@ id = "bounded-event-admission"
 label = "Bounded event admission"
 
 [[concepts]]
-id = "bounded-kernel-file-io"
-label = "Bounded kernel file I/O"
-
-[[concepts]]
 id = "bounded-read-contract"
 label = "Bounded read contract"
 
 [[concepts]]
 id = "bounded-rendered-filter"
 label = "Bounded rendered filter"
-
-[[concepts]]
-id = "bounded-typed-parsing"
-label = "Bounded typed parsing"
 
 [[concepts]]
 id = "bounded-user-copy"
@@ -347,14 +365,6 @@ id = "c-preprocessor"
 label = "C preprocessor"
 
 [[concepts]]
-id = "checksum-repair"
-label = "Checksum repair"
-
-[[concepts]]
-id = "compare-before-rollback"
-label = "Compare before rollback"
-
-[[concepts]]
 id = "complete-rootkit-integration"
 label = "Complete rootkit integration"
 
@@ -365,6 +375,10 @@ label = "Component ownership"
 [[concepts]]
 id = "connect-back-agent"
 label = "Connect-back agent"
+
+[[concepts]]
+id = "covert-syscall-channel"
+label = "Covert syscall channel"
 
 [[concepts]]
 id = "copy-validate-commit"
@@ -405,14 +419,6 @@ label = "Exclusive staging file"
 [[concepts]]
 id = "false-eof-avoidance"
 label = "False-EOF avoidance"
-
-[[concepts]]
-id = "file-and-directory-fsync"
-label = "File and directory fsync"
-
-[[concepts]]
-id = "file-identity-guard"
-label = "File identity guard"
 
 [[concepts]]
 id = "fixed-command-grammar"
@@ -459,14 +465,6 @@ id = "kernel-crypto-api"
 label = "Kernel Crypto API"
 
 [[concepts]]
-id = "kernel-file-context-constraints"
-label = "Kernel file-context constraints"
-
-[[concepts]]
-id = "kernel-randomness"
-label = "Kernel randomness"
-
-[[concepts]]
 id = "kernel-socket-context-constraints"
 label = "Kernel socket-context constraints"
 
@@ -491,8 +489,8 @@ id = "kretprobes"
 label = "Kretprobes"
 
 [[concepts]]
-id = "linux-file-permission-basics"
-label = "Linux file and permission basics"
+id = "local-privilege-escalation"
+label = "Local privilege escalation"
 
 [[concepts]]
 id = "linux-identity-basics"
@@ -501,10 +499,6 @@ label = "Linux identity basics"
 [[concepts]]
 id = "linux-process-basics"
 label = "Linux process basics"
-
-[[concepts]]
-id = "machine-readable-evidence-map"
-label = "Machine-readable evidence map"
 
 [[concepts]]
 id = "malformed-input-state-preservation"
@@ -531,20 +525,8 @@ id = "multi-file-modules"
 label = "Multi-file modules"
 
 [[concepts]]
-id = "mutex-protected-invariants"
-label = "Mutex-protected invariants"
-
-[[concepts]]
-id = "mutexes"
-label = "Mutexes"
-
-[[concepts]]
 id = "named-kprobe-resolution"
 label = "Named Kprobe resolution"
-
-[[concepts]]
-id = "namespace-aware-process-view-filtering"
-label = "Namespace-aware process-view filtering"
 
 [[concepts]]
 id = "namespace-id-translation"
@@ -575,16 +557,8 @@ id = "nonlinear-packet-access"
 label = "Nonlinear packet access"
 
 [[concepts]]
-id = "one-use-authorization"
-label = "One-use authorization"
-
-[[concepts]]
 id = "overlap-safe-record-compaction"
 label = "Overlap-safe record compaction"
-
-[[concepts]]
-id = "oversized-frame-draining"
-label = "Oversized frame draining"
 
 [[concepts]]
 id = "packed-record-validation"
@@ -595,20 +569,8 @@ id = "packet-classification"
 label = "Packet classification"
 
 [[concepts]]
-id = "packet-copy-on-write"
-label = "Packet copy-on-write"
-
-[[concepts]]
 id = "packet-length-validation"
 label = "Packet length validation"
-
-[[concepts]]
-id = "packet-redirection"
-label = "Packet redirection"
-
-[[concepts]]
-id = "partial-stream-io"
-label = "Partial stream I/O"
 
 [[concepts]]
 id = "pointer-invalidation"
@@ -647,24 +609,8 @@ id = "read-once-write-once"
 label = "READ_ONCE and WRITE_ONCE"
 
 [[concepts]]
-id = "remote-agent-integration"
-label = "Remote agent integration"
-
-[[concepts]]
-id = "replay-rejection"
-label = "Replay rejection"
-
-[[concepts]]
 id = "replay-resistant-state"
 label = "Replay-resistant state"
-
-[[concepts]]
-id = "resident-client-retry"
-label = "Resident client retry"
-
-[[concepts]]
-id = "resident-core-integration"
-label = "Resident core integration"
 
 [[concepts]]
 id = "resource-ownership"
@@ -695,10 +641,6 @@ id = "shell-and-paths"
 label = "Shell commands and paths"
 
 [[concepts]]
-id = "single-socket-ownership"
-label = "Single socket ownership"
-
-[[concepts]]
 id = "skb-safe-access"
 label = "Safe sk_buff access"
 
@@ -709,10 +651,6 @@ label = "Socket lifecycle"
 [[concepts]]
 id = "socket-file-bridge"
 label = "Socket file-descriptor bridge"
-
-[[concepts]]
-id = "spinlocked-event-ring"
-label = "Spinlocked event ring"
 
 [[concepts]]
 id = "state-invariant-selection"
@@ -729,10 +667,6 @@ label = "Task attribution"
 [[concepts]]
 id = "task-credentials"
 label = "Task credentials"
-
-[[concepts]]
-id = "tcp-length-framing"
-label = "TCP length framing"
 
 [[concepts]]
 id = "timer-to-worker-deferral"

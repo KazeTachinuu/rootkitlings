@@ -9,9 +9,8 @@
 #include <unistd.h>
 
 #ifdef RK_STANDALONE_HELPER
-size_t rk_replace_equal(unsigned char *bytes, size_t length,
-			const unsigned char *from,
-			const unsigned char *to, size_t width);
+size_t rk_remove_lines(unsigned char *buffer, size_t length,
+		       const unsigned char *target, size_t target_length);
 
 static void fail(const char *label)
 {
@@ -19,30 +18,46 @@ static void fail(const char *label)
 	exit(1);
 }
 
-static size_t reference(unsigned char *bytes, size_t length,
-			const unsigned char *from,
-			const unsigned char *to, size_t width)
+static size_t reference(unsigned char *buffer, size_t length,
+			const unsigned char *target, size_t target_length)
 {
-	size_t index = 0;
-	size_t count = 0;
+	size_t read_pos = 0;
+	size_t write_pos = 0;
 
-	if (width == 0 || width > length)
-		return 0;
-	while (index + width <= length) {
-		if (memcmp(bytes + index, from, width) == 0) {
-			memcpy(bytes + index, to, width);
-			count++;
-			index += width;
-		} else {
-			index++;
+	if (target_length == 0 || target_length > length)
+		return length;
+	while (read_pos < length) {
+		const unsigned char *line = buffer + read_pos;
+		const unsigned char *nl = memchr(line, '\n',
+						 length - read_pos);
+		size_t line_len = nl ? (size_t)(nl - line + 1)
+				     : (length - read_pos);
+		int match = 0;
+
+		if (line_len >= target_length) {
+			size_t end = line_len - target_length;
+			size_t i;
+
+			for (i = 0; i <= end; i++) {
+				if (memcmp(line + i, target,
+					   target_length) == 0) {
+					match = 1;
+					break;
+				}
+			}
 		}
+		if (!match) {
+			if (write_pos != read_pos)
+				memmove(buffer + write_pos, line, line_len);
+			write_pos += line_len;
+		}
+		read_pos += line_len;
 	}
-	return count;
+	return write_pos;
 }
 
 static void check(const char *label, const unsigned char *input, size_t length,
-		  const unsigned char *from, const unsigned char *to,
-		  size_t width)
+		  const unsigned char *target, size_t target_length)
 {
 	unsigned char actual[514];
 	unsigned char expected[514];
@@ -55,8 +70,8 @@ static void check(const char *label, const unsigned char *input, size_t length,
 	memset(expected, 0xa5, sizeof(expected));
 	memcpy(actual + 1, input, length);
 	memcpy(expected + 1, input, length);
-	want = reference(expected + 1, length, from, to, width);
-	got = rk_replace_equal(actual + 1, length, from, to, width);
+	want = reference(expected + 1, length, target, target_length);
+	got = rk_remove_lines(actual + 1, length, target, target_length);
 	if (got != want || memcmp(actual, expected, sizeof(actual)) != 0)
 		fail(label);
 }
@@ -72,27 +87,31 @@ static unsigned char next_byte(void)
 static void generated_cases(void)
 {
 	unsigned char input[512];
-	unsigned char from[16];
-	unsigned char to[16];
+	unsigned char target[8];
 	size_t trial;
 
 	for (trial = 0; trial < 4096; trial++) {
 		size_t index;
 		size_t length = next_byte() * 2U;
-		size_t width = next_byte() % 14U;
+		size_t tlen = (next_byte() % 7U) + 1U;
 
 		for (index = 0; index < sizeof(input); index++)
 			input[index] = next_byte();
-		for (index = 0; index < sizeof(from); index++) {
-			from[index] = next_byte();
-			to[index] = next_byte();
+		for (index = 0; index < sizeof(target); index++)
+			target[index] = next_byte();
+		if (tlen <= length && (trial % 3U) == 0) {
+			size_t at = next_byte() % (length - tlen + 1U);
+			memcpy(input + at, target, tlen);
 		}
-		if (width && width <= length && (trial % 3U) == 0) {
-			size_t at = next_byte() % (length - width + 1U);
-			memcpy(input + at, from, width);
+		if (trial % 5U == 0) {
+			size_t nl_count = (next_byte() % 4U) + 1U;
+			for (index = 0; index < nl_count && index < length; index++) {
+				size_t pos = next_byte() % length;
+				input[pos] = '\n';
+			}
 		}
 		check("generated reference corpus", input, length,
-		      from, to, width);
+		      target, tlen);
 	}
 }
 
@@ -101,8 +120,7 @@ static void guard_page_case(void)
 	const long page_size = sysconf(_SC_PAGESIZE);
 	unsigned char *mapping;
 	unsigned char *bytes;
-	const unsigned char from[] = "SECRET";
-	const unsigned char to[] = "XXXXXX";
+	const unsigned char target[] = "SECRET";
 
 	if (page_size <= 0)
 		fail("page size");
@@ -113,57 +131,51 @@ static void guard_page_case(void)
 	if (mprotect(mapping + page_size, (size_t)page_size,
 		     PROT_READ | PROT_WRITE) != 0)
 		fail("guard-page mprotect");
-	bytes = mapping + page_size * 2U - 512U;
-	memset(bytes, 'q', 512);
-	memcpy(bytes + 506, from, 6);
-	if (rk_replace_equal(bytes, 512, from, to, 6) != 1 ||
-	    memcmp(bytes + 506, to, 6) != 0)
-		fail("guard-page end boundary");
+	bytes = mapping + page_size * 2U - 32U;
+	memcpy(bytes, "safe line\nSECRET hidden\nvisible\n", 32);
+	size_t result = rk_remove_lines(bytes, 32, target, 6);
+	if (result != 18)
+		fail("guard-page line removal");
+	if (memcmp(bytes, "safe line\nvisible\n", 18) != 0)
+		fail("guard-page content");
 	if (munmap(mapping, (size_t)page_size * 3U) != 0)
 		fail("guard-page munmap");
 }
 
 int main(void)
 {
-	static const unsigned char secret[] = "SECRET";
-	static const unsigned char masked[] = "XXXXXX";
-	static const unsigned char embedded[] = {
-		0, 'S', 'E', 'C', 'R', 'E', 'T', 0,
-		'S', 'E', 'C', 'R', 'E', 'T', 0
-	};
-	static const unsigned char adjacent[] = "SECRETSECRET";
-	static const unsigned char ends[] = "SECRET--SECRET";
-	static const unsigned char overlap[] = "AAAAA";
-	static const unsigned char unchanged[] = "no matching bytes";
-	unsigned char sized[512];
-	size_t length;
-
-	for (length = 0; length <= 512; length++) {
-		memset(sized, 'z', sizeof(sized));
-		if (length >= 6)
-			memcpy(sized + length - 6, secret, 6);
-		check("all bounded lengths", sized, length, secret, masked, 6);
-	}
-	check("embedded NUL bytes", embedded, sizeof(embedded),
-	      secret, masked, 6);
-	check("adjacent matches", adjacent, sizeof(adjacent) - 1,
-	      secret, masked, 6);
-	check("first and last matches", ends, sizeof(ends) - 1,
-	      secret, masked, 6);
-	check("no match", unchanged, sizeof(unchanged) - 1,
-	      secret, masked, 6);
-	check("overlap is not reused", overlap, sizeof(overlap) - 1,
-	      (const unsigned char *)"AAA", (const unsigned char *)"BBB", 3);
-	check("zero width", unchanged, sizeof(unchanged) - 1,
-	      secret, masked, 0);
-	check("unit width", (const unsigned char *)"ababa", 5,
-	      (const unsigned char *)"a", (const unsigned char *)"x", 1);
-	check("replacement is not rescanned", (const unsigned char *)"AAAA", 4,
-	      (const unsigned char *)"AA", (const unsigned char *)"AA", 2);
-	check("width exceeds length", unchanged, 3, secret, masked, 6);
+	static const unsigned char target[] = "SECRET";
+	check("empty input", (const unsigned char *)"", 0, target, 6);
+	check("no match", (const unsigned char *)"safe line\n", 10, target, 6);
+	check("single match",
+	      (const unsigned char *)"SECRET line\n", 12, target, 6);
+	check("match without newline",
+	      (const unsigned char *)"has SECRET", 10, target, 6);
+	check("middle line match",
+	      (const unsigned char *)"keep\nSECRET drop\nkeep2\n", 22,
+	      target, 6);
+	check("multiple matches",
+	      (const unsigned char *)"SECRET a\nSECRET b\n", 18, target, 6);
+	check("all lines match",
+	      (const unsigned char *)"SECRET\nSECRET\n", 14, target, 6);
+	check("no lines match",
+	      (const unsigned char *)"safe\nlines\nonly\n", 15, target, 6);
+	check("target at end of line",
+	      (const unsigned char *)"endSECRET\nkeep\n", 15, target, 6);
+	check("target at start of line",
+	      (const unsigned char *)"SECRETwo\nkeep\n", 14, target, 6);
+	check("embedded in larger word",
+	      (const unsigned char *)"xSECRETx\nkeep\n", 14, target, 6);
+	check("last line no newline",
+	      (const unsigned char *)"keep\nSECRET", 11, target, 6);
+	check("target longer than input",
+	      (const unsigned char *)"ab\n", 3, target, 6);
+	check("zero-length target",
+	      (const unsigned char *)"keep\n", 5,
+	      (const unsigned char *)"", 0);
 	generated_cases();
 	guard_page_case();
-	puts("[+] bounded equal-width replacement verified");
+	puts("[+] bounded line removal verified");
 	return 0;
 }
 #else
@@ -273,12 +285,16 @@ static ssize_t read_by_method(const char *method, int descriptor,
 	if (strcmp(method, "mmap") == 0) {
 		struct stat status;
 		unsigned char *mapping;
+		size_t available;
 
 		if (fstat(descriptor, &status) != 0 || offset < 0 ||
-		    (uintmax_t)offset + request > (uintmax_t)status.st_size) {
+		    (uintmax_t)offset >= (uintmax_t)status.st_size) {
 			errno = EINVAL;
 			return -1;
 		}
+		available = (size_t)(status.st_size - offset);
+		if (request > available)
+			request = available;
 		mapping = mmap(NULL, (size_t)status.st_size, PROT_READ,
 			       MAP_PRIVATE, descriptor, 0);
 		if (mapping == MAP_FAILED)
@@ -488,6 +504,7 @@ struct stress_args {
 	const unsigned char *expected;
 	const unsigned char *alternate;
 	size_t length;
+	size_t alternate_length;
 	unsigned long iterations;
 	int failed;
 };
@@ -495,7 +512,7 @@ struct stress_args {
 static void *stress_thread(void *opaque)
 {
 	struct stress_args *args = opaque;
-	unsigned char buffer[512];
+	unsigned char buffer[4096];
 	unsigned long iteration;
 	int descriptor = open(args->path, O_RDONLY | O_CLOEXEC);
 
@@ -505,15 +522,17 @@ static void *stress_thread(void *opaque)
 	}
 	for (iteration = 0; iteration < args->iterations; iteration++) {
 		ssize_t result = syscall(SYS_pread64, descriptor, buffer,
-					 args->length, 0);
+					 sizeof(buffer), 0);
 
-		if (result != (ssize_t)args->length ||
-		    (memcmp(buffer, args->expected, args->length) != 0 &&
-		     (!args->alternate ||
-		      memcmp(buffer, args->alternate, args->length) != 0))) {
-			args->failed = 1;
-			break;
-		}
+		if (result == (ssize_t)args->length &&
+		    memcmp(buffer, args->expected, args->length) == 0)
+			continue;
+		if (args->alternate &&
+		    result == (ssize_t)args->alternate_length &&
+		    memcmp(buffer, args->alternate, args->alternate_length) == 0)
+			continue;
+		args->failed = 1;
+		break;
 	}
 	close(descriptor);
 	return NULL;
@@ -529,6 +548,7 @@ static int stress(const char *path, const char *iterations_text,
 	char *end;
 	unsigned long iterations;
 	size_t length;
+	size_t alt_length = 0;
 	size_t index;
 
 	errno = 0;
@@ -536,15 +556,13 @@ static int stress(const char *path, const char *iterations_text,
 	if (errno || *end != '\0' || iterations == 0 || iterations > 100000)
 		return 2;
 	expected = decode_hex(hex, &length);
-	if (!expected || length > 512) {
+	if (!expected || length > 4096) {
 		free(expected);
 		return 2;
 	}
 	if (alternate_hex) {
-		size_t alternate_length;
-
-		alternate = decode_hex(alternate_hex, &alternate_length);
-		if (!alternate || alternate_length != length) {
+		alternate = decode_hex(alternate_hex, &alt_length);
+		if (!alternate || alt_length > 4096) {
 			free(expected);
 			free(alternate);
 			return 2;
@@ -556,6 +574,7 @@ static int stress(const char *path, const char *iterations_text,
 			.expected = expected,
 			.alternate = alternate,
 			.length = length,
+			.alternate_length = alt_length,
 			.iterations = iterations,
 			.failed = 0,
 		};

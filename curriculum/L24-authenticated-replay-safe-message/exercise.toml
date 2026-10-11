@@ -5,9 +5,9 @@ stage = "authenticated-operations"
 kind = "lesson"
 tradecraft = ["cryptography", "control", "detection"]
 difficulty = "advanced"
-prerequisites = ["one-use-authorization", "sha256-verification"]
+prerequisites = ["sha256-verification"]
 teaches = ["hmac-authentication", "replay-resistant-state"]
-requires = ["replay-rejection", "kernel-crypto-api", "sha256-verification"]
+requires = ["kernel-crypto-api", "sha256-verification"]
 
 [workspace]
 mode = "project"

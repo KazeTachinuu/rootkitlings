@@ -1,0 +1,48 @@
+schema_version = 2
+id = "dynamic-directory-filter"
+title = "Hide files and PIDs with dynamic target lists"
+stage = "views-detection"
+kind = "milestone"
+tradecraft = ["concealment", "instrumentation"]
+difficulty = "standard"
+prerequisites = ["packed-directory-filter"]
+teaches = ["dynamic-target-list"]
+requires = ["kretprobes", "packed-record-validation", "overlap-safe-record-compaction"]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c", "target_list.h", "target_list.c"]
+editable = ["main.c", "target_list.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/M03-dynamic-directory-filter/starter"
+
+[resources]
+readme = "curriculum/M03-dynamic-directory-filter/README.md"
+host_check = ""
+hint = "curriculum/M03-dynamic-directory-filter/hint"
+solution = "curriculum/M03-dynamic-directory-filter/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "file-hiding"
+label = "Files hidden by prefix"
+expect_build = "pass"
+check = "curriculum/M03-dynamic-directory-filter/checks/success-check"
+
+[[verification.cases]]
+id = "pid-hiding"
+label = "PIDs hidden from /proc"
+expect_build = "pass"
+check = "curriculum/M03-dynamic-directory-filter/checks/pid-check"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+[verification.cases.build_variables]
+ROOTKITLINGS_FAIL_POINT = "99"

@@ -1,0 +1,6 @@
+The second argument (regs->si) is the current socket. When it equals
+SEQ_START_TOKEN, that is the header line: return 0 to let it through.
+
+For data rows, cast v to struct sock *, then call inet_sk() to get the
+inet_sock. Compare ntohs(inet->inet_sport) against hidden_port. Return
+1 to skip tcp4_seq_show (hiding the port), 0 to let it execute.

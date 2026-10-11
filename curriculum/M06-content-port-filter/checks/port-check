@@ -1,0 +1,45 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /vm/checks/lib.sh
+
+begin "Port hiding"
+
+ifconfig lo 127.0.0.1 up
+
+load rootkitlings.ko
+
+test_port=7777
+
+nc -l -s 0.0.0.0 -p "$test_port" &
+nc_pid=$!
+sleep 1
+
+if grep -q "$(printf '%04X' "$test_port")" /proc/net/tcp; then
+	_ok "port $test_port visible before hiding"
+else
+	_fail "port $test_port not found in /proc/net/tcp"
+	kill "$nc_pid" 2>/dev/null
+	unload rootkitlings
+	summary
+fi
+
+echo "hide port $test_port" > /proc/rootkitlings
+
+if grep -q "$(printf '%04X' "$test_port")" /proc/net/tcp; then
+	_fail "port $test_port still visible after hiding"
+else
+	_ok "port $test_port hidden from /proc/net/tcp"
+fi
+
+echo "unhide port 0" > /proc/rootkitlings
+
+if grep -q "$(printf '%04X' "$test_port")" /proc/net/tcp; then
+	_ok "port $test_port visible again after unhide"
+else
+	_fail "port $test_port still hidden after unhide"
+fi
+
+kill "$nc_pid" 2>/dev/null
+unload rootkitlings
+
+summary

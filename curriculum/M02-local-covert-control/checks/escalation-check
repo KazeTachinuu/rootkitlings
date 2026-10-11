@@ -1,0 +1,35 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /vm/checks/lib.sh
+
+begin "Privilege escalation"
+
+load rootkitlings.ko
+assert_loaded rootkitlings
+
+adduser -D testuser 2>/dev/null || true
+
+before=$(su testuser -c 'id -u')
+if test "$before" = "0"; then
+	_fail "test user is already root"
+	summary
+	exit 0
+fi
+_ok "test user starts as uid $before"
+
+after=$(su testuser -c 'mkdir_escalation_test rkling.e')
+if test "$after" = "0"; then
+	_ok "mkdir rkling.e escalated to uid 0"
+else
+	_fail "escalation failed: uid is $after"
+fi
+
+unload rootkitlings
+
+if dmesg | grep -Eqi '(BUG:|WARNING:|Oops:|KASAN:|UBSAN:|hung task)'; then
+	_fail "kernel log contains a fault report"
+else
+	_ok "kernel log is clean"
+fi
+
+summary
