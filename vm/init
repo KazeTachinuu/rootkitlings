@@ -82,14 +82,14 @@ if [ "${_runtime:-}" = 1 ]; then
 		ui_success 'Target ready; the rootkit is waiting for its operator'
 	else
 		ui_error "Target setup failed with exit $_setup_status"
-		reboot -f
+		/bin/reboot
 	fi
 	ui_progress 'Use this console to inspect the target; exit powers it off'
 	cd /rootkitlings || exit 1
 	show 'setsid -c /bin/bash --noprofile --rcfile /etc/rootkitlings.bashrc -i'
 	setsid -c /bin/bash --noprofile \
 		--rcfile /etc/rootkitlings.bashrc -i \
-		</dev/ttyS0 >/dev/ttyS0 2>&1
+		</dev/ttyS0 >/dev/ttyS0 2>&1 || true
 	/bin/poweroff
 fi
 
@@ -127,12 +127,20 @@ _module=$(ls /rootkitlings/*.ko 2>/dev/null | head -1)
 cd /rootkitlings || exit 1
 
 if [ "${_bare:-}" = 1 ]; then
-	ui_success 'Bare mode: root shell, no module loaded'
+	if grep -q rootkitlings /proc/modules 2>/dev/null; then
+		ui_success 'Bare mode: root shell, module loaded (persisted)'
+	else
+		ui_success 'Bare mode: root shell, no module loaded'
+	fi
 	ui_progress 'Load the module yourself with insmod'
 	setsid -c /bin/bash --login </dev/ttyS0 >/dev/ttyS0 2>&1 || true
 else
 	if grep -q rootkitlings /proc/modules 2>/dev/null; then
 		ui_success 'Module loaded (persisted)'
+	elif [ -n "$_module" ]; then
+		show "insmod $_module"
+		insmod "$_module" && ui_success 'Module loaded' \
+			|| ui_error 'Module failed to load'
 	fi
 	ui_success 'Logged in as student (unprivileged)'
 	ui_progress 'Type reboot to restart the VM; exit to shut down'
