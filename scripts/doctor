@@ -94,6 +94,7 @@ package_name()
 		fedora:libelf) printf elfutils-libelf-devel ;;
 		fedora:libcrypto) printf openssl-devel ;;
 		fedora:static-libc) printf glibc-static ;;
+		arch:libelf) printf libelf ;;
 		arch:libcrypto) printf openssl ;;
 		arch:clangd) printf clang ;;
 		arch:clang|debian:clang|fedora:clang) printf clang ;;
@@ -101,6 +102,7 @@ package_name()
 		fedora:clangd) printf clang-tools-extra ;;
 		*:binutils) printf binutils ;;
 		debian:busybox) printf busybox-static ;;
+		fedora:busybox) printf busybox ;;
 		fedora:qemu) printf qemu-system-x86-core ;;
 		*:qemu) printf qemu-system-x86 ;;
 		*:python) printf python3 ;;
@@ -146,13 +148,10 @@ check_command bash bash
 check_command ldd glibc
 check_command make build
 check_command gcc compiler
-check_command clang clang
 for command in ld as ar nm objcopy objdump readelf; do check_command "$command" binutils; done
 check_command bison bison
 check_command flex flex
 check_command perl perl
-check_command openssl openssl
-check_command file file
 check_command modinfo kmod
 check_command python3 python
 check_command busybox busybox
@@ -210,7 +209,7 @@ if command -v gcc >/dev/null; then
 fi
 
 if command -v busybox >/dev/null; then
-	if file "$(command -v busybox)" | grep -q 'statically linked'; then
+	if command -v file >/dev/null && file "$(command -v busybox)" | grep -q 'statically linked'; then
 		ui_item pass BusyBox 'statically linked'
 	else
 		ui_item fail BusyBox "must be statically linked (package: $(package_name busybox))"
@@ -257,8 +256,11 @@ fi
 
 printf '\n'
 ui_heading 'Optional developer tools'
+check_optional_command clang clang 'used by make compile-db for editor support'
 check_optional_command bear bear 'needed only by make compile-db'
 check_optional_command clangd clangd 'uses compile_commands.json for editor diagnostics'
+check_optional_command openssl openssl 'handy for key generation and debugging'
+check_optional_command file file 'used by doctor to verify busybox linkage'
 check_optional_command shellcheck shellcheck 'adds shell diagnostics to make validate'
 check_optional_command gdb gdb 'needed only for ./rootkitlings gdb'
 
