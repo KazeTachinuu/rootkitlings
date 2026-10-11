@@ -48,6 +48,30 @@ if [ "${_network:-}" = 1 ]; then
 	run ifconfig eth0 10.0.2.15 up
 fi
 
+# Mount persistent disk (all modes, survives reboots)
+if [ -b /dev/vda ]; then
+	mkdir -p /mnt/persist
+	mount -t ext4 /dev/vda /mnt/persist 2>/dev/null
+	mkdir -p /mnt/persist/modules-load.d /mnt/persist/home/student
+	chown 1000:1000 /mnt/persist/home/student
+	mount --bind /mnt/persist/modules-load.d /etc/modules-load.d
+	mount --bind /mnt/persist/home/student /home/student
+fi
+[ -f /etc/modules-load.d/rootkitlings.conf ] || \
+	install -m 0600 /dev/null /etc/modules-load.d/rootkitlings.conf
+
+# Load persisted modules (before check mode so persistence is testable)
+for _conf in /etc/modules-load.d/*.conf; do
+	[ -f "$_conf" ] || continue
+	while read -r _modname; do
+		[ -n "$_modname" ] || continue
+		_ko="/rootkitlings/${_modname}.ko"
+		if [ -f "$_ko" ]; then
+			insmod "$_ko" 2>/dev/null
+		fi
+	done < "$_conf"
+done
+
 if [ "${_check:-}" = 1 ]; then
 	export NO_COLOR=1
 	printf '\nROOTKITLINGS_CHECK_BEGIN\n'
@@ -96,32 +120,6 @@ fi
 # -- interactive boot --
 
 ui_success "/init is PID $$"
-
-# Mount persistent disk (survives reboots)
-if [ -b /dev/vda ]; then
-	mkdir -p /mnt/persist
-	mount -t ext4 /dev/vda /mnt/persist 2>/dev/null
-	mkdir -p /mnt/persist/modules-load.d /mnt/persist/home/student
-	chown 1000:1000 /mnt/persist/home/student
-	mount --bind /mnt/persist/modules-load.d /etc/modules-load.d
-	mount --bind /mnt/persist/home/student /home/student
-fi
-# Ensure the persistence target exists (transaction validates mode 0600)
-[ -f /etc/modules-load.d/rootkitlings.conf ] || \
-	install -m 0600 /dev/null /etc/modules-load.d/rootkitlings.conf
-
-# Load persisted modules from modules-load.d
-for _conf in /etc/modules-load.d/*.conf; do
-	[ -f "$_conf" ] || continue
-	while read -r _modname; do
-		[ -n "$_modname" ] || continue
-		_ko="/rootkitlings/${_modname}.ko"
-		if [ -f "$_ko" ]; then
-			insmod "$_ko" && ui_success "Persisted module loaded: $_modname" \
-				|| ui_error "Persisted module failed: $_modname"
-		fi
-	done < "$_conf"
-done
 
 _module=$(ls /rootkitlings/*.ko 2>/dev/null | head -1)
 cd /rootkitlings || exit 1

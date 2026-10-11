@@ -16,6 +16,10 @@ class GuestProtocolError(ValueError):
     """The guest did not emit one complete, ordered result envelope."""
 
 
+class GuestRebootedError(GuestProtocolError):
+    """The guest rebooted mid-check without producing a result."""
+
+
 @dataclass(frozen=True)
 class GuestCheckResult:
     passed: bool
@@ -34,6 +38,8 @@ def parse_guest_check(text: str) -> GuestCheckResult:
         for index, line in enumerate(lines)
         if line.startswith("ROOTKITLINGS_RESULT=")
     ]
+    if not result_records:
+        raise GuestRebootedError("guest rebooted without producing a result")
     if len(result_records) != 1:
         raise GuestProtocolError("expected exactly one guest check result record")
     result_index, result_line = result_records[0]
@@ -60,6 +66,9 @@ def main(arguments: list[str]) -> int:
     try:
         text = Path(arguments[0]).read_text(encoding="utf-8", errors="replace")
         result = parse_guest_check(text)
+    except GuestRebootedError as error:
+        print(error, file=sys.stderr)
+        return 3
     except (OSError, GuestProtocolError) as error:
         print(error, file=sys.stderr)
         return 2

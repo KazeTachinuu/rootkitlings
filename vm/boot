@@ -398,20 +398,29 @@ guestfwd=tcp:10.0.2.100:47024-tcp:127.0.0.1:$SHELL_PORT")
     fi
 
 	serial_log=$WORK/serial.log
-	set +e
-	if [[ -n $CHECK ]]; then
-		qemu-system-x86_64 "${qemu_args[@]}" >"$serial_log" 2>&1
-		qemu_status=$?
-	else
+	if [[ -z $CHECK ]]; then
+		set +e
 		qemu-system-x86_64 "${qemu_args[@]}" 2>&1 | tee "$serial_log"
 		qemu_status=${PIPESTATUS[0]}
+		set -e
+		if (( qemu_status != 0 )); then
+			return "$qemu_status"
+		fi
+		return 0
 	fi
-	set -e
-	if (( qemu_status != 0 )); then
-		[[ -z $CHECK ]] || cat "$serial_log" >&2
-		return "$qemu_status"
-	fi
-	if [[ -n $CHECK ]]; then
+
+	# Check mode: retry QEMU when the guest reboots mid-check (exit 3).
+	# The persist disk survives across boots so checks can test persistence.
+	local _boot _max_boots=3
+	for (( _boot = 1; _boot <= _max_boots; _boot++ )); do
+		set +e
+		qemu-system-x86_64 "${qemu_args[@]}" >"$serial_log" 2>&1
+		qemu_status=$?
+		set -e
+		if (( qemu_status != 0 )); then
+			cat "$serial_log" >&2
+			return "$qemu_status"
+		fi
 		protocol_error=$WORK/protocol.error
 		set +e
 		python3 "$ROOT_DIR/engine/guest_protocol.py" "$serial_log" 2>"$protocol_error"
@@ -423,13 +432,18 @@ guestfwd=tcp:10.0.2.100:47024-tcp:127.0.0.1:$SHELL_PORT")
 				cat "$protocol_error" >&2
 				return 1
 				;;
+			3)
+				continue
+				;;
 			*)
 				cat "$serial_log" >&2
 				ui_error "Guest check protocol invalid: $(<"$protocol_error")"
 				return 1
 				;;
 		esac
-	fi
+	done
+	ui_error "Check exhausted $_max_boots boots without a result"
+	return 1
 }
 
 # -- main --
