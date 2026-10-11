@@ -14,6 +14,7 @@ source "$ROOT_DIR/scripts/lib/host.sh"
 MODULE=
 CHECK=
 GDB=
+BARE=
 NETWORK=
 GUEST_COLOR=
 ACCEL=auto
@@ -27,6 +28,7 @@ while (( $# )); do
     case $1 in
         --check) CHECK=${2:?--check requires an argument}; shift 2 ;;
         --check-arg) CHECK_ARGS+=("${2:?--check-arg requires an argument}"); shift 2 ;;
+        --bare)  BARE=1; shift ;;
         --gdb)   GDB=1; shift ;;
         --runtime-setup)
             RUNTIME_SETUP=${2:?--runtime-setup requires an argument}
@@ -115,7 +117,7 @@ SCRIPT=$(command -v script || true)
 
 readonly VM_DIR ROOT_DIR RELEASE KERNEL VMLINUX BUSYBOX BASH SCRIPT WORK ROOTFS
 readonly INITRAMFS
-readonly MODULE CHECK GDB NETWORK GUEST_COLOR ACCEL RUNTIME_SETUP
+readonly MODULE CHECK GDB BARE NETWORK GUEST_COLOR ACCEL RUNTIME_SETUP
 readonly CONTROL_KEY CONTROL_KEY_FILE CONTROL_PORT SHELL_PORT
 
 resolve_tools()
@@ -202,16 +204,19 @@ build_rootfs()
 
     ui_heading "Building the BusyBox root filesystem"
     mkdir -p "$ROOTFS"/{bin,dev,etc,lib,proc,rootkitlings,sys,tmp,vm/checks} \
+        "$ROOTFS/etc/modules-load.d" \
+        "$ROOTFS/home/student" \
         "$ROOTFS/lib/modules/$RELEASE"
     : > "$ROOTFS/lib/modules/$RELEASE/modules.dep"
-	printf 'root:x:0:0:root:/rootkitlings:/bin/bash\n' > "$ROOTFS/etc/passwd"
-    printf 'root:!:0:::::\n' > "$ROOTFS/etc/shadow"
+	printf 'root:x:0:0:root:/rootkitlings:/bin/bash\nstudent:x:1000:1000:student:/home/student:/bin/bash\n' > "$ROOTFS/etc/passwd"
+	printf 'root:!:0:::::\nstudent:!:0:::::\n' > "$ROOTFS/etc/shadow"
     cp "$BUSYBOX" "$ROOTFS/bin/busybox"
-    for applet in cat chmod cmp cut dd diff dmesg echo find grep head \
-		hexdump id \
-		ifconfig insmod kill ls lsmod mkdir modinfo mount nc ping poweroff \
-		printf ps reboot rm rmdir rmmod sed setsid sh sha256sum sleep \
-		sort stat stty tail test touch tr tty uname wc xargs xxd od; do
+    for applet in adduser cat chmod clear cmp cp cut dd df diff dmesg echo env \
+		find grep head hexdump id \
+		ifconfig insmod kill less ln ls lsmod mkdir modinfo mount mv nc \
+		ping printf ps rm rmdir rmmod sed setsid sh \
+		sha256sum sleep sort stat stty su tail test touch tr tty \
+		umount uname vi wc whoami xargs xxd od; do
         ln -s busybox "$ROOTFS/bin/$applet"
     done
 	install -D -m 0755 -- "$BASH" "$ROOTFS/bin/bash"
@@ -238,9 +243,22 @@ build_rootfs()
 		"unset HISTFILE" \
 		"bind 'set enable-bracketed-paste off' 2>/dev/null || true" \
 		> "$ROOTFS/etc/rootkitlings.bashrc"
+	cat > "$ROOTFS/etc/profile" <<'PROFILE'
+if [ "$(id -u)" = 0 ]; then
+	export PS1='root@target:\w# '
+	cd /rootkitlings 2>/dev/null
+else
+	export PS1='student@target:\w$ '
+fi
+PROFILE
     cp "$VM_DIR/init" "$ROOTFS/init"
     cp "$ROOT_DIR/scripts/lib/ui.sh" "$ROOTFS/vm/ui.sh"
     chmod 755 "$ROOTFS/init"
+
+    rm -f "$ROOTFS/bin/reboot" "$ROOTFS/bin/poweroff"
+    gcc -o "$ROOTFS/bin/reboot" "$VM_DIR/reboot.c"
+    chmod 4755 "$ROOTFS/bin/reboot"
+    ln "$ROOTFS/bin/reboot" "$ROOTFS/bin/poweroff"
     if [[ -n $MODULE ]]; then
         cp "$MODULE" "$ROOTFS/rootkitlings/$(basename "$MODULE")"
         ui_success "Module copied to /rootkitlings/$(basename "$MODULE")"
@@ -313,6 +331,9 @@ run_vm()
     if [[ -n $CHECK ]]; then
         cmdline+=' rootkitlings=check'
     fi
+    if [[ -n $BARE ]]; then
+        cmdline+=' rootkitlings=bare'
+    fi
     if [[ -n $NETWORK || -n $RUNTIME_SETUP ]]; then
         cmdline+=' rootkitlings=network'
     fi
@@ -341,15 +362,23 @@ run_vm()
         printf '    %s continue\n' "$debugger_prompt"
     fi
 
+    # Persistent disk for /etc/modules-load.d and /home/student (survives reboots)
+    local persist_disk="$WORK/persist.img"
+    dd if=/dev/zero of="$persist_disk" bs=4M count=1 status=none
+    mkfs.ext4 -q -F "$persist_disk"
+
     qemu_args+=(
         -m 256M
         -smp 2
         -kernel "$KERNEL"
         -initrd "$INITRAMFS"
         -append "$cmdline"
-        -no-reboot
+        -drive "file=$persist_disk,format=raw,if=virtio"
         -nographic
     )
+    if [[ -n $CHECK ]]; then
+        qemu_args+=(-no-reboot)
+    fi
 
     if [[ -n $RUNTIME_SETUP ]]; then
         qemu_args+=(-nic "user,model=virtio-net-pci,restrict=on,\

@@ -3,6 +3,7 @@
 set -eu
 
 export PATH=/bin
+export TERM=xterm-256color
 export LC_ALL=C
 export PS1='(rootkitlings) \w # '
 # shellcheck source=scripts/lib/ui.sh
@@ -26,6 +27,7 @@ mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 mount -t debugfs debugfs /sys/kernel/debug
 mount -t tracefs tracefs /sys/kernel/tracing
+chown 1000:1000 /home/student
 
 read -r _cmdline < /proc/cmdline
 for _word in $_cmdline; do
@@ -33,6 +35,7 @@ for _word in $_cmdline; do
 		rootkitlings=check) _check=1 ;;
 		rootkitlings=network) _network=1 ;;
 		rootkitlings=runtime) _runtime=1 ;;
+		rootkitlings=bare) _bare=1 ;;
 		rootkitlings=color) _color=1 ;;
 	esac
 done
@@ -87,23 +90,58 @@ if [ "${_runtime:-}" = 1 ]; then
 	setsid -c /bin/bash --noprofile \
 		--rcfile /etc/rootkitlings.bashrc -i \
 		</dev/ttyS0 >/dev/ttyS0 2>&1
-	show 'reboot -f'
-	reboot -f
-	while :; do sleep 1; done
+	/bin/poweroff
 fi
 
+# -- interactive boot --
+
 ui_success "/init is PID $$"
-ui_success 'BusyBox shell ready on ttyS0'
-ui_progress 'The root filesystem lives in RAM; exit powers off the VM'
-cd /rootkitlings || exit 1
-ui_success 'Working directory: /rootkitlings'
 
-show 'setsid -c sh -i </dev/ttyS0 >/dev/ttyS0 2>&1'
-setsid -c sh -i </dev/ttyS0 >/dev/ttyS0 2>&1
+# Mount persistent disk (survives reboots)
+if [ -b /dev/vda ]; then
+	mkdir -p /mnt/persist
+	mount -t ext4 /dev/vda /mnt/persist 2>/dev/null
+	mkdir -p /mnt/persist/modules-load.d /mnt/persist/home/student
+	chown 1000:1000 /mnt/persist/home/student
+	mount --bind /mnt/persist/modules-load.d /etc/modules-load.d
+	mount --bind /mnt/persist/home/student /home/student
+fi
+# Ensure the persistence target exists (transaction validates mode 0600)
+[ -f /etc/modules-load.d/rootkitlings.conf ] || \
+	install -m 0600 /dev/null /etc/modules-load.d/rootkitlings.conf
 
-show 'reboot -f'
-reboot -f
-ui_error 'reboot failed'
-while :; do
-	sleep 1
+# Load persisted modules from modules-load.d
+for _conf in /etc/modules-load.d/*.conf; do
+	[ -f "$_conf" ] || continue
+	while read -r _modname; do
+		[ -n "$_modname" ] || continue
+		_ko="/rootkitlings/${_modname}.ko"
+		if [ -f "$_ko" ]; then
+			insmod "$_ko" && ui_success "Persisted module loaded: $_modname" \
+				|| ui_error "Persisted module failed: $_modname"
+		fi
+	done < "$_conf"
 done
+
+_module=$(ls /rootkitlings/*.ko 2>/dev/null | head -1)
+cd /rootkitlings || exit 1
+
+if [ "${_bare:-}" = 1 ]; then
+	ui_success 'Bare mode: root shell, no module loaded'
+	ui_progress 'Load the module yourself with insmod'
+	export ENV=/etc/profile
+	setsid -c sh -i </dev/ttyS0 >/dev/ttyS0 2>&1 || true
+else
+	if grep -q rootkitlings /proc/modules 2>/dev/null; then
+		ui_success 'Module already loaded (persisted)'
+	elif [ -n "$_module" ]; then
+		show "insmod $_module"
+		insmod "$_module" && ui_success 'Module loaded' \
+			|| ui_error 'Module failed to load'
+	fi
+	ui_success 'Logged in as student (unprivileged)'
+	ui_progress 'Type reboot to restart the VM; exit to shut down'
+	setsid -c su -l student </dev/ttyS0 >/dev/ttyS0 2>&1 || true
+fi
+
+/bin/poweroff
