@@ -133,11 +133,7 @@ if [ "${_bare:-}" = 1 ]; then
 	setsid -c sh -i </dev/ttyS0 >/dev/ttyS0 2>&1 || true
 else
 	if grep -q rootkitlings /proc/modules 2>/dev/null; then
-		ui_success 'Module already loaded (persisted)'
-	elif [ -n "$_module" ]; then
-		show "insmod $_module"
-		insmod "$_module" && ui_success 'Module loaded' \
-			|| ui_error 'Module failed to load'
+		ui_success 'Module loaded (persisted)'
 	fi
 	ui_success 'Logged in as student (unprivileged)'
 	ui_progress 'Type reboot to restart the VM; exit to shut down'
