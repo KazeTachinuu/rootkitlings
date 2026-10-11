@@ -129,8 +129,7 @@ cd /rootkitlings || exit 1
 if [ "${_bare:-}" = 1 ]; then
 	ui_success 'Bare mode: root shell, no module loaded'
 	ui_progress 'Load the module yourself with insmod'
-	export ENV=/etc/profile
-	setsid -c sh -i </dev/ttyS0 >/dev/ttyS0 2>&1 || true
+	setsid -c /bin/bash --login </dev/ttyS0 >/dev/ttyS0 2>&1 || true
 else
 	if grep -q rootkitlings /proc/modules 2>/dev/null; then
 		ui_success 'Module loaded (persisted)'
