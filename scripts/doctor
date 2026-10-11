@@ -9,6 +9,16 @@ source "$ROOT_DIR/scripts/lib/ui.sh"
 # shellcheck source=scripts/lib/host.sh
 source "$ROOT_DIR/scripts/lib/host.sh"
 missing=0
+missing_packages=""
+
+record_missing()
+{
+	local pkg=$1
+	case " $missing_packages " in
+		*" $pkg "*) ;;
+		*) missing_packages="$missing_packages $pkg" ;;
+	esac
+}
 
 ui_heading 'Host'
 host_system=$(uname -s)
@@ -116,6 +126,7 @@ check_command()
 		ui_item pass "$command" "$(command -v "$command")"
 	else
 		ui_item fail "$command" "missing (package: $package)"
+		record_missing "$package"
 		missing=$((missing + 1))
 	fi
 }
@@ -169,12 +180,14 @@ if command -v gcc >/dev/null; then
 		ui_item pass 'libelf development' available
 	else
 		ui_item fail 'libelf development' "missing (package: $(package_name libelf))"
+		record_missing "$(package_name libelf)"
 		missing=$((missing + 1))
 	fi
 	if printf '#include <openssl/evp.h>\nint main(void) { return EVP_aes_256_gcm() == 0; }\n' | gcc -x c -o /dev/null - -lcrypto >/dev/null 2>&1; then
 		ui_item pass 'OpenSSL development' available
 	else
 		ui_item fail 'OpenSSL development' "missing (package: $(package_name libcrypto))"
+		record_missing "$(package_name libcrypto)"
 		missing=$((missing + 1))
 	fi
 	probe=$(mktemp "${TMPDIR:-/tmp}/rootkitlings-cc.XXXXXX") || {
@@ -188,6 +201,7 @@ if command -v gcc >/dev/null; then
 			ui_item pass 'static C linking' available
 		else
 			ui_item fail 'static C linking' "unavailable (package: $(package_name static-libc))"
+			record_missing "$(package_name static-libc)"
 			missing=$((missing + 1))
 		fi
 	fi
@@ -200,6 +214,7 @@ if command -v busybox >/dev/null; then
 		ui_item pass BusyBox 'statically linked'
 	else
 		ui_item fail BusyBox "must be statically linked (package: $(package_name busybox))"
+		record_missing "$(package_name busybox)"
 		missing=$((missing + 1))
 	fi
 	busybox_applets=$(busybox --list)
@@ -223,10 +238,12 @@ if command -v script >/dev/null; then
 		ui_item pass script 'util-linux PTY relay'
 	else
 		ui_item fail script "requires util-linux (package: $(package_name script))"
+		record_missing "$(package_name script)"
 		missing=$((missing + 1))
 	fi
 else
 	ui_item fail script "missing (package: $(package_name script))"
+	record_missing "$(package_name script)"
 	missing=$((missing + 1))
 fi
 
@@ -292,5 +309,14 @@ if (( missing == 0 )); then
 	ui_success 'Host ready for the pinned x86-64 course kernel'
 else
 	ui_error "Not ready: $missing required item(s) missing"
+	if [[ -n ${missing_packages// } ]]; then
+		printf '\n'
+		case $family in
+			arch)   printf '  sudo pacman -S%s\n' "$missing_packages" ;;
+			debian) printf '  sudo apt install%s\n' "$missing_packages" ;;
+			fedora) printf '  sudo dnf install%s\n' "$missing_packages" ;;
+			*)      printf '  Install:%s\n' "$missing_packages" ;;
+		esac
+	fi
 	exit 1
 fi

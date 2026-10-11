@@ -1,7 +1,7 @@
 schema_version = 2
 id = "tcp-port-filter"
 title = "Hide a listening port from /proc/net/tcp"
-stage = "views-detection"
+stage = "advanced-hiding"
 kind = "lesson"
 tradecraft = ["concealment", "instrumentation"]
 difficulty = "standard"

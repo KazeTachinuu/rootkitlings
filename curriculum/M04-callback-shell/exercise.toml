@@ -1,7 +1,7 @@
 schema_version = 2
 id = "callback-shell"
 title = "Call home and open a root shell"
-stage = "authenticated-operations"
+stage = "network-state"
 kind = "milestone"
 tradecraft = ["control", "execution", "privilege", "networking"]
 difficulty = "advanced"
