@@ -9,6 +9,22 @@ hook safely.
 Netfilter is Linux's framework for running callbacks at packet-processing
 points.
 
+```text
+ local process
+      |
+      v
+ LOCAL_OUT  <-- hook here (observe before routing)
+      |
+      v
+   routing
+      |
+      v
+ POST_ROUTING
+      |
+      v
+    wire
+```
+
 Place the watch at `LOCAL_OUT` in `init_net` only.
 
 Use `NF_IP_PRI_FIRST`, the earliest numeric priority.

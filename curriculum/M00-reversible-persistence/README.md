@@ -34,6 +34,27 @@ Naive persistence (just write the file) has two problems:
 
 The solution is a staged atomic transaction:
 
+```text
+persist:
+    staging                target
+    "rootkitlings"         ""
+         |                  |
+         +- RENAME_EXCHANGE +
+         |                  |
+    ""                     "rootkitlings"
+    (old content)          (now live)
+
+unload:
+    staging                target
+         |                  |
+         +- RENAME_EXCHANGE +
+         |                  |
+    "rootkitlings"         ""
+    (swapped back)         (restored)
+         |
+       unlink
+```
+
 1. Create a staging file (`.rootkitlings.conf.staging`) with O_EXCL.
 2. Write the module name, fsync.
 3. `RENAME_EXCHANGE` the staging file with the target.
@@ -76,3 +97,17 @@ rolled back on unload.
 
 The staging, transaction, worker, and proc files are provided. Your job
 is `core/main.c`: the init and exit functions that connect everything.
+
+Run:
+
+```sh
+./rootkitlings check
+```
+
+## References
+
+- [Linux v7.2 `renameat2()` and `RENAME_EXCHANGE`][1]
+- [Linux v7.2 `modules-load.d(5)` boot-time module loading][2]
+
+[1]: https://github.com/torvalds/linux/blob/v7.2/fs/namei.c
+[2]: https://www.freedesktop.org/software/systemd/man/latest/modules-load.d.html

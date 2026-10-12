@@ -26,10 +26,36 @@ Validate both bounds before reporting the payload.
 
 ## The fields used here
 
-The first byte holds version and IHL; IHL counts 32-bit words from 5 to 15.
+```text
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|Version|  IHL  |    DSCP/ECN   |         Total Length          |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|         Identification        |Flags|     Fragment Offset     |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|      TTL      |   Protocol    |      Header Checksum          |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                      Source Address                           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                   Destination Address                         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+byte 0:    version (high nibble, must be 4)
+           IHL (low nibble, header length in 32-bit words, 5-15)
+bytes 2-3: Total Length (big-endian, includes header)
+bytes 6-7: flags (R, DF, MF) + 13-bit fragment offset (big-endian)
+byte 9:    protocol (6 = TCP, 17 = UDP)
+
+|<--- IHL * 4 bytes --->|<--- payload --->|
+|<------------ Total Length -------------->|
+|<--------- available bytes (from sk_buff) ---------->|
+```
+
+IHL counts 32-bit words from 5 to 15.
 Values below 5 are malformed IPv4 headers.
 
-Big-endian Total Length at bytes 2 and 3 includes the header.
+Total Length includes the header.
 Less than IHL is malformed; more than `available` is truncated.
 Bytes beyond Total Length do not enlarge the view.
 

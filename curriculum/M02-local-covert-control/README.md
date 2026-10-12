@@ -23,10 +23,9 @@ unrecognized commands (indistinguishable from a normal missing directory).
 
 ## Privilege escalation
 
-`mkdir rkling.e` calls `commit_creds(prepare_kernel_cred(NULL))` on the
-calling task. After the syscall returns, the process has uid 0, gid 0,
-and full capabilities. This reuses the credential replacement technique
-from L10.
+`mkdir rkling.e` grants root credentials to the calling task using
+the credential replacement technique from L10. After the syscall
+returns, the process has uid 0, gid 0, and full capabilities.
 
 ## Your task
 
@@ -41,3 +40,19 @@ In `main.c`, implement:
    - Anything else returns -ENOENT
 3. Init: register the kprobe, create /proc/rkling_status
 4. Exit: unregister kprobe, uncloak module, remove proc entry
+
+Run:
+
+```sh
+./rootkitlings check
+```
+
+## References
+
+- [Kprobes API][1]
+- [Linux v7.2 credential replacement][2]
+- [Linux v7.2 module list manipulation][3]
+
+[1]: https://docs.kernel.org/7.2/trace/kprobes.html
+[2]: https://github.com/torvalds/linux/blob/v7.2/kernel/cred.c
+[3]: https://github.com/torvalds/linux/blob/v7.2/include/linux/list.h

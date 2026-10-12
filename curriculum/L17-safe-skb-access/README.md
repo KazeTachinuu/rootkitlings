@@ -9,6 +9,22 @@ packet.
 Success proves that later inspection works across real kernel storage layouts,
 not only convenient contiguous buffers.
 
+```text
+           head           data                    tail  end
+            |              |                        |    |
+            v              v                        v    v
+main buf:  [  headroom  ][ linear data             ][ .. ]
+                            ^
+                            network_header (may be before data)
+
+                         skb_headlen() = tail - data
+                         skb->data_len = bytes in frags + frag_list
+                         skb->len      = skb_headlen() + data_len
+
+frags[]:   [ page 0 ][ page 1 ] ...   (page fragments)
+frag_list: [ sk_buff ] --> [ sk_buff ] (linked fragments)
+```
+
 Its network header may precede or follow `skb->data`.
 The supplied adapter uses it for the 20-byte IPv4 prefix.
 

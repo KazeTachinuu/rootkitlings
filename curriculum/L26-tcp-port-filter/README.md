@@ -54,3 +54,19 @@ internal behavior can change between kernel versions.
 Implement `rk_tcp_show_pre`: check the port of each socket and return 1
 to hide it, 0 to let it through. The `hidden_port` module parameter is
 already wired up.
+
+Run:
+
+```sh
+./rootkitlings check
+```
+
+## References
+
+- [seq_file interface][1]
+- [Linux v7.2 `tcp4_seq_show` and TCP seq_file iteration][2]
+- [Linux v7.2 `inet_sock` and port fields][3]
+
+[1]: https://docs.kernel.org/7.2/filesystems/seq_file.html
+[2]: https://github.com/torvalds/linux/blob/v7.2/net/ipv4/tcp_ipv4.c
+[3]: https://github.com/torvalds/linux/blob/v7.2/include/net/inet_sock.h

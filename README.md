@@ -50,15 +50,42 @@ Run `./rootkitlings help` for the complete command list.
 
 ## Course
 
-- **L00-L03:** module lifecycle, owned state, and procfs rollback.
-- **L04-L07, M00:** bounded control, resident execution, reversible persistence.
-- **L08-L12, M01:** task identity, credentials, probes, module cloaking.
-- **M02:** local covert control via mkdir hook, privilege escalation.
-- **L13-L15, M03:** view filters, directory hiding with dynamic target lists.
-- **L16-L21, M04:** packets, sockets, root shell bridge, callback shell.
-- **L22-L25, M05:** authentication, replay defense, encryption, authenticated channel.
-- **L26, M06:** tcp4_seq_show port hiding, content and port filter.
-- **C00:** wire all milestones into one operational rootkit.
+```text
+L00-L03  module lifecycle, state, procfs
+   |
+L04-L07  control, execution engine
+   |
+   +---> M00  reversible persistence
+   |
+L08-L12  credentials, probes, telemetry
+   |
+   +---> M01  module cloaking
+   +---> M02  local covert control
+   |
+L13-L15  view filters, directory hiding
+   |
+   +---> M03  dynamic directory filter
+   |
+L16-L21  packets, sockets, reverse shell
+   |
+   +---> M04  callback shell
+   |
+L22-L25  auth, replay defense, encryption
+   |
+   +---> M05  authenticated channel
+   |
+L26      port hiding
+   |
+   +---> M06  content and port filter
+   |
+   +---> C00  complete rootkit
+```
+
+Lessons isolate mechanisms.
+Milestones turn them into a small tool or a visible system behavior.
+Use `list` for the route and `prereq` for direct dependencies.
+Use `./rootkitlings run C00 --reference` then `./rootkitlings connect C00` to
+operate the completed project in its restricted guest network.
 
 Lessons isolate mechanisms.
 Milestones turn them into a small tool or a visible system behavior.

@@ -8,8 +8,22 @@ kernel's internal module list.
 ## The technique
 
 The kernel maintains a doubly-linked list of loaded modules. `lsmod`
-reads `/proc/modules`, which iterates this list. The Diamorphine
-rootkit popularized the simplest hiding technique:
+reads `/proc/modules`, which iterates this list.
+
+```text
+before:
+  modules_list <-> [modA] <-> [rootkitlings] <-> [modB] <-> ...
+                                     ^
+                                saved_prev = list.prev
+
+after list_del:
+  modules_list <-> [modA] <-> [modB] <-> ...
+
+  [rootkitlings]  (unlinked, invisible to lsmod)
+
+restore with list_add(list, saved_prev):
+  modules_list <-> [modA] <-> [rootkitlings] <-> [modB] <-> ...
+```
 
 ```c
 saved_prev = THIS_MODULE->list.prev;
@@ -62,3 +76,17 @@ Invalid commands return an error without changing state.
 
 Implement `rk_module_cloak()` and `rk_module_uncloak()`. The proc
 interface and command parsing are provided.
+
+Run:
+
+```sh
+./rootkitlings check
+```
+
+## References
+
+- [Linux v7.2 module list and `THIS_MODULE`][1]
+- [Linux v7.2 linked-list API (`list_del`, `list_add`)][2]
+
+[1]: https://github.com/torvalds/linux/blob/v7.2/include/linux/module.h
+[2]: https://github.com/torvalds/linux/blob/v7.2/include/linux/list.h

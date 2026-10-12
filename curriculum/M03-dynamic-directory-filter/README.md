@@ -38,6 +38,24 @@ parsed as an unsigned integer and compared against the stored value.
 
 ## The getdents64 kretprobe
 
+```text
+userspace buffer (from getdents64 return):
+
++----------+----------+----------+----------+----------+
+| "."      | "secret" | "normal" | "rkling" | "data"   |
+| reclen=32| reclen=40| reclen=32| reclen=40| reclen=32|
++----------+----------+----------+----------+----------+
+                 ^                      ^
+                 match                  match
+
+after filtering (compacted, return value adjusted):
+
++----------+----------+----------+
+| "."      | "normal" | "data"   |
+| reclen=32| reclen=32| reclen=32|
++----------+----------+----------+
+```
+
 The kretprobe hooks `__x64_sys_getdents64`. The return handler:
 1. Copies the dirent buffer from userspace
 2. Iterates the packed `linux_dirent64` records
@@ -69,3 +87,17 @@ Invalid commands return an error without changing state.
 Implement the four functions in `target_list.c` and the
 `rk_dirent_should_hide` matcher in `main.c`. The kretprobe plumbing,
 proc interface, and dirent filter loop are provided.
+
+Run:
+
+```sh
+./rootkitlings check
+```
+
+## References
+
+- [Linux v7.2 spinlock API][1]
+- [Linux v7.2 `getdents64` and directory record layout][2]
+
+[1]: https://docs.kernel.org/7.2/locking/spinlocks.html
+[2]: https://github.com/torvalds/linux/blob/v7.2/fs/readdir.c

@@ -8,6 +8,19 @@ when startup fails.
 Kernel memory with this lifetime is the module's **private state**.
 One component creates it, and the same component destroys it.
 
+```text
+insmod                                     rmmod
+  |                                          |
+  v                                          v
+rk_init()                               rk_exit()
+  |                                          |
+  +-- rk_state_create()                      +-- rk_state_destroy()
+  |     |                                    |     |
+  |     +-- kzalloc() -> struct rk_state *   |     +-- kfree()
+  |                                          |
+  +-- (on failure: destroy + return error)   +-- state = NULL
+```
+
 Here, `core/state.c` owns a small heap object.
 `core/main.c` controls when that object exists but cannot inspect its fields.
 During init, `rk_state_create()` allocates it with `kzalloc()`.

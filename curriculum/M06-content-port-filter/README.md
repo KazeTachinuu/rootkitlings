@@ -5,6 +5,30 @@ from file reads (content hiding) and hiding TCP ports from /proc/net/tcp
 (port hiding). Combined with M03's directory/PID hiding, this gives the
 rootkit a complete concealment toolkit.
 
+```text
+file read:                        /proc/net/tcp listing:
+
+  vfs_read returns                  tcp4_seq_show called
+       |                                  |
+       v                                  v
+  copy buf to kernel              check source port
+       |                          against port list
+       v                                  |
+  scan lines for                   +------+------+
+  target strings                   |             |
+       |                         match        no match
+  +----+----+                      |             |
+  |         |                   return 1      return 0
+match    no match               (skip line)   (show line)
+  |         |
+remove    keep
+  |         |
+  +----+----+
+       |
+  copy back, adjust
+  return value
+```
+
 ## Content hiding with vfs_read
 
 A kretprobe on `vfs_read` intercepts every file read. In the return
@@ -50,3 +74,19 @@ In `main.c`, implement:
 3. `rk_tcp_show_pre()` - tcp4_seq_show kprobe pre-handler
 4. `rk_write()` - proc command parser for hide/unhide content/port
 5. `rk_init()` / `rk_exit()` - module lifecycle
+
+Run:
+
+```sh
+./rootkitlings check
+```
+
+## References
+
+- [Linux v7.2 `vfs_read` and file operations][1]
+- [Linux v7.2 `tcp4_seq_show`][2]
+- [Kprobes API][3]
+
+[1]: https://github.com/torvalds/linux/blob/v7.2/fs/read_write.c
+[2]: https://github.com/torvalds/linux/blob/v7.2/net/ipv4/tcp_ipv4.c
+[3]: https://docs.kernel.org/7.2/trace/kprobes.html

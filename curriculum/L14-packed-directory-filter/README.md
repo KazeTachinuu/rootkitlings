@@ -103,35 +103,6 @@ Run:
 The checker sanitizes malformed and randomized streams, then tests the supplied
 integration in the guest.
 
-## Supplied integration and limits
-
-The supplied `iterate_dir()` return probe receives the actual `struct file`.
-A managed identity Kprobe resolves the pinned `filldir64()` and reverses x86's
-`ENDBR64` adjustment before comparing the callback.
-It admits only native `getdents64()` on an enabled procfs root with at most 32
-KiB requested.
-
-The private Linux v7.2 `getdents_callback64` layout is compile-time checked and
-used only with that exact actor; it is not a stable module API.
-Entry allocates bounded `GFP_ATOMIC` scratch and stores call data per instance.
-Return copies with nofault helpers and validates counts and final boundaries
-before filtering.
-After changed copy-back, it adjusts `current_dir`, `prev_reclen`, and remaining
-count so `getdents64()` produces the shorter result and final cookie.
-Copy-back failure clears `prev_reclen` and forces `-EFAULT`.
-The rewrite is not transactional against concurrent userspace buffer changes.
-
-The following cases deliberately fail open:
-
-- Older `getdents` and 32-bit compatibility calls.
-- Other enumeration APIs and non-root or non-proc directories.
-- Zero or larger-than-32-KiB requests.
-- Scratch-allocation failure or an unavailable Kretprobe instance.
-- A chunk in which every record has the target name.
-
-`directory_returns_missed` reports Kretprobe instance exhaustion.
-Allocation precedes admission, so a miss need not be a selected enumeration.
-
 ## References
 
 - [Directory record layout, `filldir64()`, cookie writes, and `getdents64()`][1]

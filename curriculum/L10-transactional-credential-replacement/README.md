@@ -15,6 +15,27 @@ process, or an existing sibling thread.
 
 ## Replace one complete credential
 
+```text
+  current task
+  cred: uid=1000
+        |
+        v
+  prepare_kernel_cred(&init_task)
+        |
+        v
+  replacement (private)
+  cred: uid=0, full caps
+        |
+   +----+----+
+   |         |
+   v         v
+ commit    abort
+   |         |
+   v         v
+ uid=0     uid=1000
+ (published) (unchanged)
+```
+
 Published credentials are immutable.
 Prepare one private replacement, then either publish or discard it:
 

@@ -7,9 +7,23 @@ a root reverse shell on demand.
 
 ## The callback pattern
 
+```text
+  target                                     operator
+  [agent thread]                             [listener :4444]
+       |                                           |
+       +-------- TCP connect --------------------->|
+       |<------- length-framed commands -----------|
+       |-------- length-framed replies ----------->|
+       |                                           |
+       |  on SHELL 9999:                           |
+       |  [setsid/script/bash]                     |  [listener :9999]
+       |       |                                   |        |
+       |       +-------- TCP connect ---------------------->|
+       |       |<------- interactive PTY ------------------>|
+```
+
 The rootkit initiates the connection, not the operator. This is the
-standard connect-back (or "reverse shell") pattern used by Diamorphine,
-Reptile, and most modern implants. Advantages:
+standard connect-back (or "reverse shell") pattern. Advantages:
 
 - Traverses NAT and most egress firewalls (outbound TCP is usually allowed)
 - No listening port on the target to discover
@@ -62,3 +76,17 @@ interactive root Bash session.
    the agent, tear down in reverse order on exit)
 2. In `network/agent.c`: implement the command handler switch and add
    jitter to the retry delay
+
+Run:
+
+```sh
+./rootkitlings check
+```
+
+## References
+
+- [Linux v7.2 kernel socket API][1]
+- [Linux v7.2 `call_usermodehelper`][2]
+
+[1]: https://github.com/torvalds/linux/blob/v7.2/include/linux/net.h
+[2]: https://github.com/torvalds/linux/blob/v7.2/include/linux/umh.h

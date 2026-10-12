@@ -82,3 +82,14 @@ In `core/main.c`, wire the init/exit sequence:
 5. Create /proc/rkling_status
 6. Auto-stealth: add "rkling" to file targets
 7. On exit: uncloak, remove proc, unregister all probes, stop agent/shell
+
+Run:
+
+```sh
+./rootkitlings check
+```
+
+## References
+
+Refer to the README of each milestone (M00 through M06) for the kernel
+APIs and techniques used in that subsystem.
