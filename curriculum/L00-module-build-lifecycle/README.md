@@ -20,19 +20,21 @@ The kernel build system compiles it into an object and links a loadable kernel
 object, whose filename ends in `.ko`:
 
 ```text
-core/main.c
-     |
-     | Kbuild
-     v
-core/main.o ----> rootkitlings.ko
-                       |
-                       | insmod
-                       v
-                 load callback
-                       |
-                       | rmmod
-                       v
-                unload callback
+  build                          runtime
+
+  core/main.c                    insmod rootkitlings.ko
+       |                              |
+       | compile (Kbuild)             v
+       v                         rk_init() --> return 0
+  core/main.o                         |
+       |                         module is resident
+       | link                         |
+       v                         rmmod rootkitlings
+  rootkitlings.ko                     |
+                                      v
+                                 rk_exit()
+                                      |
+                                 module removed
 ```
 
 This is an **external module**: its source lives outside the kernel source tree,
