@@ -32,7 +32,6 @@ VERSION = 1
 REQUEST = 1
 REPLY = 2
 SEQUENCE_MAX = 0x7FFFFFFF
-GUEST_SHELL_PORT = 47024
 SHELL_PRELUDE_LENGTH = 31
 SHELL_TICKET = re.compile(r"OPEN ([0-9a-f]{8}) ([0-9a-f]{16})")
 SHELL_STATUS = re.compile(
@@ -84,6 +83,7 @@ class OperatorConsole(cmd.Cmd):
         warning: Callable[[str], None],
         success: Callable[[str], None],
         on_shell: Callable[[str], None],
+        shell_port: int = 0,
     ):
         super().__init__()
         self._exchange = exchange
@@ -92,6 +92,7 @@ class OperatorConsole(cmd.Cmd):
         self._warning = warning
         self._success = success
         self._on_shell = on_shell
+        self._shell_port = shell_port
         self._quit = False
 
     def _send(self, wire: str) -> str:
@@ -211,7 +212,7 @@ class OperatorConsole(cmd.Cmd):
         if sub == "status":
             self._send("SHELL STATUS")
             return
-        reply = self._send(f"SHELL {GUEST_SHELL_PORT}")
+        reply = self._send(f"SHELL {self._shell_port}")
         if reply and reply.startswith("OPEN "):
             self._on_shell(reply)
 
@@ -895,21 +896,31 @@ def accept_while_running(
     process,
     timeout: float = 0,
 ) -> socket.socket:
+    import selectors
+    sel = selectors.DefaultSelector()
+    sel.register(listener, selectors.EVENT_READ)
     deadline = (time.monotonic() + timeout) if timeout > 0 else 0
-    listener.settimeout(0.25)
-    while True:
-        if process.poll() is not None:
-            status = process.returncode
-            raise OperatorError(
-                f"target stopped before connecting ({status})"
-            )
-        if deadline and time.monotonic() > deadline:
-            raise OperatorError("timed out waiting for the target callback")
-        try:
-            peer, _ = listener.accept()
-            return peer
-        except TimeoutError:
-            continue
+    try:
+        while True:
+            if process.poll() is not None:
+                raise OperatorError(
+                    f"target stopped before connecting"
+                    f" ({process.returncode})"
+                )
+            if deadline:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise OperatorError(
+                        "timed out waiting for the target callback"
+                    )
+            else:
+                remaining = 1.0
+            if sel.select(timeout=remaining):
+                peer, _ = listener.accept()
+                return peer
+    finally:
+        sel.unregister(listener)
+        sel.close()
 
 
 def parse_shell_ticket(reply: str) -> tuple[int, int]:
@@ -1070,7 +1081,8 @@ def run_control_console(
             poll_shell_status(request_id, exchange)
 
         console = OperatorConsole(exchange, exchange_quiet, output,
-                                  warning, success, handle_shell)
+                                  warning, success, handle_shell,
+                                  operator.shell_port)
         if input_stream is not sys.stdin:
             console.use_rawinput = False
             console.stdin = input_stream

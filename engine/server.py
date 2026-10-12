@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import cmd
 import os
-import select
 import socket
 import socketserver
 import sys
@@ -15,7 +14,7 @@ from typing import Callable, TextIO
 
 from engine.control_console import (
     COMMAND_HELP,
-    GUEST_SHELL_PORT,
+
     HostOperator,
     OpenSslAead,
     OperatorError,
@@ -279,6 +278,7 @@ def _run_target_console(
 
     console = TargetConsole(
         exchange, exchange_quiet, output, warning, success, handle_shell,
+        target.operator.shell_port,
     )
     console.prompt = f"{target.id}> "
     try:
@@ -365,7 +365,11 @@ class _SessionHandler(socketserver.BaseRequestHandler):
                 lambda key: OpenSslAead(key, ctx["helper"], ctx["output"]),
             )
             session_id = secure.accept_hello(receive_frame(peer))
-        except Exception:
+        except Exception as e:
+            _server_print(
+                ctx["warning"],
+                f"reject   {ctx['exercise']}: {e}\n",
+            )
             return
 
         target = ctx["manager"].add(
