@@ -44,9 +44,17 @@ complete invariant.
 ## Define the write boundary
 
 Replace `proc_create_single_data()` with `proc_create_data()` and an explicit
-`struct proc_ops`.
-Keep `single_open()`, `seq_read()`, `seq_lseek()`, and `single_release()` for
-reads, then add the write callback.
+`struct proc_ops` that maps each file operation to a handler:
+
+```c
+.proc_open    = rk_open,       /* wraps single_open() with the show fn */
+.proc_read    = seq_read,      /* standard seq_file read */
+.proc_write   = rk_write,      /* your new write handler */
+.proc_lseek   = seq_lseek,     /* standard seq_file seek */
+.proc_release = single_release /* standard cleanup */
+```
+
+Keep the existing read path unchanged and add the write callback.
 
 The callback accepts exactly these byte sequences:
 

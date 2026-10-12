@@ -1,9 +1,10 @@
 # Hand a TCP socket to a root shell
 
-A kernel thread cannot become an interactive userspace shell.
-It has no userspace address space, executable image, or file-descriptor table.
+A kernel thread runs inside the kernel: it has no userspace memory, no program
+image, no file descriptors. It cannot become an interactive shell.
 
-Build the boundary instead:
+The solution is a **bridge**: the kernel creates a TCP socket and hands it to a
+userspace process that runs a real shell.
 
 ```text
 peer terminal <-> plaintext TCP <-> script PTY <-> interactive root Bash
@@ -16,10 +17,12 @@ socket, process, work item, or reference behind on unload.
 ## The handoff
 
 Create and connect one kernel socket from a work item.
-`sock_alloc_file()` gives that socket normal file semantics.
+`sock_alloc_file()` wraps that socket in a `struct file`, which is what
+userspace needs to use it as a file descriptor.
 
-Use a user-mode-helper setup callback to install three references to that file
-as descriptors 0, 1, and 2 in the helper's clean descriptor table.
+`call_usermodehelper_exec()` launches a userspace process from the kernel.
+Use its setup callback to install the socket file as descriptors 0, 1, and 2
+(stdin, stdout, stderr) in the new process.
 The fixed helper chain is:
 
 ```sh
@@ -28,8 +31,8 @@ The fixed helper chain is:
 ```
 
 `setsid` gives the helper its own session and process group.
-`script` allocates a pseudoterminal and forwards the socket-backed standard
-descriptors to an interactive Bash process.
+`script` allocates a pseudoterminal (PTY, a virtual terminal device) and
+forwards the socket-backed standard descriptors to an interactive Bash process.
 The peer therefore gets terminal behavior: command echo, prompts, CRLF line
 endings, job-control signals, and terminal escape sequences.
 This exercise does not carry terminal-resize metadata, so the shell is intended

@@ -25,53 +25,41 @@ actions=enabled
 worker_runs=3
 ```
 
-## Count requests; use the wait queue only to sleep
+## Wait queue and atomic counter
 
-The wait queue does not remember arrivals, so store the pending count in an
-`atomic_t`.
-Sleep with `wait_event_interruptible()` using the exact condition
-`pending > 0 || kthread_should_stop()`.
-Call `wake_up_interruptible()` only after publishing a request.
+A **wait queue** lets a thread sleep until a condition becomes true.
+It does not remember past wake-ups, so store the pending count in an
+`atomic_t` (an integer safe for concurrent read-modify-write).
 
-Use `atomic_add_unless(..., INT_MAX)` when a command is accepted.
-If it returns false, return `-EOVERFLOW` without changing the count or waking
-the thread.
+```text
+proc write "run"                 kernel thread
+      |                               |
+  atomic_add(pending)          wait_event_interruptible
+      |                          (pending > 0 || should_stop)
+  wake_up_interruptible              |
+                               atomic_dec_if_positive
+                                     |
+                               worker_runs++
+```
 
-After waking, check `kthread_should_stop()` before consuming work.
-Consume one unit with `atomic_dec_if_positive()` and record one `worker_runs`
-increment.
-It leaves an already-zero counter unchanged and returns a negative value.
-Recheck the wait condition instead of polling or delaying.
+- `atomic_add_unless(..., INT_MAX)`: increment pending unless already at max
+  (return `-EOVERFLOW` if false).
+- `wait_event_interruptible()`: sleep until `pending > 0 || kthread_should_stop()`.
+- `atomic_dec_if_positive()`: consume one unit (returns negative if already zero).
 
-The pending count needs atomic read-modify-write operations because proc writers
-add requests while the thread consumes them.
-The action switch is replaced as a whole, and one thread alone writes
-`worker_runs`, so those fields retain their supplied `READ_ONCE()` and
-`WRITE_ONCE()` operations.
-
-Each `run` samples the action switch once.
-Seeing disabled rejects the write; seeing enabled admits a unit that remains
-valid even if another writer immediately disables future actions.
-Concurrent successful writes must not merge: 100 successes must eventually add
-exactly 100 runs.
+Each `run` samples the action switch once. Disabled rejects the write.
+Concurrent writes must not merge: 100 successes produce exactly 100 runs.
 
 ## Lifecycle
 
-Start the thread after state allocation and before procfs publication.
-Failure point 4 supplies `ERR_PTR(-EINTR)` instead of creating the task.
-Handle that value through the same `IS_ERR()` and `PTR_ERR()` path as a real
-`kthread_run()` error.
-On creation failure, destroy state.
-On publication failure, stop and join the thread before destroying state.
+Start the thread after state allocation, before procfs publication.
+`kthread_run()` returns `ERR_PTR` on failure; handle with `IS_ERR()`.
 
-Unload in this order:
+Unload in reverse:
 
-1. remove the proc entry so no new commands begin
-2. call `kthread_stop()` to wake, stop, and join the thread
-3. destroy the state used by the thread
-
-`kthread_stop()` waits until the thread function exits.
-Pending units may be discarded once unload asks the thread to stop.
+1. remove proc entry
+2. `kthread_stop()` (wakes, stops, and joins the thread)
+3. destroy state
 
 ## Your task
 

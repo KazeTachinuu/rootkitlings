@@ -61,21 +61,19 @@ filesystem checks.
 The primary GID is separate from the supplementary group list, which this record
 does not render.
 
-## Separate the credential source from the numeric view
+## Translate IDs through the opener's namespace
 
-`current_cred()` describes the materializing task, not the opener.
-`seq_user_ns(output)` supplies the user namespace stored in
-`output->file->f_cred`, the immutable credential captured at open time.
-Translate every `kuid_t` and `kgid_t` through that opener namespace with
-`from_kuid_munged()` and `from_kgid_munged()`.
+Kernel UIDs (`kuid_t`) are internal, namespace-independent values.
+To print the number a userspace reader expects, translate each ID through the
+namespace of the process that opened the file:
 
-This matches `/proc/<pid>/status`.
-If an ID has no mapping in the opener's user namespace, the `*_munged()` helper
-emits the configured overflow ID.
+1. `seq_user_ns(output)` returns the opener's namespace (from `output->file->f_cred`).
+2. `from_kuid_munged(ns, kuid)` converts a kernel UID to a numeric UID in that
+   namespace. If the ID has no mapping there, it returns the overflow ID.
 
-An inherited or passed descriptor can therefore combine identity from the
-materializing task with numeric UID/GID coordinates from the opener.
-That split is the required record contract.
+This matches how `/proc/<pid>/status` prints UIDs.
+The identity comes from `current_cred()`; the numeric format comes from the
+opener's namespace.
 
 ## Capabilities also have a namespace
 

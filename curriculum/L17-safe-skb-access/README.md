@@ -64,29 +64,19 @@ Return `RK_SKB_ACCESS_TRUNCATED` if the requested offset or range exceeds the
 logical network-relative bytes.
 The IPv4 adapter requests exactly the first 20 bytes.
 
-Use `skb_network_offset()` as a signed value.
-A negative offset is valid when an earlier layer pulled `skb->data` past a
-stored network header.
-Reject `INT_MIN` before negating the offset, and prove a negative offset fits in
-`skb_headroom()`.
-For a nonnegative offset, prove it does not exceed `skb->len` before subtracting
-it.
+Apply checks in this order:
 
-Reject `data_len > len`, lengths that exceed the signed helper interface, and
-unreadable fragments before claiming an available byte count.
-After validating the network-relative range, add the requested offset with a
-wide signed type and prove the result fits the helper's signed `int` interface.
-For a negative final offset, also keep the helper's `skb_headlen() - offset`
-calculation within signed `int`.
-Use `skb_header_pointer_careful()` to obtain the bytes.
-Copy through a fixed local array and change neither output on failure.
+1. Invalid arguments: NULL pointers, empty or oversized request, offset > `S64_MAX`.
+2. Base geometry: `skb_network_offset()` as signed value. Reject `INT_MIN`.
+   For negative offset, prove it fits in `skb_headroom()`.
+   For nonnegative, prove it does not exceed `skb->len`.
+3. Unreadable fragments: `data_len > len` or lengths beyond signed helper range.
+4. Truncated range: requested offset or range exceeds available network bytes.
+5. Signed arithmetic fit: offset + request fits the helper's `int` interface.
+   For negative final offset, also keep `skb_headlen() - offset` within `int`.
+6. Copy: `skb_header_pointer_careful()` through a fixed local array.
 
-After invalid arguments and base geometry, an unreadable-fragment marker takes
-precedence over a truncated requested range.
-If an otherwise present range cannot fit the helper's signed arithmetic, return
-invalid geometry.
-If the safe-copy helper still cannot retrieve a range that the length fields
-claim exists, return unreadable.
+Change neither output on failure.
 
 The caller keeps the `sk_buff` geometry and data stable for the call.
 `bytes` and `available` are valid, non-overlapping outputs.

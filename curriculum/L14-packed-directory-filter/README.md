@@ -1,12 +1,12 @@
 # Hide one name from a directory listing
 
-An object can remain reachable by its exact path while a directory listing omits
-its name.
-Hide one controlled proc entry from native x86-64 directory listings without
-changing the object or corrupting its neighbors.
+When a program calls `ls` or `readdir()`, the kernel fills a buffer with
+directory entries via the `getdents64` syscall. Each entry is a variable-length
+record containing a filename, inode number, and a resume position.
 
-Success proves that you can validate and compact a packed result safely.
-`getdents64()` supplies that result as adjacent variable-length records.
+By removing one entry from this buffer before it reaches userspace, the
+filename disappears from every directory listing, but the file itself remains
+accessible by its full path.
 
 The supplied module creates `/proc/rklings_hidden`.
 A direct read still returns:
@@ -52,18 +52,16 @@ For each record, require:
 The buffer may be unaligned, so read `d_reclen` and `d_off` with `memcpy()`.
 Ignore padding after the first filename NUL.
 
-## Compaction and directory cookies
+## Compaction
 
 Compare filename length and bytes exactly.
 After validation, compact retained records with `memmove()`.
 
-`d_off` is an opaque resume cookie.
-For each removed record after a retained record, copy its `d_off` bytes into
-that retained record; a removed run leaves its last cookie there.
-Do not interpret or calculate cookies.
+`d_off` is an opaque position the kernel uses to resume reading.
+For each removed record after a retained record, copy its `d_off` into
+that retained record so the resumed position stays correct.
 
-If every record matches, return the chunk unchanged.
-Returning zero would falsely signal EOF after the kernel advanced position.
+If every record matches, return unchanged (returning zero would signal EOF).
 
 ## Your task
 

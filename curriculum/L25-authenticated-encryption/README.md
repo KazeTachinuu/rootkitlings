@@ -5,18 +5,6 @@ Seal turns private bytes into ciphertext with an authentication tag.
 Open releases the complete plaintext only when that tag is valid; a forged or
 damaged envelope releases no plaintext to the caller.
 
-## Your task
-
-Edit `crypto/aead.c` only.
-Implement `rk_aead_seal_with()` and `rk_aead_open_with()`, then keep the two
-kernel entry points as thin calls to `rk_kernel_aead_ops`.
-
-Run:
-
-```sh
-./rklings check
-```
-
 ## What this mechanism does
 
 AES-256-GCM takes a 32-byte key, 12-byte nonce, plaintext, and associated data.
@@ -34,7 +22,8 @@ Repeated open nonces are valid cryptographically but do not prevent replay.
 
 ## Linux AEAD layout
 
-The Linux 7.2 AEAD request sees one scatterlist in this lesson:
+A **scatterlist** describes a contiguous memory region for the crypto API.
+The AEAD request sees one scatterlist in this lesson:
 
 ```text
 seal:  AAD || plaintext || room for tag
@@ -51,9 +40,10 @@ Configure `gcm(aes)` for a 32-byte key, 12-byte IV, and 16-byte tag, then
 allocate the request.
 Keep every request object and buffer alive until completion.
 
-Always pass the immediate, `-EINPROGRESS`, or `-EBUSY` result to `wait_request`,
-which maps to `crypto_wait_req()`.
-Set `RK_AEAD_MAY_BACKLOG | RK_AEAD_MAY_SLEEP` in this sleepable context.
+Always pass the result to `wait_request` (maps to `crypto_wait_req()`), which
+handles immediate success, `-EINPROGRESS`, and `-EBUSY` completion.
+Set `RK_AEAD_MAY_BACKLOG | RK_AEAD_MAY_SLEEP` (the operation may sleep and
+queue behind other requests).
 
 ## Transaction rule
 
@@ -85,6 +75,18 @@ The guest checks NIST `gcmEncryptExtIV256.rsp` Count 0 with the real provider,
 plus block boundaries and tampering.
 Instrumented host tests inspect layout, deferred completion, lifetime, overlap,
 cleanup, and publication; only the NIST bytes judge cryptographic output.
+
+## Your task
+
+Edit `crypto/aead.c` only.
+Implement `rk_aead_seal_with()` and `rk_aead_open_with()`, then keep the two
+kernel entry points as thin calls to `rk_kernel_aead_ops`.
+
+Run:
+
+```sh
+./rklings check
+```
 
 ## References
 

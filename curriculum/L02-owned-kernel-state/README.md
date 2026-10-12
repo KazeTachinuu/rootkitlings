@@ -29,8 +29,12 @@ During unload, `rk_state_destroy()` releases it with `kfree()`.
 ## One return value
 
 `kzalloc(size, GFP_KERNEL)` returns zero-filled memory or `NULL`.
-The state constructor converts `NULL` to `ERR_PTR(-ENOMEM)` so every failure is
-carried in the returned pointer.
+`GFP_KERNEL` tells the allocator it may sleep while finding memory, which is
+allowed during module init but not inside interrupt handlers.
+
+A plain `NULL` carries no reason for the failure.
+The state constructor converts `NULL` to `ERR_PTR(-ENOMEM)`, encoding the exact
+negative errno into the pointer itself.
 The caller must use `IS_ERR()` before treating that value as an object and
 `PTR_ERR()` to recover the original negative error.
 An error pointer is encoded error information; it must never be dereferenced.

@@ -35,8 +35,11 @@ worker_runs=0
 ## Timer and work behavior
 
 A kernel timer is one-shot.
+`jiffies` is a kernel counter that increments on every timer tick;
+`msecs_to_jiffies(ms)` converts a millisecond interval to the corresponding
+number of ticks.
 The timer callback makes it periodic by calling `mod_timer()` with the current
-`jiffies` plus an interval converted by `msecs_to_jiffies()`.
+`jiffies` plus the converted interval.
 It performs only three bounded operations: record the firing, call
 `schedule_work()`, and rearm the timer.
 
@@ -66,8 +69,8 @@ lock.
 ## Ownership and shutdown
 
 `execution/scheduler.c` owns one timer and one work item.
-Its state pointer is borrowed from `core/main.c`; the scheduler neither
-allocates nor frees state.
+It receives a pointer to state owned by `core/main.c`; the scheduler neither
+allocates nor frees that state.
 Both callback objects are initialized before the timer is armed, so scheduler
 start has no failure path.
 

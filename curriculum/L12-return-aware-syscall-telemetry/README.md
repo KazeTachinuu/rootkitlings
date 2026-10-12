@@ -26,6 +26,10 @@ The `seen` fields reset on load and are flags, not counters.
 
 ## One invocation, two handlers
 
+A **kretprobe** fires twice: once when the function is entered, once when it
+returns. This lets you carry data from entry to return, so you can correlate
+arguments with results.
+
 This lesson probes the native x86-64 wrapper `__x64_sys_rmdir`.
 Concurrent calls forbid a global scratch variable.
 
@@ -75,7 +79,8 @@ The pinned build does not export `strncpy_from_user_nofault()`.
 ## Admit work once
 
 Read the action switch once.
-When disabled, return nonzero to suppress this call's return callback.
+When disabled, return nonzero to skip this call's return handler (the entry
+handler's return value controls whether the return handler fires).
 That value is not an errno and does not change `rmdir()`.
 When enabled, initialize the record, classify the path, and return zero.
 A call admitted before `disable` may record its result afterward.
@@ -104,10 +109,7 @@ publish procfs
 ```
 
 Release in reverse order.
-Install borrowed state before registration and keep it through
-`unregister_kretprobe()`.
-Failure point 4 returns `-ENOENT` with no probe or proc entry.
-If proc publication fails, unregister before freeing state.
+If proc publication fails, unregister the probe before freeing state.
 
 The debugfs Kprobe registry provides independent lifecycle evidence.
 

@@ -20,8 +20,14 @@ Each message is exactly 36 bytes:
 |     19 |    1 | reserved, exactly `0`                                  |
 |     20 |   16 | first 16 bytes of HMAC-SHA-256 over bytes 0 through 19 |
 
-Plain SHA-256 cannot authenticate a command because an attacker can hash a
-changed command.
+## HMAC: keyed authentication
+
+Plain SHA-256 cannot authenticate a command because anyone can compute
+`SHA-256(altered message)`.
+HMAC adds a secret key: only someone who knows the key can produce a
+valid tag, and the receiver can verify it.
+If the tag matches, the message came from a key holder and was not altered.
+
 Use the supplied `hmac(sha256)` context, which installs the key with
 `crypto_shash_setkey()` and computes the MAC with `crypto_shash_digest()`.
 Do not invent a keyed construction from plain SHA-256.

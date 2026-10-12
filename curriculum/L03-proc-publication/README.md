@@ -26,20 +26,18 @@ state before it returns the publication error.
 ## The procfs owner
 
 `interface/proc.c` alone stores the `struct proc_dir_entry *`.
-It publishes the entry with `proc_create_single()` and removes the entry with
-`proc_remove()`.
+It publishes the entry with `proc_create_single(name, mode, parent, show_fn)`:
+the name to appear under `/proc`, a permissions mode, a parent directory (NULL
+for `/proc` itself), and a show callback that writes the file's content.
+It removes the entry with `proc_remove()`.
 
 The supplied show function returns one fixed line, `active`, so the read-only
 entry has real behavior from the moment it appears.
 This lesson owns publication and cleanup.
 State snapshots are outside this exercise.
 
-## Failure point 3
-
-Failure point 3 makes the publication result `NULL` after state exists.
-It then follows the same error path as a real `proc_create_single()` allocation
-failure: return `-ENOMEM` and let the init callback roll back state.
-The init callback preserves that error and destroys the state it already owns.
+Failure point 3 simulates `proc_create_single()` returning `NULL` after state
+already exists. The init callback must return `-ENOMEM` and roll back state.
 
 ## Your task
 

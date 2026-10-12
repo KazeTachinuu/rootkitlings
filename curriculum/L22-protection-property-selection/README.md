@@ -24,8 +24,8 @@ That is obfuscation, not confidentiality or integrity.
 - **Message integrity and origin:** use HMAC-SHA-256 with a shared key.
 - **Authentication and freshness:** authenticate a sequence number and retain
   replay state.
-- **Confidentiality and authentication:** use AEAD with a secret key and a nonce
-  unique for that key.
+- **Confidentiality and authentication:** use AEAD (Authenticated Encryption
+  with Associated Data) with a secret key and a nonce unique for that key.
 - **Confidentiality and freshness:** combine AEAD with replay state.
 
 A digest stored beside an artifact is not trusted if an attacker can replace
