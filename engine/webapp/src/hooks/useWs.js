@@ -12,7 +12,7 @@ export function useWs() {
 
   const connect = useCallback(() => {
     const host = location.hostname || 'localhost'
-    const port = location.port === '5173' ? 8081 : 8081
+    const port = location.port === '5173' ? 8080 : (location.port || '8080')
     try {
       const ws = new WebSocket(`ws://${host}:${port}`)
       ws.onopen = () => {

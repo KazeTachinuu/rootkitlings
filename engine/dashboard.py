@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Callable
 if TYPE_CHECKING:
     from engine.server import Target, TargetManager
 
-WS_PORT = 8081
 HTTP_PORT = 8080
 
 _manager: TargetManager | None = None
@@ -159,14 +158,42 @@ async def _ws_handler(ws):
         _ws_clients.discard(ws)
 
 
+def _is_ws_upgrade(request: bytes) -> str | None:
+    """Return the Sec-WebSocket-Key if this is a WS upgrade request."""
+    for line in request.decode(errors="replace").splitlines():
+        if line.lower().startswith("sec-websocket-key:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
 async def _http_handler(reader: asyncio.StreamReader,
                         writer: asyncio.StreamWriter,
                         root: Path, index: str) -> None:
-    """Serve static files over HTTP using asyncio streams."""
+    """Serve static files and WebSocket upgrades on the same port."""
+    from engine.ws import WebSocket, _accept_key
+
     try:
         request = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5.0)
     except (asyncio.TimeoutError, asyncio.IncompleteReadError):
         writer.close()
+        return
+
+    ws_key = _is_ws_upgrade(request)
+    if ws_key is not None:
+        response = (
+            "HTTP/1.1 101 Switching Protocols\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Accept: {_accept_key(ws_key)}\r\n"
+            "\r\n"
+        )
+        writer.write(response.encode())
+        await writer.drain()
+        ws = WebSocket(reader, writer)
+        try:
+            await _ws_handler(ws)
+        finally:
+            ws.close()
         return
 
     line = request.split(b"\r\n", 1)[0].decode(errors="replace")
@@ -202,10 +229,9 @@ async def _http_handler(reader: asyncio.StreamReader,
     writer.close()
 
 
-def _run_servers(ws_port: int, http_port: int, html_path: Path) -> None:
-    """Single event loop for both WebSocket and HTTP servers."""
+def _run_server(http_port: int, html_path: Path) -> None:
+    """Single event loop for HTTP + WS on one port."""
     global _loop
-    from engine.ws import serve as ws_serve
 
     root = html_path.parent.resolve()
     index = html_path.name
@@ -214,16 +240,13 @@ def _run_servers(ws_port: int, http_port: int, html_path: Path) -> None:
         global _loop
         _loop = asyncio.get_running_loop()
 
-        http = await asyncio.start_server(
+        server = await asyncio.start_server(
             lambda r, w: _http_handler(r, w, root, index),
             "0.0.0.0", http_port,
         )
 
-        async with http:
-            await asyncio.gather(
-                http.serve_forever(),
-                ws_serve(_ws_handler, "0.0.0.0", ws_port),
-            )
+        async with server:
+            await server.serve_forever()
 
     asyncio.run(run())
 
@@ -233,18 +256,17 @@ def start_dashboard(
     html_path: Path,
     output: Callable[[str], None],
     *,
-    ws_port: int = WS_PORT,
     http_port: int = HTTP_PORT,
+    **_kwargs,
 ) -> None:
-    """Start the dashboard servers as a single daemon thread."""
+    """Start the dashboard server as a daemon thread."""
     global _manager
     _manager = manager
 
     threading.Thread(
-        target=_run_servers,
-        args=(ws_port, http_port, html_path),
+        target=_run_server,
+        args=(http_port, html_path),
         daemon=True, name="dashboard",
     ).start()
 
     output(f"  dashboard: http://localhost:{http_port}\n")
-    output(f"  websocket: ws://localhost:{ws_port}\n")
