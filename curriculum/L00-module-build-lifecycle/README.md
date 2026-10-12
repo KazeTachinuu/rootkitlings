@@ -30,7 +30,7 @@ object, whose filename ends in `.ko`:
        |                         module is resident
        | link                         |
        v                         rmmod rklings
-  rklings.ko                     |
+  rklings.ko                          |
                                       v
                                  rk_exit()
                                       |
