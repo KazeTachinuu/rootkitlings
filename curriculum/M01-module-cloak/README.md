@@ -74,6 +74,8 @@ Invalid commands return an error without changing state.
 
 ## Your task
 
+Edit `main.c`.
+
 Implement `rk_module_cloak()` and `rk_module_uncloak()`. The proc
 interface and command parsing are provided.
 

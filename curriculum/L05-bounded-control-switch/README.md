@@ -86,11 +86,10 @@ Keep proc removal before state destruction.
 
 ## Your task
 
-Edit these three files:
-
-- `include/rootkit.h`
-- `core/state.c`
-- `interface/proc.c`
+- `include/rootkit.h`: declare the action switch accessors
+- `core/state.c`: add the `actions` field, implement enable/disable/query
+- `interface/proc.c`: replace `proc_create_single_data` with `proc_create_data`
+  and a `struct proc_ops`, add the write handler
 
 Run:
 

@@ -51,6 +51,8 @@ internal behavior can change between kernel versions.
 
 ## Your task
 
+Edit `main.c`.
+
 Implement `rk_tcp_show_pre`: check the port of each socket and return 1
 to hide it, 0 to let it through. The `hidden_port` module parameter is
 already wired up.
