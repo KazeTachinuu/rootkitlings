@@ -71,7 +71,7 @@ function Shell() {
             {targets.map(t => (
               <button
                 key={t.id}
-                title={collapsed ? `${t.hostname || t.id} (${t.exercise})` : undefined}
+                title={collapsed ? ((t.hostname && t.hostname !== '(none)') ? t.hostname : t.id) : undefined}
                 className={`w-full flex items-center gap-2 text-sm text-left rounded-[var(--radius)] border-2 transition-all
                   ${collapsed ? 'p-1.5 justify-center' : 'px-2 py-1.5'}
                   ${page.targetId === t.id
@@ -81,8 +81,7 @@ function Shell() {
               >
                 <span className={`w-2 h-2 rounded-full shrink-0 ${t.online ? 'bg-green pulse' : 'bg-red'}`} />
                 {!collapsed && <>
-                  <span className="truncate">{t.hostname || t.id}</span>
-                  <span className="ml-auto text-[10px] font-mono opacity-50">{t.exercise}</span>
+                  <span className="truncate">{(t.hostname && t.hostname !== '(none)') ? t.hostname : t.id}</span>
                 </>}
               </button>
             ))}

@@ -98,14 +98,13 @@ function TargetCard({ target: t, onClick }) {
       <div className="p-4 space-y-3">
         <div className="flex items-start justify-between">
           <div>
-            <div className="font-bold text-lg">{t.hostname || t.id}</div>
+            <div className="font-bold text-lg">{(t.hostname && t.hostname !== '(none)') ? t.hostname : t.id}</div>
             <div className="text-xs font-mono text-fg-3">{t.id}</div>
           </div>
           <Badge label={t.online ? 'Online' : 'Offline'} color={t.online ? 'green' : 'red'} />
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-sm">
-          <Field label="Exercise" value={t.exercise} />
           <Field label="Kernel" value={`${t.kernel || '--'} ${t.arch || ''}`} />
           <Field label="Module" value={t.module_hidden ? 'Hidden' : 'Visible'} color={t.module_hidden ? 'text-green' : 'text-fg-3'} />
           <Field label="Hidden" value={total ? `${total} items` : 'None'} color={total ? 'text-amber' : 'text-fg-3'} />
@@ -138,7 +137,7 @@ function TargetTable({ targets, onNavigate }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b-2 border-border bg-bg-2">
-            <Th>Status</Th><Th>Target</Th><Th>Exercise</Th><Th>Kernel</Th><Th>Module</Th><Th>Hidden</Th><th className="w-8" />
+            <Th>Status</Th><Th>Target</Th><Th>Kernel</Th><Th>Module</Th><Th>Hidden</Th><th className="w-8" />
           </tr>
         </thead>
         <tbody>
@@ -148,10 +147,9 @@ function TargetTable({ targets, onNavigate }) {
               <tr key={t.id} className="border-b-2 border-border hover:bg-bg-2 cursor-pointer transition-colors" onClick={() => onNavigate(t.id)}>
                 <td className="px-4 py-2.5"><Badge label={t.online ? 'Online' : 'Offline'} color={t.online ? 'green' : 'red'} /></td>
                 <td className="px-4 py-2.5">
-                  <div className="font-bold">{t.hostname || t.id}</div>
+                  <div className="font-bold">{(t.hostname && t.hostname !== '(none)') ? t.hostname : t.id}</div>
                   <div className="text-xs font-mono text-fg-3">{t.id}</div>
                 </td>
-                <td className="px-4 py-2.5 font-mono">{t.exercise}</td>
                 <td className="px-4 py-2.5 font-mono text-xs">{t.kernel || '--'} {t.arch || ''}</td>
                 <td className="px-4 py-2.5">{t.module_hidden ? <span className="font-bold text-green">Hidden</span> : <span className="text-fg-3">Visible</span>}</td>
                 <td className="px-4 py-2.5">{total ? <span className="font-bold text-amber">{total}</span> : <span className="text-fg-3">0</span>}</td>

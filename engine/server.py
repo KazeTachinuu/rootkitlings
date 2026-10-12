@@ -65,10 +65,14 @@ class Target:
 
     def exchange(self, command: str) -> str:
         with self._lock:
-            payload = encode_control_command(command)
-            send_frame(self.peer, self.secure.seal_request(payload))
-            reply = self.secure.open_reply(receive_frame(self.peer))
-            return reply.decode("ascii", errors="replace")
+            try:
+                payload = encode_control_command(command)
+                send_frame(self.peer, self.secure.seal_request(payload))
+                reply = self.secure.open_reply(receive_frame(self.peer))
+                return reply.decode("ascii", errors="replace")
+            except Exception:
+                self.online = False
+                raise
 
     def close(self) -> None:
         self.online = False
@@ -388,23 +392,18 @@ class _SessionHandler(socketserver.BaseRequestHandler):
             f"connect {target.id} {ctx['exercise']}{info}", "connect",
         )
 
-        # TCP keepalive: let the OS detect dead connections
+        # TCP keepalive so the OS detects dead connections
         peer.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 5)
         peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 2)
         peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
 
-        # Block until disconnected: select detects EOF/error
-        try:
-            while target.online:
-                readable, _, _ = select.select([peer], [], [], 5.0)
-                if readable:
-                    if not peer.recv(1, socket.MSG_PEEK):
-                        break
-        except Exception:
-            pass
-
-        target.online = False
+        # Wait until the connection drops. The socket is shared with
+        # dashboard and console threads via target.exchange(), so we
+        # must not read/peek from it here. A failed exchange() sets
+        # target.online = False; we just watch that flag.
+        while target.online and ctx["process"].poll() is None:
+            time.sleep(1)
         _server_print(
             ctx["warning"],
             f"lost     {target.id} ({ctx['exercise']}):"
