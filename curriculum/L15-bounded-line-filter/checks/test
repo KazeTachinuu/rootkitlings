@@ -117,31 +117,33 @@ expect_host_rejection "$scratch/starter" an-empty-helper
 
 off_by_one=$scratch/host-off-by-one
 cp -a "$scratch/success" "$off_by_one"
-sed -i 's/index <= length - width/index < length - width/' \
+sed -i 's/i <= end/i < end/' \
 	"$off_by_one/instrumentation/replace.c"
 expect_host_rejection "$off_by_one" an-off-by-one-loop
 
-overlap=$scratch/host-overlap
-cp -a "$scratch/success" "$overlap"
-sed -i 's/index += width;/index++;/' "$overlap/instrumentation/replace.c"
-expect_host_rejection "$overlap" overlapping-matches
+skip_line=$scratch/host-skip-line
+cp -a "$scratch/success" "$skip_line"
+sed -i 's/if (!match)/if (match)/' "$skip_line/instrumentation/replace.c"
+expect_host_rejection "$skip_line" inverted-match-logic
 
 string_only=$scratch/host-string-only
 cp -a "$scratch/success" "$string_only"
-sed -i '/size_t count = 0;/a\
-\tlength = strlen((const char *)bytes);' \
+sed -i '/size_t read_pos = 0;/a\
+\tlength = strlen((const char *)buffer);' \
 	"$string_only/instrumentation/replace.c"
 expect_host_rejection "$string_only" C-string-processing
 
 secret_only=$scratch/host-secret-only
 cp -a "$scratch/success" "$secret_only"
-sed -i 's/memcmp(bytes + index, from, width)/memcmp(bytes + index, "SECRET", 6)/' \
+sed -i 's/memcmp(line + i, target,/memcmp(line + i, "SECRET",/' \
+	"$secret_only/instrumentation/replace.c"
+sed -i 's/target_length) == 0/6) == 0/' \
 	"$secret_only/instrumentation/replace.c"
 expect_host_rejection "$secret_only" a-hard-coded-pattern
 
 out_of_range=$scratch/host-out-of-range
 cp -a "$scratch/success" "$out_of_range"
-sed -i 's/index <= length - width/index <= length/' \
+sed -i 's/i <= end/i <= line_len/' \
 	"$out_of_range/instrumentation/replace.c"
 expect_host_rejection "$out_of_range" an-out-of-range-comparison
 

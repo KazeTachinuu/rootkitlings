@@ -5,7 +5,7 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
 ROOT=$RKLINGS_ROOT
-SECURE_AGENT=$HERE/../../M08-authenticated-reverse-shell
+SECURE_AGENT=$HERE/../../M05-authenticated-channel
 AUTHORIZED=$HERE/../../M02-authorized-actions-telemetry
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-complete-rootkit.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT

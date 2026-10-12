@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0
+#ifdef __KERNEL__
 #include <linux/string.h>
 #include <linux/types.h>
 #include "rootkit.h"
+#else
+#include <stddef.h>
+#include <string.h>
+#endif
 
 #include "replace.h"
 
