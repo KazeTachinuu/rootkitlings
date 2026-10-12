@@ -17,7 +17,7 @@ can run in interrupt context (the kretprobe trampoline fires on
 function return, which may happen during interrupt processing). Using
 `spin_lock_irqsave` / `spin_unlock_irqrestore` is mandatory.
 
-```
+```c
 spin_lock_irqsave(&list->lock, flags);
 // iterate, match, or modify
 spin_unlock_irqrestore(&list->lock, flags);

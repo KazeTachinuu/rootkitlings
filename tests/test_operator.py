@@ -403,7 +403,7 @@ class FramingTests(unittest.TestCase):
     def test_invalid_input_warns_then_returns_next_command(self) -> None:
         stream = io.StringIO(
             "unknown\n"
-            "mark café\n"
+            "mark caf\xe9\n"
             "mark this message is much too long\n"
             "help\n"
             "status\n"

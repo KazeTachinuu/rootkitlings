@@ -47,7 +47,7 @@ wrong sequence, it is rejected.
 
 The 12-byte GCM nonce is built from three values:
 
-```
+```text
 bytes 0-7:  session ID (big-endian u64)
 bytes 8-11: (sequence << 1 | direction) (big-endian u32)
 ```
