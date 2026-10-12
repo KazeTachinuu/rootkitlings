@@ -11,14 +11,14 @@ static struct rk_state *probe_state;
 
 static int rk_vfs_mkdir_pre(struct kprobe *probe, struct pt_regs *registers)
 {
-	/* TODO: mark vfs_mkdir only when this invocation is admitted. */
+	/* TODO: record this event when actions are enabled. */
 	return 0;
 }
 
 static int rk_filename_rmdir_pre(struct kprobe *probe,
 				 struct pt_regs *registers)
 {
-	/* TODO: mark filename_rmdir only when this invocation is admitted. */
+	/* TODO: record this event when actions are enabled. */
 	return 0;
 }
 
@@ -49,8 +49,8 @@ __must_check int rk_probes_start(struct rk_state *state)
 		return -EINVAL;
 
 	probe_state = state;
+	/* TODO: arm all probes and keep the result. */
 	(void)probes;
-	/* TODO: register the complete probe set and keep the returned error. */
 	error = -EOPNOTSUPP;
 	if (error)
 		probe_state = NULL;
@@ -62,6 +62,6 @@ void rk_probes_stop(void)
 	if (!probe_state)
 		return;
 
-	/* TODO: unregister the complete set before releasing borrowed state. */
+	/* TODO: disarm all probes before releasing borrowed state. */
 	probe_state = NULL;
 }

@@ -16,27 +16,12 @@ static struct proc_dir_entry *control_entry;
 
 static void rk_module_cloak(void)
 {
-	/*
-	 * TODO: hide the module from /proc/modules (lsmod).
-	 *
-	 * If already cloaked, return early.
-	 * Save THIS_MODULE->list.prev so you can re-insert later.
-	 * Call list_del(&THIS_MODULE->list) to unlink from the
-	 * kernel's module list.
-	 * Set cloaked = true.
-	 */
+	/* TODO: hide the module from /proc/modules (lsmod). */
 }
 
 static void rk_module_uncloak(void)
 {
-	/*
-	 * TODO: restore the module to /proc/modules.
-	 *
-	 * If not cloaked, return early.
-	 * Call list_add(&THIS_MODULE->list, saved_prev) to re-insert
-	 * at the saved position.
-	 * Set cloaked = false.
-	 */
+	/* TODO: restore the module to /proc/modules. */
 }
 
 static ssize_t rk_control_write(struct file *file, const char __user *buffer,

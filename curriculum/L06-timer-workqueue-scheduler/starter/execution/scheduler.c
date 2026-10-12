@@ -13,20 +13,20 @@ static struct work_struct action_work;
 
 static void rk_action_run(struct work_struct *work)
 {
-	/* TODO: admit a run through the action switch and record it. */
+	/* TODO: execute a guarded action cycle. */
 }
 
 static void rk_action_timer(struct timer_list *timer)
 {
-	/* TODO: record the firing, queue work, and rearm the timer. */
+	/* TODO: bridge the timer into the work queue and keep it running. */
 }
 
 void rk_scheduler_start(struct rk_state *state)
 {
-	/* TODO: initialize the borrowed state, work, and timer, then arm the timer. */
+	/* TODO: set up and start the periodic execution engine. */
 }
 
 void rk_scheduler_stop(void)
 {
-	/* TODO: shut down the timer, cancel work synchronously, then clear state. */
+	/* TODO: tear down the execution engine cleanly. */
 }

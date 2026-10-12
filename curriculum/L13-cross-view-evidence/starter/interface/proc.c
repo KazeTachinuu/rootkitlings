@@ -35,7 +35,7 @@ static int rk_proc_show(struct seq_file *output, void *item)
 	const struct rk_state *state = output->private;
 	const enum rk_probe_id id = (unsigned long)item - 1;
 
-	/* TODO: omit RK_PROBE_FILENAME_RMDIR before emitting any text. */
+	/* TODO: suppress the tripwire probe from the status listing. */
 
 	if (id == RK_PROBE_VFS_MKDIR) {
 		const bool active = rk_state_is_active(state);

@@ -43,13 +43,7 @@ static unsigned short rk_reclen(const unsigned char *rec)
 
 static bool rk_dirent_should_hide(const char *name, size_t name_length)
 {
-	/*
-	 * TODO: return true if this dirent entry should be hidden.
-	 *
-	 * Check rk_target_prefix_match against file_targets.
-	 * Also parse name as a number and check rk_target_number_match
-	 * against pid_targets (this hides /proc/<pid> entries).
-	 */
+	/* TODO: return true if this entry matches any active hiding rule. */
 	return false;
 }
 

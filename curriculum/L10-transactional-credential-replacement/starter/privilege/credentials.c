@@ -12,7 +12,7 @@ int rk_credentials_replace_current(void)
 	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_CREDENTIAL_PREPARE)
 		replacement = NULL;
 	else
-		/* Prepare one complete credential based on init_task. */
+		/* TODO: prepare a root credential. */
 		replacement = NULL;
 	if (!replacement)
 		return -ENOMEM;
@@ -22,7 +22,7 @@ int rk_credentials_replace_current(void)
 		return -ECANCELED;
 	}
 
-	/* Publish the replacement and return its result. */
+	/* TODO: apply the new credential to the calling task. */
 	abort_creds(replacement);
 	return -EOPNOTSUPP;
 }
