@@ -19,7 +19,6 @@ from engine.control_console import (
     create_target_session,
     read_target_session,
     run_control_console,
-    wait_for_operator,
 )
 from engine.state import StateStore, StateError
 from engine.verification import VerificationError, build_verification_cases
@@ -619,12 +618,10 @@ def boot_exercise(x, module):
         except OperatorError as error:
             raise CLIError(str(error)) from error
         try:
-            UI.section('Connect from another terminal')
-            UI.command(f'./rklings connect {label(x)}')
-            UI.progress('Waiting for both operator listeners')
-            wait_for_operator(target)
-            UI.success('Operator listeners ready')
             UI.section('Target console')
+            UI.progress(
+                f'Connect the operator: ./rklings connect {label(x)}'
+            )
             command = [
                 str(ROOT / 'vm/boot'),
                 '--runtime-setup', str(ROOT / x.runtime.setup),
