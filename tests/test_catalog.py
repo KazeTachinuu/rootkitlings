@@ -79,7 +79,7 @@ class GeneratedSerialTests(unittest.TestCase):
             text=True,
             capture_output=True,
         )
-        self.assertEqual(query.stdout, "rootkitlings.ko\n")
+        self.assertEqual(query.stdout, "rklings.ko\n")
         exported = subprocess.run(
             [str(ROOT / "scripts/catalog"), "export"],
             cwd=ROOT,
@@ -88,10 +88,10 @@ class GeneratedSerialTests(unittest.TestCase):
             capture_output=True,
         )
         data = json.loads(exported.stdout)
-        self.assertEqual(data["default_module_artifact"], "rootkitlings.ko")
+        self.assertEqual(data["default_module_artifact"], "rklings.ko")
         self.assertEqual(
             data["exercises"][0]["workspace"]["module_artifact"],
-            "rootkitlings.ko",
+            "rklings.ko",
         )
         self.assertIsNone(
             data["exercises"][0]["workspace"]["module_artifact_override"]
@@ -101,7 +101,7 @@ class GeneratedSerialTests(unittest.TestCase):
             [{
                 "id": "normal-lifecycle",
                 "label": "Normal load and unload",
-                "build_variables": {"ROOTKITLINGS_FAIL_POINT": "0"},
+                "build_variables": {"RKLINGS_FAIL_POINT": "0"},
                 "expect_build": "pass",
                 "check": (
                     "curriculum/L00-module-build-lifecycle/"
@@ -529,7 +529,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             root = Path(directory)
             for tree, files in {
                 "provider-solution": {
-                    "Kbuild": "obj-m += rootkitlings.o\n",
+                    "Kbuild": "obj-m += rklings.o\n",
                     "main.c": "int inherited;\n",
                 },
                 "consumer-starter": {
@@ -571,7 +571,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             materialized = catalog.materialize_starter(consumer, work)
             self.assertEqual(
                 (materialized / "Kbuild").read_text(),
-                "obj-m += rootkitlings.o\n",
+                "obj-m += rklings.o\n",
             )
 
     def test_direct_prerequisites_reject_duplicates_and_transitive_edges(self) -> None:
@@ -781,21 +781,21 @@ class WorkspaceInheritanceTests(unittest.TestCase):
         overridden = _exercise(
             "overridden",
             "starter",
-            module_artifact="rootkitlings.ko",
+            module_artifact="rklings.ko",
         )
         inherited = _exercise(
             "inherited", "parent", parent="overridden"
         )
         catalog = self.catalog((overridden, inherited), (defaulted,))
         self.assertEqual(catalog.module_artifact(defaulted), "hello.ko")
-        self.assertEqual(catalog.module_artifact(overridden), "rootkitlings.ko")
-        self.assertEqual(catalog.module_artifact(inherited), "rootkitlings.ko")
+        self.assertEqual(catalog.module_artifact(overridden), "rklings.ko")
+        self.assertEqual(catalog.module_artifact(inherited), "rklings.ko")
 
     def test_inherited_module_artifact_cannot_conflict(self) -> None:
         provider = _exercise(
             "provider",
             "starter",
-            module_artifact="rootkitlings.ko",
+            module_artifact="rklings.ko",
         )
         consumer = _exercise(
             "consumer",
@@ -975,8 +975,8 @@ class ModuleArtifactValidationTests(unittest.TestCase):
         from engine.catalog import _module_artifact
 
         self.assertEqual(
-            _module_artifact("rootkitlings_test-1.ko", Path("test")),
-            "rootkitlings_test-1.ko",
+            _module_artifact("rklings_test-1.ko", Path("test")),
+            "rklings_test-1.ko",
         )
 
 

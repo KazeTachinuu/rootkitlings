@@ -51,7 +51,7 @@ int main(void)
 {
 	struct rk_state *state;
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_STATE_ALLOC) {
+	if (RKLINGS_FAIL_POINT == RK_FAIL_STATE_ALLOC) {
 		allocation_available = true;
 		state = rk_state_create();
 		require(IS_ERR(state) && PTR_ERR(state) == -ENOMEM,

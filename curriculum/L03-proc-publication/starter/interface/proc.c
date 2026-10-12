@@ -9,4 +9,4 @@ static int rk_status_show(struct seq_file *output, void *unused)
 	return 0;
 }
 
-/* TODO: own the /proc/rootkitlings entry here with rk_status_show(). */
+/* TODO: own the /proc/rklings entry here with rk_status_show(). */

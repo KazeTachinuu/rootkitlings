@@ -20,5 +20,5 @@ rk_target_add with the rest of the string. For unhide, parse the index
 with kstrtouint and call rk_target_remove.
 
 For init: init both lists, register_kretprobe(&read_probe),
-register_kprobe(&tcp_probe), proc_create("rootkitlings", 0600, ...).
+register_kprobe(&tcp_probe), proc_create("rklings", 0600, ...).
 Unwind on failure. Exit in reverse order.

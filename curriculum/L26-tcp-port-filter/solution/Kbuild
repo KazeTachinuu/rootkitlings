@@ -1,2 +1,2 @@
-obj-m += rootkitlings.o
-rootkitlings-y := main.o
+obj-m += rklings.o
+rklings-y := main.o

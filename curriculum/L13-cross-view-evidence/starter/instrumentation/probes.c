@@ -5,7 +5,7 @@
 
 #include "rootkit.h"
 
-#define RK_MISSING_TARGET "__rootkitlings_missing_kprobe_target_7_2__"
+#define RK_MISSING_TARGET "__rklings_missing_kprobe_target_7_2__"
 
 static struct rk_state *probe_state;
 
@@ -30,7 +30,7 @@ static struct kprobe probe_catalog[RK_PROBE_COUNT] = {
 		.pre_handler = rk_vfs_mkdir_pre,
 	},
 	[RK_PROBE_FILENAME_RMDIR] = {
-#if ROOTKITLINGS_FAIL_POINT == RK_FAIL_SECOND_PROBE
+#if RKLINGS_FAIL_POINT == RK_FAIL_SECOND_PROBE
 		.symbol_name = RK_MISSING_TARGET,
 #else
 		.symbol_name = "filename_rmdir",

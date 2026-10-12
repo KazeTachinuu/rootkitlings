@@ -13,8 +13,8 @@
 #include "platform.h"
 
 #define RK_DIR "/etc/modules-load.d"
-#define RK_TARGET RK_DIR "/rootkitlings.conf"
-#define RK_SIBLING RK_DIR "/.rootkitlings.conf.staging"
+#define RK_TARGET RK_DIR "/rklings.conf"
+#define RK_SIBLING RK_DIR "/.rklings.conf.staging"
 
 static struct path dir_path;
 static bool prepared;
@@ -234,5 +234,5 @@ out_path:
 
 void rk_platform_warn_preserved(void)
 {
-	pr_warn("rootkitlings: persistence transaction incomplete; stopping without further changes\n");
+	pr_warn("rklings: persistence transaction incomplete; stopping without further changes\n");
 }

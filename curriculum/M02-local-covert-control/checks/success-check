@@ -4,25 +4,25 @@
 
 begin "Local covert control"
 
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 assert_exists /proc/rkling_status
 
-if lsmod | grep -q rootkitlings; then
+if lsmod | grep -q rklings; then
 	_ok "module visible before cloak"
 else
 	_fail "module not visible before cloak"
 fi
 
 mkdir rkling.h.m 2>/dev/null
-if ! lsmod | grep -q rootkitlings; then
+if ! lsmod | grep -q rklings; then
 	_ok "mkdir rkling.h.m hides module"
 else
 	_fail "module still visible after hide"
 fi
 
 mkdir rkling.u.m 2>/dev/null
-if lsmod | grep -q rootkitlings; then
+if lsmod | grep -q rklings; then
 	_ok "mkdir rkling.u.m restores module"
 else
 	_fail "module not visible after unhide"
@@ -42,7 +42,7 @@ else
 	_fail "normal mkdir is broken"
 fi
 
-unload rootkitlings
+unload rklings
 assert_absent /proc/rkling_status
 
 if dmesg | grep -Eqi '(BUG:|WARNING:|Oops:|KASAN:|UBSAN:|hung task)'; then

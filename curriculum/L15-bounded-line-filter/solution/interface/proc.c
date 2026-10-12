@@ -42,10 +42,10 @@ __must_check int rk_proc_publish(void)
 	if (proc_entry)
 		return -EINVAL;
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH)
+	if (RKLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH)
 		proc_entry = NULL;
 	else
-		proc_entry = proc_create("rootkitlings", 0400, NULL,
+		proc_entry = proc_create("rklings", 0400, NULL,
 					 &rk_proc_ops);
 	if (!proc_entry)
 		return -ENOMEM;

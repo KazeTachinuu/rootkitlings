@@ -79,6 +79,7 @@ class OperatorConsole(cmd.Cmd):
     def __init__(
         self,
         exchange: Callable[[str], str],
+        exchange_quiet: Callable[[str], str],
         output: Callable[[str], None],
         warning: Callable[[str], None],
         success: Callable[[str], None],
@@ -86,6 +87,7 @@ class OperatorConsole(cmd.Cmd):
     ):
         super().__init__()
         self._exchange = exchange
+        self._exchange_quiet = exchange_quiet
         self._output = output
         self._warning = warning
         self._success = success
@@ -106,15 +108,15 @@ class OperatorConsole(cmd.Cmd):
         return self._exchange(wire)
 
     def _list_category(self, category: str) -> None:
-        count_reply = self._exchange(f"LIST {category}")
+        count_reply = self._exchange_quiet(f"LIST {category}")
         if not count_reply.startswith("LIST "):
             return
         count = int(count_reply.split()[1])
         if count == 0:
-            self._output(f"  {category.lower()}: (empty)\n")
+            self._output(f"  (empty)\n")
             return
         for i in range(count):
-            entry_reply = self._exchange(f"LIST {category} {i}")
+            entry_reply = self._exchange_quiet(f"LIST {category} {i}")
             if entry_reply.startswith("ENTRY "):
                 parts = entry_reply.split(None, 2)
                 value = parts[2] if len(parts) > 2 else ""
@@ -180,7 +182,7 @@ class OperatorConsole(cmd.Cmd):
         return [c for c in _CATEGORIES if c.startswith(text)]
 
     def do_status(self, arg: str) -> None:
-        reply = self._exchange("STATUS")
+        reply = self._exchange_quiet("STATUS")
         if not reply.startswith("STATUS "):
             return
         fields = {}
@@ -542,7 +544,7 @@ def create_target_session(
     exercise: str,
 ) -> TargetSession:
     """Create one private run directory for a foreground target."""
-    run_root = root / ".rootkitlings/run"
+    run_root = root / ".rklings/run"
     if run_root.is_symlink():
         raise OperatorError(f"unsafe target session root: {run_root}")
     run_root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -625,7 +627,7 @@ def read_target_session(
     exercise: str,
 ) -> TargetSession:
     """Load and validate the private state for a running target."""
-    directory = root / ".rootkitlings/run" / exercise
+    directory = root / ".rklings/run" / exercise
     if directory.is_symlink() or not directory.is_dir():
         raise OperatorError(
             f"target {exercise} is not running; start it in another terminal"
@@ -978,7 +980,7 @@ def run_control_console(
         )
         helper = _build_crypto_helper(
             root,
-            root / ".rootkitlings/tools",
+            root / ".rklings/tools",
             transcript,
             output,
         )
@@ -1001,14 +1003,17 @@ def run_control_console(
 
         def exchange(command: str) -> str:
             output(f"send    {command}\n")
+            reply = exchange_quiet(command)
+            output(f"recv    {reply}\n")
+            return reply
+
+        def exchange_quiet(command: str) -> str:
             payload = _encode_control_command(command)
             send_frame(peer, secure.seal_request(payload))
-            reply = secure.open_reply(receive_frame(peer)).decode(
+            return secure.open_reply(receive_frame(peer)).decode(
                 "ascii",
                 errors="replace",
             )
-            output(f"recv    {reply}\n")
-            return reply
 
         def handle_shell(reply: str) -> None:
             request_id, cookie = parse_shell_ticket(reply)
@@ -1032,8 +1037,8 @@ def run_control_console(
             output("\nRemote Bash closed.\n")
             _poll_shell_status(request_id, exchange)
 
-        console = OperatorConsole(exchange, output, warning, success,
-                                  handle_shell)
+        console = OperatorConsole(exchange, exchange_quiet, output,
+                                  warning, success, handle_shell)
         if input_stream is not sys.stdin:
             console.use_rawinput = False
             console.stdin = input_stream

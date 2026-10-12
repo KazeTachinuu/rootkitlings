@@ -5,7 +5,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$here/../../../scripts/lesson-env"
 scratch=$(mktemp -d \
-	"${TMPDIR:-/tmp}/rootkitlings-root-shell-bridge-test.XXXXXX")
+	"${TMPDIR:-/tmp}/rklings-root-shell-bridge-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 for command in make nm; do
@@ -68,7 +68,7 @@ build()
 
 	cp -a "$source" "$destination"
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-			ROOTKITLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
+			RKLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
 		cat "$log" >&2
 		exit 1
 	fi
@@ -84,9 +84,9 @@ compose "$scratch/starter-source"
 build "$scratch/solution-source" "$scratch/solution"
 build "$scratch/starter-source" "$scratch/starter"
 "$here/host-check" "$scratch/solution" \
-	"$scratch/solution/rootkitlings.ko"
+	"$scratch/solution/rklings.ko"
 if "$here/host-check" "$scratch/starter" \
-		"$scratch/starter/rootkitlings.ko" \
+		"$scratch/starter/rklings.ko" \
 		>"$scratch/starter-host.log" 2>&1; then
 	printf '[x] host checker accepted the unfinished starter\n' >&2
 	exit 1
@@ -94,12 +94,12 @@ fi
 
 cp -a "$scratch/solution-source" "$scratch/unknown-source"
 if make -s -C "$KDIR" M="$scratch/unknown-source" W=1 \
-		ROOTKITLINGS_FAIL_POINT=99 modules \
+		RKLINGS_FAIL_POINT=99 modules \
 		>"$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure point compiled\n' >&2
 	exit 1
 fi
-grep -Fq 'unknown ROOTKITLINGS_FAIL_POINT' "$scratch/unknown.log" || {
+grep -Fq 'unknown RKLINGS_FAIL_POINT' "$scratch/unknown.log" || {
 	cat "$scratch/unknown.log" >&2
 	printf '[x] unknown failure point failed for the wrong reason\n' >&2
 	exit 1
@@ -111,7 +111,7 @@ guest()
 	shift 2
 
 	if ! output=$("$here/../../../vm/boot" --check "$check" \
-			"$@" "$scratch/solution/rootkitlings.ko" 2>&1); then
+			"$@" "$scratch/solution/rklings.ko" 2>&1); then
 		printf '%s\n[x] guest rejected %s\n' "$output" "$label" >&2
 		exit 1
 	fi

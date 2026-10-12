@@ -4,19 +4,19 @@
 
 begin "Bounded IPv4 parser"
 
-assert_absent /sys/module/rootkitlings
-load rootkitlings.ko
-assert_loaded rootkitlings
-assert_param rootkitlings parser_selftest Y
-assert_log "rootkitlings: IPv4 parser self-tests passed: 14 assertions"
-if grep -q '^rootkitlings ' /proc/modules; then
+assert_absent /sys/module/rklings
+load rklings.ko
+assert_loaded rklings
+assert_param rklings parser_selftest Y
+assert_log "rklings: IPv4 parser self-tests passed: 14 assertions"
+if grep -q '^rklings ' /proc/modules; then
 	_ok "module appears in /proc/modules"
 else
 	_fail "module is absent from /proc/modules"
 fi
-unload rootkitlings
-assert_absent /sys/module/rootkitlings
-if grep -q '^rootkitlings ' /proc/modules; then
+unload rklings
+assert_absent /sys/module/rklings
+if grep -q '^rklings ' /proc/modules; then
 	_fail "module remains in /proc/modules"
 else
 	_ok "module left /proc/modules"

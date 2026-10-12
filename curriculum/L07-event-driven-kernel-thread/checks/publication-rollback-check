@@ -15,13 +15,13 @@ worker_count()
 }
 
 for attempt in 1 2; do
-	if module_load_test /rootkitlings/rootkitlings.ko 12; then
+	if module_load_test /rklings/rklings.ko 12; then
 		_ok "attempt $attempt returned numeric ENOMEM"
 	else
 		_fail "attempt $attempt did not return ENOMEM"
 	fi
-	assert_absent /sys/module/rootkitlings
-	assert_absent /proc/rootkitlings
+	assert_absent /sys/module/rklings
+	assert_absent /proc/rklings
 	if [ "$(worker_count)" -eq 0 ]; then
 		_ok "attempt $attempt stopped and joined the worker"
 	else

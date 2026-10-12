@@ -46,7 +46,7 @@ host_kvm_available()
 	local probe pid status=1
 
 	[ -r "$device" ] && [ -w "$device" ] && command -v "$qemu" >/dev/null || return 1
-	probe=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-kvm.XXXXXX") || return 1
+	probe=$(mktemp -d "${TMPDIR:-/tmp}/rklings-kvm.XXXXXX") || return 1
 	if "$qemu" -accel kvm -machine none -nodefaults -display none -S \
 		-daemonize -pidfile "$probe/pid" >/dev/null 2>&1 &&
 		read -r pid < "$probe/pid" && kill -0 "$pid" 2>/dev/null; then

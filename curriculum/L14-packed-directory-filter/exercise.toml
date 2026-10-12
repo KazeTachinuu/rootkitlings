@@ -34,7 +34,7 @@ label = "Packed directory filtering"
 expect_build = "pass"
 check = "curriculum/L14-packed-directory-filter/checks/success-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "0"
+RKLINGS_FAIL_POINT = "0"
 
 [[verification.cases]]
 id = "preflight-rejection"
@@ -42,7 +42,7 @@ label = "Preflight rejection"
 expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-ecanceled-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "1"
+RKLINGS_FAIL_POINT = "1"
 
 [[verification.cases]]
 id = "allocation-rejection"
@@ -50,7 +50,7 @@ label = "State allocation rejection"
 expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-enomem-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "2"
+RKLINGS_FAIL_POINT = "2"
 
 [[verification.cases]]
 id = "public-proc-rollback"
@@ -59,7 +59,7 @@ expect_build = "pass"
 check = "curriculum/L14-packed-directory-filter/checks/failure-check.in"
 check_arguments = ["12", "Public proc publication rollback"]
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "3"
+RKLINGS_FAIL_POINT = "3"
 
 [[verification.cases]]
 id = "inherited-probe-rollback"
@@ -68,7 +68,7 @@ expect_build = "pass"
 check = "curriculum/L14-packed-directory-filter/checks/failure-check.in"
 check_arguments = ["2", "Inherited Kprobe batch rollback"]
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "4"
+RKLINGS_FAIL_POINT = "4"
 
 [[verification.cases]]
 id = "missing-return-target-rollback"
@@ -77,7 +77,7 @@ expect_build = "pass"
 check = "curriculum/L14-packed-directory-filter/checks/failure-check.in"
 check_arguments = ["2", "Missing iterate_dir target rollback"]
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "5"
+RKLINGS_FAIL_POINT = "5"
 
 [[verification.cases]]
 id = "hidden-proc-rollback"
@@ -86,12 +86,12 @@ expect_build = "pass"
 check = "curriculum/L14-packed-directory-filter/checks/failure-check.in"
 check_arguments = ["12", "Hidden proc publication rollback"]
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "6"
+RKLINGS_FAIL_POINT = "6"
 
 [[verification.cases]]
 id = "unknown-failure-point"
 label = "Reject unknown failure point"
 expect_build = "fail"
-build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+build_output_contains = "unknown RKLINGS_FAIL_POINT"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "99"
+RKLINGS_FAIL_POINT = "99"

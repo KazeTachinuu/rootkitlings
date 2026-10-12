@@ -93,7 +93,7 @@ expect_events(const enum event *expected, size_t count)
 		CHECK(events[index] == expected[index]);
 }
 
-#if ROOTKITLINGS_FAIL_POINT == RK_FAIL_NONE
+#if RKLINGS_FAIL_POINT == RK_FAIL_NONE
 static void check_start_and_callback(void)
 {
 	static const enum event expected[] = { EVENT_REGISTER };
@@ -222,12 +222,12 @@ static void check_injected_registration_failure(void)
 
 int main(void)
 {
-#if ROOTKITLINGS_FAIL_POINT == RK_FAIL_NONE
+#if RKLINGS_FAIL_POINT == RK_FAIL_NONE
 	check_start_and_callback();
 	check_registration_error();
 	check_stop();
 	check_snapshot();
-#elif ROOTKITLINGS_FAIL_POINT == RK_FAIL_NETFILTER_REGISTER
+#elif RKLINGS_FAIL_POINT == RK_FAIL_NETFILTER_REGISTER
 	check_injected_registration_failure();
 #else
 #error "observer fixture built with unsupported failure point"

@@ -1,6 +1,6 @@
-ROOTKITLINGS_FAIL_POINT ?= 0
+RKLINGS_FAIL_POINT ?= 0
 
-obj-m += rootkitlings.o
-rootkitlings-y := core/main.o core/state.o
+obj-m += rklings.o
+rklings-y := core/main.o core/state.o
 ccflags-y += -I$(src)/include
-ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)
+ccflags-y += -DRKLINGS_FAIL_POINT=$(RKLINGS_FAIL_POINT)

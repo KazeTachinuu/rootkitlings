@@ -1,7 +1,7 @@
-ROOTKITLINGS_FAIL_POINT ?= 0
+RKLINGS_FAIL_POINT ?= 0
 
-obj-m += rootkitlings.o
+obj-m += rklings.o
 # TODO: add execution/scheduler.o to the module.
-rootkitlings-y := core/main.o core/state.o interface/proc.o
+rklings-y := core/main.o core/state.o interface/proc.o
 ccflags-y += -I$(src)/include
-ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)
+ccflags-y += -DRKLINGS_FAIL_POINT=$(RKLINGS_FAIL_POINT)

@@ -1,5 +1,5 @@
-#ifndef ROOTKITLINGS_HOST_FS_H
-#define ROOTKITLINGS_HOST_FS_H
+#ifndef RKLINGS_HOST_FS_H
+#define RKLINGS_HOST_FS_H
 
 #include <linux/types.h>
 

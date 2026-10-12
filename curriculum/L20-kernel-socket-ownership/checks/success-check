@@ -4,16 +4,16 @@
 
 begin "Kernel TCP socket ownership"
 
-endpoint=/proc/rootkitlings
-fixtures=/tmp/rootkitlings-socket
+endpoint=/proc/rklings
+fixtures=/tmp/rklings-socket
 expected=$fixtures/expected
 actual=$fixtures/actual
 fixture_pid=
 
 cleanup()
 {
-	if [ -d /sys/module/rootkitlings ]; then
-		rmmod rootkitlings 2>/dev/null || true
+	if [ -d /sys/module/rklings ]; then
+		rmmod rklings 2>/dev/null || true
 	fi
 	if [ -n "$fixture_pid" ]; then
 		kill "$fixture_pid" 2>/dev/null || true
@@ -61,12 +61,12 @@ has_established_tuple()
 
 assert_not_loaded()
 {
-	assert_absent /sys/module/rootkitlings
+	assert_absent /sys/module/rklings
 	assert_absent "$endpoint"
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "rootkitlings remains in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings remains in /proc/modules"
 	else
-		_ok "rootkitlings is absent from /proc/modules"
+		_ok "rklings is absent from /proc/modules"
 	fi
 }
 
@@ -88,8 +88,8 @@ peer_port=$(cat "$fixtures/first/primary_port")
 if busybox unshare -n sh -c '
 	ifconfig lo 127.0.0.1 up || exit 20
 	peer_port=$1
-	insmod /rootkitlings/rootkitlings.ko peer_port="$peer_port" || exit 21
-	local_port=$(sed -n "s/^local_port=//p" /proc/rootkitlings)
+	insmod /rklings/rklings.ko peer_port="$peer_port" || exit 21
+	local_port=$(sed -n "s/^local_port=//p" /proc/rklings)
 	local_hex=$(printf "%04X" "$local_port")
 	peer_hex=$(printf "%04X" "$peer_port")
 	if grep -q "0100007F:$local_hex 0100007F:$peer_hex 01 " /proc/net/tcp; then
@@ -101,7 +101,7 @@ else
 	_fail "child-namespace load or namespace isolation failed"
 fi
 
-assert_loaded rootkitlings
+assert_loaded rklings
 assert_exists "$endpoint"
 if [ "$(stat -c '%a:%u:%g' "$endpoint")" = 400:0:0 ]; then
 	_ok "$endpoint is read-only and owned by root"
@@ -184,7 +184,7 @@ else
 	_fail "a concurrent snapshot was inconsistent"
 fi
 
-if proc_read_test "$endpoint" "$expected" rootkitlings; then
+if proc_read_test "$endpoint" "$expected" rklings; then
 	_ok "a held proc descriptor is retired during unload"
 else
 	_fail "held-descriptor unload behavior changed"
@@ -205,7 +205,7 @@ fi
 
 start_fixture "$fixtures/second"
 peer_port=$(cat "$fixtures/second/primary_port")
-load rootkitlings.ko "peer_port=$peer_port"
+load rklings.ko "peer_port=$peer_port"
 if wait_for_file "$fixtures/second/accepted"; then
 	_ok "reload created a fresh connection"
 else
@@ -219,7 +219,7 @@ if cmp -s "$expected" "$endpoint" &&
 else
 	_fail "reload evidence is incomplete"
 fi
-unload rootkitlings
+unload rklings
 if wait_for_file "$fixtures/second/eof"; then
 	_ok "reload peer observed EOF after unload"
 else

@@ -51,7 +51,7 @@ elif (( wsl_version == 2 )); then
 	ui_item pass environment 'WSL2'
 	case $ROOT_DIR in
 		/mnt/[A-Za-z]|/mnt/[A-Za-z]/*)
-			ui_item fail 'repository location' 'clone inside the WSL filesystem, for example ~/rootkitlings'
+			ui_item fail 'repository location' 'clone inside the WSL filesystem, for example ~/rklings'
 			missing=$((missing + 1))
 			;;
 	esac
@@ -155,7 +155,7 @@ if command -v gcc >/dev/null; then
 		record_missing "$(package_name libcrypto)"
 		missing=$((missing + 1))
 	fi
-	probe=$(mktemp "${TMPDIR:-/tmp}/rootkitlings-cc.XXXXXX") || {
+	probe=$(mktemp "${TMPDIR:-/tmp}/rklings-cc.XXXXXX") || {
 		ui_item fail 'static C linking' 'could not create a temporary probe'
 		missing=$((missing + 1))
 		probe=
@@ -241,7 +241,7 @@ check_optional_command clangd clangd 'uses compile_commands.json for editor diag
 check_optional_command openssl openssl 'handy for key generation and debugging'
 check_optional_command file file 'used by doctor to verify busybox linkage'
 check_optional_command shellcheck shellcheck 'adds shell diagnostics to make validate'
-check_optional_command gdb gdb 'needed only for ./rootkitlings gdb'
+check_optional_command gdb gdb 'needed only for ./rklings gdb'
 
 printf '\n'
 ui_heading 'Capacity'

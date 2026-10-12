@@ -56,7 +56,7 @@ static int rk_expect(bool condition, const char *label)
 	rk_assertions++;
 	if (condition)
 		return 0;
-	pr_err("rootkitlings: self-test failed: %s\n", label);
+	pr_err("rklings: self-test failed: %s\n", label);
 	return -EINVAL;
 }
 
@@ -637,7 +637,7 @@ out:
 	return ret;
 }
 
-static int __init rootkitlings_init(void)
+static int __init rklings_init(void)
 {
 	int ret;
 
@@ -658,17 +658,17 @@ static int __init rootkitlings_init(void)
 		ret = rk_test_parser_integration();
 	if (ret)
 		return ret;
-	pr_info("rootkitlings: skb access self-tests passed: %u\n",
+	pr_info("rklings: skb access self-tests passed: %u\n",
 		rk_assertions);
 	return 0;
 }
 
-static void __exit rootkitlings_exit(void)
+static void __exit rklings_exit(void)
 {
 }
 
-module_init(rootkitlings_init);
-module_exit(rootkitlings_exit);
+module_init(rklings_init);
+module_exit(rklings_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings safe sk_buff access exercise");
+MODULE_DESCRIPTION("Rklings safe sk_buff access exercise");

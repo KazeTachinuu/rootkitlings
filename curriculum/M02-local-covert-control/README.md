@@ -44,7 +44,7 @@ In `main.c`, implement:
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 ## References

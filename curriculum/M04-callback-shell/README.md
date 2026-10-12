@@ -57,7 +57,7 @@ bytes payload). Supported commands:
 | Command | Reply | Effect |
 |---------|-------|--------|
 | PING | PONG | Keepalive |
-| INFO | INFO rootkitlings | Identify the implant |
+| INFO | INFO rklings | Identify the implant |
 | STATUS | STATUS connected=... attempts=... | Agent state |
 | SHELL port | OPEN request_id cookie | Open reverse shell to operator:port |
 | SHELL STATUS | STATE request_id state result | Shell session state |
@@ -80,7 +80,7 @@ interactive root Bash session.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 ## References

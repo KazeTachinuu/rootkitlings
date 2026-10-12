@@ -22,15 +22,15 @@ object, whose filename ends in `.ko`:
 ```text
   build                          runtime
 
-  core/main.c                    insmod rootkitlings.ko
+  core/main.c                    insmod rklings.ko
        |                              |
        | compile (Kbuild)             v
        v                         rk_init() --> return 0
   core/main.o                         |
        |                         module is resident
        | link                         |
-       v                         rmmod rootkitlings
-  rootkitlings.ko                     |
+       v                         rmmod rklings
+  rklings.ko                     |
                                       v
                                  rk_exit()
                                       |
@@ -44,12 +44,12 @@ The build command identifies the module workspace with `M=<workspace>`.
 `Kbuild` names the module and its object:
 
 ```make
-obj-m += rootkitlings.o
-rootkitlings-y := core/main.o
+obj-m += rklings.o
+rklings-y := core/main.o
 ```
 
-`obj-m` declares `rootkitlings.ko` as a loadable module.
-`rootkitlings-y` lists the objects linked into it.
+`obj-m` declares `rklings.ko` as a loadable module.
+`rklings-y` lists the objects linked into it.
 
 ## Module lifecycle
 
@@ -85,22 +85,22 @@ These macros add static metadata to the module:
 
 ```c
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings kernel module");
+MODULE_DESCRIPTION("Rklings kernel module");
 ```
 
 `modinfo` can read this metadata without loading the module.
-`insmod rootkitlings.ko` asks the kernel to load the file.
-`rmmod rootkitlings` asks it to remove the loaded module by name.
+`insmod rklings.ko` asks the kernel to load the file.
+`rmmod rklings` asks it to remove the loaded module by name.
 
 ## Your task
 
 Edit only `Kbuild` and `core/main.c`:
 
-- Build `rootkitlings.ko` from `core/main.o`.
+- Build `rklings.ko` from `core/main.o`.
 - Register a load callback that returns `0`.
 - Register an unload callback.
 - Set the license to `GPL`.
-- Set the description to `Rootkitlings kernel module`.
+- Set the description to `Rklings kernel module`.
 
 The module must build without warnings.
 You may add kernel log messages for debugging, but messages do not prove that a
@@ -111,12 +111,12 @@ module is loaded or cleaned up.
 From the repository root, run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The host phase builds the module and inspects its metadata.
 The guest phase proves the lifecycle behavior by loading it and checking two
-kernel-maintained views: `/proc/modules` and `/sys/module/rootkitlings`.
+kernel-maintained views: `/proc/modules` and `/sys/module/rklings`.
 It then unloads the module, proves both views disappeared, and immediately
 repeats the load/unload cycle.
 

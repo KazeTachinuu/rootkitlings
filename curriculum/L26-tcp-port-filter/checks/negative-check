@@ -18,8 +18,8 @@ sleep 1
 
 other_hex=$(printf '%04X' "$other_port")
 
-load rootkitlings.ko hidden_port="$hidden_port"
-assert_loaded rootkitlings
+load rklings.ko hidden_port="$hidden_port"
+assert_loaded rklings
 
 # The other port must remain visible.
 if grep -qi ":${other_hex} " /proc/net/tcp 2>/dev/null; then
@@ -28,7 +28,7 @@ else
 	_fail "non-target port $other_port was incorrectly hidden"
 fi
 
-unload rootkitlings
+unload rklings
 
 kill "$hidden_pid" 2>/dev/null || true
 kill "$other_pid" 2>/dev/null || true

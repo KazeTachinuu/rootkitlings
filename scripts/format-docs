@@ -158,7 +158,7 @@ def course_documents(root: Path = ROOT) -> tuple[Path, ...]:
 	result = []
 	for path in sorted(documents):
 		relative = path.relative_to(root)
-		if relative.parts[0] in {".git", ".rootkitlings", "work"}:
+		if relative.parts[0] in {".git", ".rklings", "work"}:
 			continue
 		result.append(path)
 	return tuple(result)

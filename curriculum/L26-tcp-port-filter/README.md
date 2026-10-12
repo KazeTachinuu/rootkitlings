@@ -58,7 +58,7 @@ already wired up.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 ## References

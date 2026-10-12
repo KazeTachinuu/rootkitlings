@@ -4,7 +4,7 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-kernel-socket-ownership-test.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-kernel-socket-ownership-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || {
@@ -68,7 +68,7 @@ build_tree()
 	local log=$destination.log
 	cp -a "$source" "$destination"
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-			ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+			RKLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
 		cat "$log" >&2
 		printf '[x] %s build failed\n' "${source##*/}" >&2
 		exit 1
@@ -85,10 +85,10 @@ build_tree "$HERE/../solution" "$scratch/solution"
 build_tree "$HERE/../solution" "$scratch/after-create" 1
 build_tree "$HERE/../solution" "$scratch/after-capture" 2
 build_tree "$HERE/../solution" "$scratch/proc-failure" 3
-"$HERE/host-check" "$scratch/solution" "$scratch/solution/rootkitlings.ko"
+"$HERE/host-check" "$scratch/solution" "$scratch/solution/rklings.ko"
 
 if "$HERE/host-check" "$scratch/starter" \
-		"$scratch/starter/rootkitlings.ko" > "$scratch/starter-host.log" 2>&1; then
+		"$scratch/starter/rklings.ko" > "$scratch/starter-host.log" 2>&1; then
 	printf '[x] host checker accepted the unfinished socket owner\n' >&2
 	exit 1
 fi
@@ -125,12 +125,12 @@ if grep -q 'warning:' "$equivalent.log"; then
 	printf '[x] equivalent implementation build has warnings\n' >&2
 	exit 1
 fi
-"$HERE/host-check" "$equivalent" "$equivalent/rootkitlings.ko"
+"$HERE/host-check" "$equivalent" "$equivalent/rklings.ko"
 
 expect_rejection()
 {
 	local directory=$1 label=$2
-	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+	if "$HERE/host-check" "$directory" "$directory/rklings.ko" \
 			> "$scratch/host-$label.log" 2>&1; then
 		printf '[x] host checker accepted %s\n' "$label" >&2
 		exit 1
@@ -162,9 +162,9 @@ from pathlib import Path
 import sys
 p = Path(sys.argv[1])
 s = p.read_text(encoding="utf-8")
-s = s.replace("if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_AFTER_CREATE) {\n"
+s = s.replace("if (RKLINGS_FAIL_POINT == RK_FAIL_AFTER_CREATE) {\n"
               "\t\terror = -ECANCELED;\n\t\tgoto release;\n\t}",
-              "if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_AFTER_CREATE) {\n"
+              "if (RKLINGS_FAIL_POINT == RK_FAIL_AFTER_CREATE) {\n"
               "\t\terror = -ECANCELED;\n\t\tgoto unlock;\n\t}")
 p.write_text(s, encoding="utf-8")
 PY
@@ -252,7 +252,7 @@ expect_rejection "$early_close_unlock" release-outside-lock
 
 cp -a "$HERE/../solution" "$scratch/unknown"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
-		ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
+		RKLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure-point value compiled successfully\n' >&2
 	exit 1
 fi
@@ -273,12 +273,12 @@ run_guest()
 	printf '%s\n' "$output"
 }
 
-run_guest "$HERE/failure-check.in" "$scratch/after-create/rootkitlings.ko" \
+run_guest "$HERE/failure-check.in" "$scratch/after-create/rklings.ko" \
 	--check-arg 125 --check-arg 'Rollback after socket creation' --check-arg 0
-run_guest "$HERE/failure-check.in" "$scratch/after-capture/rootkitlings.ko" \
+run_guest "$HERE/failure-check.in" "$scratch/after-capture/rklings.ko" \
 	--check-arg 125 --check-arg 'Rollback after connected endpoint capture' \
 	--check-arg 1
-run_guest "$HERE/failure-check.in" "$scratch/proc-failure/rootkitlings.ko" \
+run_guest "$HERE/failure-check.in" "$scratch/proc-failure/rklings.ko" \
 	--check-arg 12 --check-arg 'Proc publication rollback' --check-arg 1
-run_guest "$HERE/validation-check" "$scratch/solution/rootkitlings.ko"
-run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko"
+run_guest "$HERE/validation-check" "$scratch/solution/rklings.ko"
+run_guest "$HERE/success-check" "$scratch/solution/rklings.ko"

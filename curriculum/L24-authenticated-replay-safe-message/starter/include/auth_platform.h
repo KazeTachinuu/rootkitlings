@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef ROOTKITLINGS_AUTH_PLATFORM_H
-#define ROOTKITLINGS_AUTH_PLATFORM_H
+#ifndef RKLINGS_AUTH_PLATFORM_H
+#define RKLINGS_AUTH_PLATFORM_H
 
 #include "authenticated.h"
 

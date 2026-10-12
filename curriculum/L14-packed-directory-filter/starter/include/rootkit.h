@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-#ifndef ROOTKITLINGS_ROOTKIT_H
-#define ROOTKITLINGS_ROOTKIT_H
+#ifndef RKLINGS_ROOTKIT_H
+#define RKLINGS_ROOTKIT_H
 
 #include <linux/compiler_attributes.h>
 #include <linux/types.h>
@@ -14,7 +14,7 @@
 #define RK_FAIL_HIDDEN_PUBLISH 6
 
 #define RK_DIRECTORY_CHUNK_CAPACITY (32U * 1024U)
-#define RK_DIRECTORY_TARGET "rootkitlings_hidden"
+#define RK_DIRECTORY_TARGET "rklings_hidden"
 #define RK_DIRECTORY_RETURN_CAPACITY 16
 
 struct rk_state;

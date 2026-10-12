@@ -1,5 +1,5 @@
-#ifndef ROOTKITLINGS_HOST_MODULE_H
-#define ROOTKITLINGS_HOST_MODULE_H
+#ifndef RKLINGS_HOST_MODULE_H
+#define RKLINGS_HOST_MODULE_H
 
 #include <stddef.h>
 

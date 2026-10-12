@@ -31,7 +31,7 @@ fi
 
 _ok "fixture listening on port $test_port"
 
-load rootkitlings.ko peer_address=127.0.0.1 peer_port="$test_port" \
+load rklings.ko peer_address=127.0.0.1 peer_port="$test_port" \
 	retry_base_ms=25 retry_max_ms=200
 
 # Wait for the fixture to complete the first session
@@ -47,7 +47,7 @@ else
 	_fail "agent did not complete protocol exchange"
 fi
 
-unload rootkitlings
+unload rklings
 
 # Wait for fixture to see the second connection's EOF
 tries=0

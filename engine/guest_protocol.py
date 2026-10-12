@@ -8,8 +8,8 @@ import re
 import sys
 
 
-BEGIN = "ROOTKITLINGS_CHECK_BEGIN"
-RESULT = re.compile(r"ROOTKITLINGS_RESULT=(pass|fail:([1-9][0-9]{0,2}))\Z")
+BEGIN = "RKLINGS_CHECK_BEGIN"
+RESULT = re.compile(r"RKLINGS_RESULT=(pass|fail:([1-9][0-9]{0,2}))\Z")
 
 
 class GuestProtocolError(ValueError):
@@ -36,7 +36,7 @@ def parse_guest_check(text: str) -> GuestCheckResult:
     result_records = [
         (index, line)
         for index, line in enumerate(lines)
-        if line.startswith("ROOTKITLINGS_RESULT=")
+        if line.startswith("RKLINGS_RESULT=")
     ]
     if not result_records:
         raise GuestRebootedError("guest rebooted without producing a result")

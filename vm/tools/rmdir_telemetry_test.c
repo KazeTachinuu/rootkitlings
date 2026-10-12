@@ -13,7 +13,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define SELECTED_PATH "/tmp/rootkitlings-rmdir-watch"
+#define SELECTED_PATH "/tmp/rklings-rmdir-watch"
 #define CONCURRENT_THREADS 8
 #define CONCURRENT_ROUNDS 64
 
@@ -95,7 +95,7 @@ static void *run_concurrent_case(void *argument)
 
 	if (test->index != 0) {
 		if (snprintf(other_path, sizeof(other_path),
-			     "/tmp/rootkitlings-rmdir-other-%u", test->index) < 0) {
+			     "/tmp/rklings-rmdir-other-%u", test->index) < 0) {
 			atomic_store(test->failed, 1);
 			return NULL;
 		}
@@ -181,7 +181,7 @@ static void *run_stress_case(void *argument)
 	struct stress_case *test = argument;
 	char path[64];
 
-	if (snprintf(path, sizeof(path), "/tmp/rootkitlings-rmdir-stress-%u",
+	if (snprintf(path, sizeof(path), "/tmp/rklings-rmdir-stress-%u",
 		     test->index) < 0) {
 		atomic_store(test->failed, 1);
 		return NULL;

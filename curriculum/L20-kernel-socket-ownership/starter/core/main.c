@@ -8,8 +8,8 @@
 
 #include "rootkit.h"
 
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 3
-#error "unknown ROOTKITLINGS_FAIL_POINT"
+#if RKLINGS_FAIL_POINT < 0 || RKLINGS_FAIL_POINT > 3
+#error "unknown RKLINGS_FAIL_POINT"
 #endif
 
 static unsigned short peer_port;
@@ -59,4 +59,4 @@ module_init(rk_init);
 module_exit(rk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings owned loopback TCP socket");
+MODULE_DESCRIPTION("Rklings owned loopback TCP socket");

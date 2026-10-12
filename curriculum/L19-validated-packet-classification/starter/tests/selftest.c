@@ -15,7 +15,7 @@ static int rk_expect(bool condition, const char *label)
 	assertions++;
 	if (condition)
 		return 0;
-	pr_err("rootkitlings: self-test failed: %s\n", label);
+	pr_err("rklings: self-test failed: %s\n", label);
 	return -EINVAL;
 }
 
@@ -169,7 +169,7 @@ __must_check int rk_run_selftests(void)
 	error = rk_test_upstream_rejections();
 	if (error)
 		return error;
-	pr_info("rootkitlings: packet classifier self-tests passed: %u assertions\n",
+	pr_info("rklings: packet classifier self-tests passed: %u assertions\n",
 		assertions);
 	return 0;
 }

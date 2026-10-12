@@ -177,7 +177,7 @@ class TargetSessionTests(unittest.TestCase):
             root = Path(directory)
             session = create_target_session(root, "complete-rootkit")
             try:
-                self.assertEqual(_mode(root / ".rootkitlings/run"), 0o700)
+                self.assertEqual(_mode(root / ".rklings/run"), 0o700)
                 self.assertEqual(_mode(session.directory), 0o700)
                 self.assertEqual(_mode(session.key_file), 0o600)
                 self.assertEqual(
@@ -368,8 +368,8 @@ class FramingTests(unittest.TestCase):
     def test_frame_round_trip_preserves_payload(self) -> None:
         first, second = socket.socketpair()
         try:
-            send_frame(first, b"rootkitlings")
-            self.assertEqual(receive_frame(second), b"rootkitlings")
+            send_frame(first, b"rklings")
+            self.assertEqual(receive_frame(second), b"rklings")
         finally:
             first.close()
             second.close()

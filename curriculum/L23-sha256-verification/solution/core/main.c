@@ -4,28 +4,28 @@
 
 #include "selftest.h"
 
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 1
-#error "unknown ROOTKITLINGS_FAIL_POINT"
+#if RKLINGS_FAIL_POINT < 0 || RKLINGS_FAIL_POINT > 1
+#error "unknown RKLINGS_FAIL_POINT"
 #endif
 
-static int __init rootkitlings_init(void)
+static int __init rklings_init(void)
 {
 	unsigned int assertions;
 	int error = rk_sha256_selftest(&assertions);
 
 	if (error)
 		return error;
-	pr_info("rootkitlings: sha256 self-tests passed: %u assertions\n",
+	pr_info("rklings: sha256 self-tests passed: %u assertions\n",
 		assertions);
 	return 0;
 }
 
-static void __exit rootkitlings_exit(void)
+static void __exit rklings_exit(void)
 {
 }
 
-module_init(rootkitlings_init);
-module_exit(rootkitlings_exit);
+module_init(rklings_init);
+module_exit(rklings_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings SHA-256 verification");
+MODULE_DESCRIPTION("Rklings SHA-256 verification");

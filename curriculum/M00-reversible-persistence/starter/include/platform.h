@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef ROOTKITLINGS_PLATFORM_H
-#define ROOTKITLINGS_PLATFORM_H
+#ifndef RKLINGS_PLATFORM_H
+#define RKLINGS_PLATFORM_H
 
 #include "transaction.h"
 

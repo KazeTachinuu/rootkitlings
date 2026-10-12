@@ -1,5 +1,5 @@
-#ifndef ROOTKITLINGS_HOST_TYPES_H
-#define ROOTKITLINGS_HOST_TYPES_H
+#ifndef RKLINGS_HOST_TYPES_H
+#define RKLINGS_HOST_TYPES_H
 
 #include <stdbool.h>
 #include <stddef.h>

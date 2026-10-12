@@ -52,10 +52,10 @@ __must_check int rk_proc_publish(struct rk_netfilter_observer *observer)
 	if (proc_entry || !observer)
 		return -EINVAL;
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH)
+	if (RKLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH)
 		proc_entry = NULL;
 	else
-		proc_entry = proc_create_data("rootkitlings", 0400, NULL,
+		proc_entry = proc_create_data("rklings", 0400, NULL,
 					      &rk_proc_ops, observer);
 	if (!proc_entry)
 		return -ENOMEM;

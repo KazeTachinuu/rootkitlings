@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-#ifndef ROOTKITLINGS_ROOTKIT_H
-#define ROOTKITLINGS_ROOTKIT_H
+#ifndef RKLINGS_ROOTKIT_H
+#define RKLINGS_ROOTKIT_H
 
 #include <linux/compiler_attributes.h>
 #include <linux/types.h>
@@ -14,7 +14,7 @@
 
 #define RK_READ_RESULT_LIMIT 512U
 #define RK_READ_RETURN_CAPACITY 32U
-#define RK_READ_TARGET "/tmp/rootkitlings-read-target"
+#define RK_READ_TARGET "/tmp/rklings-read-target"
 
 __must_check int rk_read_target_retain(void);
 void rk_read_target_release(void);

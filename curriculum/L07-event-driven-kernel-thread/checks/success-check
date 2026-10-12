@@ -5,8 +5,8 @@
 
 begin "Event-driven kernel thread"
 
-endpoint=/proc/rootkitlings
-fixtures=/tmp/rootkitlings-worker
+endpoint=/proc/rklings
+fixtures=/tmp/rklings-worker
 actual=$fixtures/actual
 mkdir -p "$fixtures"
 
@@ -73,12 +73,12 @@ assert_sleeping_worker()
 
 assert_not_loaded()
 {
-	assert_absent /sys/module/rootkitlings
+	assert_absent /sys/module/rklings
 	assert_absent "$endpoint"
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "rootkitlings appears in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings appears in /proc/modules"
 	else
-		_ok "rootkitlings is absent from /proc/modules"
+		_ok "rklings is absent from /proc/modules"
 	fi
 	assert_no_worker
 }
@@ -124,7 +124,7 @@ expect_disabled_errno()
 
 check_loaded()
 {
-	assert_loaded rootkitlings
+	assert_loaded rklings
 	assert_exists "$endpoint"
 	metadata=$(stat -c '%a:%u:%g' "$endpoint")
 	if [ "$metadata" = 644:0:0 ]; then
@@ -356,14 +356,14 @@ check_switch_race()
 assert_not_loaded
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	load rootkitlings.ko
+	load rklings.ko
 	check_loaded
 	check_rejections
 	check_exact_requests
 	check_switch_race
 	proc_write_test write "$endpoint" "$fixtures/enable" > /dev/null ||
 		_fail "could not enable before unload"
-	if proc_write_test unload "$endpoint" "$fixtures/run" rootkitlings > /dev/null; then
+	if proc_write_test unload "$endpoint" "$fixtures/run" rklings > /dev/null; then
 		_ok "attempt $attempt rejects a held descriptor after unload"
 	else
 		_fail "attempt $attempt failed the held-descriptor unload check"

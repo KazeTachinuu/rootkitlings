@@ -125,10 +125,10 @@ __must_check int rk_proc_publish(struct rk_state *state,
 	proc_context.state = state;
 	proc_context.transaction = transaction;
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH)
+	if (RKLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH)
 		proc_entry = NULL;
 	else
-		proc_entry = proc_create_data("rootkitlings", 0666, NULL,
+		proc_entry = proc_create_data("rklings", 0666, NULL,
 					      &rk_proc_ops, &proc_context);
 	if (!proc_entry)
 		return -ENOMEM;

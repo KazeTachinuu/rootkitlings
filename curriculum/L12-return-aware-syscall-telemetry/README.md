@@ -10,7 +10,7 @@ Success proves that concurrent calls keep their observations separate.
 The selected path is:
 
 ```text
-/tmp/rootkitlings-rmdir-watch
+/tmp/rklings-rmdir-watch
 ```
 
 ```text
@@ -124,7 +124,7 @@ ownership unchanged.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker stresses ABI decoding, hostile pointers, concurrent correlation,

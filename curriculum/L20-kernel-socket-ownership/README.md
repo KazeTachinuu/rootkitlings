@@ -48,7 +48,7 @@ TCP may retain `TIME_WAIT`; the captured tuple need only leave `ESTABLISHED`.
 Closing a null or empty owner does nothing.
 For an owned socket, clear the published pointer and recorded state before
 shutdown and release.
-The supplied module removes `/proc/rootkitlings` before it closes the socket.
+The supplied module removes `/proc/rklings` before it closes the socket.
 
 `rk_socket_snapshot()` must copy a consistent view while proc readers may run
 concurrently.
@@ -89,7 +89,7 @@ Implement `rk_socket_open()`, `rk_socket_close()`, and `rk_socket_snapshot()`.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker uses `W=1` and verifies exact errors, rollback, and `init_net`

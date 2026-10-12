@@ -20,7 +20,7 @@ class Stream(io.StringIO):
 
 class ConsoleTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.console = Console(f"rootkitlings.test.{id(self)}")
+        self.console = Console(f"rklings.test.{id(self)}")
 
     def test_color_is_decided_for_each_destination_stream(self) -> None:
         stdout = Stream(False)

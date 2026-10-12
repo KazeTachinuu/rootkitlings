@@ -6,9 +6,9 @@ expected_errno=${1:-@EXPECTED_ERRNO@}
 label=${2:-@LABEL@}
 begin "$label"
 
-endpoint=/proc/rootkitlings
+endpoint=/proc/rklings
 registry=/sys/kernel/debug/kprobes/list
-fixtures=/tmp/rootkitlings-probe-failure
+fixtures=/tmp/rklings-probe-failure
 mkdir -p "$fixtures"
 
 probe_count()
@@ -39,8 +39,8 @@ assert_registry_baseline()
 
 cleanup()
 {
-	if test -d /sys/module/rootkitlings; then
-		rmmod rootkitlings 2>/dev/null || true
+	if test -d /sys/module/rklings; then
+		rmmod rklings 2>/dev/null || true
 	fi
 	kmem_trace_restore
 }
@@ -57,7 +57,7 @@ trap cleanup EXIT INT TERM
 attempt=1
 while [ "$attempt" -le 2 ]; do
 	kmem_trace_start
-	if module_load_test /rootkitlings/rootkitlings.ko "$expected_errno"; then
+	if module_load_test /rklings/rklings.ko "$expected_errno"; then
 		_ok "attempt $attempt returned errno $expected_errno"
 	else
 		_fail "attempt $attempt returned the wrong error"
@@ -65,10 +65,10 @@ while [ "$attempt" -le 2 ]; do
 	kmem_trace_stop
 	assert_one_loader_allocation_freed \
 		"attempt $attempt freed module state after rollback"
-	assert_absent /sys/module/rootkitlings
+	assert_absent /sys/module/rklings
 	assert_absent "$endpoint"
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "attempt $attempt left rootkitlings in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "attempt $attempt left rklings in /proc/modules"
 	else
 		_ok "attempt $attempt leaves no loaded module"
 	fi

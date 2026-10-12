@@ -10,7 +10,7 @@
 
 static void *rk_alloc(void)
 {
-	if (ROOTKITLINGS_FAIL_POINT == 1)
+	if (RKLINGS_FAIL_POINT == 1)
 		return ERR_PTR(-ENOMEM);
 	return crypto_alloc_aead("gcm(aes)", 0, 0);
 }
@@ -37,7 +37,7 @@ static unsigned int rk_auth_size(void *transform)
 
 static int rk_set_key(void *transform, const u8 *key, unsigned int length)
 {
-	if (ROOTKITLINGS_FAIL_POINT == 2)
+	if (RKLINGS_FAIL_POINT == 2)
 		return -EKEYREJECTED;
 	return crypto_aead_setkey(transform, key, length);
 }
@@ -91,7 +91,7 @@ static void rk_set_crypt(void *request, void *scatterlist,
 
 static int rk_encrypt(void *request)
 {
-	if (ROOTKITLINGS_FAIL_POINT == 3)
+	if (RKLINGS_FAIL_POINT == 3)
 		return -EIO;
 	return crypto_aead_encrypt(request);
 }

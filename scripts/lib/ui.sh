@@ -1,5 +1,5 @@
 #!/bin/sh
-# Shared terminal output for Rootkitlings shell commands.
+# Shared terminal output for Rklings shell commands.
 # shellcheck disable=SC3043 # BusyBox ash and Bash provide local variables.
 
 _ui_color_enabled()
@@ -26,9 +26,9 @@ _ui_emit()
 	fi
 }
 
-ui_heading()  { [ "${ROOTKITLINGS_QUIET:-0}" = 1 ] || _ui_emit 1 '1;34' '[*]' "$*"; }
-ui_progress() { [ "${ROOTKITLINGS_QUIET:-0}" = 1 ] || _ui_emit 1 '1;34' '[*]' "$*"; }
-ui_success()  { [ "${ROOTKITLINGS_QUIET:-0}" = 1 ] || _ui_emit 1 '1;32' '[+]' "$*"; }
+ui_heading()  { [ "${RKLINGS_QUIET:-0}" = 1 ] || _ui_emit 1 '1;34' '[*]' "$*"; }
+ui_progress() { [ "${RKLINGS_QUIET:-0}" = 1 ] || _ui_emit 1 '1;34' '[*]' "$*"; }
+ui_success()  { [ "${RKLINGS_QUIET:-0}" = 1 ] || _ui_emit 1 '1;32' '[+]' "$*"; }
 ui_pass()     { _ui_emit 1 '1;32' '[+]' "$*"; }
 ui_fail()     { _ui_emit 1 '1;31' '[x]' "$*"; }
 ui_warning()  { _ui_emit 2 '1;33' '[!]' "$*"; }

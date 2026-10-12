@@ -6,7 +6,7 @@ begin "Port hiding"
 
 ifconfig lo 127.0.0.1 up
 
-load rootkitlings.ko
+load rklings.ko
 
 test_port=7777
 
@@ -19,11 +19,11 @@ if grep -q "$(printf '%04X' "$test_port")" /proc/net/tcp; then
 else
 	_fail "port $test_port not found in /proc/net/tcp"
 	kill "$nc_pid" 2>/dev/null
-	unload rootkitlings
+	unload rklings
 	summary
 fi
 
-echo "hide port $test_port" > /proc/rootkitlings
+echo "hide port $test_port" > /proc/rklings
 
 if grep -q "$(printf '%04X' "$test_port")" /proc/net/tcp; then
 	_fail "port $test_port still visible after hiding"
@@ -31,7 +31,7 @@ else
 	_ok "port $test_port hidden from /proc/net/tcp"
 fi
 
-echo "unhide port 0" > /proc/rootkitlings
+echo "unhide port 0" > /proc/rklings
 
 if grep -q "$(printf '%04X' "$test_port")" /proc/net/tcp; then
 	_ok "port $test_port visible again after unhide"
@@ -40,6 +40,6 @@ else
 fi
 
 kill "$nc_pid" 2>/dev/null
-unload rootkitlings
+unload rklings
 
 summary

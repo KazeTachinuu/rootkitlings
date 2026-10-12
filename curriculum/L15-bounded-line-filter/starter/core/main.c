@@ -5,15 +5,15 @@
 
 #include "rootkit.h"
 
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 5
-#error "unknown ROOTKITLINGS_FAIL_POINT"
+#if RKLINGS_FAIL_POINT < 0 || RKLINGS_FAIL_POINT > 5
+#error "unknown RKLINGS_FAIL_POINT"
 #endif
 
 static int __init rk_init(void)
 {
 	int error;
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT)
+	if (RKLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT)
 		return -ECANCELED;
 
 	error = rk_read_target_retain();
@@ -48,4 +48,4 @@ module_init(rk_init);
 module_exit(rk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings kernel module");
+MODULE_DESCRIPTION("Rklings kernel module");

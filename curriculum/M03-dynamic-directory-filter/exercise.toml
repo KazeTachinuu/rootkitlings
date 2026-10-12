@@ -43,6 +43,6 @@ check = "curriculum/M03-dynamic-directory-filter/checks/pid-check"
 id = "unknown-failure-point"
 label = "Reject unknown failure point"
 expect_build = "fail"
-build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+build_output_contains = "unknown RKLINGS_FAIL_POINT"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "99"
+RKLINGS_FAIL_POINT = "99"

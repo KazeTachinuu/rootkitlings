@@ -14,7 +14,7 @@ kernel entry points as thin calls to `rk_kernel_aead_ops`.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 ## What this mechanism does

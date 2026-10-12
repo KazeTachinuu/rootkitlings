@@ -76,7 +76,7 @@ The counter measures hook traversals, not sends, deliveries, or wire packets.
 
 ## Status is not execution evidence
 
-`/proc/rootkitlings` renders the snapshot supplied by your observer as exactly
+`/proc/rklings` renders the snapshot supplied by your observer as exactly
 seven lines:
 
 ```text
@@ -104,7 +104,7 @@ Implement `rk_observe_local_ipv4()`, `rk_netfilter_start()`,
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker builds with `W=1` and verifies exact status, delivery, counter

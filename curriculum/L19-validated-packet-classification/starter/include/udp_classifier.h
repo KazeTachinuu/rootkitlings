@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef ROOTKITLINGS_UDP_CLASSIFIER_H
-#define ROOTKITLINGS_UDP_CLASSIFIER_H
+#ifndef RKLINGS_UDP_CLASSIFIER_H
+#define RKLINGS_UDP_CLASSIFIER_H
 
 #include "ipv4_parser.h"
 

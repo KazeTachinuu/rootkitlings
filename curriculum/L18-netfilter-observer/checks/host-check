@@ -29,13 +29,13 @@ done <<< "$undefined"
 
 fixture=$here/../fixtures/host/netfilter_observer_test.c
 includes=$here/../fixtures/host/include
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-netfilter-observer-host.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-netfilter-observer-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 for point in 0 1; do
 	binary=$scratch/netfilter-observer-$point
 	if ! gcc -std=c11 -Wall -Wextra -Werror -pedantic \
 			-fsanitize=address,undefined -fno-omit-frame-pointer \
-			-I"$includes" -DROOTKITLINGS_FAIL_POINT="$point" \
+			-I"$includes" -DRKLINGS_FAIL_POINT="$point" \
 			"$build_dir/instrumentation/netfilter_observer.c" "$fixture" \
 			-o "$binary" > "$binary.log" 2>&1; then
 		cat "$binary.log" >&2

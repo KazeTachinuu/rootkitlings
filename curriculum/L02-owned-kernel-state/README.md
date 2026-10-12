@@ -76,7 +76,7 @@ or use a log message as proof of ownership.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker builds failure points 0, 1, and 2 without warnings and rejects an

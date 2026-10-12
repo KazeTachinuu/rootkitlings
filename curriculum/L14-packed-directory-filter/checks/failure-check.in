@@ -29,14 +29,14 @@ filldir_before=$(probe_count k filldir64)
 
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	if module_load_test /rootkitlings/rootkitlings.ko "$expected_errno"; then
+	if module_load_test /rklings/rklings.ko "$expected_errno"; then
 		_ok "attempt $attempt returned errno $expected_errno"
 	else
 		_fail "attempt $attempt returned the wrong error"
 	fi
-	assert_absent /sys/module/rootkitlings
-	assert_absent /proc/rootkitlings
-	assert_absent /proc/rootkitlings_hidden
+	assert_absent /sys/module/rklings
+	assert_absent /proc/rklings
+	assert_absent /proc/rklings_hidden
 	if [ "$(probe_count k vfs_mkdir)" -eq "$mkdir_before" ] &&
 	   [ "$(probe_count k filename_rmdir)" -eq "$rmdir_before" ] &&
 	   [ "$(probe_count r iterate_dir)" -eq "$iterate_before" ] &&

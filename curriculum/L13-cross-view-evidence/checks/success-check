@@ -4,10 +4,10 @@
 
 begin "Cross-view probe evidence"
 
-endpoint=/proc/rootkitlings
+endpoint=/proc/rklings
 registry=/sys/kernel/debug/kprobes/list
-fixtures=/tmp/rootkitlings-probes
-target_dir=/tmp/rootkitlings-probe-target
+fixtures=/tmp/rklings-probes
+target_dir=/tmp/rklings-probe-target
 actual=$fixtures/actual
 mkdir -p "$fixtures"
 
@@ -55,7 +55,7 @@ assert_registry_delta()
 	label=$2
 	mkdir_now=$(probe_count vfs_mkdir)
 	rmdir_now=$(probe_count filename_rmdir)
-	missing_now=$(probe_count __rootkitlings_missing_kprobe_target_7_2__)
+	missing_now=$(probe_count __rklings_missing_kprobe_target_7_2__)
 	if [ "$mkdir_now" -eq $((mkdir_before + expected_delta)) ] &&
 	   [ "$rmdir_now" -eq $((rmdir_before + expected_delta)) ] &&
 	   [ "$missing_now" -eq "$missing_before" ]; then
@@ -70,7 +70,7 @@ assert_selected_view()
 	label=$1
 	if [ "$(grep -Fxc 'listed_probe=vfs_mkdir' "$actual")" -eq 1 ] &&
 	   ! grep -Fqx 'listed_probe=filename_rmdir' "$actual" &&
-	   ! grep -Fq '__rootkitlings_missing_kprobe_target_7_2__' "$actual"; then
+	   ! grep -Fq '__rklings_missing_kprobe_target_7_2__' "$actual"; then
 		_ok "$label retains one catalog row and omits the selected row"
 	else
 		_fail "$label returned the wrong catalog view"
@@ -92,12 +92,12 @@ assert_status()
 
 assert_not_loaded()
 {
-	assert_absent /sys/module/rootkitlings
+	assert_absent /sys/module/rklings
 	assert_absent "$endpoint"
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "rootkitlings appears in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings appears in /proc/modules"
 	else
-		_ok "rootkitlings is absent from /proc/modules"
+		_ok "rklings is absent from /proc/modules"
 	fi
 	assert_registry_delta 0 "unloaded state"
 }
@@ -139,7 +139,7 @@ check_abi()
 			_fail "$target is absent from the running kernel"
 		fi
 	done
-	if grep -q '[[:space:]]__rootkitlings_missing_kprobe_target_7_2__$' \
+	if grep -q '[[:space:]]__rklings_missing_kprobe_target_7_2__$' \
 		/proc/kallsyms; then
 		_fail "the injected missing target unexpectedly exists"
 	else
@@ -163,7 +163,7 @@ expect_errno()
 
 check_loaded()
 {
-	assert_loaded rootkitlings
+	assert_loaded rklings
 	assert_exists "$endpoint"
 	metadata=$(stat -c '%a:%u:%g' "$endpoint")
 	if [ "$metadata" = 644:0:0 ]; then
@@ -313,7 +313,7 @@ unload_under_activity()
 	stress_until_unload &
 	stress_pid=$!
 	while [ ! -e "$fixtures/stress-ready" ]; do :; done
-	if proc_write_test unload "$endpoint" "$fixtures/enable" rootkitlings \
+	if proc_write_test unload "$endpoint" "$fixtures/enable" rklings \
 		> /dev/null; then
 		_ok "held control descriptor unloads during repeated reads and target calls"
 	else
@@ -381,12 +381,12 @@ run_targets_after_unload()
 check_abi
 mkdir_before=$(probe_count vfs_mkdir)
 rmdir_before=$(probe_count filename_rmdir)
-missing_before=$(probe_count __rootkitlings_missing_kprobe_target_7_2__)
+missing_before=$(probe_count __rklings_missing_kprobe_target_7_2__)
 assert_not_loaded
 
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	load rootkitlings.ko
+	load rklings.ko
 	check_loaded
 	check_rejections
 	exercise_targets

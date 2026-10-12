@@ -10,8 +10,8 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 [[ -d $build_dir && ! -L $build_dir ]] || die "build directory must be a real directory"
 [[ -f $artifact && ! -L $artifact ]] || die "artifact must be a regular file"
-[[ $artifact == "$build_dir/rootkitlings.ko" ]] ||
-	die "expected artifact at: $build_dir/rootkitlings.ko"
+[[ $artifact == "$build_dir/rklings.ko" ]] ||
+	die "expected artifact at: $build_dir/rklings.ko"
 
 for path in core/main.o core/state.o interface/proc.o include/rootkit.h; do
 	[[ -f $build_dir/$path && ! -L $build_dir/$path ]] ||
@@ -23,8 +23,8 @@ command -v nm >/dev/null || die "nm is required"
 command -v gcc >/dev/null || die "gcc is required"
 command -v clang >/dev/null || die "clang is required"
 [[ $(modinfo -F license "$artifact") == GPL ]] || die "module license must be GPL"
-[[ $(modinfo -F description "$artifact") == 'Rootkitlings kernel module' ]] ||
-	die "module description must be: Rootkitlings kernel module"
+[[ $(modinfo -F description "$artifact") == 'Rklings kernel module' ]] ||
+	die "module description must be: Rklings kernel module"
 
 for symbol in rk_state_create rk_state_is_active rk_state_destroy; do
 	nm "$build_dir/core/state.o" | grep -Eq "[[:space:]]T[[:space:]]+$symbol$" ||
@@ -55,12 +55,12 @@ for object in core/main.o interface/proc.o; do
 	fi
 done
 
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-proc-read-contract-host.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-proc-read-contract-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 for compiler in gcc clang; do
 	"$compiler" -std=c11 -Wall -Wextra -Werror -Wno-unused-parameter \
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
-		-DROOTKITLINGS_FAIL_POINT=0 \
+		-DRKLINGS_FAIL_POINT=0 \
 		-I "$here/../fixtures/host/include" -I "$build_dir/include" \
 		-I "$build_dir" "$here/../fixtures/host/state_view_test.c" \
 		-o "$scratch/state-view-$compiler"

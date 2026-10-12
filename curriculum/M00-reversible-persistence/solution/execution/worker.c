@@ -56,7 +56,7 @@ __must_check int rk_worker_start(struct rk_state *state,
 	worker_transaction = transaction;
 	init_waitqueue_head(&worker_wait);
 	atomic_set(&pending, 0);
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_WORKER_CREATE)
+	if (RKLINGS_FAIL_POINT == RK_FAIL_WORKER_CREATE)
 		worker_task = ERR_PTR(-EINTR);
 	else
 		worker_task = kthread_run(rk_worker_main, NULL, "rkling_persist");

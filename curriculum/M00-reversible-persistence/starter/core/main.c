@@ -8,8 +8,8 @@
 #include "rootkit.h"
 #include "transaction.h"
 
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 4
-#error "unknown ROOTKITLINGS_FAIL_POINT"
+#if RKLINGS_FAIL_POINT < 0 || RKLINGS_FAIL_POINT > 4
+#error "unknown RKLINGS_FAIL_POINT"
 #endif
 
 static struct rk_state *state;
@@ -20,7 +20,7 @@ static int __init rk_init(void)
 	/*
 	 * TODO: wire the init sequence.
 	 *
-	 * 1. Check ROOTKITLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT, return -ECANCELED.
+	 * 1. Check RKLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT, return -ECANCELED.
 	 * 2. Call rk_platform_prepare().
 	 * 3. Create state with rk_state_create().
 	 * 4. Start the worker with rk_worker_start(state, &transaction).
@@ -49,4 +49,4 @@ module_init(rk_init);
 module_exit(rk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings reversible persistence");
+MODULE_DESCRIPTION("Rklings reversible persistence");

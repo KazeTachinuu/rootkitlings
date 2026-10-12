@@ -91,7 +91,7 @@ The borrowed pointer remains valid until both callback sources have stopped.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker verifies the callback call boundaries, observable timer and worker

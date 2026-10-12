@@ -5,8 +5,8 @@
 
 #include "rootkit.h"
 
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 2
-#error "unknown ROOTKITLINGS_FAIL_POINT"
+#if RKLINGS_FAIL_POINT < 0 || RKLINGS_FAIL_POINT > 2
+#error "unknown RKLINGS_FAIL_POINT"
 #endif
 
 static struct rk_netfilter_observer observer;
@@ -40,4 +40,4 @@ module_init(rk_init);
 module_exit(rk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings local IPv4 Netfilter observer");
+MODULE_DESCRIPTION("Rklings local IPv4 Netfilter observer");

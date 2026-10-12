@@ -126,7 +126,7 @@ rk_netfilter_start(struct rk_netfilter_observer *observer,
 		.priority = NF_IP_PRI_FIRST,
 	};
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_NETFILTER_REGISTER)
+	if (RKLINGS_FAIL_POINT == RK_FAIL_NETFILTER_REGISTER)
 		error = -EAFNOSUPPORT;
 	else
 		error = nf_register_net_hook(observer->net, &observer->ops);

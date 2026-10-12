@@ -844,7 +844,7 @@ static int serve(const char *directory, const char *port_text,
 		peer = accept_peer(server);
 		previous = receive_hello(peer, previous, &channel);
 		expect_reply(peer, &channel, "PING", "PONG");
-		expect_reply(peer, &channel, "INFO", "INFO rootkitlings");
+		expect_reply(peer, &channel, "INFO", "INFO rklings");
 		expect_reply(peer, &channel, "MARK alpha_7", "MARKED alpha_7");
 		expect_reply(peer, &channel, "UNKNOWN", "ERR");
 		replay_length = seal_envelope(

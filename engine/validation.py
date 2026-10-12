@@ -325,7 +325,7 @@ class Validator:
                 failures.append(f"{item.id}: tree composition failed: {error}")
 
         tracked = self.require_command(
-            ["git", "ls-files", "--", ".rootkitlings", "work"],
+            ["git", "ls-files", "--", ".rklings", "work"],
             "could not inspect tracked runtime files",
             capture=True,
         ).output.splitlines()
@@ -338,7 +338,7 @@ class Validator:
             raise ValidationError("catalog assets:\n  " + "\n  ".join(failures))
 
     def _source_files(self) -> tuple[Path, ...]:
-        candidates = [self.root / "rootkitlings"]
+        candidates = [self.root / "rklings"]
         candidates.extend(sorted((self.root / "engine").glob("*.py")))
         candidates.extend(
             path
@@ -476,7 +476,7 @@ class Validator:
         derived = 0
         solutions = 0
         with tempfile.TemporaryDirectory(
-            prefix="rootkitlings-validate-"
+            prefix="rklings-validate-"
         ) as temporary:
             temporary_root = Path(temporary)
             starter_root = temporary_root / "starters"
@@ -554,7 +554,7 @@ def _usage(program: str) -> str:
 
 def main(arguments: Iterable[str], *, root: Path) -> int:
     values = list(arguments)
-    console = Console("rootkitlings.validation")
+    console = Console("rklings.validation")
     if values not in ([], ["--quick"]):
         console.raw(_usage("scripts/validate") + "\n", error=True)
         return 2

@@ -8,8 +8,8 @@
 #include "rootkit.h"
 #include "transaction.h"
 
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 4
-#error "unknown ROOTKITLINGS_FAIL_POINT"
+#if RKLINGS_FAIL_POINT < 0 || RKLINGS_FAIL_POINT > 4
+#error "unknown RKLINGS_FAIL_POINT"
 #endif
 
 static struct rk_state *state;
@@ -19,7 +19,7 @@ static int __init rk_init(void)
 {
 	int error;
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT)
+	if (RKLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT)
 		return -ECANCELED;
 
 	error = rk_platform_prepare();
@@ -68,4 +68,4 @@ module_init(rk_init);
 module_exit(rk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings reversible persistence");
+MODULE_DESCRIPTION("Rklings reversible persistence");

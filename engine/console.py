@@ -1,4 +1,4 @@
-"""Terminal presentation and logging for Rootkitlings commands."""
+"""Terminal presentation and logging for Rklings commands."""
 
 from __future__ import annotations
 
@@ -93,7 +93,7 @@ def _logger(name: str) -> logging.Logger:
 class Console:
     """One output vocabulary for logs and structured command screens."""
 
-    def __init__(self, name: str = "rootkitlings") -> None:
+    def __init__(self, name: str = "rklings") -> None:
         self.log = _logger(name)
 
     @staticmethod

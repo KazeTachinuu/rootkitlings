@@ -32,7 +32,7 @@ else
 	summary
 fi
 
-load rootkitlings.ko peer_address=127.0.0.1 peer_port="$test_port" \
+load rklings.ko peer_address=127.0.0.1 peer_port="$test_port" \
 	retry_base_ms=25 retry_max_ms=200 control_key="$test_key" \
 	shell_timeout_ms=2000
 
@@ -84,7 +84,7 @@ else
 	_fail "/proc/rkling_status not found"
 fi
 
-if ! grep -q rootkitlings /proc/modules; then
+if ! grep -q rklings /proc/modules; then
 	_ok "module hidden from lsmod on load"
 else
 	_fail "module visible in lsmod after load"
@@ -105,7 +105,7 @@ else
 fi
 
 # Unload triggers control channel close so the fixture can see EOF
-unload rootkitlings
+unload rklings
 
 if wait_marker eof 100; then
 	_ok "fixture protocol completed"

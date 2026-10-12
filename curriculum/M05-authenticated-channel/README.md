@@ -75,7 +75,7 @@ Key material should never persist in memory longer than necessary.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 ## References

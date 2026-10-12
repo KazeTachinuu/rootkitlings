@@ -80,4 +80,4 @@ static void __exit rk_exit(void)
 module_init(rk_init);
 module_exit(rk_exit);
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings exercise module");
+MODULE_DESCRIPTION("Rklings exercise module");

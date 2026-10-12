@@ -5,21 +5,21 @@
 
 begin "Packed directory filtering"
 
-endpoint=/proc/rootkitlings
-hidden=/proc/rootkitlings_hidden
+endpoint=/proc/rklings
+hidden=/proc/rklings_hidden
 registry=/sys/kernel/debug/kprobes/list
-fixtures=/tmp/rootkitlings-dirents
+fixtures=/tmp/rklings-dirents
 ordinary=$fixtures/ordinary
-mkdir -p "$fixtures" "$ordinary/rootkitlings_hidden"
+mkdir -p "$fixtures" "$ordinary/rklings_hidden"
 : > "$ordinary/ordinary_marker"
 printf 'enable' > "$fixtures/enable"
 printf 'disable' > "$fixtures/disable"
 printf 'present=1\n' > "$fixtures/present"
 printf 'active=1\nactions=disabled\nvfs_mkdir_seen=0\nfilename_rmdir_seen=0\n' > "$fixtures/status-disabled"
-printf 'directory_filter=active\ndirectory_target=rootkitlings_hidden\n' >> "$fixtures/status-disabled"
+printf 'directory_filter=active\ndirectory_target=rklings_hidden\n' >> "$fixtures/status-disabled"
 printf 'directory_chunk_capacity=32768\ndirectory_returns_missed=0\nlisted_probe=vfs_mkdir\n' >> "$fixtures/status-disabled"
 printf 'active=1\nactions=enabled\nvfs_mkdir_seen=0\nfilename_rmdir_seen=0\n' > "$fixtures/status-enabled"
-printf 'directory_filter=active\ndirectory_target=rootkitlings_hidden\n' >> "$fixtures/status-enabled"
+printf 'directory_filter=active\ndirectory_target=rklings_hidden\n' >> "$fixtures/status-enabled"
 printf 'directory_chunk_capacity=32768\ndirectory_returns_missed=0\nlisted_probe=vfs_mkdir\n' >> "$fixtures/status-enabled"
 chmod 0644 "$fixtures"/* 2>/dev/null || true
 
@@ -61,7 +61,7 @@ assert_status()
 
 assert_unloaded()
 {
-	assert_absent /sys/module/rootkitlings
+	assert_absent /sys/module/rklings
 	assert_absent "$endpoint"
 	assert_absent "$hidden"
 	assert_registry_delta 0 "unloaded state"
@@ -69,7 +69,7 @@ assert_unloaded()
 
 check_loaded()
 {
-	assert_loaded rootkitlings
+	assert_loaded rklings
 	assert_exists "$endpoint"
 	assert_exists "$hidden"
 	[ "$(stat -c '%a:%u:%g' "$endpoint")" = 644:0:0 ] &&
@@ -90,39 +90,39 @@ check_loaded()
 
 check_filtering()
 {
-	getdents64_test visible /proc 32768 rootkitlings_hidden > "$fixtures/raw" &&
+	getdents64_test visible /proc 32768 rklings_hidden > "$fixtures/raw" &&
 		_ok "disabled raw getdents64 sees the controlled proc entry" ||
 		_fail "disabled raw getdents64 omitted the controlled entry"
-	getdents64_test visible "$ordinary" 32768 rootkitlings_hidden > "$fixtures/raw" &&
+	getdents64_test visible "$ordinary" 32768 rklings_hidden > "$fixtures/raw" &&
 		_ok "ordinary-directory negative control sees the same name" ||
 		_fail "ordinary-directory negative control failed"
 	proc_write_test write "$endpoint" "$fixtures/enable" > /dev/null ||
 		_fail "could not enable actions"
 	assert_status enabled "enable"
-	getdents64_test hidden /proc 32768 rootkitlings_hidden > "$fixtures/raw" &&
+	getdents64_test hidden /proc 32768 rklings_hidden > "$fixtures/raw" &&
 		_ok "enabled raw getdents64 omits the name from a mixed proc chunk" ||
 		_fail "enabled raw getdents64 exposed the name"
 	cmp -s "$fixtures/present" "$hidden" &&
 		_ok "direct lookup still reads the object while enumeration omits it" ||
 		_fail "enumeration changed direct lookup"
-	getdents64_test visible "$ordinary" 32768 rootkitlings_hidden > "$fixtures/raw" &&
+	getdents64_test visible "$ordinary" 32768 rklings_hidden > "$fixtures/raw" &&
 		_ok "enabled filtering remains scoped away from an ordinary directory" ||
 		_fail "filter escaped the proc-root scope"
-	getdents64_test hidden /proc 65536 rootkitlings_hidden > "$fixtures/raw" &&
+	getdents64_test hidden /proc 65536 rklings_hidden > "$fixtures/raw" &&
 		_fail "oversized getdents64 did not fail open" || true
-	getdents64_test visible /proc 65536 rootkitlings_hidden > "$fixtures/raw" &&
+	getdents64_test visible /proc 65536 rklings_hidden > "$fixtures/raw" &&
 		_ok "calls above 32 KiB fail open" ||
 		_fail "oversized calls were changed"
-	getdents64_test cookies /proc 32768 rootkitlings_hidden > "$fixtures/raw" &&
+	getdents64_test cookies /proc 32768 rklings_hidden > "$fixtures/raw" &&
 		_ok "retained directory cookies remain seekable" ||
 		_fail "a retained directory cookie is invalid"
 
 	proc_write_test write "$endpoint" "$fixtures/disable" > /dev/null ||
 		_fail "could not disable before all-match test"
-	getdents64_test isolate /proc "$endpoint" rootkitlings_hidden > "$fixtures/raw" &&
+	getdents64_test isolate /proc "$endpoint" rklings_hidden > "$fixtures/raw" &&
 		_ok "an isolated all-target chunk stays positive and makes progress" ||
 		_fail "all-target handling produced false EOF or repeated the record"
-	getdents64_test fdreuse /proc "$ordinary" 2000 rootkitlings_hidden \
+	getdents64_test fdreuse /proc "$ordinary" 2000 rklings_hidden \
 		> "$fixtures/raw" &&
 		_ok "descriptor reuse cannot apply proc filtering to an ordinary directory" ||
 		_fail "descriptor reuse corrupted, filtered, or failed to exercise an ordinary result"
@@ -132,7 +132,7 @@ enumerate_many()
 {
 	i=0
 	while [ "$i" -lt 40 ]; do
-		getdents64_test either /proc 32768 rootkitlings_hidden > /dev/null || return 1
+		getdents64_test either /proc 32768 rklings_hidden > /dev/null || return 1
 		i=$((i + 1))
 	done
 }
@@ -174,7 +174,7 @@ check_concurrency()
 stress_enumeration()
 {
 	while [ -e "$endpoint" ]; do
-		getdents64_test hidden /proc 32768 rootkitlings_hidden > /dev/null 2>&1 || {
+		getdents64_test hidden /proc 32768 rklings_hidden > /dev/null 2>&1 || {
 			[ ! -e "$endpoint" ] || : > "$fixtures/stress-failed"
 			return
 		}
@@ -188,7 +188,7 @@ unload_active()
 	stress_pid=$!
 	while [ ! -e "$fixtures/stress-ready" ]; do :; done
 	exec 9</proc
-	if proc_write_test unload "$endpoint" "$fixtures/disable" rootkitlings > /dev/null; then
+	if proc_write_test unload "$endpoint" "$fixtures/disable" rklings > /dev/null; then
 		_ok "unload completes with a held control descriptor and active enumeration"
 	else
 		_fail "unload under enumeration failed"
@@ -213,13 +213,13 @@ assert_unloaded
 
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	load rootkitlings.ko
+	load rklings.ko
 	check_loaded
 	check_filtering
 	check_concurrency
 	unload_active
 	assert_unloaded
-	if getdents64_test visible /proc 32768 rootkitlings_hidden > "$fixtures/raw"; then
+	if getdents64_test visible /proc 32768 rklings_hidden > "$fixtures/raw"; then
 		_fail "post-unload enumeration retained a stale controlled object"
 	else
 		_ok "post-unload enumeration contains no stale controlled object"

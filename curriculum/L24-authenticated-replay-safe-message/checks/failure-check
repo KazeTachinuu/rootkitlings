@@ -3,10 +3,10 @@
 . /vm/checks/lib.sh
 
 begin "Rejected unfinished authenticated receiver"
-if module_load_test /rootkitlings/rootkitlings.ko 22; then
+if module_load_test /rklings/rklings.ko 22; then
 	_ok "unfinished receiver is rejected with EINVAL"
 else
 	_fail "unfinished receiver returned the wrong error"
 fi
-assert_absent /sys/module/rootkitlings
+assert_absent /sys/module/rklings
 summary

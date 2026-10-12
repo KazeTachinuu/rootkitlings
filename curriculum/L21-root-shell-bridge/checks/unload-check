@@ -4,7 +4,7 @@
 
 begin "Blocked root shell unload"
 port=46124
-capture=/tmp/rootkitlings-root-shell-unload
+capture=/tmp/rklings-root-shell-unload
 rm -f "$capture"
 ifconfig lo 127.0.0.1 up
 
@@ -17,7 +17,7 @@ printf '%s\n' 'printf "rkproof-%s\n" ready' 'while :; do :; done' |
 	nc -l -p "$port" >"$capture" 2>&1 &
 listener=$!
 sleep 0.1
-load rootkitlings.ko "shell_port=$port" shell_timeout_ms=300000
+load rklings.ko "shell_port=$port" shell_timeout_ms=300000
 
 attempt=0
 while ! has_line "$capture" '^rkproof-ready$' 2>/dev/null && \
@@ -26,14 +26,14 @@ while ! has_line "$capture" '^rkproof-ready$' 2>/dev/null && \
 	attempt=$((attempt + 1))
 done
 has_line "$capture" '^rkproof-ready$' || _fail "shell did not start"
-if printf 46129 > /sys/module/rootkitlings/parameters/shell_port 2>/dev/null;
+if printf 46129 > /sys/module/rklings/parameters/shell_port 2>/dev/null;
 then
 	_fail "a busy shell accepted a concurrent request"
 else
 	_ok "a busy shell rejected a concurrent request"
 fi
 
-unload rootkitlings
+unload rklings
 attempt=0
 while kill -0 "$listener" 2>/dev/null && [ "$attempt" -lt 60 ]; do
 	sleep 0.05
@@ -46,6 +46,6 @@ else
 	wait "$listener" || true
 	_ok "unload stopped a busy shell promptly"
 fi
-assert_absent /sys/module/rootkitlings
+assert_absent /sys/module/rklings
 rm -f "$capture"
 summary

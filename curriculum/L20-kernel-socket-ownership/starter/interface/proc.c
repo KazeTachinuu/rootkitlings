@@ -48,10 +48,10 @@ __must_check int rk_proc_publish(struct rk_socket_owner *owner)
 	if (!owner || proc_entry)
 		return -EINVAL;
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH)
+	if (RKLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH)
 		proc_entry = NULL;
 	else
-		proc_entry = proc_create_data("rootkitlings", 0400, NULL,
+		proc_entry = proc_create_data("rklings", 0400, NULL,
 					      &rk_proc_ops, owner);
 	if (!proc_entry)
 		return -ENOMEM;

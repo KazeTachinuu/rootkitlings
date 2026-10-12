@@ -6,11 +6,11 @@ begin "Precise failed initialization"
 
 assert_inventory_absent()
 {
-	assert_absent /sys/module/rootkitlings
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "rootkitlings appears in /proc/modules"
+	assert_absent /sys/module/rklings
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings appears in /proc/modules"
 	else
-		_ok "rootkitlings is absent from /proc/modules"
+		_ok "rklings is absent from /proc/modules"
 	fi
 }
 
@@ -18,7 +18,7 @@ assert_inventory_absent
 
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	if output=$(module_load_test /rootkitlings/rootkitlings.ko 2>&1); then
+	if output=$(module_load_test /rklings/rklings.ko 2>&1); then
 		_ok "attempt $attempt returned numeric ECANCELED"
 	else
 		_fail "attempt $attempt did not return ECANCELED: $output"

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef ROOTKITLINGS_FRAMING_H
-#define ROOTKITLINGS_FRAMING_H
+#ifndef RKLINGS_FRAMING_H
+#define RKLINGS_FRAMING_H
 
 #include <linux/compiler_attributes.h>
 #include <linux/types.h>

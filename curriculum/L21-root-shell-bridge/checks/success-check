@@ -4,7 +4,7 @@
 
 begin "Root shell bridge"
 port=46121
-capture=/tmp/rootkitlings-root-shell
+capture=/tmp/rklings-root-shell
 rm -f "$capture"
 ifconfig lo 127.0.0.1 up
 
@@ -45,11 +45,11 @@ has_line()
 listener=$!
 sleep 0.1
 
-load rootkitlings.ko peer_address=127.0.0.2 "shell_port=$port" \
+load rklings.ko peer_address=127.0.0.2 "shell_port=$port" \
 	shell_timeout_ms=5000
-assert_contains /sys/module/rootkitlings/parameters/peer_address \
+assert_contains /sys/module/rklings/parameters/peer_address \
 	127.0.0.2
-first_ticket=$(cat /sys/module/rootkitlings/parameters/shell_ticket)
+first_ticket=$(cat /sys/module/rklings/parameters/shell_ticket)
 attempt=0
 while kill -0 "$listener" 2>/dev/null && [ "$attempt" -lt 100 ]; do
 	sleep 0.05
@@ -104,7 +104,7 @@ listener=$!
 sleep 0.1
 attempt=0
 while ! printf '%s' "$port" \
-		> /sys/module/rootkitlings/parameters/shell_port 2>/dev/null && \
+		> /sys/module/rklings/parameters/shell_port 2>/dev/null && \
 		[ "$attempt" -lt 100 ]; do
 	sleep 0.05
 	attempt=$((attempt + 1))
@@ -123,7 +123,7 @@ else
 	wait "$listener" || _fail "second shell transport failed"
 fi
 show_capture "$capture.second" "Second shell transcript"
-second_ticket=$(cat /sys/module/rootkitlings/parameters/shell_ticket)
+second_ticket=$(cat /sys/module/rklings/parameters/shell_ticket)
 second_id=${second_ticket%% *}
 if test "$(head -n 1 "$capture.second" | tr -d '\r')" = \
 		"RKSH $second_ticket"; then
@@ -142,15 +142,15 @@ if has_line "$capture.second" '^rkproof-second$'; then
 else
 	_fail "second shell did not run"
 fi
-if test "$(cat /sys/module/rootkitlings/parameters/shell_status)" = \
+if test "$(cat /sys/module/rklings/parameters/shell_status)" = \
 		"$second_id exited 0"; then
 	_ok "completed shell reports its exact request and result"
 else
 	_fail "completed shell status is not honest"
 fi
 
-unload rootkitlings
-assert_absent /sys/module/rootkitlings
+unload rklings
+assert_absent /sys/module/rklings
 _ok "completed sessions unload cleanly"
 rm -f "$capture" "$capture.second"
 summary

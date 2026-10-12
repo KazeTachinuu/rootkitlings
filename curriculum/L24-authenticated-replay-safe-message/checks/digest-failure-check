@@ -3,10 +3,10 @@
 . /vm/checks/lib.sh
 
 begin "HMAC calculation failure"
-if module_load_test /rootkitlings/rootkitlings.ko 5; then
+if module_load_test /rklings/rklings.ko 5; then
 	_ok "digest failure is propagated as EIO"
 else
 	_fail "digest failure returned the wrong error"
 fi
-assert_absent /sys/module/rootkitlings
+assert_absent /sys/module/rklings
 summary

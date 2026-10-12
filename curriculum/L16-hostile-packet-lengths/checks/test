@@ -4,7 +4,7 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-hostile-packet-lengths-test.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-hostile-packet-lengths-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || {
@@ -65,7 +65,7 @@ build_tree()
 build_tree "$HERE/../starter" "$scratch/starter"
 build_tree "$HERE/../solution" "$scratch/solution"
 "$HERE/host-check" "$scratch/solution" \
-	"$scratch/solution/rootkitlings.ko"
+	"$scratch/solution/rklings.ko"
 
 if gcc -std=c11 -Wall -Wextra -Werror -pedantic \
 	-fsanitize=address,undefined -I "$HERE/../starter/include" \
@@ -81,7 +81,7 @@ fi
 expect_rejection()
 {
 	local directory=$1 label=$2
-	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+	if "$HERE/host-check" "$directory" "$directory/rklings.ko" \
 		> "$scratch/$label.log" 2>&1; then
 		printf '[x] host checker accepted %s\n' "$label" >&2
 		exit 1
@@ -132,7 +132,7 @@ run_guest()
 {
 	local output
 	if ! output=$("$HERE/../../../vm/boot" --check \
-		"$HERE/success-check" "$scratch/solution/rootkitlings.ko" 2>&1); then
+		"$HERE/success-check" "$scratch/solution/rklings.ko" 2>&1); then
 		printf '%s\n' "$output" >&2
 		printf '[x] disposable guest did not complete\n' >&2
 		exit 1

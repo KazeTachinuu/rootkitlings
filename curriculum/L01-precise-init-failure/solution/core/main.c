@@ -8,13 +8,13 @@ enum rk_fail_point {
 	RK_FAIL_PREFLIGHT = 1,
 };
 
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 1
-#error "unknown ROOTKITLINGS_FAIL_POINT"
+#if RKLINGS_FAIL_POINT < 0 || RKLINGS_FAIL_POINT > 1
+#error "unknown RKLINGS_FAIL_POINT"
 #endif
 
 static int __init rk_init(void)
 {
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT)
+	if (RKLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT)
 		return -ECANCELED;
 
 	return 0;
@@ -28,4 +28,4 @@ module_init(rk_init);
 module_exit(rk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings kernel module");
+MODULE_DESCRIPTION("Rklings kernel module");

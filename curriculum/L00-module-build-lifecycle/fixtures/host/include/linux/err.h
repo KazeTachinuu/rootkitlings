@@ -1,5 +1,5 @@
-#ifndef ROOTKITLINGS_HOST_ERR_H
-#define ROOTKITLINGS_HOST_ERR_H
+#ifndef RKLINGS_HOST_ERR_H
+#define RKLINGS_HOST_ERR_H
 
 #include <stdint.h>
 

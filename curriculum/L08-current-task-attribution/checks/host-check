@@ -10,8 +10,8 @@ artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
 [[ -d $build_dir && ! -L $build_dir ]] ||
 	die "build directory must be a real directory"
 [[ -f $artifact && ! -L $artifact ]] || die "artifact must be a regular file"
-[[ $artifact == "$build_dir/rootkitlings.ko" ]] ||
-	die "expected artifact at: $build_dir/rootkitlings.ko"
+[[ $artifact == "$build_dir/rklings.ko" ]] ||
+	die "expected artifact at: $build_dir/rklings.ko"
 
 for path in core/main.o core/state.o interface/proc.o include/rootkit.h \
 	interface/proc.c; do
@@ -22,8 +22,8 @@ done
 command -v modinfo >/dev/null || die "modinfo is required"
 command -v nm >/dev/null || die "nm is required"
 [[ $(modinfo -F license "$artifact") == GPL ]] || die "module license must be GPL"
-[[ $(modinfo -F description "$artifact") == 'Rootkitlings kernel module' ]] ||
-	die "module description must be: Rootkitlings kernel module"
+[[ $(modinfo -F description "$artifact") == 'Rklings kernel module' ]] ||
+	die "module description must be: Rklings kernel module"
 
 for symbol in rk_state_create rk_state_is_active rk_state_destroy; do
 	nm "$build_dir/core/state.o" | grep -Eq "[[:space:]]T[[:space:]]+$symbol$" ||

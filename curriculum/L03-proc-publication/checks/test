@@ -4,9 +4,9 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-proc-publication-baseline.XXXXXX")
-work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-proc-publication-work.XXXXXX")
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-proc-publication-test.XXXXXX")
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rklings-proc-publication-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rklings-proc-publication-work.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-proc-publication-test.XXXXXX")
 trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
 
 cp -a "$HERE/../../L02-owned-kernel-state/solution/." "$baseline/"
@@ -24,7 +24,7 @@ build_variant()
 	local name=$1 point=$2 destination=$scratch/$1 log=$scratch/$1.log
 	cp -a "$work" "$destination"
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
+		RKLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
 		cat "$log" >&2
 		printf '[x] %s build failed\n' "$name" >&2
 		exit 1
@@ -40,12 +40,12 @@ build_variant success 0
 build_variant preflight 1
 build_variant allocation 2
 build_variant publication 3
-"$HERE/host-check" "$scratch/success" "$scratch/success/rootkitlings.ko"
+"$HERE/host-check" "$scratch/success" "$scratch/success/rklings.ko"
 
 cp "$HERE/../fixtures/reversed-exit-main.c" "$work/core/main.c"
 build_variant reversed-exit 0
 if output=$("$HERE/host-check" "$scratch/reversed-exit" \
-	"$scratch/reversed-exit/rootkitlings.ko" 2>&1); then
+	"$scratch/reversed-exit/rklings.ko" 2>&1); then
 	printf '%s\n[x] reversed-exit fixture unexpectedly passed\n' "$output" >&2
 	exit 1
 fi
@@ -58,7 +58,7 @@ printf '[+] reversed-exit fixture rejected by lifecycle ordering\n'
 cp "$HERE/../fixtures/collapsed-publish-error-main.c" "$work/core/main.c"
 build_variant collapsed-publish-error 0
 if output=$("$HERE/host-check" "$scratch/collapsed-publish-error" \
-	"$scratch/collapsed-publish-error/rootkitlings.ko" 2>&1); then
+	"$scratch/collapsed-publish-error/rklings.ko" 2>&1); then
 	printf '%s\n[x] collapsed-publish-error fixture unexpectedly passed\n' \
 		"$output" >&2
 	exit 1
@@ -72,7 +72,7 @@ printf '[+] collapsed publication error rejected by injected component error\n'
 cp -p "$HERE/../solution/core/main.c" "$work/core/main.c"
 
 cp -a "$work" "$scratch/unknown"
-if make -s -C "$KDIR" M="$scratch/unknown" W=1 ROOTKITLINGS_FAIL_POINT=99 \
+if make -s -C "$KDIR" M="$scratch/unknown" W=1 RKLINGS_FAIL_POINT=99 \
 	modules >"$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure-point value compiled successfully\n' >&2
 	exit 1
@@ -90,10 +90,10 @@ run_guest()
 	printf '%s\n' "$output"
 }
 
-run_guest "$HERE/failure-ecanceled-check" "$scratch/preflight/rootkitlings.ko" \
+run_guest "$HERE/failure-ecanceled-check" "$scratch/preflight/rklings.ko" \
 	--tool vm/tools/module_load_test
-run_guest "$HERE/failure-enomem-check" "$scratch/allocation/rootkitlings.ko" \
+run_guest "$HERE/failure-enomem-check" "$scratch/allocation/rklings.ko" \
 	--tool vm/tools/module_load_test
-run_guest "$HERE/failure-after-state-check" "$scratch/publication/rootkitlings.ko" \
+run_guest "$HERE/failure-after-state-check" "$scratch/publication/rklings.ko" \
 	--tool vm/tools/module_load_test
-run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko"
+run_guest "$HERE/success-check" "$scratch/success/rklings.ko"

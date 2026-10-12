@@ -69,16 +69,16 @@ retained entry is updated to maintain the linked-list invariant.
 
 ## Control interface
 
-The starter code creates `/proc/rootkitlings` (world-readable and
+The starter code creates `/proc/rklings` (world-readable and
 writable). Write commands to manage the target lists:
 
 | Command | Effect |
 |---------|--------|
-| `echo "hide file rkling" > /proc/rootkitlings` | Hide entries starting with "rkling" |
-| `echo "hide pid 1234" > /proc/rootkitlings` | Hide PID 1234 from /proc |
-| `echo "unhide file 0" > /proc/rootkitlings` | Remove file target at index 0 |
-| `echo "unhide pid 0" > /proc/rootkitlings` | Remove PID target at index 0 |
-| `cat /proc/rootkitlings` | Show current target lists with indices |
+| `echo "hide file rkling" > /proc/rklings` | Hide entries starting with "rkling" |
+| `echo "hide pid 1234" > /proc/rklings` | Hide PID 1234 from /proc |
+| `echo "unhide file 0" > /proc/rklings` | Remove file target at index 0 |
+| `echo "unhide pid 0" > /proc/rklings` | Remove PID target at index 0 |
+| `cat /proc/rklings` | Show current target lists with indices |
 
 Invalid commands return an error without changing state.
 
@@ -91,7 +91,7 @@ proc interface, and dirent filter loop are provided.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 ## References

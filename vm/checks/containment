@@ -63,8 +63,8 @@ assert_exists /proc/1/status
 assert_exists /proc/mounts
 assert_exists /sys/kernel
 assert_exists /sys/class/net/lo
-assert_contains /proc/cmdline "rootkitlings=check"
-assert_not_contains /proc/cmdline "rootkitlings=network"
+assert_contains /proc/cmdline "rklings=check"
+assert_not_contains /proc/cmdline "rklings=network"
 assert_loopback_only
 assert_no_host_disk
 assert_no_host_mount

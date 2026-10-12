@@ -174,10 +174,10 @@ def source_defines(source: Path, root: Path = ROOT) -> tuple[str, ...]:
             bundle / other_tree / "Kbuild",
         )
     for kbuild in kbuilds:
-        if kbuild.is_file() and "ROOTKITLINGS_FAIL_POINT" in kbuild.read_text(
+        if kbuild.is_file() and "RKLINGS_FAIL_POINT" in kbuild.read_text(
             encoding="utf-8"
         ):
-            return ("-DROOTKITLINGS_FAIL_POINT=0",)
+            return ("-DRKLINGS_FAIL_POINT=0",)
     return ()
 
 
@@ -249,7 +249,7 @@ def captured_database(catalog: Catalog, temporary_root: Path) -> list[dict[str, 
     build_directory = Path((kernel.stdout or "").strip())
     if kernel.returncode or build_directory.is_symlink() or not build_directory.is_dir():
         raise CompileDatabaseError(
-            "course kernel is not ready; run: ./rootkitlings setup"
+            "course kernel is not ready; run: ./rklings setup"
         )
     reference = catalog.required()[0]
     workspace = catalog.materialize_solution(reference, temporary_root, "reference")
@@ -322,7 +322,7 @@ def write_database(database: list[dict[str, object]], path: Path = DATABASE) -> 
 
 def generate() -> int:
     try:
-        with tempfile.TemporaryDirectory(prefix="rootkitlings-compile-db-") as directory:
+        with tempfile.TemporaryDirectory(prefix="rklings-compile-db-") as directory:
             database = captured_database(Catalog(ROOT), Path(directory))
         write_database(database)
     except (CompileDatabaseError, OSError, ProcessError, ProcessTimeout) as error:

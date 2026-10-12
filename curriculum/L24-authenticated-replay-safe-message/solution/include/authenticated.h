@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef ROOTKITLINGS_AUTHENTICATED_H
-#define ROOTKITLINGS_AUTHENTICATED_H
+#ifndef RKLINGS_AUTHENTICATED_H
+#define RKLINGS_AUTHENTICATED_H
 
 #ifdef __KERNEL__
 #include <linux/errno.h>

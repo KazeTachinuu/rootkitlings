@@ -186,11 +186,11 @@ module:
         self.assertIn("$ make --no-print-directory -C", message)
 
     def test_timeout_is_rejected_and_tree_is_cleaned(self) -> None:
-        before = set(Path(tempfile.gettempdir()).glob("rootkitlings-cases-*"))
+        before = set(Path(tempfile.gettempdir()).glob("rklings-cases-*"))
         with self.assertRaisesRegex(VerificationError, "timed out"):
             with self.builds((self.case("slow", "timeout"),), timeout=1):
                 pass
-        after = set(Path(tempfile.gettempdir()).glob("rootkitlings-cases-*"))
+        after = set(Path(tempfile.gettempdir()).glob("rklings-cases-*"))
         self.assertEqual(before, after)
 
     def test_preexisting_declared_artifact_is_not_fresh(self) -> None:

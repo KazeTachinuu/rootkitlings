@@ -14,7 +14,7 @@
 
 #define BUFFER_SIZE 8192
 #define WORKERS 24
-#define SELECTED_PATH "/tmp/rootkitlings-rmdir-watch"
+#define SELECTED_PATH "/tmp/rklings-rmdir-watch"
 
 struct result {
 	pid_t tid;

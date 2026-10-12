@@ -8,7 +8,7 @@ changing the object or corrupting its neighbors.
 Success proves that you can validate and compact a packed result safely.
 `getdents64()` supplies that result as adjacent variable-length records.
 
-The supplied module creates `/proc/rootkitlings_hidden`.
+The supplied module creates `/proc/rklings_hidden`.
 A direct read still returns:
 
 ```text
@@ -97,7 +97,7 @@ or know about probes.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker sanitizes malformed and randomized streams, then tests the supplied

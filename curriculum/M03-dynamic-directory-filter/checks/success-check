@@ -4,13 +4,13 @@
 
 begin "Dynamic file hiding"
 
-endpoint=/proc/rootkitlings
-testdir=/tmp/rootkitlings-dirent-test
+endpoint=/proc/rklings
+testdir=/tmp/rklings-dirent-test
 
 cleanup()
 {
-	if test -d /sys/module/rootkitlings; then
-		rmmod rootkitlings 2>/dev/null || true
+	if test -d /sys/module/rklings; then
+		rmmod rklings 2>/dev/null || true
 	fi
 	rm -rf "$testdir"
 }
@@ -21,8 +21,8 @@ touch "$testdir/rkling_test_a"
 touch "$testdir/rkling_test_b"
 touch "$testdir/normal_file"
 
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 assert_exists "$endpoint"
 
 # Before hiding, all files should be visible.
@@ -76,7 +76,7 @@ else
 	_ok "17th target correctly rejected"
 fi
 
-unload rootkitlings
+unload rklings
 assert_absent "$endpoint"
 
 # After unload, all files should be visible again.

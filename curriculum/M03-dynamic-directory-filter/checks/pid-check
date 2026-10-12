@@ -4,7 +4,7 @@
 
 begin "Dynamic PID hiding"
 
-endpoint=/proc/rootkitlings
+endpoint=/proc/rklings
 
 # Start a background process whose PID we will hide.
 sleep 3600 &
@@ -13,8 +13,8 @@ target_pid=$!
 cleanup()
 {
 	kill "$target_pid" 2>/dev/null || true
-	if test -d /sys/module/rootkitlings; then
-		rmmod rootkitlings 2>/dev/null || true
+	if test -d /sys/module/rklings; then
+		rmmod rklings 2>/dev/null || true
 	fi
 }
 trap cleanup EXIT INT TERM
@@ -27,8 +27,8 @@ else
 	summary
 fi
 
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 assert_exists "$endpoint"
 
 # Add the PID to the hide list.
@@ -58,7 +58,7 @@ else
 	_fail "PID $target_pid did not reappear"
 fi
 
-unload rootkitlings
+unload rklings
 assert_absent "$endpoint"
 
 summary

@@ -18,7 +18,7 @@ initialization instead of waiting for an accidental failure.
 This exercise selects the path at build time:
 
 ```text
-ROOTKITLINGS_FAIL_POINT=0        ROOTKITLINGS_FAIL_POINT=1
+RKLINGS_FAIL_POINT=0        RKLINGS_FAIL_POINT=1
             |                                |
             v                                v
       init returns 0                 init returns -ECANCELED
@@ -36,8 +36,8 @@ The compiler's `-D` option makes that integer available to C as a preprocessor
 macro:
 
 ```make
-ROOTKITLINGS_FAIL_POINT ?= 0
-ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)
+RKLINGS_FAIL_POINT ?= 0
+ccflags-y += -DRKLINGS_FAIL_POINT=$(RKLINGS_FAIL_POINT)
 ```
 
 Only values `0` and `1` are valid here.
@@ -58,7 +58,7 @@ Start this lesson to copy your passed module forward, then edit its two existing
 files.
 Do not add files.
 
-- In `Kbuild`, define `ROOTKITLINGS_FAIL_POINT` with default `0` and pass it to
+- In `Kbuild`, define `RKLINGS_FAIL_POINT` with default `0` and pass it to
   C.
 - In `core/main.c`, define `RK_FAIL_NONE` as `0` and `RK_FAIL_PREFLIGHT` as `1`.
 - Reject unknown build-time values with a compile-time error.
@@ -75,14 +75,14 @@ unload.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker builds value `1`, boots a disposable guest, and calls
 `finit_module()` through a small verifier.
 It requires the numeric error to be `ECANCELED`, then repeats the rejected load.
-Before and after both attempts, it verifies that `rootkitlings` is absent from
-both `/proc/modules` and `/sys/module/rootkitlings`.
+Before and after both attempts, it verifies that `rklings` is absent from
+both `/proc/modules` and `/sys/module/rklings`.
 
 The checker then rebuilds value `0` in a clean directory and uses a fresh guest
 to load, unload, and immediately reload the module.

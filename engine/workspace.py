@@ -80,7 +80,7 @@ def canonical_tree_hash(root: Path, declared_files: Iterable[str]) -> str:
     """Hash sorted relative names and bytes with unambiguous length framing."""
     root = _real_directory(Path(root), "tree root")
     paths = _declared(declared_files)
-    digest = hashlib.sha256(b"rootkitlings-tree-v1\0")
+    digest = hashlib.sha256(b"rklings-tree-v1\0")
     for relative in paths:
         source = _regular_file(root, relative)
         name = relative.as_posix().encode("utf-8")

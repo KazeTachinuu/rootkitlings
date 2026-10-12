@@ -9,8 +9,8 @@ kmem_trace_setup
 cleanup()
 {
 	kmem_trace_disable
-	if test -d /sys/module/rootkitlings; then
-		rmmod rootkitlings 2>/dev/null || true
+	if test -d /sys/module/rklings; then
+		rmmod rklings 2>/dev/null || true
 	fi
 	kmem_trace_restore
 }
@@ -21,7 +21,7 @@ check_attempt()
 	attempt=$1
 	kmem_trace_start
 
-	if module_load_test /rootkitlings/rootkitlings.ko 12; then
+	if module_load_test /rklings/rklings.ko 12; then
 		_ok "attempt $attempt returned numeric ENOMEM"
 	else
 		_fail "attempt $attempt did not return ENOMEM"
@@ -29,12 +29,12 @@ check_attempt()
 
 	kmem_trace_stop
 
-	assert_absent /sys/module/rootkitlings
-	assert_absent /proc/rootkitlings
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "rootkitlings appears in /proc/modules"
+	assert_absent /sys/module/rklings
+	assert_absent /proc/rklings
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings appears in /proc/modules"
 	else
-		_ok "rootkitlings is absent from /proc/modules"
+		_ok "rklings is absent from /proc/modules"
 	fi
 
 	assert_one_loader_allocation_freed \

@@ -80,7 +80,7 @@ proc read callback.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 An independent checker proves attribution across `fork()`, threads, descriptor

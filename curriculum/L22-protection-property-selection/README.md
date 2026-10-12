@@ -66,7 +66,7 @@ contains an unknown bit.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker covers every selection, overlap and boundary behavior, XOR key

@@ -86,7 +86,7 @@ In `core/main.c`, wire the init/exit sequence:
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 ## References

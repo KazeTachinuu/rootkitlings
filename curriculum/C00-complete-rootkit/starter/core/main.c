@@ -132,4 +132,4 @@ static bool persist_requested;
 // stop agent, stop shell, zeroize key
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings complete rootkit");
+MODULE_DESCRIPTION("Rklings complete rootkit");

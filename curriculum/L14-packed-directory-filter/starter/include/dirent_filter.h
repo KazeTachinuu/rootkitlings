@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-#ifndef ROOTKITLINGS_DIRENT_FILTER_H
-#define ROOTKITLINGS_DIRENT_FILTER_H
+#ifndef RKLINGS_DIRENT_FILTER_H
+#define RKLINGS_DIRENT_FILTER_H
 
 #include <linux/types.h>
 

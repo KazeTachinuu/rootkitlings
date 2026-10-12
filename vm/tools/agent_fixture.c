@@ -194,7 +194,7 @@ static int serve(const char *directory, const char *port_text)
 	send_frame(peer, "PING");
 	expect_frame(peer, "PONG");
 	send_frame(peer, "INFO");
-	expect_frame(peer, "INFO rootkitlings");
+	expect_frame(peer, "INFO rklings");
 	send_frame(peer, "UNKNOWN");
 	expect_frame(peer, "ERR");
 	send_oversized(peer);

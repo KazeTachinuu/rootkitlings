@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rootkitlings learner CLI."""
+"""Rklings learner CLI."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ from engine.workspace import (
 )
 
 ROOT = Path(__file__).resolve().parent.parent
-RT = ROOT / '.rootkitlings'
+RT = ROOT / '.rklings'
 STATE = RT / 'state.toml'
 WORK = ROOT / 'work'
 BUILD = RT / 'build'
@@ -113,7 +113,7 @@ def course_kernel_ready():
 
 def require_setup():
     if not course_kernel_ready():
-        die('Course kernel is not ready. Run: ./rootkitlings setup')
+        die('Course kernel is not ready. Run: ./rklings setup')
 
 
 def cmd_setup(a):
@@ -192,11 +192,11 @@ def next_command(state, *, kernel_ready):
     if item is None:
         return None
     if not kernel_ready:
-        return './rootkitlings setup'
+        return './rklings setup'
     workspace = wp(item)
     if workspace.is_dir() and not workspace.is_symlink():
-        return f'./rootkitlings check {label(item)}'
-    return f'./rootkitlings read {label(item)}'
+        return f'./rklings check {label(item)}'
+    return f'./rklings read {label(item)}'
 
 
 def show_next(state, *, kernel_ready):
@@ -252,7 +252,7 @@ def need(x):
     if not p.is_dir() or p.is_symlink():
         die(
             f'{label(x)} has no workspace. '
-            f'Run: ./rootkitlings start {label(x)}'
+            f'Run: ./rklings start {label(x)}'
         )
     return p
 
@@ -310,13 +310,13 @@ def materialize_workspace(x, state):
 
 def one(a, command):
     if len(a) > 1:
-        die(f'Usage: ./rootkitlings {command} [EXERCISE]')
+        die(f'Usage: ./rklings {command} [EXERCISE]')
     return a[0] if a else None
 
 
 def none(a, command):
     if a:
-        die(f'Usage: ./rootkitlings {command}')
+        die(f'Usage: ./rklings {command}')
 
 
 def run(cmd, timeout=None, capture=False, env=None, visible=False):
@@ -384,7 +384,7 @@ def cmd_start(a):
         for path in shown_editable(x):
             UI.bullet(path)
         UI.section('Next')
-        UI.command(f'./rootkitlings check {label(x)}')
+        UI.command(f'./rklings check {label(x)}')
 
 
 def cmd_read(a):
@@ -416,10 +416,10 @@ def cmd_read(a):
     workspace = wp(x)
     if workspace.is_dir() and not workspace.is_symlink():
         UI.section('Next')
-        UI.command(f'./rootkitlings check {label(x)}')
+        UI.command(f'./rklings check {label(x)}')
     else:
         UI.section('Next')
-        UI.command(f'./rootkitlings start {label(x)}')
+        UI.command(f'./rklings start {label(x)}')
 
 
 def cmd_hint(a):
@@ -431,9 +431,9 @@ def cmd_hint(a):
     workspace_ready = workspace.is_dir() and not workspace.is_symlink()
     UI.section('Try again' if workspace_ready else 'Next')
     command = 'check' if workspace_ready else 'start'
-    UI.command(f'./rootkitlings {command} {label(x)}')
+    UI.command(f'./rklings {command} {label(x)}')
     UI.section('Still stuck')
-    UI.command(f'./rootkitlings solution {label(x)}')
+    UI.command(f'./rklings solution {label(x)}')
 
 
 def cmd_solution(a):
@@ -446,12 +446,12 @@ def cmd_solution(a):
     workspace = wp(x)
     if workspace.is_dir() and not workspace.is_symlink():
         UI.section('Try again')
-        UI.command(f'./rootkitlings check {label(x)}')
+        UI.command(f'./rklings check {label(x)}')
         UI.section('Restore starting files')
-        UI.command(f'./rootkitlings restore {label(x)}')
+        UI.command(f'./rklings restore {label(x)}')
     else:
         UI.section('Next')
-        UI.command(f'./rootkitlings start {label(x)}')
+        UI.command(f'./rklings start {label(x)}')
 
 
 def solution_text(data, relative):
@@ -567,7 +567,7 @@ def course_kernel_build_dir():
     )
     output = (located.stdout or '').strip()
     if located.returncode or not output or '\n' in output:
-        die('Course kernel is not ready; run: ./rootkitlings setup')
+        die('Course kernel is not ready; run: ./rklings setup')
     path = Path(output)
     if path.is_symlink() or not path.is_dir():
         die('Course kernel build directory is unsafe or missing')
@@ -620,7 +620,7 @@ def boot_exercise(x, module):
             raise CLIError(str(error)) from error
         try:
             UI.section('Connect from another terminal')
-            UI.command(f'./rootkitlings connect {label(x)}')
+            UI.command(f'./rklings connect {label(x)}')
             UI.progress('Waiting for both operator listeners')
             wait_for_operator(target)
             UI.success('Operator listeners ready')
@@ -645,11 +645,11 @@ def boot_exercise(x, module):
 
 
 def check_timeout(x):
-    value = os.getenv('ROOTKITLINGS_CHECK_TIMEOUT')
+    value = os.getenv('RKLINGS_CHECK_TIMEOUT')
     if value is None:
         return x.verification.timeout_seconds
     if not value.isdigit() or int(value) <= 0:
-        die('ROOTKITLINGS_CHECK_TIMEOUT must be a positive integer')
+        die('RKLINGS_CHECK_TIMEOUT must be a positive integer')
     return int(value)
 
 
@@ -833,13 +833,13 @@ def cmd_check(a):
         record_attempt(x, False)
         raise CLIError(
             str(error),
-            recovery=(('Try', f'./rootkitlings hint {label(x)}'),),
+            recovery=(('Try', f'./rklings hint {label(x)}'),),
         ) from error
     if workspace_changed:
         die(
             'Workspace changed while checks were running; '
             'no pass was recorded. '
-            f'Rerun: ./rootkitlings check {label(x)}'
+            f'Rerun: ./rklings check {label(x)}'
         )
     UI.success(f'Passed {label(x)}')
     with STORE.read_locked() as s:
@@ -888,7 +888,7 @@ def cmd_run(a, gdb=False):
         UI.field('Source', 'Completed reference')
         UI.field('Guest', 'Restricted QEMU')
         with tempfile.TemporaryDirectory(
-            prefix='rootkitlings-reference-'
+            prefix='rklings-reference-'
         ) as directory:
             root = Path(directory)
             source = CAT.materialize_solution(x, root, 'source')
@@ -938,7 +938,7 @@ def cmd_connect(a):
             str(error),
             recovery=((
                 'Start the target in another terminal',
-                f'./rootkitlings run {label(item)} --reference',
+                f'./rklings run {label(item)} --reference',
             ),),
         ) from error
     if status:
@@ -949,7 +949,7 @@ def cmd_connect(a):
 def cmd_status(a):
     none(a, 'status')
     kernel_ready = course_kernel_ready()
-    UI.heading('Rootkitlings')
+    UI.heading('Rklings')
     with STORE.read_locked() as s:
         x = current(s)
         completed = len(set(ROUTE) & s.completed)
@@ -1048,7 +1048,7 @@ def cmd_prereq(a):
             detail = f': {assumption.competency}' if assumption else ''
             UI.bullet(f'{CAT.concept_label(c)}{detail}')
     UI.section('Next')
-    UI.command(f'./rootkitlings read {label(x)}')
+    UI.command(f'./rklings read {label(x)}')
 
 
 def cmd_restore(a):
@@ -1072,7 +1072,7 @@ def cmd_restore(a):
     for path in shown_editable(x):
         UI.bullet(path)
     UI.section('Next')
-    UI.command(f'./rootkitlings check {label(x)}')
+    UI.command(f'./rklings check {label(x)}')
 
 
 def progress_reset_ids(selected):
@@ -1084,11 +1084,11 @@ def progress_reset_ids(selected):
 def cmd_reset(a):
     reset_all = a == ['--all', '--yes']
     if a == ['--all']:
-        die('Resetting all progress requires: ./rootkitlings reset --all --yes')
+        die('Resetting all progress requires: ./rklings reset --all --yes')
     if not reset_all and len(a) != 1:
-        die('Usage: ./rootkitlings reset EXERCISE | reset --all --yes')
+        die('Usage: ./rklings reset EXERCISE | reset --all --yes')
     if not reset_all and a[0].startswith('-'):
-        die('Usage: ./rootkitlings reset EXERCISE | reset --all --yes')
+        die('Usage: ./rklings reset EXERCISE | reset --all --yes')
     with STORE.locked() as s:
         selected = None if reset_all else resolve(a[0], s)
         affected = progress_reset_ids(selected)
@@ -1124,7 +1124,7 @@ def cmd_clean(a):
     UI.success(f'Cleaned build outputs for {label(x)}')
     UI.field('Sources', shown(wp(x)))
     UI.section('Next')
-    UI.command(f'./rootkitlings build {label(x)}')
+    UI.command(f'./rklings build {label(x)}')
 
 
 def usage():
@@ -1157,12 +1157,12 @@ def usage():
             ('help', 'Show this help'),
         )),
     )
-    UI.heading('Rootkitlings')
+    UI.heading('Rklings')
     UI.line(
         'Learn kernel development by building one rootkit mechanism at a time.'
     )
     UI.section('Usage')
-    UI.command('./rootkitlings <COMMAND> [EXERCISE]')
+    UI.command('./rklings <COMMAND> [EXERCISE]')
     for title, commands in sections:
         UI.section(title)
         for command, description in commands:
@@ -1202,7 +1202,7 @@ def main(a):
         return 0
     if requested in {'-V', '--version'}:
         none(arguments, requested)
-        UI.line(f'rootkitlings curriculum {CAT.revision}')
+        UI.line(f'rklings curriculum {CAT.revision}')
         return 0
     matches = [command for command in CMDS if command.startswith(requested)]
     if not matches:

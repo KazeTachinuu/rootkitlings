@@ -99,7 +99,7 @@ This requires a secret key, rate limits, and key rotation.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker validates the adapter with RFC 4231, recomputes the known answer

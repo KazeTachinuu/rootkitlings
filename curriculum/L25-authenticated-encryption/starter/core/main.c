@@ -4,22 +4,22 @@
 #include <linux/printk.h>
 #include "selftest.h"
 
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 3
-#error "unknown ROOTKITLINGS_FAIL_POINT"
+#if RKLINGS_FAIL_POINT < 0 || RKLINGS_FAIL_POINT > 3
+#error "unknown RKLINGS_FAIL_POINT"
 #endif
 
-static int __init rootkitlings_init(void)
+static int __init rklings_init(void)
 {
 	int error = rk_aead_selftest();
-	if (error) { pr_err("rootkitlings: aead selftest failed: %d\n", error); return error; }
-	pr_info("rootkitlings: authenticated-encryption ready\n");
+	if (error) { pr_err("rklings: aead selftest failed: %d\n", error); return error; }
+	pr_info("rklings: authenticated-encryption ready\n");
 	return 0;
 }
-static void __exit rootkitlings_exit(void)
+static void __exit rklings_exit(void)
 {
-	pr_info("rootkitlings: authenticated-encryption stopped\n");
+	pr_info("rklings: authenticated-encryption stopped\n");
 }
-module_init(rootkitlings_init);
-module_exit(rootkitlings_exit);
+module_init(rklings_init);
+module_exit(rklings_exit);
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings authenticated encryption lesson");
+MODULE_DESCRIPTION("Rklings authenticated encryption lesson");

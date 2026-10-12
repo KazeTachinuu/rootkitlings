@@ -18,7 +18,7 @@ __must_check struct rk_state *rk_state_create(void)
 {
 	struct rk_state *state;
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_STATE_ALLOC)
+	if (RKLINGS_FAIL_POINT == RK_FAIL_STATE_ALLOC)
 		state = NULL;
 	else
 		state = kzalloc(sizeof(*state), GFP_KERNEL);

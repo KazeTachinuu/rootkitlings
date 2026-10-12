@@ -46,11 +46,11 @@ check_object()
 check_object "$success_object" success
 check_object "$missing_object" missing-target
 
-for value in __x64_sys_rmdir /tmp/rootkitlings-rmdir-watch; do
+for value in __x64_sys_rmdir /tmp/rklings-rmdir-watch; do
 	strings "$success_object" | grep -Fxq "$value" ||
 		die "success object does not contain $value"
 done
-missing_target=__rootkitlings_missing_kretprobe_target_7_2__
+missing_target=__rklings_missing_kretprobe_target_7_2__
 if strings "$success_object" | grep -Fxq "$missing_target"; then
 	die "success object contains the injected missing target"
 fi

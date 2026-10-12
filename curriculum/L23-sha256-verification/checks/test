@@ -4,7 +4,7 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-sha256-verification-test.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-sha256-verification-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || { printf '[x] this lesson requires x86_64\n' >&2; exit 1; }
@@ -74,7 +74,7 @@ build_tree()
 	local log=$destination.log
 	cp -a "$source" "$destination"
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		RKLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
 		cat "$log" >&2
 		printf '[x] build failed: %s\n' "${destination##*/}" >&2
 		exit 1
@@ -91,17 +91,17 @@ build_tree "$HERE/../solution" "$scratch/solution"
 build_tree "$HERE/../solution" "$scratch/api-failure" 1
 cp -a "$HERE/../solution" "$scratch/unknown-failure-point"
 if make -s -C "$KDIR" M="$scratch/unknown-failure-point" W=1 \
-	ROOTKITLINGS_FAIL_POINT=99 modules >"$scratch/unknown.log" 2>&1; then
+	RKLINGS_FAIL_POINT=99 modules >"$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure point compiled\n' >&2
 	exit 1
 fi
-grep -Fq 'unknown ROOTKITLINGS_FAIL_POINT' "$scratch/unknown.log" || {
+grep -Fq 'unknown RKLINGS_FAIL_POINT' "$scratch/unknown.log" || {
 	cat "$scratch/unknown.log" >&2
 	printf '[x] unknown failure point failed for the wrong reason\n' >&2
 	exit 1
 }
-"$HERE/host-check" "$scratch/solution" "$scratch/solution/rootkitlings.ko"
-if "$HERE/host-check" "$scratch/starter" "$scratch/starter/rootkitlings.ko" \
+"$HERE/host-check" "$scratch/solution" "$scratch/solution/rklings.ko"
+if "$HERE/host-check" "$scratch/starter" "$scratch/starter/rklings.ko" \
 	> "$scratch/starter-host.log" 2>&1; then
 	printf '[x] host checker accepted the unfinished implementation\n' >&2
 	exit 1
@@ -110,7 +110,7 @@ fi
 expect_rejection()
 {
 	local directory=$1 label=$2
-	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+	if "$HERE/host-check" "$directory" "$directory/rklings.ko" \
 		> "$scratch/$label-host.log" 2>&1; then
 		printf '[x] host checker accepted mutant: %s\n' "$label" >&2
 		exit 1
@@ -159,7 +159,7 @@ cp -a "$HERE/../solution" "$scratch/alternate-source"
 cp "$HERE/../fixtures/alternate/sha256.c" \
 	"$scratch/alternate-source/crypto/sha256.c"
 build_tree "$scratch/alternate-source" "$scratch/alternate"
-"$HERE/host-check" "$scratch/alternate" "$scratch/alternate/rootkitlings.ko"
+"$HERE/host-check" "$scratch/alternate" "$scratch/alternate/rklings.ko"
 
 sed -e 's/@LABEL@/Rejected unfinished SHA-256 implementation/' \
 	-e 's/@ERRNO@/95/' "$HERE/failure-check.in" > "$scratch/starter-check"
@@ -182,13 +182,13 @@ run_guest()
 	printf '%s\n' "$output"
 }
 
-run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" solution
-run_guest "$HERE/success-check" "$scratch/alternate/rootkitlings.ko" alternate
-run_guest "$scratch/starter-check" "$scratch/starter/rootkitlings.ko" starter
+run_guest "$HERE/success-check" "$scratch/solution/rklings.ko" solution
+run_guest "$HERE/success-check" "$scratch/alternate/rklings.ko" alternate
+run_guest "$scratch/starter-check" "$scratch/starter/rklings.ko" starter
 run_guest "$scratch/api-failure-check" \
-	"$scratch/api-failure/rootkitlings.ko" api-failure
+	"$scratch/api-failure/rklings.ko" api-failure
 run_guest "$scratch/kernel-only-check" \
-	"$scratch/kernel-only-build/rootkitlings.ko" kernel-only
+	"$scratch/kernel-only-build/rklings.ko" kernel-only
 
 assert_clean_tree
 

@@ -4,8 +4,8 @@
 
 begin "Privilege escalation"
 
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 
 before=$(su student -c 'id -u')
 if test "$before" = "0"; then
@@ -22,7 +22,7 @@ else
 	_fail "escalation failed: uid is $after"
 fi
 
-unload rootkitlings
+unload rklings
 
 if dmesg | grep -Eqi '(BUG:|WARNING:|Oops:|KASAN:|UBSAN:|hung task)'; then
 	_fail "kernel log contains a fault report"

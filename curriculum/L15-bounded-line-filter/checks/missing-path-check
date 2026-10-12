@@ -4,8 +4,8 @@
 
 begin "Missing retained target"
 
-target=/tmp/rootkitlings-read-target
-endpoint=/proc/rootkitlings
+target=/tmp/rklings-read-target
+endpoint=/proc/rklings
 registry=/sys/kernel/debug/kprobes/list
 rm -f "$target"
 
@@ -18,15 +18,15 @@ probe_count()
 before=$(probe_count)
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	if module_load_test /rootkitlings/rootkitlings.ko 2; then
+	if module_load_test /rklings/rklings.ko 2; then
 		_ok "attempt $attempt returned ENOENT"
 	else
 		_fail "attempt $attempt returned the wrong error"
 	fi
-	assert_absent /sys/module/rootkitlings
+	assert_absent /sys/module/rklings
 	assert_absent "$endpoint"
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "attempt $attempt left rootkitlings in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "attempt $attempt left rklings in /proc/modules"
 	else
 		_ok "attempt $attempt leaves no loaded module"
 	fi

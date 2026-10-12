@@ -2,19 +2,19 @@
 # shellcheck source=/dev/null
 . /vm/checks/lib.sh
 begin "AES-256-GCM authenticated encryption"
-assert_absent /sys/module/rootkitlings
+assert_absent /sys/module/rklings
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	load rootkitlings.ko
-	assert_loaded rootkitlings
-	if dmesg | grep -q 'rootkitlings: aes-256-gcm behavior passed' &&
-		dmesg | grep -q 'rootkitlings: authenticated-encryption ready'; then
+	load rklings.ko
+	assert_loaded rklings
+	if dmesg | grep -q 'rklings: aes-256-gcm behavior passed' &&
+		dmesg | grep -q 'rklings: authenticated-encryption ready'; then
 		_ok "module initialization completed its AES-GCM self-test"
 	else
 		_fail "AES-GCM self-test completion is missing"
 	fi
-	unload rootkitlings
-	assert_absent /sys/module/rootkitlings
+	unload rklings
+	assert_absent /sys/module/rklings
 	attempt=$((attempt+1))
 done
 summary

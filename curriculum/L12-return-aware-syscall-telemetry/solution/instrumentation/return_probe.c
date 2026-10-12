@@ -8,9 +8,9 @@
 
 #include "rootkit.h"
 
-#define RK_SELECTED_PATH "/tmp/rootkitlings-rmdir-watch"
+#define RK_SELECTED_PATH "/tmp/rklings-rmdir-watch"
 #define RK_USER_PATH_SIZE 64
-#define RK_MISSING_TARGET "__rootkitlings_missing_kretprobe_target_7_2__"
+#define RK_MISSING_TARGET "__rklings_missing_kretprobe_target_7_2__"
 
 struct rk_rmdir_instance {
 	bool selected;
@@ -79,7 +79,7 @@ static int rk_rmdir_return(struct kretprobe_instance *instance,
 }
 
 static struct kretprobe rmdir_probe = {
-#if ROOTKITLINGS_FAIL_POINT == RK_FAIL_KRETPROBE_TARGET
+#if RKLINGS_FAIL_POINT == RK_FAIL_KRETPROBE_TARGET
 	.kp.symbol_name = RK_MISSING_TARGET,
 #else
 	.kp.symbol_name = "__x64_sys_rmdir",

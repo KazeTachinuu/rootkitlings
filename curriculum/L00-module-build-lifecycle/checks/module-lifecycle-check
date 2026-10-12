@@ -6,39 +6,39 @@ begin "Module lifecycle"
 
 assert_inventory_present()
 {
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_ok "rootkitlings is present in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_ok "rklings is present in /proc/modules"
 	else
-		_fail "rootkitlings is absent from /proc/modules"
+		_fail "rklings is absent from /proc/modules"
 	fi
 }
 
 assert_inventory_absent()
 {
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "rootkitlings remains in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings remains in /proc/modules"
 	else
-		_ok "rootkitlings is absent from /proc/modules"
+		_ok "rklings is absent from /proc/modules"
 	fi
 }
 
-assert_absent /sys/module/rootkitlings
+assert_absent /sys/module/rklings
 assert_inventory_absent
 
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 assert_inventory_present
 
-unload rootkitlings
-assert_absent /sys/module/rootkitlings
+unload rklings
+assert_absent /sys/module/rklings
 assert_inventory_absent
 
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 assert_inventory_present
 
-unload rootkitlings
-assert_absent /sys/module/rootkitlings
+unload rklings
+assert_absent /sys/module/rklings
 assert_inventory_absent
 
 summary

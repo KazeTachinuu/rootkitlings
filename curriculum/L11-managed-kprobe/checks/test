@@ -4,9 +4,9 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-managed-kprobe-baseline.XXXXXX")
-work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-managed-kprobe-work.XXXXXX")
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-managed-kprobe-test.XXXXXX")
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rklings-managed-kprobe-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rklings-managed-kprobe-work.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-managed-kprobe-test.XXXXXX")
 trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
 
 cp -a "$HERE/../../L02-owned-kernel-state/solution/." "$baseline/"
@@ -67,7 +67,7 @@ for symbol in vfs_mkdir filename_rmdir; do
 		exit 1
 	}
 done
-if grep -q '[[:space:]]__rootkitlings_missing_kprobe_target_7_2__$' \
+if grep -q '[[:space:]]__rklings_missing_kprobe_target_7_2__$' \
 	/proc/kallsyms; then
 	printf '[x] injected missing Kprobe target exists in the running kernel\n' >&2
 	exit 1
@@ -96,7 +96,7 @@ while IFS= read -r -d '' source; do
 	cp -p "$source" "$starter_build/$relative"
 done < <(find "$HERE/../starter" -type f -print0)
 if ! make -s -C "$KDIR" M="$starter_build" W=1 \
-	ROOTKITLINGS_FAIL_POINT=0 modules >"$scratch/starter.log" 2>&1; then
+	RKLINGS_FAIL_POINT=0 modules >"$scratch/starter.log" 2>&1; then
 	cat "$scratch/starter.log" >&2
 	printf '[x] starter build failed\n' >&2
 	exit 1
@@ -112,7 +112,7 @@ build_variant()
 	local name=$1 point=$2 destination=$scratch/$1 log=$scratch/$1.log
 	cp -a "$work" "$destination"
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
+		RKLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
 		cat "$log" >&2
 		printf '[x] %s build failed\n' "$name" >&2
 		exit 1
@@ -130,11 +130,11 @@ build_variant allocation 2
 build_variant publication 3
 build_variant missing 4
 "$HERE/host-check" "$scratch/success" \
-	"$scratch/success/rootkitlings.ko" "$scratch/missing"
+	"$scratch/success/rklings.ko" "$scratch/missing"
 
 cp -a "$work" "$scratch/unknown"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
-	ROOTKITLINGS_FAIL_POINT=99 modules >"$scratch/unknown.log" 2>&1; then
+	RKLINGS_FAIL_POINT=99 modules >"$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure-point value compiled successfully\n' >&2
 	exit 1
 fi
@@ -162,12 +162,12 @@ run_guest()
 }
 
 run_guest "$HERE/../../L03-proc-publication/checks/failure-ecanceled-check" \
-	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
+	"$scratch/preflight/rklings.ko" --tool vm/tools/module_load_test
 run_guest "$HERE/../../L03-proc-publication/checks/failure-enomem-check" \
-	"$scratch/allocation/rootkitlings.ko" --tool vm/tools/module_load_test
+	"$scratch/allocation/rklings.ko" --tool vm/tools/module_load_test
 run_guest "$scratch/publication-check" \
-	"$scratch/publication/rootkitlings.ko" --tool vm/tools/module_load_test
+	"$scratch/publication/rklings.ko" --tool vm/tools/module_load_test
 run_guest "$scratch/missing-check" \
-	"$scratch/missing/rootkitlings.ko" --tool vm/tools/module_load_test
-run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
+	"$scratch/missing/rklings.ko" --tool vm/tools/module_load_test
+run_guest "$HERE/success-check" "$scratch/success/rklings.ko" \
 	--tool vm/tools/proc_write_test

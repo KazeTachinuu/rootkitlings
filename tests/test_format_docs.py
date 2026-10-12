@@ -88,7 +88,7 @@ class MarkdownFormatTests(unittest.TestCase):
             root = Path(directory)
             maintained = root / "docs/guide.md"
             learner = root / "work/L00/notes.md"
-            runtime = root / ".rootkitlings/log.md"
+            runtime = root / ".rklings/log.md"
             hint = root / "curriculum/L00-example/hint"
             for path in (maintained, learner, runtime, hint):
                 path.parent.mkdir(parents=True, exist_ok=True)

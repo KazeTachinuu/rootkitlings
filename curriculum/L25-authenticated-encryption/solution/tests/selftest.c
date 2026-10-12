@@ -173,6 +173,6 @@ int rk_aead_selftest(void)
 	error = boundary_round_trips();
 	if (error)
 		return error;
-	pr_info("rootkitlings: aes-256-gcm behavior passed\n");
+	pr_info("rklings: aes-256-gcm behavior passed\n");
 	return 0;
 }

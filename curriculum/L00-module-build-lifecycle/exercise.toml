@@ -34,4 +34,4 @@ expect_build = "pass"
 check = "curriculum/L00-module-build-lifecycle/checks/module-lifecycle-check"
 
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "0"
+RKLINGS_FAIL_POINT = "0"

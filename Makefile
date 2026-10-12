@@ -1,8 +1,8 @@
 KDIR ?=
 MODULE_DIR ?=
 MODULE_OUT ?=
-TOOL_OUT ?= .rootkitlings/build/tools
-ROOTKITLINGS_FAIL_POINT ?= 0
+TOOL_OUT ?= .rklings/build/tools
+RKLINGS_FAIL_POINT ?= 0
 GUEST_TOOL_NAMES := \
 	agent_fixture \
 	cred_trigger_test \
@@ -36,7 +36,7 @@ all: help
 
 help:
 	@printf '%s\n' \
-		'Rootkitlings maintainer targets:' \
+		'Rklings maintainer targets:' \
 		'  tools           Build guest-side verification tools' \
 		'  clean           Remove generated verification tools' \
 		'  doctor          Check host dependencies' \
@@ -59,7 +59,7 @@ module:
 	fi; \
 	env -i PATH="$$PATH" LC_ALL=C LANG=C TZ=UTC \
 		make -C "$$kdir" M="$(MODULE_DIR)" W=1 ARCH=x86_64 CC=gcc HOSTCC=gcc \
-		ROOTKITLINGS_FAIL_POINT="$(ROOTKITLINGS_FAIL_POINT)" "$$@" modules
+		RKLINGS_FAIL_POINT="$(RKLINGS_FAIL_POINT)" "$$@" modules
 
 tools: $(GUEST_TOOLS)
 
@@ -132,7 +132,7 @@ $(TOOL_OUT)/tcp_session_fixture: vm/tools/tcp_session_fixture.c | tool-output-di
 	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
 
 clean:
-	@test "$(TOOL_OUT)" = .rootkitlings/build/tools || \
+	@test "$(TOOL_OUT)" = .rklings/build/tools || \
 		{ echo 'clean does not accept TOOL_OUT' >&2; exit 2; }
 	$(RM) $(GUEST_TOOLS)
 

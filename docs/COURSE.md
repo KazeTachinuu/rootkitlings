@@ -1,6 +1,6 @@
 # Course design
 
-Rootkitlings teaches Linux kernel development by building a rootkit one
+Rklings teaches Linux kernel development by building a rootkit one
 observable mechanism at a time.
 The required route contains 26 lessons, nine milestones, and one final project.
 
@@ -55,7 +55,7 @@ The exact graph is metadata, not prose:
 ## Prerequisites
 
 Entry knowledge is attached where first used, not copied into every lesson.
-`./rootkitlings prereq ID` prints direct exercise dependencies and the specific
+`./rklings prereq ID` prints direct exercise dependencies and the specific
 outside knowledge used by that exercise.
 
 Prerequisites contain only direct edges; validation rejects transitive
@@ -66,7 +66,7 @@ Every required concept must be entry knowledge or taught by a prerequisite.
 
 A learner edits an isolated tree under `work/<serial>/`.
 Build outputs, internal state, snapshots, and backups stay under
-`.rootkitlings/`.
+`.rklings/`.
 Bundles contain:
 
 ```text

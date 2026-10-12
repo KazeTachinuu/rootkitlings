@@ -16,7 +16,7 @@ from engine.console import Console  # noqa: E402
 from engine.process import ProcessError, run_process  # noqa: E402
 
 
-UI = Console("rootkitlings.checker-tests")
+UI = Console("rklings.checker-tests")
 CHECKER_TIMEOUT_SECONDS = 30 * 60
 
 

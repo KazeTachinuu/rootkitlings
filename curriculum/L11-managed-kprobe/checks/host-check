@@ -49,7 +49,7 @@ for target in vfs_mkdir filename_rmdir; do
 	strings "$success_object" | grep -Fxq "$target" ||
 		die "success object does not name $target"
 done
-missing_target=__rootkitlings_missing_kprobe_target_7_2__
+missing_target=__rklings_missing_kprobe_target_7_2__
 if strings "$success_object" | grep -Fxq "$missing_target"; then
 	die "success object contains the injected missing target"
 fi

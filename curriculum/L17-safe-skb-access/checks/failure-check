@@ -4,12 +4,12 @@
 
 begin "Rejected unsafe sk_buff adapter"
 
-assert_absent /sys/module/rootkitlings
-if module_load_test /rootkitlings/rootkitlings.ko 22; then
+assert_absent /sys/module/rklings
+if module_load_test /rklings/rklings.ko 22; then
 	_ok "kernel self-tests rejected the adapter with EINVAL"
 else
 	_fail "module load did not return EINVAL"
 fi
-assert_absent /sys/module/rootkitlings
+assert_absent /sys/module/rklings
 
 summary

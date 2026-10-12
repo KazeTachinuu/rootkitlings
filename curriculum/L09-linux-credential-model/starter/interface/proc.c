@@ -54,10 +54,10 @@ __must_check int rk_proc_publish(struct rk_state *state)
 	if (proc_entry || !state)
 		return -EINVAL;
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH)
+	if (RKLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH)
 		proc_entry = NULL;
 	else
-		proc_entry = proc_create_single_data("rootkitlings", 0444, NULL,
+		proc_entry = proc_create_single_data("rklings", 0444, NULL,
 						     rk_status_show, state);
 	if (!proc_entry)
 		return -ENOMEM;

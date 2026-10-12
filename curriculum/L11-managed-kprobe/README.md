@@ -83,7 +83,7 @@ Complete both pre-handlers, batch registration, and batch unregistration.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker pins the ABI assumptions and proves gated observations without

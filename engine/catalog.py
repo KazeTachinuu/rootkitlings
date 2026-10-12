@@ -1,4 +1,4 @@
-"""Dependency-free loader and validator for the Rootkitlings catalog."""
+"""Dependency-free loader and validator for the Rklings catalog."""
 
 from __future__ import annotations
 

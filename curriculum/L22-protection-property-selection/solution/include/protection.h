@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef ROOTKITLINGS_PROTECTION_H
-#define ROOTKITLINGS_PROTECTION_H
+#ifndef RKLINGS_PROTECTION_H
+#define RKLINGS_PROTECTION_H
 
 #ifdef __KERNEL__
 #include <linux/stddef.h>

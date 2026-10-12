@@ -4,10 +4,10 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-ROOT=$ROOTKITLINGS_ROOT
+ROOT=$RKLINGS_ROOT
 SECURE_AGENT=$HERE/../../M08-authenticated-reverse-shell
 AUTHORIZED=$HERE/../../M02-authorized-actions-telemetry
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-complete-rootkit.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-complete-rootkit.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || {
@@ -63,7 +63,7 @@ build_tree()
 	local directory=$1 point=${2:-0}
 	local log=$directory.log
 	local -a command=(make -s -C "$KDIR" M="$directory" W=1
-		"ROOTKITLINGS_FAIL_POINT=$point" modules)
+		"RKLINGS_FAIL_POINT=$point" modules)
 	show_command "${command[@]}"
 	if ! "${command[@]}" 2>&1 | tee "$log"; then
 		printf '[x] build failed: %s failpoint %s\n' \
@@ -85,7 +85,7 @@ if ! "${starter_build[@]}" 2>&1 | tee "$scratch/starter.log"; then
 	exit 1
 fi
 starter_host=("$HERE/host-check" "$scratch/starter"
-	"$scratch/starter/rootkitlings.ko")
+	"$scratch/starter/rklings.ko")
 show_command "${starter_host[@]}"
 if "${starter_host[@]}" 2>&1 | tee "$scratch/starter-host.log"; then
 	printf '[x] checker accepted the unfinished project\n' >&2
@@ -95,19 +95,19 @@ fi
 materialize solution "$scratch/solution"
 build_tree "$scratch/solution"
 solution_host=("$HERE/host-check" "$scratch/solution"
-	"$scratch/solution/rootkitlings.ko")
+	"$scratch/solution/rklings.ko")
 show_command "${solution_host[@]}"
 "${solution_host[@]}"
 
 materialize solution "$scratch/unknown"
 unknown_build=(make -s -C "$KDIR" M="$scratch/unknown" W=1
-	ROOTKITLINGS_FAIL_POINT=99 modules)
+	RKLINGS_FAIL_POINT=99 modules)
 show_command "${unknown_build[@]}"
 if "${unknown_build[@]}" 2>&1 | tee "$scratch/unknown.log"; then
 	printf '[x] unknown failure point compiled\n' >&2
 	exit 1
 fi
-grep -Fq 'unknown ROOTKITLINGS_FAIL_POINT' "$scratch/unknown.log" || {
+grep -Fq 'unknown RKLINGS_FAIL_POINT' "$scratch/unknown.log" || {
 	cat "$scratch/unknown.log" >&2
 	printf '[x] unknown failure point failed for the wrong reason\n' >&2
 	exit 1
@@ -141,7 +141,7 @@ with open(sys.argv[1], "rb") as stream:
 
 rows = {}
 for case in cases:
-    raw = case.get("build_variables", {}).get("ROOTKITLINGS_FAIL_POINT")
+    raw = case.get("build_variables", {}).get("RKLINGS_FAIL_POINT")
     if raw is None or not raw.isdecimal() or not 1 <= int(raw) <= 15:
         continue
     point = int(raw)
@@ -188,7 +188,7 @@ while IFS=$'\x1f' read -r point case_id check arg1 arg2 arg3; do
 	while IFS= read -r tool; do
 		guest_args+=(--tool "$tool")
 	done <<< "$tools"
-	run_guest "$ROOT/$check" "$directory/rootkitlings.ko" "$case_id" \
+	run_guest "$ROOT/$check" "$directory/rklings.ko" "$case_id" \
 		"${guest_args[@]}"
 done < "$scratch/failure-matrix"
 
@@ -201,28 +201,28 @@ append_binary()
 }
 
 cp "$HERE/success-check" "$scratch/checks/success-check"
-append_binary __ROOTKITLINGS_SECURE_FIXTURE__ \
+append_binary __RKLINGS_SECURE_FIXTURE__ \
 	"$scratch/secure_agent_fixture" "$scratch/checks/success-check"
 run_guest "$scratch/checks/success-check" \
-	"$scratch/solution/rootkitlings.ko" solution \
+	"$scratch/solution/rklings.ko" solution \
 	--tool vm/tools/packet_mutation_test
 
 run_guest "$AUTHORIZED/checks/success-check" \
-	"$scratch/solution/rootkitlings.ko" authorized-actions \
+	"$scratch/solution/rklings.ko" authorized-actions \
 	--check-arg complete-rootkit --tool vm/tools/event_stream_test \
 	--tool vm/tools/status_field_test --tool vm/tools/proc_write_test \
 	--tool vm/tools/proc_read_test --tool vm/tools/cred_trigger_test \
 	--tool vm/tools/rmdir_telemetry_test --tool vm/tools/run_as
 run_guest "$SECURE_AGENT/checks/invalid-check" \
-	"$scratch/solution/rootkitlings.ko" control-provisioning \
+	"$scratch/solution/rklings.ko" control-provisioning \
 	--tool vm/tools/module_load_params
 
 run_guest "$HERE/config-check" \
-	"$scratch/solution/rootkitlings.ko" configuration-boundaries \
+	"$scratch/solution/rklings.ko" configuration-boundaries \
 	--tool vm/tools/module_load_params
 
 run_guest "$HERE/visibility-check" \
-	"$scratch/solution/rootkitlings.ko" selected-view-concealment \
+	"$scratch/solution/rklings.ko" selected-view-concealment \
 	--tool vm/tools/run_as --tool vm/tools/getdents64_test \
 	--tool vm/tools/status_field_test --tool vm/tools/proc_write_test \
 	--tool vm/tools/proc_read_test --tool vm/tools/read_result_test

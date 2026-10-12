@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-#ifndef ROOTKITLINGS_SOCKET_FIXTURE_H
-#define ROOTKITLINGS_SOCKET_FIXTURE_H
+#ifndef RKLINGS_SOCKET_FIXTURE_H
+#define RKLINGS_SOCKET_FIXTURE_H
 
 #include <arpa/inet.h>
 #include <stdbool.h>

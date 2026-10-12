@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-#ifndef ROOTKITLINGS_ROOTKIT_H
-#define ROOTKITLINGS_ROOTKIT_H
+#ifndef RKLINGS_ROOTKIT_H
+#define RKLINGS_ROOTKIT_H
 
 #include <linux/compiler_attributes.h>
 

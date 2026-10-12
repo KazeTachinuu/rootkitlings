@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef ROOTKITLINGS_SHA256_H
-#define ROOTKITLINGS_SHA256_H
+#ifndef RKLINGS_SHA256_H
+#define RKLINGS_SHA256_H
 
 #ifdef __KERNEL__
 #include <crypto/hash.h>

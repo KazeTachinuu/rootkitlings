@@ -143,7 +143,7 @@ def build_verification_cases(
         raise VerificationError("verification cases must be non-empty")
     declared_values = tuple(declared_files)
     try:
-        temporary_context = tempfile.TemporaryDirectory(prefix="rootkitlings-cases-")
+        temporary_context = tempfile.TemporaryDirectory(prefix="rklings-cases-")
     except OSError as exc:
         raise VerificationError(f"cannot create verification directory: {exc}") from exc
     with temporary_context as temporary:

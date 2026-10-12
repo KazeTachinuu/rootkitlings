@@ -53,13 +53,13 @@ class KernelToolTests(unittest.TestCase):
 
     def test_repository_path_rejects_kbuild_metacharacters(self) -> None:
         TOOL["validate_repository_path"](
-            Path("/tmp/rootkitlings-course_2026.10+local")
+            Path("/tmp/rklings-course_2026.10+local")
         )
         for character in (" ", "\t", "$", "#", "%", ":", "\\", "(", ")", ","):
             with self.subTest(character=character):
                 with self.assertRaisesRegex(TOOL["KernelError"], "Kbuild"):
                     TOOL["validate_repository_path"](
-                        Path(f"/tmp/rootkitlings{character}course")
+                        Path(f"/tmp/rklings{character}course")
                     )
 
     def test_nested_cgroup_memberships_are_parsed_without_escaping(self) -> None:
@@ -80,7 +80,7 @@ class KernelToolTests(unittest.TestCase):
     def test_manifest_has_one_computed_release_and_verified_source(self) -> None:
         manifest = TOOL["read_manifest"]()
         paths = TOOL["layout"](manifest)
-        self.assertEqual(paths["release"], "7.2.9-rootkitlings")
+        self.assertEqual(paths["release"], "7.2.9-rklings")
         self.assertEqual(
             paths["url"],
             "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.9.tar.xz",
@@ -267,7 +267,7 @@ class KernelToolTests(unittest.TestCase):
                 globals_["RUNTIME"] = Path(temporary_name) / "runtime"
                 kit = (
                     globals_["RUNTIME"]
-                    / "kernel/kits/7.2.9-rootkitlings-aaaaaaaaaaaaaaaa"
+                    / "kernel/kits/7.2.9-rklings-aaaaaaaaaaaaaaaa"
                 )
                 kit.mkdir(parents=True)
                 (kit / "identity").write_text("old", encoding="ascii")
@@ -299,10 +299,10 @@ class KernelToolTests(unittest.TestCase):
                 globals_["RUNTIME"] = runtime
                 kits = runtime / "kernel/kits"
                 kits.mkdir(parents=True)
-                release = "7.2.9-rootkitlings"
+                release = "7.2.9-rklings"
                 current = kits / f"{release}-{'a' * 16}"
                 superseded = kits / f"{release}-{'b' * 16}"
-                other_release = kits / f"7.2.8-rootkitlings-{'c' * 16}"
+                other_release = kits / f"7.2.8-rklings-{'c' * 16}"
                 unfinished = kits / f"{release}-{'d' * 16}.previous"
                 symlink = kits / f"{release}-{'e' * 16}"
                 for path in (current, superseded, other_release, unfinished):
@@ -424,7 +424,7 @@ class KernelToolTests(unittest.TestCase):
                 lines = []
                 for key, value in fragment.items():
                     lines.append(f"# {key} is not set" if value == "n" else f"{key}={value}")
-                lines.append('CONFIG_LOCALVERSION="-rootkitlings"')
+                lines.append('CONFIG_LOCALVERSION="-rklings"')
                 for key, value in TOOL["REQUIRED_FINAL_CONFIG"].items():
                     lines.append(f"{key}={value}")
                 config = build / ".config"

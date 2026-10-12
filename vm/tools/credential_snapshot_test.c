@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-// Compare a Rootkitlings credential record with independent procfs views.
+// Compare a Rklings credential record with independent procfs views.
 #define _GNU_SOURCE
 
 #include <errno.h>

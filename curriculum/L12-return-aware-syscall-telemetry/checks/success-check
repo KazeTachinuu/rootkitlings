@@ -4,12 +4,12 @@
 
 begin "Return-aware rmdir telemetry"
 
-endpoint=/proc/rootkitlings
+endpoint=/proc/rklings
 registry=/sys/kernel/debug/kprobes/list
-selected=/tmp/rootkitlings-rmdir-watch
-near=/tmp/rootkitlings-rmdir-watch-extra
-other=/tmp/rootkitlings-rmdir-other
-fixtures=/tmp/rootkitlings-return-telemetry
+selected=/tmp/rklings-rmdir-watch
+near=/tmp/rklings-rmdir-watch-extra
+other=/tmp/rklings-rmdir-other
+fixtures=/tmp/rklings-return-telemetry
 actual=$fixtures/actual
 mkdir -p "$fixtures"
 
@@ -58,11 +58,11 @@ assert_status()
 
 cleanup()
 {
-	if test -d /sys/module/rootkitlings; then
-		rmmod rootkitlings 2>/dev/null || true
+	if test -d /sys/module/rklings; then
+		rmmod rklings 2>/dev/null || true
 	fi
 	rm -rf "$fixtures" "$selected" "$near" "$other" \
-		/tmp/rootkitlings-rmdir-other-* /tmp/rootkitlings-rmdir-stress-* \
+		/tmp/rklings-rmdir-other-* /tmp/rklings-rmdir-stress-* \
 		2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
@@ -103,8 +103,8 @@ else
 	_fail "native rmdir wrapper is absent"
 fi
 
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 assert_exists "$endpoint"
 assert_registry_delta 1 "loaded state"
 assert_status disabled 0 0 "initial state"
@@ -171,7 +171,7 @@ assert_status enabled 1 1 "selected failure result"
 rmdir_telemetry_test stress 3 &
 stress_pid=$!
 sleep 1
-unload rootkitlings
+unload rklings
 if wait "$stress_pid"; then
 	_ok "ordinary rmdir calls remain valid across unload"
 else
@@ -180,11 +180,11 @@ fi
 assert_absent "$endpoint"
 assert_registry_delta 0 "unloaded state"
 
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 assert_registry_delta 1 "reloaded state"
 assert_status disabled 0 0 "fresh reload"
-unload rootkitlings
+unload rklings
 assert_absent "$endpoint"
 assert_registry_delta 0 "second unloaded state"
 

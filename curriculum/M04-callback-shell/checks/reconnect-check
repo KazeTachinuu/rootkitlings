@@ -28,7 +28,7 @@ if [ ! -f "$fixture_dir/ready" ]; then
 	summary
 fi
 
-load rootkitlings.ko peer_address=127.0.0.1 peer_port="$test_port" \
+load rklings.ko peer_address=127.0.0.1 peer_port="$test_port" \
 	retry_base_ms=25 retry_max_ms=200
 
 tries=0
@@ -56,7 +56,7 @@ else
 	_fail "agent did not reconnect"
 fi
 
-unload rootkitlings
+unload rklings
 
 tries=0
 while [ ! -f "$fixture_dir/eof" ] && [ "$tries" -lt 50 ]; do

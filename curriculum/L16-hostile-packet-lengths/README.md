@@ -119,7 +119,7 @@ Do not read options or payload; only validate their declared bounds.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The kernel check covers a valid packet, truncation, malformed input, fragment

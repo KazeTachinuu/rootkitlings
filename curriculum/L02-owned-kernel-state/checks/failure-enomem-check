@@ -6,17 +6,17 @@ begin "State allocation rejection"
 
 assert_not_loaded()
 {
-	assert_absent /sys/module/rootkitlings
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "rootkitlings appears in /proc/modules"
+	assert_absent /sys/module/rklings
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings appears in /proc/modules"
 	else
-		_ok "rootkitlings is absent from /proc/modules"
+		_ok "rklings is absent from /proc/modules"
 	fi
 }
 
 assert_not_loaded
 for attempt in 1 2; do
-	if module_load_test /rootkitlings/rootkitlings.ko 12; then
+	if module_load_test /rklings/rklings.ko 12; then
 		_ok "attempt $attempt returned numeric ENOMEM"
 	else
 		_fail "attempt $attempt did not return ENOMEM"

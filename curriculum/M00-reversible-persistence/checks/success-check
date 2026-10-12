@@ -2,10 +2,10 @@
 # shellcheck source=/dev/null
 . /vm/checks/lib.sh
 
-endpoint=/proc/rootkitlings
+endpoint=/proc/rklings
 persist_dir=/etc/modules-load.d
-persist_file=$persist_dir/rootkitlings.conf
-staging_file=$persist_dir/.rootkitlings.conf.staging
+persist_file=$persist_dir/rklings.conf
+staging_file=$persist_dir/.rklings.conf.staging
 marker=/mnt/persist/.check-phase
 fixtures=/tmp/m00-fixtures
 
@@ -20,13 +20,13 @@ read_field() {
 if [ -f "$marker" ]; then
 	begin "Persistence survives reboot"
 
-	if grep -q rootkitlings /proc/modules 2>/dev/null; then
+	if grep -q rklings /proc/modules 2>/dev/null; then
 		_ok "module loaded automatically after reboot"
 	else
 		_fail "module was not loaded after reboot"
 	fi
 
-	if [ -f "$persist_file" ] && grep -q rootkitlings "$persist_file"; then
+	if [ -f "$persist_file" ] && grep -q rklings "$persist_file"; then
 		_ok "persistence file survived reboot"
 	else
 		_fail "persistence file missing or empty after reboot"
@@ -48,8 +48,8 @@ chmod 0600 "$persist_file"
 
 printf 'persist' > "$fixtures/persist"
 
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 assert_exists "$endpoint"
 
 _state=$(read_field "$endpoint" persistence)
@@ -69,16 +69,16 @@ else
 	_fail "persistence state is not applied after trigger (got: $_state)"
 fi
 
-if [ -f "$persist_file" ] && grep -q rootkitlings "$persist_file"; then
+if [ -f "$persist_file" ] && grep -q rklings "$persist_file"; then
 	_ok "persistence file contains the module name"
 else
 	_fail "persistence file is missing or has wrong content"
 fi
 
 # Test rollback: unload should reverse the transaction
-unload rootkitlings
+unload rklings
 
-if [ -f "$persist_file" ] && ! grep -q rootkitlings "$persist_file"; then
+if [ -f "$persist_file" ] && ! grep -q rklings "$persist_file"; then
 	_ok "persistence rolled back on unload"
 else
 	_fail "persistence file was not rolled back"
@@ -96,11 +96,11 @@ assert_absent "$endpoint"
 : > "$persist_file"
 chmod 0600 "$persist_file"
 
-load rootkitlings.ko
+load rklings.ko
 proc_write_test write "$endpoint" "$fixtures/persist" > /dev/null
 sleep 1
 
-if [ -f "$persist_file" ] && grep -q rootkitlings "$persist_file"; then
+if [ -f "$persist_file" ] && grep -q rklings "$persist_file"; then
 	_ok "re-persisted for reboot test"
 else
 	_fail "re-persist failed"

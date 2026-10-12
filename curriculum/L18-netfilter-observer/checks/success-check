@@ -4,8 +4,8 @@
 
 begin "Local IPv4 Netfilter observer"
 
-endpoint=/proc/rootkitlings
-fixtures=/tmp/rootkitlings-netfilter
+endpoint=/proc/rklings
+fixtures=/tmp/rklings-netfilter
 actual=$fixtures/actual
 expected=$fixtures/expected
 mkdir -p "$fixtures"
@@ -56,19 +56,19 @@ assert_unchanged()
 
 assert_not_loaded()
 {
-	assert_absent /sys/module/rootkitlings
+	assert_absent /sys/module/rklings
 	assert_absent "$endpoint"
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "rootkitlings remains in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings remains in /proc/modules"
 	else
-		_ok "rootkitlings is absent from /proc/modules"
+		_ok "rklings is absent from /proc/modules"
 	fi
 }
 
 assert_not_loaded
 ifconfig lo 127.0.0.1 up
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 assert_exists "$endpoint"
 if [ "$(stat -c '%a:%u:%g' "$endpoint")" = 400:0:0 ]; then
 	_ok "$endpoint is read-only and owned by root"
@@ -134,7 +134,7 @@ else
 	_fail "IPv4 traffic ended before observer teardown"
 fi
 exec 3< "$endpoint"
-unload rootkitlings
+unload rklings
 wait "$traffic" || _fail "IPv4 traffic failed across observer unload"
 assert_not_loaded
 if cat <&3 > /dev/null 2>&1; then
@@ -144,8 +144,8 @@ else
 fi
 exec 3<&-
 
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 assert_status "reload"
 before=$(callbacks)
 if "$helper" 1 > "$fixtures/udp-reload.log" 2>&1; then
@@ -159,7 +159,7 @@ if [ "$after" -eq $((before + 1)) ]; then
 else
 	_fail "reload epoch changed callbacks from $before to $after"
 fi
-unload rootkitlings
+unload rklings
 assert_not_loaded
 
 summary

@@ -8,12 +8,12 @@ begin "$label"
 
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	if module_load_test /rootkitlings/rootkitlings.ko "$expected"; then
+	if module_load_test /rklings/rklings.ko "$expected"; then
 		_ok "attempt $attempt returned errno $expected"
 	else
 		_fail "attempt $attempt returned the wrong error"
 	fi
-	assert_absent /sys/module/rootkitlings
+	assert_absent /sys/module/rklings
 	attempt=$((attempt + 1))
 done
 

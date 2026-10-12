@@ -4,7 +4,7 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-protection-property-selection-test.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-protection-property-selection-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || {
@@ -74,10 +74,10 @@ build_tree()
 build_tree "$HERE/../starter" "$scratch/starter"
 build_tree "$HERE/../solution" "$scratch/solution"
 "$HERE/host-check" "$scratch/solution" \
-	"$scratch/solution/rootkitlings.ko"
+	"$scratch/solution/rklings.ko"
 
 if "$HERE/host-check" "$scratch/starter" \
-	"$scratch/starter/rootkitlings.ko" > "$scratch/starter-host.log" 2>&1; then
+	"$scratch/starter/rklings.ko" > "$scratch/starter-host.log" 2>&1; then
 	printf '[x] host checker accepted the unfinished implementation\n' >&2
 	exit 1
 fi
@@ -85,7 +85,7 @@ fi
 expect_host_rejection()
 {
 	local directory=$1 label=$2
-	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+	if "$HERE/host-check" "$directory" "$directory/rklings.ko" \
 		> "$scratch/$label-host.log" 2>&1; then
 		printf '[x] host checker accepted mutant: %s\n' "$label" >&2
 		exit 1
@@ -156,7 +156,7 @@ cp "$HERE/../fixtures/alternate/properties.c" \
 	"$scratch/alternate/protection/properties.c"
 build_tree "$scratch/alternate" "$scratch/alternate-build"
 "$HERE/host-check" "$scratch/alternate-build" \
-	"$scratch/alternate-build/rootkitlings.ko"
+	"$scratch/alternate-build/rklings.ko"
 
 run_guest()
 {
@@ -171,13 +171,13 @@ run_guest()
 	printf '%s\n' "$output"
 }
 
-run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" solution
+run_guest "$HERE/success-check" "$scratch/solution/rklings.ko" solution
 run_guest "$HERE/success-check" \
-	"$scratch/alternate-build/rootkitlings.ko" alternate
-run_guest "$HERE/failure-check" "$scratch/starter/rootkitlings.ko" starter \
+	"$scratch/alternate-build/rklings.ko" alternate
+run_guest "$HERE/failure-check" "$scratch/starter/rklings.ko" starter \
 	--tool vm/tools/module_load_test
 run_guest "$HERE/failure-check" \
-	"$scratch/kernel-only-answer-build/rootkitlings.ko" kernel-only-answer \
+	"$scratch/kernel-only-answer-build/rklings.ko" kernel-only-answer \
 	--tool vm/tools/module_load_test
 
 printf '[+] protection-property-selection passed\n'

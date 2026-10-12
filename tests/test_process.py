@@ -20,7 +20,7 @@ class ProcessTests(unittest.TestCase):
 
     def test_launch_error_is_translated(self) -> None:
         with self.assertRaisesRegex(ProcessError, "cannot execute"):
-            run_process(["/definitely/missing/rootkitlings-command"])
+            run_process(["/definitely/missing/rklings-command"])
 
     def test_timeout_kills_descendant_process_group(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

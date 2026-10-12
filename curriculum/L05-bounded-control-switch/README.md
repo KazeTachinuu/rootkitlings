@@ -71,7 +71,7 @@ This keeps repeated commands on one open file descriptor valid.
 Do not store the command string, add a mutex, or call `access_ok()` yourself;
 `copy_from_user()` performs the user-memory check.
 
-Publish `/proc/rootkitlings` as mode `0644`.
+Publish `/proc/rklings` as mode `0644`.
 It remains owned by root, so any user may inspect it while only root may control
 it.
 Keep proc removal before state destruction.
@@ -87,7 +87,7 @@ Edit these three files:
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker covers every accepted form, malformed input, exact error codes,

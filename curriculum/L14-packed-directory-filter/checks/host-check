@@ -7,7 +7,7 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
 module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found: $2"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-packed-directory-filter-host.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-packed-directory-filter-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
@@ -51,7 +51,7 @@ nm -u "$build_dir/instrumentation/getdents_probe.o" |
 	die "module must contain one iterate_dir target identity"
 [[ $(strings "$module" | grep -Fxc 'filldir64') -eq 1 ]] ||
 	die "module must contain one native filldir64 identity"
-grep -Fxq 'rootkitlings_hidden' < <(strings "$module") ||
+grep -Fxq 'rklings_hidden' < <(strings "$module") ||
 	die "module lacks the controlled directory target"
 
 printf '[+] pure filter, supplied integration, and sanitizer corpus verified\n'

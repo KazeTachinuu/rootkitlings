@@ -36,7 +36,7 @@ __must_check int rk_proc_publish(struct rk_state *state)
 	if (proc_entry || !state)
 		return -EINVAL;
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH)
+	if (RKLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH)
 		proc_entry = NULL;
 	else
 		/* TODO: publish mode 0644 with proc_create_data(). */

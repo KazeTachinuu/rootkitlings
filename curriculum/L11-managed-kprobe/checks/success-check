@@ -4,10 +4,10 @@
 
 begin "Managed named Kprobes"
 
-endpoint=/proc/rootkitlings
+endpoint=/proc/rklings
 registry=/sys/kernel/debug/kprobes/list
-fixtures=/tmp/rootkitlings-probes
-target_dir=/tmp/rootkitlings-probe-target
+fixtures=/tmp/rklings-probes
+target_dir=/tmp/rklings-probe-target
 actual=$fixtures/actual
 mkdir -p "$fixtures"
 
@@ -77,12 +77,12 @@ assert_status()
 
 assert_not_loaded()
 {
-	assert_absent /sys/module/rootkitlings
+	assert_absent /sys/module/rklings
 	assert_absent "$endpoint"
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "rootkitlings appears in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings appears in /proc/modules"
 	else
-		_ok "rootkitlings is absent from /proc/modules"
+		_ok "rklings is absent from /proc/modules"
 	fi
 	assert_registry_delta 0 "unloaded state"
 }
@@ -124,7 +124,7 @@ check_abi()
 			_fail "$target is absent from the running kernel"
 		fi
 	done
-	if grep -q '[[:space:]]__rootkitlings_missing_kprobe_target_7_2__$' \
+	if grep -q '[[:space:]]__rklings_missing_kprobe_target_7_2__$' \
 		/proc/kallsyms; then
 		_fail "the injected missing target unexpectedly exists"
 	else
@@ -148,7 +148,7 @@ expect_errno()
 
 check_loaded()
 {
-	assert_loaded rootkitlings
+	assert_loaded rklings
 	assert_exists "$endpoint"
 	metadata=$(stat -c '%a:%u:%g' "$endpoint")
 	if [ "$metadata" = 644:0:0 ]; then
@@ -305,12 +305,12 @@ assert_not_loaded
 
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	load rootkitlings.ko
+	load rklings.ko
 	check_loaded
 	check_rejections
 	exercise_targets
 	check_concurrency
-	if proc_write_test unload "$endpoint" "$fixtures/enable" rootkitlings \
+	if proc_write_test unload "$endpoint" "$fixtures/enable" rklings \
 		> /dev/null; then
 		_ok "attempt $attempt rejects a held descriptor after unload"
 	else

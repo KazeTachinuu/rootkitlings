@@ -4,14 +4,14 @@
 
 begin "Module hiding"
 
-endpoint=/proc/rootkitlings
+endpoint=/proc/rklings
 
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 assert_exists "$endpoint"
 
 # Module should be visible before hideing.
-if lsmod | grep -q rootkitlings; then
+if lsmod | grep -q rklings; then
 	_ok "module visible in lsmod before hide"
 else
 	_fail "module not in lsmod before hide"
@@ -20,14 +20,14 @@ fi
 # Cloak the module.
 echo hide > "$endpoint"
 
-if lsmod | grep -q rootkitlings; then
+if lsmod | grep -q rklings; then
 	_fail "module still visible in lsmod after hide"
 else
 	_ok "module hidden from lsmod after hide"
 fi
 
 # /proc/modules is the same view as lsmod.
-if grep -q rootkitlings /proc/modules; then
+if grep -q rklings /proc/modules; then
 	_fail "module still visible in /proc/modules after hide"
 else
 	_ok "module hidden from /proc/modules after hide"
@@ -57,10 +57,10 @@ fi
 
 # Unhide so rmmod can find it, then unload.
 echo unhide > "$endpoint"
-unload rootkitlings
+unload rklings
 assert_absent "$endpoint"
 
-if lsmod | grep -q rootkitlings; then
+if lsmod | grep -q rklings; then
 	_fail "module still in lsmod after unload"
 else
 	_ok "module removed from lsmod after unload"

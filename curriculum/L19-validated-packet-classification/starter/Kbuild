@@ -1,8 +1,8 @@
-ROOTKITLINGS_FAIL_POINT ?= 0
+RKLINGS_FAIL_POINT ?= 0
 
-obj-m += rootkitlings.o
-rootkitlings-y := core/main.o interface/proc.o \
+obj-m += rklings.o
+rklings-y := core/main.o interface/proc.o \
 	instrumentation/netfilter_observer.o parser/ipv4.o access/skb_access.o \
 	classifier/udp.o tests/selftest.o
 ccflags-y += -I$(src)/include
-ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)
+ccflags-y += -DRKLINGS_FAIL_POINT=$(RKLINGS_FAIL_POINT)

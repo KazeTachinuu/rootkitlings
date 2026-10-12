@@ -7,15 +7,15 @@
 
 #include "sha256.h"
 
-#ifndef ROOTKITLINGS_FAIL_POINT
-#define ROOTKITLINGS_FAIL_POINT 0
+#ifndef RKLINGS_FAIL_POINT
+#define RKLINGS_FAIL_POINT 0
 #endif
 
 static struct crypto_shash *rk_alloc(const char *name, unsigned int type,
 				     unsigned int mask, void *context)
 {
 	(void)context;
-	if (ROOTKITLINGS_FAIL_POINT == 1)
+	if (RKLINGS_FAIL_POINT == 1)
 		return ERR_PTR(-EINTR);
 	return crypto_alloc_shash(name, type, mask);
 }

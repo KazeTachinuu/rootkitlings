@@ -68,7 +68,7 @@ class CompileDatabaseTests(unittest.TestCase):
             source.parent.mkdir()
             source.write_text("int main;\n")
             wanted = {"directory": str(root), "file": "core/main.c", "arguments": []}
-            generated = {"directory": str(root), "file": "rootkitlings.mod.c"}
+            generated = {"directory": str(root), "file": "rklings.mod.c"}
             self.assertIs(base_compile_entry([wanted, generated], {source}), wanted)
             with self.assertRaises(CompileDatabaseError):
                 base_compile_entry([generated], {source})
@@ -84,7 +84,7 @@ class CompileDatabaseTests(unittest.TestCase):
             solution_include.mkdir(parents=True)
             starter_include.mkdir(parents=True)
             (bundle / "starter/Kbuild").write_text(
-                "ccflags-y += -DROOTKITLINGS_FAIL_POINT=$(ROOTKITLINGS_FAIL_POINT)\n"
+                "ccflags-y += -DRKLINGS_FAIL_POINT=$(RKLINGS_FAIL_POINT)\n"
             )
             source.write_text("int main;\n")
             reference = root / "reference/core/main.c"
@@ -115,7 +115,7 @@ class CompileDatabaseTests(unittest.TestCase):
             self.assertFalse(any(value.startswith("-Wp,-MMD,") for value in arguments))
             self.assertIn(f"-I{solution_include.resolve()}", arguments)
             self.assertIn(f"-I{starter_include.resolve()}", arguments)
-            self.assertIn("-DROOTKITLINGS_FAIL_POINT=0", arguments)
+            self.assertIn("-DRKLINGS_FAIL_POINT=0", arguments)
             self.assertIn('-DKBUILD_BASENAME="main"', arguments)
             self.assertEqual(arguments[-2:], ["-c", str(source.resolve())])
 

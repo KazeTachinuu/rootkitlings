@@ -56,7 +56,7 @@ int main(void)
 	struct seq_file output = { 0 };
 	int error;
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH) {
+	if (RKLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH) {
 		creation_result = &entry;
 		error = rk_proc_publish();
 		require(error == -ENOMEM,
@@ -76,7 +76,7 @@ int main(void)
 	error = rk_proc_publish();
 	require(error == 0 && create_calls == 2,
 		"successful publication must call proc_create_single once");
-	require(strcmp(created_name, "rootkitlings") == 0 &&
+	require(strcmp(created_name, "rklings") == 0 &&
 		created_mode == 0444 && created_parent == NULL && created_show,
 		"publication must use the required name, mode, root, and show callback");
 	require(created_show(&output, NULL) == 0 &&

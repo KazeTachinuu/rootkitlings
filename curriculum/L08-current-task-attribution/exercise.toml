@@ -35,7 +35,7 @@ expect_build = "pass"
 check = "curriculum/L08-current-task-attribution/checks/success-check"
 
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "0"
+RKLINGS_FAIL_POINT = "0"
 
 [[verification.cases]]
 id = "preflight-rejection"
@@ -44,7 +44,7 @@ expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-ecanceled-check"
 
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "1"
+RKLINGS_FAIL_POINT = "1"
 
 [[verification.cases]]
 id = "allocation-rejection"
@@ -53,7 +53,7 @@ expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-enomem-check"
 
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "2"
+RKLINGS_FAIL_POINT = "2"
 
 [[verification.cases]]
 id = "publication-rollback"
@@ -62,13 +62,13 @@ expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-after-state-check"
 
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "3"
+RKLINGS_FAIL_POINT = "3"
 
 [[verification.cases]]
 id = "unknown-failure-point"
 label = "Reject unknown failure point"
 expect_build = "fail"
-build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+build_output_contains = "unknown RKLINGS_FAIL_POINT"
 
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "99"
+RKLINGS_FAIL_POINT = "99"

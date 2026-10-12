@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef ROOTKITLINGS_AGENT_H
-#define ROOTKITLINGS_AGENT_H
+#ifndef RKLINGS_AGENT_H
+#define RKLINGS_AGENT_H
 
 #include <linux/compiler_attributes.h>
 #include <linux/in.h>

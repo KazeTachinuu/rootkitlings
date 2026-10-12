@@ -8,7 +8,7 @@ needs_listener=${3:?listener flag argument is required}
 
 begin "$label"
 
-fixtures=/tmp/rootkitlings-socket-failure
+fixtures=/tmp/rklings-socket-failure
 mkdir -p "$fixtures"
 
 ifconfig lo 127.0.0.1 up
@@ -39,15 +39,15 @@ while [ "$attempt" -le 2 ]; do
 		fixture_pid=
 	fi
 
-	if load_errno /rootkitlings/rootkitlings.ko "$expected_errno" \
+	if load_errno /rklings/rklings.ko "$expected_errno" \
 			"peer_port=$port"; then
 		_ok "attempt $attempt returned errno $expected_errno"
 	else
 		_fail "attempt $attempt returned the wrong error"
 	fi
-	assert_absent /sys/module/rootkitlings
-	assert_absent /proc/rootkitlings
-	if grep -q '^rootkitlings ' /proc/modules; then
+	assert_absent /sys/module/rklings
+	assert_absent /proc/rklings
+	if grep -q '^rklings ' /proc/modules; then
 		_fail "attempt $attempt left a loaded module"
 	else
 		_ok "attempt $attempt left no loaded module"

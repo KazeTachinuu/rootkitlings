@@ -6,8 +6,8 @@ expected_errno=${1:-@EXPECTED_ERRNO@}
 label=${2:-@LABEL@}
 begin "$label"
 
-target=/tmp/rootkitlings-read-target
-endpoint=/proc/rootkitlings
+target=/tmp/rklings-read-target
+endpoint=/proc/rklings
 registry=/sys/kernel/debug/kprobes/list
 printf 'SECRET\n' > "$target"
 
@@ -20,15 +20,15 @@ probe_count()
 before=$(probe_count)
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	if module_load_test /rootkitlings/rootkitlings.ko "$expected_errno"; then
+	if module_load_test /rklings/rklings.ko "$expected_errno"; then
 		_ok "attempt $attempt returned errno $expected_errno"
 	else
 		_fail "attempt $attempt returned the wrong error"
 	fi
-	assert_absent /sys/module/rootkitlings
+	assert_absent /sys/module/rklings
 	assert_absent "$endpoint"
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "attempt $attempt left rootkitlings in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "attempt $attempt left rklings in /proc/modules"
 	else
 		_ok "attempt $attempt leaves no loaded module"
 	fi

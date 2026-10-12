@@ -6,14 +6,14 @@ begin "Authenticated replay-safe message"
 
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	load rootkitlings.ko
-	if dmesg | grep -Eq 'rootkitlings: authenticated replay-safe message passed: [1-9][0-9]* assertions'; then
+	load rklings.ko
+	if dmesg | grep -Eq 'rklings: authenticated replay-safe message passed: [1-9][0-9]* assertions'; then
 		_ok "attempt $attempt completed authenticated and concurrent checks"
 	else
 		_fail "attempt $attempt did not publish its self-test result"
 	fi
-	unload rootkitlings
-	assert_absent /sys/module/rootkitlings
+	unload rklings
+	assert_absent /sys/module/rklings
 	attempt=$((attempt + 1))
 done
 

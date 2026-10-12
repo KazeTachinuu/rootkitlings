@@ -34,7 +34,7 @@ label = "Cross-view probe evidence"
 expect_build = "pass"
 check = "curriculum/L13-cross-view-evidence/checks/success-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "0"
+RKLINGS_FAIL_POINT = "0"
 
 [[verification.cases]]
 id = "preflight-rejection"
@@ -42,7 +42,7 @@ label = "Preflight rejection"
 expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-ecanceled-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "1"
+RKLINGS_FAIL_POINT = "1"
 
 [[verification.cases]]
 id = "allocation-rejection"
@@ -50,7 +50,7 @@ label = "State allocation rejection"
 expect_build = "pass"
 check = "curriculum/L03-proc-publication/checks/failure-enomem-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "2"
+RKLINGS_FAIL_POINT = "2"
 
 [[verification.cases]]
 id = "publication-rollback"
@@ -59,7 +59,7 @@ expect_build = "pass"
 check = "curriculum/L13-cross-view-evidence/checks/probe-failure-check.in"
 check_arguments = ["12", "Probe cleanup after procfs publication failure"]
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "3"
+RKLINGS_FAIL_POINT = "3"
 
 [[verification.cases]]
 id = "missing-target-rollback"
@@ -68,12 +68,12 @@ expect_build = "pass"
 check = "curriculum/L13-cross-view-evidence/checks/probe-failure-check.in"
 check_arguments = ["2", "Batch rollback after a missing second symbol"]
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "4"
+RKLINGS_FAIL_POINT = "4"
 
 [[verification.cases]]
 id = "unknown-failure-point"
 label = "Reject unknown failure point"
 expect_build = "fail"
-build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+build_output_contains = "unknown RKLINGS_FAIL_POINT"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "99"
+RKLINGS_FAIL_POINT = "99"

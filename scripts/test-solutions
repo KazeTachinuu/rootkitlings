@@ -30,7 +30,7 @@ class SolutionCheckError(RuntimeError):
     pass
 
 
-UI = Console("rootkitlings.solution-tests")
+UI = Console("rklings.solution-tests")
 
 
 def require_compiled_sources(source: Path, build_relative: str) -> None:
@@ -53,7 +53,7 @@ def require_compiled_sources(source: Path, build_relative: str) -> None:
         logical_lines.append(current)
     objects: set[str] = set()
     assignment = re.compile(
-        r"^\s*rootkitlings-(?:y|objs)\s*(?::=|\+=|=)\s*(.*)$"
+        r"^\s*rklings-(?:y|objs)\s*(?::=|\+=|=)\s*(.*)$"
     )
     object_token = re.compile(r"^(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.o$")
     for line in logical_lines:
@@ -182,7 +182,7 @@ def main(arguments: list[str]) -> int:
         UI.error("course kernel is not ready; run: scripts/kernel ensure")
         return 1
     with tempfile.TemporaryDirectory(
-        prefix="rootkitlings-solutions-"
+        prefix="rklings-solutions-"
     ) as temporary:
         solution_root = Path(temporary)
         for item in items:

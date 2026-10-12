@@ -10,11 +10,11 @@
 
 #include "auth_platform.h"
 
-#ifndef ROOTKITLINGS_FAIL_POINT
-#define ROOTKITLINGS_FAIL_POINT 0
+#ifndef RKLINGS_FAIL_POINT
+#define RKLINGS_FAIL_POINT 0
 #endif
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 3
-#error "ROOTKITLINGS_FAIL_POINT must be between 0 and 3"
+#if RKLINGS_FAIL_POINT < 0 || RKLINGS_FAIL_POINT > 3
+#error "RKLINGS_FAIL_POINT must be between 0 and 3"
 #endif
 
 struct rk_auth_context {
@@ -29,7 +29,7 @@ int rk_platform_auth_create(void **context, const u8 *key, size_t key_length)
 
 	if (!context || !key || key_length > UINT_MAX)
 		return -EINVAL;
-	if (ROOTKITLINGS_FAIL_POINT == 1)
+	if (RKLINGS_FAIL_POINT == 1)
 		return -ENOMEM;
 	created = kzalloc(sizeof(*created), GFP_KERNEL);
 	if (!created)
@@ -44,7 +44,7 @@ int rk_platform_auth_create(void **context, const u8 *key, size_t key_length)
 		error = -EINVAL;
 		goto out_transform;
 	}
-	if (ROOTKITLINGS_FAIL_POINT == 2)
+	if (RKLINGS_FAIL_POINT == 2)
 		error = -EKEYREJECTED;
 	else
 		error = crypto_shash_setkey(created->transform, key,
@@ -81,7 +81,7 @@ int rk_platform_hmac(void *context, const u8 *data, size_t length,
 	SHASH_DESC_ON_STACK(descriptor, owned->transform);
 	int error;
 
-	if (ROOTKITLINGS_FAIL_POINT == 3)
+	if (RKLINGS_FAIL_POINT == 3)
 		return -EIO;
 	descriptor->tfm = owned->transform;
 	error = crypto_shash_digest(descriptor, data, length, digest);

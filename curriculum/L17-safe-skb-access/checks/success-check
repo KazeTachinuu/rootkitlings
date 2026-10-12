@@ -4,15 +4,15 @@
 
 begin "Safe sk_buff access"
 
-assert_absent /sys/module/rootkitlings
-load rootkitlings.ko
-assert_loaded rootkitlings
-if dmesg | grep -q 'rootkitlings: skb access self-tests passed:'; then
+assert_absent /sys/module/rklings
+load rklings.ko
+assert_loaded rklings
+if dmesg | grep -q 'rklings: skb access self-tests passed:'; then
 	_ok "kernel self-tests covered real sk_buff layouts"
 else
 	_fail "kernel self-test completion was not logged"
 fi
-unload rootkitlings
-assert_absent /sys/module/rootkitlings
+unload rklings
+assert_absent /sys/module/rklings
 
 summary

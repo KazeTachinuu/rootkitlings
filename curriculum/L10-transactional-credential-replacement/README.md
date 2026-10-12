@@ -83,7 +83,7 @@ The proc callback runs in the calling thread.
 An external `printf` launched by a shell changes that short-lived process, not
 its parent; use the supplied checker to keep and inspect the writer.
 
-`/proc/rootkitlings` uses mode `0666` in the disposable guest.
+`/proc/rklings` uses mode `0666` in the disposable guest.
 The action switch is operational control, not identity-based authorization.
 One `READ_ONCE()` admits or rejects `root`; a concurrent `disable` prevents
 future admission but does not wait for an admitted replacement.
@@ -104,7 +104,7 @@ pointer returned by `current_cred()`.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker proves parsing and gating, preparation failure and cancellation,

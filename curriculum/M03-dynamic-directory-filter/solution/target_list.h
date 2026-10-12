@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef ROOTKITLINGS_TARGET_LIST_H
-#define ROOTKITLINGS_TARGET_LIST_H
+#ifndef RKLINGS_TARGET_LIST_H
+#define RKLINGS_TARGET_LIST_H
 
 #include <linux/spinlock.h>
 #include <linux/string.h>

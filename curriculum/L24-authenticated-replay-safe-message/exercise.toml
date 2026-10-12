@@ -33,7 +33,7 @@ label = "Authenticated replay-safe transition"
 expect_build = "pass"
 check = "curriculum/L24-authenticated-replay-safe-message/checks/success-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "0"
+RKLINGS_FAIL_POINT = "0"
 
 [[verification.cases]]
 id = "context-allocation-failure"
@@ -41,7 +41,7 @@ label = "Authentication context allocation failure"
 expect_build = "pass"
 check = "curriculum/L24-authenticated-replay-safe-message/checks/allocation-failure-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "1"
+RKLINGS_FAIL_POINT = "1"
 
 [[verification.cases]]
 id = "key-setup-failure"
@@ -49,7 +49,7 @@ label = "HMAC key setup failure"
 expect_build = "pass"
 check = "curriculum/L24-authenticated-replay-safe-message/checks/key-failure-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "2"
+RKLINGS_FAIL_POINT = "2"
 
 [[verification.cases]]
 id = "digest-failure"
@@ -57,7 +57,7 @@ label = "HMAC calculation failure"
 expect_build = "pass"
 check = "curriculum/L24-authenticated-replay-safe-message/checks/digest-failure-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "3"
+RKLINGS_FAIL_POINT = "3"
 
 [[verification.cases]]
 id = "unknown-failure-point"
@@ -65,4 +65,4 @@ label = "Reject unknown failure point"
 expect_build = "fail"
 build_output_contains = "must be between 0 and 3"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "99"
+RKLINGS_FAIL_POINT = "99"

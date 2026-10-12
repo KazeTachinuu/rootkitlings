@@ -52,7 +52,7 @@ label = "Root reverse shell"
 expect_build = "pass"
 check = "curriculum/L21-root-shell-bridge/checks/success-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "0"
+RKLINGS_FAIL_POINT = "0"
 
 [[verification.cases]]
 id = "shell-timeout"
@@ -60,7 +60,7 @@ label = "Bounded shell timeout"
 expect_build = "pass"
 check = "curriculum/L21-root-shell-bridge/checks/timeout-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "0"
+RKLINGS_FAIL_POINT = "0"
 
 [[verification.cases]]
 id = "blocked-shell-unload"
@@ -68,7 +68,7 @@ label = "Blocked shell unload"
 expect_build = "pass"
 check = "curriculum/L21-root-shell-bridge/checks/unload-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "0"
+RKLINGS_FAIL_POINT = "0"
 
 [[verification.cases]]
 id = "refused-connection"
@@ -76,7 +76,7 @@ label = "Refused peer connection"
 expect_build = "pass"
 check = "curriculum/L21-root-shell-bridge/checks/refused-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "0"
+RKLINGS_FAIL_POINT = "0"
 
 [[verification.cases]]
 id = "invalid-configuration"
@@ -84,12 +84,12 @@ label = "Invalid shell configuration"
 expect_build = "pass"
 check = "curriculum/L21-root-shell-bridge/checks/invalid-parameter-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "0"
+RKLINGS_FAIL_POINT = "0"
 
 [[verification.cases]]
 id = "unknown-failure-point"
 label = "Reject unknown failure point"
 expect_build = "fail"
-build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+build_output_contains = "unknown RKLINGS_FAIL_POINT"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "99"
+RKLINGS_FAIL_POINT = "99"

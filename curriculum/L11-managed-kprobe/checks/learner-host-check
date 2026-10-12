@@ -10,7 +10,7 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 (( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR ARTIFACT_PATH"
 build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
 artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-learner-host.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-learner-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 build_variant()
@@ -19,7 +19,7 @@ build_variant()
 	cp -a "$build_dir" "$destination"
 	make -s -C "$KDIR" M="$destination" clean
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
+		RKLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
 		cat "$log" >&2
 		die "$name build failed"
 	fi

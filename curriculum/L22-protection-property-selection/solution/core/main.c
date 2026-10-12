@@ -5,7 +5,7 @@
 
 #include "selftest.h"
 
-static int __init rootkitlings_init(void)
+static int __init rklings_init(void)
 {
 	char runtime_marker[64];
 	unsigned int assertions;
@@ -15,19 +15,19 @@ static int __init rootkitlings_init(void)
 				       sizeof(runtime_marker));
 	if (error)
 		return error;
-	pr_info("rootkitlings: protection self-tests passed: %u assertions\n",
+	pr_info("rklings: protection self-tests passed: %u assertions\n",
 		assertions);
-	pr_info("rootkitlings: runtime marker=%s\n", runtime_marker);
+	pr_info("rklings: runtime marker=%s\n", runtime_marker);
 	memzero_explicit(runtime_marker, sizeof(runtime_marker));
 	return 0;
 }
 
-static void __exit rootkitlings_exit(void)
+static void __exit rklings_exit(void)
 {
 }
 
-module_init(rootkitlings_init);
-module_exit(rootkitlings_exit);
+module_init(rklings_init);
+module_exit(rklings_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings protection-property selection");
+MODULE_DESCRIPTION("Rklings protection-property selection");

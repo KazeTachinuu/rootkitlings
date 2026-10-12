@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the Rootkitlings learner CLI."""
+"""Run the Rklings learner CLI."""
 
 from engine.cli import entrypoint
 

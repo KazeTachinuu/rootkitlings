@@ -12,17 +12,17 @@ reads `/proc/modules`, which iterates this list.
 
 ```text
 before:
-  modules_list <-> [modA] <-> [rootkitlings] <-> [modB] <-> ...
-                                     ^
-                                saved_prev = list.prev
+  modules_list <-> [modA] <-> [rklings] <-> [modB] <-> ...
+                                ^
+                           saved_prev = list.prev
 
 after list_del:
   modules_list <-> [modA] <-> [modB] <-> ...
 
-  [rootkitlings]  (unlinked, invisible to lsmod)
+  [rklings]  (unlinked, invisible to lsmod)
 
 restore with list_add(list, saved_prev):
-  modules_list <-> [modA] <-> [rootkitlings] <-> [modB] <-> ...
+  modules_list <-> [modA] <-> [rklings] <-> [modB] <-> ...
 ```
 
 ```c
@@ -43,7 +43,7 @@ list_add(&THIS_MODULE->list, saved_prev);
 `list_del` only removes the module from the iteration list. The module
 is still visible through:
 
-- `/sys/module/rootkitlings/` (sysfs, created at module load)
+- `/sys/module/rklings/` (sysfs, created at module load)
 - `/proc/kallsyms` (exported symbols)
 - `/sys/kernel/debug/kprobes/list` (if you registered kprobes)
 - Direct memory forensics
@@ -61,14 +61,14 @@ would crash the kernel.
 
 ## Control interface
 
-The starter code creates `/proc/rootkitlings` (world-readable and
+The starter code creates `/proc/rklings` (world-readable and
 writable). Write commands to control cloaking:
 
 | Command | Effect |
 |---------|--------|
-| `echo hide > /proc/rootkitlings` | Hide module from lsmod |
-| `echo unhide > /proc/rootkitlings` | Restore module visibility |
-| `cat /proc/rootkitlings` | Show current state (`hidden=true/false`) |
+| `echo hide > /proc/rklings` | Hide module from lsmod |
+| `echo unhide > /proc/rklings` | Restore module visibility |
+| `cat /proc/rklings` | Show current state (`hidden=true/false`) |
 
 Invalid commands return an error without changing state.
 
@@ -80,7 +80,7 @@ interface and command parsing are provided.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 ## References

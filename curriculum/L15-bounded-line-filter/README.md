@@ -7,7 +7,7 @@ read length.
 Success proves that a return probe can select one file by identity and edit a
 bounded read result without treating arbitrary bytes as a C string.
 At load, the module retains the inode opened from
-`/tmp/rootkitlings-read-target`.
+`/tmp/rklings-read-target`.
 It handles results of at most 512 bytes and replaces complete, non-overlapping
 matches only.
 
@@ -35,7 +35,7 @@ Use this scan:
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 ## What the supplied code guarantees
@@ -57,7 +57,7 @@ Userspace memory may change concurrently, and failed copy-back may be partial.
 `-EFAULT` blocks `ksys_read()`'s local position commit but cannot undo other
 read effects.
 
-`/proc/rootkitlings` is read-only and reports exactly:
+`/proc/rklings` is read-only and reports exactly:
 
 ```text
 limit=512

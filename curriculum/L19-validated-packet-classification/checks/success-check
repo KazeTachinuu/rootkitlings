@@ -4,8 +4,8 @@
 
 begin "Bounded IPv4 UDP classification"
 
-endpoint=/proc/rootkitlings
-fixtures=/tmp/rootkitlings-classifier
+endpoint=/proc/rklings
+fixtures=/tmp/rklings-classifier
 actual=$fixtures/actual
 expected=$fixtures/expected
 mkdir -p "$fixtures"
@@ -74,19 +74,19 @@ status_is_well_formed()
 
 assert_not_loaded()
 {
-	assert_absent /sys/module/rootkitlings
+	assert_absent /sys/module/rklings
 	assert_absent "$endpoint"
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "rootkitlings remains in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings remains in /proc/modules"
 	else
-		_ok "rootkitlings is absent from /proc/modules"
+		_ok "rklings is absent from /proc/modules"
 	fi
 }
 
 assert_not_loaded
 ifconfig lo 127.0.0.1 up
-load rootkitlings.ko target_port=47021
-assert_loaded rootkitlings
+load rklings.ko target_port=47021
+assert_loaded rklings
 assert_exists "$endpoint"
 if [ "$(stat -c '%a:%u:%g' "$endpoint")" = 400:0:0 ]; then
 	_ok "$endpoint is read-only and owned by root"
@@ -94,7 +94,7 @@ else
 	_fail "$endpoint has unexpected mode or ownership"
 fi
 if dmesg | grep -q \
-	'rootkitlings: packet classifier self-tests passed: 12 assertions'; then
+	'rklings: packet classifier self-tests passed: 12 assertions'; then
 	_ok "real sk_buff fixtures passed before publication"
 else
 	_fail "real sk_buff fixture evidence is missing"
@@ -218,7 +218,7 @@ else
 	_fail "controlled UDP traffic ended before classifier teardown"
 fi
 exec 3< "$endpoint"
-unload rootkitlings
+unload rklings
 wait "$traffic" || _fail "UDP delivery failed across classifier unload"
 assert_not_loaded
 if cat <&3 > /dev/null 2>&1; then
@@ -228,8 +228,8 @@ else
 fi
 exec 3<&-
 
-load rootkitlings.ko target_port=47021
-assert_loaded rootkitlings
+load rklings.ko target_port=47021
+assert_loaded rklings
 assert_status
 before=$(field match)
 if "$helper" ordinary 47021; then
@@ -239,7 +239,7 @@ else
 fi
 assert_delta match "$before" 1 "reloaded classifier starts a fresh match count"
 assert_status
-unload rootkitlings
+unload rklings
 assert_not_loaded
 
 summary

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 0
-#error "unknown ROOTKITLINGS_FAIL_POINT"
+#if RKLINGS_FAIL_POINT < 0 || RKLINGS_FAIL_POINT > 0
+#error "unknown RKLINGS_FAIL_POINT"
 #endif
 
 #include <linux/init.h>
@@ -75,7 +75,7 @@ static const struct proc_ops rk_control_ops = {
 
 static int __init rk_init(void)
 {
-	control_entry = proc_create("rootkitlings", 0666, NULL, &rk_control_ops);
+	control_entry = proc_create("rklings", 0666, NULL, &rk_control_ops);
 	return control_entry ? 0 : -ENOMEM;
 }
 
@@ -88,4 +88,4 @@ static void __exit rk_exit(void)
 module_init(rk_init);
 module_exit(rk_exit);
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings exercise module");
+MODULE_DESCRIPTION("Rklings exercise module");

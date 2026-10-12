@@ -1,5 +1,5 @@
-#ifndef ROOTKITLINGS_HOST_SLAB_H
-#define ROOTKITLINGS_HOST_SLAB_H
+#ifndef RKLINGS_HOST_SLAB_H
+#define RKLINGS_HOST_SLAB_H
 
 #include <stdbool.h>
 #include <stddef.h>

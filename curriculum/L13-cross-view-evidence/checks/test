@@ -4,9 +4,9 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-cross-view-evidence-baseline.XXXXXX")
-work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-cross-view-evidence-work.XXXXXX")
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-cross-view-evidence-test.XXXXXX")
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rklings-cross-view-evidence-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rklings-cross-view-evidence-work.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-cross-view-evidence-test.XXXXXX")
 trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
 
 for source in \
@@ -72,7 +72,7 @@ for symbol in vfs_mkdir filename_rmdir; do
 		exit 1
 	}
 done
-if grep -q '[[:space:]]__rootkitlings_missing_kprobe_target_7_2__$' \
+if grep -q '[[:space:]]__rklings_missing_kprobe_target_7_2__$' \
 	/proc/kallsyms; then
 	printf '[x] negative-control Kprobe target exists in the running kernel\n' >&2
 	exit 1
@@ -109,7 +109,7 @@ build_tree()
 	cp -a "$baseline/." "$destination/"
 	cp -a "$source/." "$destination/"
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		RKLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
 		cat "$log" >&2
 		printf '[x] %s build failed\n' "${source##*/}" >&2
 		exit 1
@@ -129,7 +129,7 @@ build_variant()
 	local name=$1 point=$2 destination=$scratch/$1 log=$scratch/$1.log
 	cp -a "$work" "$destination"
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		RKLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
 		cat "$log" >&2
 		printf '[x] %s build failed\n' "$name" >&2
 		exit 1
@@ -147,12 +147,12 @@ build_variant allocation 2
 build_variant publication 3
 build_variant missing 4
 "$HERE/host-check" "$scratch/success" \
-	"$scratch/success/rootkitlings.ko" "$scratch/missing"
+	"$scratch/success/rklings.ko" "$scratch/missing"
 
 expect_host_rejection()
 {
 	local directory=$1 label=$2
-	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+	if "$HERE/host-check" "$directory" "$directory/rklings.ko" \
 		"$scratch/missing" > "$scratch/host-$label.log" 2>&1; then
 		printf '[x] host checker accepted %s\n' "$label" >&2
 		exit 1
@@ -163,7 +163,7 @@ rebuild_host_fixture()
 {
 	local directory=$1 label=$2 log=$scratch/rebuild-$2.log
 	if ! make -s -C "$KDIR" M="$directory" W=1 \
-		ROOTKITLINGS_FAIL_POINT=0 modules > "$log" 2>&1; then
+		RKLINGS_FAIL_POINT=0 modules > "$log" 2>&1; then
 		cat "$log" >&2
 		printf '[x] host fixture %s did not rebuild\n' "$label" >&2
 		exit 1
@@ -181,7 +181,7 @@ sed -i \
 	-e 's/if (id == RK_PROBE_FILENAME_RMDIR)/\/\* selected item \*\/\n\tif (RK_PROBE_FILENAME_RMDIR == id) {/' \
 	-e '0,/return SEQ_SKIP;/s//return SEQ_SKIP;\n\t}/' \
 	"$formatted/interface/proc.c"
-"$HERE/host-check" "$formatted" "$formatted/rootkitlings.ko" \
+"$HERE/host-check" "$formatted" "$formatted/rklings.ko" \
 	"$scratch/missing" > "$scratch/host-formatting.log"
 
 parenthesized=$scratch/host-parenthesized
@@ -189,7 +189,7 @@ cp -a "$scratch/success" "$parenthesized"
 sed -i \
 	's/if (id == RK_PROBE_FILENAME_RMDIR)/if (((id) == (RK_PROBE_FILENAME_RMDIR)))/' \
 	"$parenthesized/interface/proc.c"
-"$HERE/host-check" "$parenthesized" "$parenthesized/rootkitlings.ko" \
+"$HERE/host-check" "$parenthesized" "$parenthesized/rklings.ko" \
 	"$scratch/missing" > "$scratch/host-parenthesized.log"
 
 unconditional=$scratch/host-unconditional
@@ -228,7 +228,7 @@ static bool rk_probe_is_suppressed(enum rk_probe_id id)\
 sed -i 's/if (id == RK_PROBE_FILENAME_RMDIR)/if (rk_probe_is_suppressed(id))/' \
 	"$hidden_helper/interface/proc.c"
 rebuild_host_fixture "$hidden_helper" helper-factored-filter
-"$HERE/host-check" "$hidden_helper" "$hidden_helper/rootkitlings.ko" \
+"$HERE/host-check" "$hidden_helper" "$hidden_helper/rklings.ko" \
 	"$scratch/missing" > "$scratch/host-helper.log"
 
 no_suppression=$scratch/host-no-suppression
@@ -271,7 +271,7 @@ expect_host_rejection "$module_list" raw-list-state
 
 cp -a "$work" "$scratch/unknown"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
-	ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
+	RKLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure-point value compiled successfully\n' >&2
 	exit 1
 fi
@@ -299,12 +299,12 @@ run_guest()
 }
 
 run_guest "$HERE/../../L03-proc-publication/checks/failure-ecanceled-check" \
-	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
+	"$scratch/preflight/rklings.ko" --tool vm/tools/module_load_test
 run_guest "$HERE/../../L03-proc-publication/checks/failure-enomem-check" \
-	"$scratch/allocation/rootkitlings.ko" --tool vm/tools/module_load_test
+	"$scratch/allocation/rklings.ko" --tool vm/tools/module_load_test
 run_guest "$scratch/publication-check" \
-	"$scratch/publication/rootkitlings.ko" --tool vm/tools/module_load_test
+	"$scratch/publication/rklings.ko" --tool vm/tools/module_load_test
 run_guest "$scratch/missing-check" \
-	"$scratch/missing/rootkitlings.ko" --tool vm/tools/module_load_test
-run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
+	"$scratch/missing/rklings.ko" --tool vm/tools/module_load_test
+run_guest "$HERE/success-check" "$scratch/success/rklings.ko" \
 	--tool vm/tools/proc_read_test --tool vm/tools/proc_write_test

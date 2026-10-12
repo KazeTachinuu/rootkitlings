@@ -4,9 +4,9 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-current-task-attribution-baseline.XXXXXX")
-work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-current-task-attribution-work.XXXXXX")
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-current-task-attribution-test.XXXXXX")
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rklings-current-task-attribution-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rklings-current-task-attribution-work.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-current-task-attribution-test.XXXXXX")
 trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
 
 cp -a "$HERE/../../L02-owned-kernel-state/solution/." "$baseline/"
@@ -29,7 +29,7 @@ build_variant()
 	local name=$1 point=$2 destination=$scratch/$1 log=$scratch/$1.log
 	cp -a "$work" "$destination"
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
+		RKLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
 		cat "$log" >&2
 		printf '[x] %s build failed\n' "$name" >&2
 		exit 1
@@ -45,10 +45,10 @@ build_variant success 0
 build_variant preflight 1
 build_variant allocation 2
 build_variant publication 3
-"$HERE/host-check" "$scratch/success" "$scratch/success/rootkitlings.ko"
+"$HERE/host-check" "$scratch/success" "$scratch/success/rklings.ko"
 
 cp -a "$work" "$scratch/unknown"
-if make -s -C "$KDIR" M="$scratch/unknown" W=1 ROOTKITLINGS_FAIL_POINT=99 \
+if make -s -C "$KDIR" M="$scratch/unknown" W=1 RKLINGS_FAIL_POINT=99 \
 	modules >"$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure-point value compiled successfully\n' >&2
 	exit 1
@@ -68,10 +68,10 @@ run_guest()
 }
 
 run_guest "$HERE/../../L03-proc-publication/checks/failure-ecanceled-check" \
-	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
+	"$scratch/preflight/rklings.ko" --tool vm/tools/module_load_test
 run_guest "$HERE/../../L03-proc-publication/checks/failure-enomem-check" \
-	"$scratch/allocation/rootkitlings.ko" --tool vm/tools/module_load_test
+	"$scratch/allocation/rklings.ko" --tool vm/tools/module_load_test
 run_guest "$HERE/../../L03-proc-publication/checks/failure-after-state-check" \
-	"$scratch/publication/rootkitlings.ko" --tool vm/tools/module_load_test
-run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
+	"$scratch/publication/rklings.ko" --tool vm/tools/module_load_test
+run_guest "$HERE/success-check" "$scratch/success/rklings.ko" \
 	--tool vm/tools/task_attribution_test

@@ -3,10 +3,10 @@
 . /vm/checks/lib.sh
 
 begin "Authentication context allocation failure"
-if module_load_test /rootkitlings/rootkitlings.ko 12; then
+if module_load_test /rklings/rklings.ko 12; then
 	_ok "allocation failure is propagated as ENOMEM"
 else
 	_fail "allocation failure returned the wrong error"
 fi
-assert_absent /sys/module/rootkitlings
+assert_absent /sys/module/rklings
 summary

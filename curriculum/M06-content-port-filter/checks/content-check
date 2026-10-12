@@ -4,12 +4,12 @@
 
 begin "Content hiding"
 
-load rootkitlings.ko
+load rklings.ko
 
 test_file=/tmp/rk_content_test
 printf "line one\nSECRET treasure\nline three\nhidden SECRET data\nline five\n" > "$test_file"
 
-echo "hide content SECRET" > /proc/rootkitlings
+echo "hide content SECRET" > /proc/rklings
 
 filtered=$(cat "$test_file")
 if echo "$filtered" | grep -q "SECRET"; then
@@ -30,7 +30,7 @@ else
 	_fail "lines after hidden content were removed"
 fi
 
-echo "unhide content 0" > /proc/rootkitlings
+echo "unhide content 0" > /proc/rklings
 
 restored=$(cat "$test_file")
 if echo "$restored" | grep -q "SECRET"; then
@@ -40,6 +40,6 @@ else
 fi
 
 rm -f "$test_file"
-unload rootkitlings
+unload rklings
 
 summary

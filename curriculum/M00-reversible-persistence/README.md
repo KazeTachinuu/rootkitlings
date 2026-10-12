@@ -7,19 +7,19 @@ teaches the standard Linux persistence mechanism: writing a
 ## How persistence works
 
 Linux reads `/etc/modules-load.d/*.conf` at boot. Each line names a
-module to load. Writing `rootkitlings` to
-`/etc/modules-load.d/rootkitlings.conf` makes the module survive
+module to load. Writing `rklings` to
+`/etc/modules-load.d/rklings.conf` makes the module survive
 reboots.
 
-In the rootkitlings VM, init reads these files and loads the modules
+In the rklings VM, init reads these files and loads the modules
 before dropping you into a shell. Test with bare mode (root shell) so
 you can `insmod` and `rmmod` manually:
 
-    ./rootkitlings run --bare
+    ./rklings run --bare
 
 1. Boot the VM. No module is loaded.
-2. Load the module: `insmod rootkitlings.ko`
-3. Persist it: `echo persist > /proc/rootkitlings`
+2. Load the module: `insmod rklings.ko`
+3. Persist it: `echo persist > /proc/rklings`
 4. Reboot: `reboot`
 5. The module loads automatically. You see `Persisted module loaded`.
 6. Unload the module with `rmmod`: the transaction is reversed and the
@@ -37,11 +37,11 @@ The solution is a staged atomic transaction:
 ```text
 persist:
     staging                target
-    "rootkitlings"         ""
+    "rklings"         ""
          |                  |
          +- RENAME_EXCHANGE +
          |                  |
-    ""                     "rootkitlings"
+    ""                     "rklings"
     (old content)          (now live)
 
 unload:
@@ -49,13 +49,13 @@ unload:
          |                  |
          +- RENAME_EXCHANGE +
          |                  |
-    "rootkitlings"         ""
+    "rklings"         ""
     (swapped back)         (restored)
          |
        unlink
 ```
 
-1. Create a staging file (`.rootkitlings.conf.staging`) with O_EXCL.
+1. Create a staging file (`.rklings.conf.staging`) with O_EXCL.
 2. Write the module name, fsync.
 3. `RENAME_EXCHANGE` the staging file with the target.
 4. fsync the directory.
@@ -78,13 +78,13 @@ logging a warning. This prevents silent data loss.
 
 ## Control interface
 
-The proc interface creates `/proc/rootkitlings` (world-readable and
+The proc interface creates `/proc/rklings` (world-readable and
 writable):
 
 | Command | Effect |
 |---------|--------|
-| `echo persist > /proc/rootkitlings` | Stage the boot-load request |
-| `cat /proc/rootkitlings` | Show current state |
+| `echo persist > /proc/rklings` | Stage the boot-load request |
+| `cat /proc/rklings` | Show current state |
 
 On `rmmod`, the exit path reverses the transaction automatically.
 
@@ -101,7 +101,7 @@ is `core/main.c`: the init and exit functions that connect everything.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 ## References

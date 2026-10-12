@@ -4,8 +4,8 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-baseline=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-precise-init-failure-baseline.XXXXXX")
-work=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-precise-init-failure-work.XXXXXX")
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rklings-precise-init-failure-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rklings-precise-init-failure-work.XXXXXX")
 trap 'rm -rf -- "$baseline" "$work"' EXIT
 cp -a "$HERE/../../L00-module-build-lifecycle/solution/." "$baseline/"
 cp -a "$baseline/." "$work/"

@@ -8,8 +8,8 @@
 
 #include "root_shell.h"
 
-#if ROOTKITLINGS_FAIL_POINT != 0
-#error "unknown ROOTKITLINGS_FAIL_POINT"
+#if RKLINGS_FAIL_POINT != 0
+#error "unknown RKLINGS_FAIL_POINT"
 #endif
 
 static unsigned int shell_timeout_ms = 60000;
@@ -133,4 +133,4 @@ module_init(rk_init);
 module_exit(rk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings bounded root reverse shell");
+MODULE_DESCRIPTION("Rklings bounded root reverse shell");

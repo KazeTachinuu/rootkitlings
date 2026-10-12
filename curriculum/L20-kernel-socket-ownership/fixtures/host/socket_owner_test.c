@@ -446,8 +446,8 @@ static void __attribute__((unused)) check_snapshot(void)
 	CHECK(status.peer_port == snapshot_replacement.peer_port);
 }
 
-#if ROOTKITLINGS_FAIL_POINT == RK_FAIL_AFTER_CREATE || \
-	ROOTKITLINGS_FAIL_POINT == RK_FAIL_AFTER_CAPTURE
+#if RKLINGS_FAIL_POINT == RK_FAIL_AFTER_CREATE || \
+	RKLINGS_FAIL_POINT == RK_FAIL_AFTER_CAPTURE
 static void check_injected_failure(void)
 {
 	struct rk_socket_owner owner;
@@ -456,14 +456,14 @@ static void check_injected_failure(void)
 	reset_fixture(&owner, 26007);
 	CHECK(rk_socket_open(&owner, &config) == -ECANCELED);
 	check_owned_state_is_clear();
-#if ROOTKITLINGS_FAIL_POINT == RK_FAIL_AFTER_CREATE
+#if RKLINGS_FAIL_POINT == RK_FAIL_AFTER_CREATE
 	{
 		static const enum event expected[] = {
 			EVENT_LOCK, EVENT_CREATE, EVENT_RELEASE, EVENT_UNLOCK,
 		};
 		expect_events(expected, sizeof(expected) / sizeof(expected[0]));
 	}
-#elif ROOTKITLINGS_FAIL_POINT == RK_FAIL_AFTER_CAPTURE
+#elif RKLINGS_FAIL_POINT == RK_FAIL_AFTER_CAPTURE
 	{
 		static const enum event expected[] = {
 			EVENT_LOCK, EVENT_CREATE, EVENT_CONNECT, EVENT_GETSOCKNAME,
@@ -479,7 +479,7 @@ static void check_injected_failure(void)
 
 int main(void)
 {
-#if ROOTKITLINGS_FAIL_POINT == RK_FAIL_NONE
+#if RKLINGS_FAIL_POINT == RK_FAIL_NONE
 	int index;
 
 	check_invalid_configs();

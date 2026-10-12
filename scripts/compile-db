@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate compile_commands.json for Rootkitlings course sources."""
+"""Generate compile_commands.json for Rklings course sources."""
 
 from pathlib import Path
 import sys
@@ -13,7 +13,7 @@ from engine.compile_database import CompileDatabaseError, generate  # noqa: E402
 from engine.console import Console  # noqa: E402
 
 
-UI = Console("rootkitlings.compile-db")
+UI = Console("rklings.compile-db")
 
 
 def main() -> int:

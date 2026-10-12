@@ -32,7 +32,7 @@ For an experiment that must reach QEMU's user-network services, request the
 optional capability explicitly:
 
 ```sh
-./rootkitlings run --cap network L19
+./rklings run --cap network L19
 ```
 
 The guest then uses `10.0.2.15`; the host-side QEMU alias is `10.0.2.2`.
@@ -43,7 +43,7 @@ The guest then uses `10.0.2.15`; the host-side QEMU alias is `10.0.2.2`.
 ./vm/boot path/to/module.ko
 ```
 
-The shell opens in `/rootkitlings`, which contains only the module you built.
+The shell opens in `/rklings`, which contains only the module you built.
 The script does not load it for you.
 
 ## Add guest tools

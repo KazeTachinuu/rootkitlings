@@ -18,11 +18,11 @@ class LearnerCLITests(unittest.TestCase):
     def setUp(self) -> None:
         namespace = runpy.run_path(
             ROOT / "engine/cli.py",
-            run_name="rootkitlings_test",
+            run_name="rklings_test",
         )
         self.globals = namespace["cmd_reset"].__globals__
         self.temporary = tempfile.TemporaryDirectory()
-        runtime = Path(self.temporary.name) / ".rootkitlings"
+        runtime = Path(self.temporary.name) / ".rklings"
         values = {
             "RT": runtime,
             "STATE": runtime / "state.toml",
@@ -129,7 +129,7 @@ class LearnerCLITests(unittest.TestCase):
     def test_setup_rejects_invalid_argument_shapes(self) -> None:
         for arguments in (["--accept"], ["extra"]):
             with self.subTest(arguments=arguments):
-                with self.assertRaisesRegex(self.globals["CLIError"], r"rootkitlings setup"):
+                with self.assertRaisesRegex(self.globals["CLIError"], r"rklings setup"):
                     self.globals["cmd_setup"](arguments)
 
     def test_missing_kernel_requires_setup(self) -> None:
@@ -145,7 +145,7 @@ class LearnerCLITests(unittest.TestCase):
             self.assertFalse(self.globals["course_kernel_ready"]())
             with self.assertRaisesRegex(
                 self.globals["CLIError"],
-                r"Course kernel is not ready.*rootkitlings setup",
+                r"Course kernel is not ready.*rklings setup",
             ):
                 self.globals["require_setup"]()
         finally:
@@ -191,11 +191,11 @@ class LearnerCLITests(unittest.TestCase):
         finally:
             self.globals["course_kernel_ready"] = original_ready
         lines = output.getvalue().splitlines()
-        self.assertEqual(lines[0], "Rootkitlings")
+        self.assertEqual(lines[0], "Rklings")
         self.assertRegex(lines[1], r"^Course +0 of \d+ complete$")
         self.assertIn("Kernel     Ready", lines)
         self.assertIn("Workspace  Not started", lines)
-        self.assertIn("  ./rootkitlings read L00", lines)
+        self.assertIn("  ./rklings read L00", lines)
 
     def test_status_prioritizes_setup_when_kernel_is_missing(self) -> None:
         output = io.StringIO()
@@ -208,8 +208,8 @@ class LearnerCLITests(unittest.TestCase):
             self.globals["course_kernel_ready"] = original_ready
         text = output.getvalue()
         self.assertIn("Kernel     Setup required", text)
-        self.assertIn("  ./rootkitlings setup", text)
-        self.assertNotIn("  ./rootkitlings read L00", text)
+        self.assertIn("  ./rklings setup", text)
+        self.assertNotIn("  ./rklings read L00", text)
 
     def test_help_uses_short_reset_and_documents_current_default(self) -> None:
         output = io.StringIO()
@@ -229,7 +229,7 @@ class LearnerCLITests(unittest.TestCase):
                 output = io.StringIO()
                 with redirect_stdout(output):
                     self.assertEqual(self.globals["main"]([flag]), 0)
-                self.assertIn("./rootkitlings <COMMAND> [EXERCISE]", output.getvalue())
+                self.assertIn("./rklings <COMMAND> [EXERCISE]", output.getvalue())
 
     def test_standard_version_flags_show_the_catalog_revision(self) -> None:
         for flag in ("-V", "--version"):
@@ -239,7 +239,7 @@ class LearnerCLITests(unittest.TestCase):
                     self.assertEqual(self.globals["main"]([flag]), 0)
                 self.assertEqual(
                     output.getvalue(),
-                    f"rootkitlings curriculum {self.globals['CAT'].revision}\n",
+                    f"rklings curriculum {self.globals['CAT'].revision}\n",
                 )
 
     def test_prereq_shows_only_assumptions_the_exercise_uses(self) -> None:
@@ -273,7 +273,7 @@ class LearnerCLITests(unittest.TestCase):
         exercise = self._build_exercise()
         workspace = self.globals["wp"](exercise)
         workspace.mkdir()
-        artifact = self.globals["build_output"](exercise) / "rootkitlings.ko"
+        artifact = self.globals["build_output"](exercise) / "rklings.ko"
         artifact.parent.mkdir(parents=True)
         artifact.write_bytes(b"stale")
         original_catalog = self.globals["CAT"]
@@ -293,7 +293,7 @@ class LearnerCLITests(unittest.TestCase):
 
         try:
             self.globals["CAT"] = SimpleNamespace(
-                module_artifact=lambda _exercise: "rootkitlings.ko"
+                module_artifact=lambda _exercise: "rklings.ko"
             )
             self.globals["run"] = fake_run
             with mock.patch.dict(os.environ, {"KDIR": "/tmp/untrusted-kdir"}):
@@ -354,7 +354,7 @@ class LearnerCLITests(unittest.TestCase):
         exercise = self._build_exercise(host_check="support/host-check")
         workspace = self.globals["wp"](exercise)
         workspace.mkdir()
-        artifact = workspace / "rootkitlings.ko"
+        artifact = workspace / "rklings.ko"
         artifact.write_bytes(b"module")
         original_run = self.globals["run"]
         calls = []
@@ -685,13 +685,13 @@ class LearnerCLITests(unittest.TestCase):
 
         def fake_build(selected, source, destination):
             calls["build"] = (selected, source, destination)
-            module = destination / "rootkitlings.ko"
+            module = destination / "rklings.ko"
             module.parent.mkdir()
             module.write_bytes(b"reference module")
             return module
 
         class FakeTarget:
-            key_file = ROOT / ".rootkitlings/run/C00/control.key"
+            key_file = ROOT / ".rklings/run/C00/control.key"
             control_port = 40001
             shell_port = 40002
 
@@ -969,15 +969,15 @@ class LearnerCLITests(unittest.TestCase):
             self.globals["cmd_read"]([])
         read_text = output.getvalue()
         self.assertIn(f"# {exercise.title}", read_text)
-        self.assertIn(f"./rootkitlings start {serial}", read_text)
+        self.assertIn(f"./rklings start {serial}", read_text)
 
         output = io.StringIO()
         with redirect_stdout(output):
             self.globals["cmd_hint"]([])
         hint_text = output.getvalue()
         self.assertIn(f"Hint for {serial}", hint_text)
-        self.assertIn(f"./rootkitlings start {serial}", hint_text)
-        self.assertIn(f"./rootkitlings solution {serial}", hint_text)
+        self.assertIn(f"./rklings start {serial}", hint_text)
+        self.assertIn(f"./rklings solution {serial}", hint_text)
         state_after = state_path.read_bytes() if state_path.exists() else None
         self.assertEqual(state_after, state_before)
 
@@ -986,8 +986,8 @@ class LearnerCLITests(unittest.TestCase):
         output = io.StringIO()
         with redirect_stdout(output):
             self.globals["cmd_read"]([serial])
-        self.assertIn(f"./rootkitlings check {serial}", output.getvalue())
-        self.assertNotIn(f"./rootkitlings start {serial}", output.getvalue())
+        self.assertIn(f"./rklings check {serial}", output.getvalue())
+        self.assertNotIn(f"./rklings start {serial}", output.getvalue())
 
     def test_start_uses_a_short_visible_workspace_and_complete_edit_paths(self) -> None:
         exercise = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
@@ -1000,7 +1000,7 @@ class LearnerCLITests(unittest.TestCase):
         self.assertIn(f"Workspace created: {workspace}", text)
         for relative in exercise.workspace.editable:
             self.assertIn(f"- {workspace}/{relative}", text)
-        self.assertNotIn(".rootkitlings/work", text)
+        self.assertNotIn(".rklings/work", text)
         self.assertEqual(
             workspace,
             self.globals["WORK"] / exercise.serial,
@@ -1081,7 +1081,7 @@ class LearnerCLITests(unittest.TestCase):
             for relative in first.workspace.editable:
                 self.assertIn(f"work/{first.serial}/{relative}", status)
             self.assertRegex(status, r"State +Unchanged")
-            self.assertIn(f"./rootkitlings check {first.serial}", status)
+            self.assertIn(f"./rklings check {first.serial}", status)
 
             editable = self.globals["wp"](
                 self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
@@ -1102,7 +1102,7 @@ class LearnerCLITests(unittest.TestCase):
             self.assertRegex(listing, rf"current\s+{second.serial}")
             self.assertRegex(listing, rf"locked\s+{third.serial}")
             self.assertIn(
-                f"./rootkitlings read {second.serial}",
+                f"./rklings read {second.serial}",
                 listing,
             )
 
@@ -1187,7 +1187,7 @@ class LearnerCLITests(unittest.TestCase):
             self.globals["main"](["st"])
         with self.assertRaisesRegex(self.globals["CLIError"], "Unknown command"):
             self.globals["main"](["not-a-command"])
-        with self.assertRaisesRegex(self.globals["CLIError"], "rootkitlings help"):
+        with self.assertRaisesRegex(self.globals["CLIError"], "rklings help"):
             self.globals["main"](["help", "extra"])
 
     def test_locked_required_lesson_opens_only_after_current_completion(self) -> None:
@@ -1207,7 +1207,7 @@ class LearnerCLITests(unittest.TestCase):
         exercise = self.globals["CAT"].by_id[self.globals["ROUTE"][0]]
         with self.assertRaisesRegex(
             self.globals["CLIError"],
-            "Run: ./rootkitlings start L00",
+            "Run: ./rklings start L00",
         ):
             with redirect_stdout(io.StringIO()):
                 self.globals["cmd_build"]([exercise.serial])

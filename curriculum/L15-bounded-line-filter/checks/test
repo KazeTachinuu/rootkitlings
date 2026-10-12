@@ -4,8 +4,8 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-ROOT=$ROOTKITLINGS_ROOT
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-bounded-rendered-filter-test.XXXXXX")
+ROOT=$RKLINGS_ROOT
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-bounded-rendered-filter-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || {
@@ -79,7 +79,7 @@ build_variant()
 
 	cp -a "$source/." "$destination/"
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		RKLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
 		cat "$log" >&2
 		printf '[x] %s build failed\n' "$name" >&2
 		exit 1
@@ -100,13 +100,13 @@ build_variant copy-in 4
 build_variant copy-out 5
 
 "$HERE/host-check" "$scratch/success" \
-	"$scratch/success/rootkitlings.ko" "$scratch/missing"
+	"$scratch/success/rklings.ko" "$scratch/missing"
 
 expect_host_rejection()
 {
 	local directory=$1 label=$2
 
-	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+	if "$HERE/host-check" "$directory" "$directory/rklings.ko" \
 		"$scratch/missing" > "$scratch/host-$label.log" 2>&1; then
 		printf '[x] host checker accepted %s\n' "$label" >&2
 		exit 1
@@ -147,7 +147,7 @@ expect_host_rejection "$out_of_range" an-out-of-range-comparison
 
 cp -a "$HERE/../solution/." "$scratch/unknown/"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
-	ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
+	RKLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure-point value compiled successfully\n' >&2
 	exit 1
 fi
@@ -174,18 +174,18 @@ run_guest()
 }
 
 run_guest "$HERE/../../L03-proc-publication/checks/failure-ecanceled-check" \
-	"$scratch/preflight/rootkitlings.ko" --tool vm/tools/module_load_test
-run_guest "$HERE/missing-path-check" "$scratch/success/rootkitlings.ko" \
+	"$scratch/preflight/rklings.ko" --tool vm/tools/module_load_test
+run_guest "$HERE/missing-path-check" "$scratch/success/rklings.ko" \
 	--tool vm/tools/module_load_test
-run_guest "$scratch/publication-check" "$scratch/publication/rootkitlings.ko" \
+run_guest "$scratch/publication-check" "$scratch/publication/rklings.ko" \
 	--tool vm/tools/module_load_test
-run_guest "$scratch/missing-check" "$scratch/missing/rootkitlings.ko" \
+run_guest "$scratch/missing-check" "$scratch/missing/rklings.ko" \
 	--tool vm/tools/module_load_test
-run_guest "$HERE/copy-failure-check" "$scratch/copy-in/rootkitlings.ko" \
+run_guest "$HERE/copy-failure-check" "$scratch/copy-in/rklings.ko" \
 	--tool vm/tools/read_result_test
-run_guest "$HERE/copy-failure-check" "$scratch/copy-out/rootkitlings.ko" \
+run_guest "$HERE/copy-failure-check" "$scratch/copy-out/rklings.ko" \
 	--tool vm/tools/read_result_test
-run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
+run_guest "$HERE/success-check" "$scratch/success/rklings.ko" \
 	--tool vm/tools/read_result_test
 
 printf '[+] bounded-rendered-filter passed\n'

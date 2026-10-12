@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef ROOTKITLINGS_AEAD_PLATFORM_H
-#define ROOTKITLINGS_AEAD_PLATFORM_H
+#ifndef RKLINGS_AEAD_PLATFORM_H
+#define RKLINGS_AEAD_PLATFORM_H
 #include "aead.h"
 #ifdef __KERNEL__
 #include <crypto/aead.h>

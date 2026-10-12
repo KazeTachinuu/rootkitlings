@@ -70,7 +70,7 @@ Implement `rk_classify_ipv4_udp()`.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 Sanitized checks cover every 16-bit UDP field, unaligned input, precedence,

@@ -5,13 +5,13 @@
 begin "Preflight rejection"
 
 for attempt in 1 2; do
-	if module_load_test /rootkitlings/rootkitlings.ko 125; then
+	if module_load_test /rklings/rklings.ko 125; then
 		_ok "attempt $attempt returned numeric ECANCELED"
 	else
 		_fail "attempt $attempt did not return ECANCELED"
 	fi
-	assert_absent /sys/module/rootkitlings
-	assert_absent /proc/rootkitlings
+	assert_absent /sys/module/rklings
+	assert_absent /proc/rklings
 done
 
 summary

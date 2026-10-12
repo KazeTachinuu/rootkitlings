@@ -40,7 +40,7 @@ int main(void)
 	struct rk_state *token = (struct rk_state *)0x1000;
 	int error;
 
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT) {
+	if (RKLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT) {
 		create_result = token;
 		error = rk_test_module_init();
 		require(error == -ECANCELED,

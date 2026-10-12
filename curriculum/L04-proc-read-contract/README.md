@@ -63,7 +63,7 @@ Do not add a proc read callback, mutable state, or a lock.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker keeps the earlier build, failure, rollback, and unload checks.

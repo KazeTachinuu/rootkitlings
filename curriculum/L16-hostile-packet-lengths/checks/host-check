@@ -15,7 +15,7 @@ for relative in Kbuild main.c main.o include/ipv4_parser.h parser/ipv4.c \
 		die "build is missing regular file: $relative"
 done
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-ipv4-host.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-ipv4-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 compiler=${CC:-gcc}
 command -v "$compiler" >/dev/null || die "$compiler is required"
@@ -38,7 +38,7 @@ nm -u "$build_dir/main.o" |
 	grep -Eq '[[:space:]]U[[:space:]]rk_parse_ipv4$' ||
 	die "kernel self-test does not call rk_parse_ipv4"
 strings "$module" |
-	grep -Fq 'rootkitlings: IPv4 parser self-tests passed: %u assertions' ||
+	grep -Fq 'rklings: IPv4 parser self-tests passed: %u assertions' ||
 	die "module does not report its kernel self-test result"
 
 printf '[+] host corpus and kernel self-test wiring verified\n'

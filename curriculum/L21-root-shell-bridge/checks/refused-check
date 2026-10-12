@@ -10,23 +10,23 @@ has_line()
 	tr '\r' '\n' < "$1" | grep -Eq "$2"
 }
 
-load rootkitlings.ko shell_port=46125 shell_timeout_ms=1000
-ticket=$(cat /sys/module/rootkitlings/parameters/shell_ticket)
+load rklings.ko shell_port=46125 shell_timeout_ms=1000
+ticket=$(cat /sys/module/rklings/parameters/shell_ticket)
 request_id=${ticket%% *}
 sleep 0.4
-if test "$(cat /sys/module/rootkitlings/parameters/shell_status)" = \
+if test "$(cat /sys/module/rklings/parameters/shell_status)" = \
 		"$request_id refused -111"; then
 	_ok "refusal reports the exact request and releases its resources"
 else
 	_fail "refused connection status is missing or incorrect"
 fi
 
-capture=/tmp/rootkitlings-root-shell-retry
+capture=/tmp/rklings-root-shell-retry
 printf '%s\n' 'printf "rkproof-%s\n" retry' 'exit' |
 	nc -l -p 46126 >"$capture" 2>&1 &
 listener=$!
 sleep 0.1
-printf 46126 > /sys/module/rootkitlings/parameters/shell_port
+printf 46126 > /sys/module/rklings/parameters/shell_port
 attempt=0
 while kill -0 "$listener" 2>/dev/null && [ "$attempt" -lt 100 ]; do
 	sleep 0.05
@@ -38,7 +38,7 @@ if has_line "$capture" '^rkproof-retry$'; then
 else
 	_fail "retry after refusal did not reach the shell"
 fi
-unload rootkitlings
-assert_absent /sys/module/rootkitlings
+unload rklings
+assert_absent /sys/module/rklings
 rm -f "$capture"
 summary

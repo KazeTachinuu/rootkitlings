@@ -7,7 +7,7 @@ Success proves that the record describes one consistent caller while rendering
 its numeric IDs for the process that opened the channel.
 
 Linux stores this identity and authority in an immutable **credential** object.
-Extend `/proc/rootkitlings` with that snapshot:
+Extend `/proc/rklings` with that snapshot:
 
 ```text
 active=1
@@ -95,7 +95,7 @@ Do not prepare, mutate, retain, or replace credentials in this exercise.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker compares the record with `/proc/thread-self/status` across root,

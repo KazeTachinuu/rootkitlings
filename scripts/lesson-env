@@ -1,15 +1,15 @@
 #!/usr/bin/bash
 # shellcheck disable=SC2317 # This file may be sourced or executed.
 
-ROOTKITLINGS_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd) || {
-	printf '[x] Could not locate the Rootkitlings repository\n' >&2
+RKLINGS_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd) || {
+	printf '[x] Could not locate the Rklings repository\n' >&2
 	return 1 2>/dev/null || exit 1
 }
 # shellcheck source=scripts/lib/ui.sh
-source "$ROOTKITLINGS_ROOT/scripts/lib/ui.sh"
+source "$RKLINGS_ROOT/scripts/lib/ui.sh"
 
-KDIR=$("$ROOTKITLINGS_ROOT/scripts/kernel" build-dir) || {
-	ui_error 'course kernel is not ready; run: ./rootkitlings setup'
+KDIR=$("$RKLINGS_ROOT/scripts/kernel" build-dir) || {
+	ui_error 'course kernel is not ready; run: ./rklings setup'
 	return 1 2>/dev/null || exit 1
 }
 if [[ ! -d $KDIR || -L $KDIR ]]; then
@@ -17,12 +17,12 @@ if [[ ! -d $KDIR || -L $KDIR ]]; then
 	return 1 2>/dev/null || exit 1
 fi
 
-KERNEL_RELEASE=$("$ROOTKITLINGS_ROOT/scripts/kernel" release) || {
+KERNEL_RELEASE=$("$RKLINGS_ROOT/scripts/kernel" release) || {
 	ui_error 'cannot read the pinned course-kernel release'
 	return 1 2>/dev/null || exit 1
 }
 
-export KDIR KERNEL_RELEASE ROOTKITLINGS_ROOT
+export KDIR KERNEL_RELEASE RKLINGS_ROOT
 export LC_ALL=C LANG=C TZ=UTC ARCH=x86_64 CC=gcc HOSTCC=gcc
 unset CROSS_COMPILE KCONFIG_CONFIG LOCALVERSION KCFLAGS KCPPFLAGS KAFLAGS \
 	HOSTCFLAGS HOSTLDFLAGS LLVM LLVM_IAS MAKEFLAGS MFLAGS

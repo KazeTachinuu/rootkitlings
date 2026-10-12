@@ -5,7 +5,7 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 build=$(realpath -e -- "$1") || die "build not found"
 module=$(realpath -e -- "$2") || die "module not found"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-authenticated-encryption-host.XXXXXX")
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/rklings-authenticated-encryption-host.XXXXXX")
 trap 'rm -rf -- "$tmp"' EXIT
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"
 for f in Kbuild core/main.c crypto/aead_platform.c crypto/aead.c include/aead.h \

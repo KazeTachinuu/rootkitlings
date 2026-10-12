@@ -8,7 +8,7 @@
 #include <linux/dirent.h>
 #include "dirent_filter.h"
 
-#define TARGET "rootkitlings_hidden"
+#define TARGET "rklings_hidden"
 #define NAME_OFFSET offsetof(struct linux_dirent64, d_name)
 
 struct arena {
@@ -116,8 +116,8 @@ static void basic_cases(void)
 static void exact_name_and_unaligned(void)
 {
 	const char *names[] = {
-		"rootkitlings_hidde", "rootkitlings_hidden_more",
-		"xrootkitlings_hidden", "ROOTKITLINGS_HIDDEN",
+		"rklings_hidde", "rklings_hidden_more",
+		"xrklings_hidden", "RKLINGS_HIDDEN",
 	};
 	unsigned char storage[4096];
 	struct arena arena = {0};

@@ -16,7 +16,7 @@
 #include "rootkit.h"
 
 #define RK_MISSING_ITERATE_TARGET \
-	"__rootkitlings_missing_iterate_dir_target_7_2__"
+	"__rklings_missing_iterate_dir_target_7_2__"
 
 /* Exact private layout used by Linux v7.2 fs/readdir.c. */
 struct rk_getdents_callback64 {
@@ -199,7 +199,7 @@ out:
 }
 
 static struct kretprobe iterate_probe = {
-#if ROOTKITLINGS_FAIL_POINT == RK_FAIL_ITERATE_PROBE
+#if RKLINGS_FAIL_POINT == RK_FAIL_ITERATE_PROBE
 	.kp.symbol_name = RK_MISSING_ITERATE_TARGET,
 #else
 	.kp.symbol_name = "iterate_dir",

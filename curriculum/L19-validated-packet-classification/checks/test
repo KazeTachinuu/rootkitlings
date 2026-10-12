@@ -4,7 +4,7 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-validated-packet-classification-test.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-validated-packet-classification-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || {
@@ -38,9 +38,9 @@ fi
 
 source_root=$scratch/sources
 mkdir "$source_root"
-starter=$("$ROOTKITLINGS_ROOT/scripts/catalog" materialize starter L19 \
+starter=$("$RKLINGS_ROOT/scripts/catalog" materialize starter L19 \
 	"$source_root" --name starter-source)
-solution=$("$ROOTKITLINGS_ROOT/scripts/catalog" materialize solution L19 \
+solution=$("$RKLINGS_ROOT/scripts/catalog" materialize solution L19 \
 	"$source_root" --name solution-source)
 
 for tree in "$starter" "$solution"; do
@@ -88,7 +88,7 @@ build_tree()
 	local log=$destination.log
 	cp -a "$source" "$destination"
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		RKLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
 		cat "$log" >&2
 		printf '[x] %s build failed\n' "${source##*/}" >&2
 		exit 1
@@ -105,10 +105,10 @@ build_tree "$solution" "$scratch/solution"
 build_tree "$solution" "$scratch/register-failure" 1
 build_tree "$solution" "$scratch/proc-failure" 2
 "$HERE/host-check" "$scratch/solution" \
-	"$scratch/solution/rootkitlings.ko"
+	"$scratch/solution/rklings.ko"
 
 if "$HERE/host-check" "$scratch/starter" \
-	"$scratch/starter/rootkitlings.ko" > "$scratch/starter-host.log" 2>&1; then
+	"$scratch/starter/rklings.ko" > "$scratch/starter-host.log" 2>&1; then
 	printf '[x] host checker accepted the unfinished classifier\n' >&2
 	exit 1
 fi
@@ -132,7 +132,7 @@ build_mutant()
 		exit 1
 	fi
 	if "$HERE/host-check" "$scratch/$name" \
-		"$scratch/$name/rootkitlings.ko" > "$scratch/$name-host.log" 2>&1; then
+		"$scratch/$name/rklings.ko" > "$scratch/$name-host.log" 2>&1; then
 		printf '[x] host checker accepted mutant: %s\n' "$name" >&2
 		exit 1
 	fi
@@ -216,11 +216,11 @@ sed -i '/if (ipv4->protocol != RK_IPV4_PROTOCOL_UDP)/i\
 \t\treturn RK_UDP_MALFORMED;' "$equivalent/classifier/udp.c"
 build_tree "$equivalent" "$scratch/equivalent-build"
 "$HERE/host-check" "$scratch/equivalent-build" \
-	"$scratch/equivalent-build/rootkitlings.ko"
+	"$scratch/equivalent-build/rklings.ko"
 
 cp -a "$solution" "$scratch/unknown"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
-	ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
+	RKLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure-point value compiled successfully\n' >&2
 	exit 1
 fi
@@ -249,15 +249,15 @@ run_guest()
 	printf '%s\n' "$output"
 }
 
-run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" \
+run_guest "$HERE/success-check" "$scratch/solution/rklings.ko" \
 	solution --tool vm/tools/proc_read_test --tool vm/tools/packet_classifier_test
 run_guest "$scratch/starter-failure-check" \
-	"$scratch/starter/rootkitlings.ko" starter --tool vm/tools/module_load_test
+	"$scratch/starter/rklings.ko" starter --tool vm/tools/module_load_test
 run_guest "$scratch/register-failure-check" \
-	"$scratch/register-failure/rootkitlings.ko" registration-failure \
+	"$scratch/register-failure/rklings.ko" registration-failure \
 	--tool vm/tools/module_load_test
 run_guest "$scratch/proc-failure-check" \
-	"$scratch/proc-failure/rootkitlings.ko" proc-failure \
+	"$scratch/proc-failure/rklings.ko" proc-failure \
 	--tool vm/tools/module_load_test
 
 printf '[+] validated-packet-classification passed\n'

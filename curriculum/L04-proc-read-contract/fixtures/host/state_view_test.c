@@ -14,7 +14,7 @@ struct proc_dir_entry *proc_create_single_data(
 	const char *name, unsigned int mode, struct proc_dir_entry *parent,
 	int (*show)(struct seq_file *, void *), void *data)
 {
-	assert(strcmp(name, "rootkitlings") == 0);
+	assert(strcmp(name, "rklings") == 0);
 	assert(mode == 0444);
 	assert(parent == NULL);
 	assert(show != NULL);

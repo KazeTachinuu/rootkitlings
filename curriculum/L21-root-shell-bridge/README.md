@@ -24,7 +24,7 @@ The fixed helper chain is:
 
 ```sh
 /bin/setsid /bin/script -q \
-  -c '/bin/bash --noprofile --rcfile /etc/rootkitlings.bashrc -i' /dev/null
+  -c '/bin/bash --noprofile --rcfile /etc/rklings.bashrc -i' /dev/null
 ```
 
 `setsid` gives the helper its own session and process group.
@@ -101,7 +101,7 @@ user-mode-helper setup, timeout, worker cleanup, and stop path declared in
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker verifies the prelude, proves that Bash has a PTY on descriptors 0,

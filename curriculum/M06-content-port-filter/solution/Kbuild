@@ -1,2 +1,2 @@
-obj-m := rootkitlings.o
-rootkitlings-y := main.o target_list.o
+obj-m := rklings.o
+rklings-y := main.o target_list.o

@@ -83,16 +83,16 @@ static long long cookie_at(const struct arena *arena, size_t wanted)
 static void multiple_targets(void)
 {
 	static const char *const names[] = {
-		"rootkitlings",
-		"rootkitlings_events",
+		"rklings",
+		"rklings_events",
 		NULL,
 	};
 	struct arena arena = { 0 };
 	size_t output;
 
 	append(&arena, "alpha", 10);
-	append(&arena, "rootkitlings", 20);
-	append(&arena, "rootkitlings_events", 30);
+	append(&arena, "rklings", 20);
+	append(&arena, "rklings_events", 30);
 	append(&arena, "omega", 40);
 	assert(rk_filter_dirents64_if(arena.bytes, arena.length, selected,
 				      names, &output) ==
@@ -107,8 +107,8 @@ static void multiple_targets(void)
 static void unchanged_boundaries(void)
 {
 	static const char *const selected_names[] = {
-		"rootkitlings",
-		"rootkitlings_events",
+		"rklings",
+		"rklings_events",
 		NULL,
 	};
 	struct arena all_match = { 0 };
@@ -116,8 +116,8 @@ static void unchanged_boundaries(void)
 	struct arena original;
 	size_t output;
 
-	append(&all_match, "rootkitlings", 10);
-	append(&all_match, "rootkitlings_events", 20);
+	append(&all_match, "rklings", 10);
+	append(&all_match, "rklings_events", 20);
 	original = all_match;
 	assert(rk_filter_dirents64_if(
 		all_match.bytes, all_match.length, selected, selected_names,
@@ -137,13 +137,13 @@ static void unchanged_boundaries(void)
 
 static void invalid_input_is_unchanged(void)
 {
-	static const char *const names[] = { "rootkitlings", NULL };
+	static const char *const names[] = { "rklings", NULL };
 	struct arena arena = { 0 };
 	struct arena original;
 	unsigned short invalid = 1;
 	size_t output = 0;
 
-	append(&arena, "rootkitlings", 10);
+	append(&arena, "rklings", 10);
 	memcpy(arena.bytes + offsetof(struct linux_dirent64, d_reclen),
 	       &invalid, sizeof(invalid));
 	original = arena;
@@ -160,10 +160,10 @@ static void exact_wrapper(void)
 	size_t output;
 
 	append(&arena, "alpha", 10);
-	append(&arena, "rootkitlings", 20);
+	append(&arena, "rklings", 20);
 	append(&arena, "omega", 30);
 	assert(rk_filter_dirents64(
-		arena.bytes, arena.length, "rootkitlings", 12, &output) ==
+		arena.bytes, arena.length, "rklings", 12, &output) ==
 	       RK_DIRENT_FILTER_CHANGED);
 	arena.length = output;
 	assert(strcmp(name_at(&arena, 0), "alpha") == 0);

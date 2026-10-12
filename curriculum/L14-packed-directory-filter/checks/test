@@ -4,7 +4,7 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-packed-directory-filter-test.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-packed-directory-filter-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || { printf '[x] x86_64 is required\n' >&2; exit 1; }
@@ -52,7 +52,7 @@ build_tree()
 	local source=$1 destination=$2 point=${3:-0} log=$scratch/build-${2##*/}.log
 	cp -a "$source" "$destination"
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		RKLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
 		cat "$log" >&2
 		exit 1
 	fi
@@ -89,12 +89,12 @@ for point in 1 2 3 4 5 6; do
 	build_tree "$solution" "$scratch/failure-$point" "$point"
 done
 if make -s -C "$KDIR" M="$scratch/success" W=1 \
-	ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
+	RKLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure point compiled\n' >&2
 	exit 1
 fi
 
-"$HERE/host-check" "$scratch/success" "$scratch/success/rootkitlings.ko"
+"$HERE/host-check" "$scratch/success" "$scratch/success/rklings.ko"
 
 expect_mutation_rejected()
 {
@@ -108,7 +108,7 @@ expect_mutation_rejected()
 		printf '[x] mutation did not change the source: %s\n' "$name" >&2
 		exit 1
 	}
-	if "$HERE/host-check" "$tree" "$tree/rootkitlings.ko" \
+	if "$HERE/host-check" "$tree" "$tree/rklings.ko" \
 		> "$scratch/mutation-$name.log" 2>&1; then
 		printf '[x] host checker accepted mutation: %s\n' "$name" >&2
 		exit 1
@@ -123,7 +123,7 @@ expect_mutation_rejected prefix-match \
 	's/length == exact->length \&\&/length <= exact->length \&\&/'
 expect_mutation_rejected hard-coded-target \
 	'/\*output_length = length;/i\
-\ttarget = "rootkitlings_hidden"; target_length = sizeof("rootkitlings_hidden") - 1;'
+\ttarget = "rklings_hidden"; target_length = sizeof("rklings_hidden") - 1;'
 expect_mutation_rejected missing-output-length \
 	's/\*output_length = write_offset;/\/\* missing length \*\//'
 expect_mutation_rejected all-match-zero \
@@ -159,13 +159,13 @@ run_guest()
 }
 
 run_guest "$HERE/../../L03-proc-publication/checks/failure-ecanceled-check" \
-	"$scratch/failure-1/rootkitlings.ko" --tool vm/tools/module_load_test
+	"$scratch/failure-1/rklings.ko" --tool vm/tools/module_load_test
 run_guest "$HERE/../../L03-proc-publication/checks/failure-enomem-check" \
-	"$scratch/failure-2/rootkitlings.ko" --tool vm/tools/module_load_test
+	"$scratch/failure-2/rklings.ko" --tool vm/tools/module_load_test
 for point in 3 4 5 6; do
 	run_guest "$scratch/failure-$point-check" \
-		"$scratch/failure-$point/rootkitlings.ko" --tool vm/tools/module_load_test
+		"$scratch/failure-$point/rklings.ko" --tool vm/tools/module_load_test
 done
-run_guest "$HERE/success-check" "$scratch/success/rootkitlings.ko" \
+run_guest "$HERE/success-check" "$scratch/success/rklings.ko" \
 	--tool vm/tools/proc_read_test --tool vm/tools/proc_write_test \
 	--tool vm/tools/getdents64_test

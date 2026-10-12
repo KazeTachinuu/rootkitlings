@@ -24,8 +24,8 @@ else
 	summary
 fi
 
-load rootkitlings.ko hidden_port="$test_port"
-assert_loaded rootkitlings
+load rklings.ko hidden_port="$test_port"
+assert_loaded rklings
 
 # The port should now be hidden from /proc/net/tcp.
 if grep -qi ":${port_hex} " /proc/net/tcp 2>/dev/null; then
@@ -41,7 +41,7 @@ else
 	_ok "port $test_port is hidden from ss"
 fi
 
-unload rootkitlings
+unload rklings
 
 # After unload, the port should reappear.
 if grep -qi ":${port_hex} " /proc/net/tcp 2>/dev/null; then

@@ -634,4 +634,4 @@ module_init(rk_init);
 module_exit(rk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings complete rootkit");
+MODULE_DESCRIPTION("Rklings complete rootkit");

@@ -3,7 +3,7 @@ set -Eeuo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$here/../../../scripts/lesson-env"
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-authenticated-encryption-test.XXXXXX")
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/rklings-authenticated-encryption-test.XXXXXX")
 trap 'rm -rf -- "$tmp"' EXIT
 grep -Eq '^CONFIG_CRYPTO_GCM=[ym]$' "$KDIR/.config" || { printf '[x] CONFIG_CRYPTO_GCM required\n' >&2; exit 1; }
 grep -Eq '^CONFIG_CRYPTO_AES=[ym]$' "$KDIR/.config" || { printf '[x] CONFIG_CRYPTO_AES required\n' >&2; exit 1; }
@@ -12,27 +12,27 @@ generated=$(find "$here" -type f \( -name '*.o' -o -name '*.ko' -o -name '*.mod'
 mapfile -t changed < <(diff -qr "$here/../starter" "$here/../solution" | sed -nE 's#^Files .*/starter/(.*) and .*/solution/.* differ$#\1#p')
 [[ ${#changed[@]} == 1 && ${changed[0]} == crypto/aead.c ]] || { printf '[x] learner edit boundary is not one file\n' >&2; exit 1; }
 
-build(){ local src=$1 dst=$2 point=${3:-0}; cp -a "$src" "$dst"; make -s -C "$KDIR" M="$dst" W=1 ROOTKITLINGS_FAIL_POINT="$point" modules >"$dst.log" 2>&1 || { cat "$dst.log"; exit 1; }; ! grep -q 'warning:' "$dst.log" || { cat "$dst.log"; exit 1; }; }
+build(){ local src=$1 dst=$2 point=${3:-0}; cp -a "$src" "$dst"; make -s -C "$KDIR" M="$dst" W=1 RKLINGS_FAIL_POINT="$point" modules >"$dst.log" 2>&1 || { cat "$dst.log"; exit 1; }; ! grep -q 'warning:' "$dst.log" || { cat "$dst.log"; exit 1; }; }
 build "$here/../solution" "$tmp/solution"
 build "$here/../starter" "$tmp/starter"
 for point in 1 2 3; do build "$here/../solution" "$tmp/fail-$point" "$point"; done
 cp -a "$here/../solution" "$tmp/unknown-failure-point"
 if make -s -C "$KDIR" M="$tmp/unknown-failure-point" W=1 \
-	ROOTKITLINGS_FAIL_POINT=99 modules >"$tmp/unknown.log" 2>&1; then
+	RKLINGS_FAIL_POINT=99 modules >"$tmp/unknown.log" 2>&1; then
 	printf '[x] unknown failure point compiled\n' >&2
 	exit 1
 fi
-grep -Fq 'unknown ROOTKITLINGS_FAIL_POINT' "$tmp/unknown.log" || {
+grep -Fq 'unknown RKLINGS_FAIL_POINT' "$tmp/unknown.log" || {
 	cat "$tmp/unknown.log" >&2
 	printf '[x] unknown failure point failed for the wrong reason\n' >&2
 	exit 1
 }
-"$here/host-check" "$tmp/solution" "$tmp/solution/rootkitlings.ko"
-if "$here/host-check" "$tmp/starter" "$tmp/starter/rootkitlings.ko" >/dev/null 2>&1; then printf '[x] starter accepted\n' >&2; exit 1; fi
-cp -a "$here/../solution" "$tmp/alternate-src"; cp "$here/../fixtures/alternate/aead.c" "$tmp/alternate-src/crypto/aead.c"; build "$tmp/alternate-src" "$tmp/alternate"; "$here/host-check" "$tmp/alternate" "$tmp/alternate/rootkitlings.ko"
+"$here/host-check" "$tmp/solution" "$tmp/solution/rklings.ko"
+if "$here/host-check" "$tmp/starter" "$tmp/starter/rklings.ko" >/dev/null 2>&1; then printf '[x] starter accepted\n' >&2; exit 1; fi
+cp -a "$here/../solution" "$tmp/alternate-src"; cp "$here/../fixtures/alternate/aead.c" "$tmp/alternate-src/crypto/aead.c"; build "$tmp/alternate-src" "$tmp/alternate"; "$here/host-check" "$tmp/alternate" "$tmp/alternate/rklings.ko"
 
-mutant(){ local name=$1 old=$2 new=$3 dir="$tmp/mutant-$1"; cp -a "$here/../solution" "$dir"; sed -i "s@$old@$new@" "$dir/crypto/aead.c"; ! cmp -s "$here/../solution/crypto/aead.c" "$dir/crypto/aead.c" || { printf '[x] mutant edit did not apply: %s\n' "$name" >&2; exit 1; }; build "$dir" "$tmp/built-$name"; if "$here/host-check" "$tmp/built-$name" "$tmp/built-$name/rootkitlings.ko" >/dev/null 2>&1; then printf '[x] mutant accepted: %s\n' "$name" >&2; exit 1; fi; }
-mutant_perl(){ local name=$1 edit=$2 dir="$tmp/mutant-$1"; cp -a "$here/../solution" "$dir"; perl -0pi -e "$edit" "$dir/crypto/aead.c"; ! cmp -s "$here/../solution/crypto/aead.c" "$dir/crypto/aead.c" || { printf '[x] mutant edit did not apply: %s\n' "$name" >&2; exit 1; }; build "$dir" "$tmp/built-$name"; if "$here/host-check" "$tmp/built-$name" "$tmp/built-$name/rootkitlings.ko" >/dev/null 2>&1; then printf '[x] mutant accepted: %s\n' "$name" >&2; exit 1; fi; }
+mutant(){ local name=$1 old=$2 new=$3 dir="$tmp/mutant-$1"; cp -a "$here/../solution" "$dir"; sed -i "s@$old@$new@" "$dir/crypto/aead.c"; ! cmp -s "$here/../solution/crypto/aead.c" "$dir/crypto/aead.c" || { printf '[x] mutant edit did not apply: %s\n' "$name" >&2; exit 1; }; build "$dir" "$tmp/built-$name"; if "$here/host-check" "$tmp/built-$name" "$tmp/built-$name/rklings.ko" >/dev/null 2>&1; then printf '[x] mutant accepted: %s\n' "$name" >&2; exit 1; fi; }
+mutant_perl(){ local name=$1 edit=$2 dir="$tmp/mutant-$1"; cp -a "$here/../solution" "$dir"; perl -0pi -e "$edit" "$dir/crypto/aead.c"; ! cmp -s "$here/../solution/crypto/aead.c" "$dir/crypto/aead.c" || { printf '[x] mutant edit did not apply: %s\n' "$name" >&2; exit 1; }; build "$dir" "$tmp/built-$name"; if "$here/host-check" "$tmp/built-$name" "$tmp/built-$name/rklings.ko" >/dev/null 2>&1; then printf '[x] mutant accepted: %s\n' "$name" >&2; exit 1; fi; }
 mutant no-aad 'ops->set_ad(request, (unsigned int)aad_length);' 'ops->set_ad(request, 0);'
 mutant wrong-open-length 'ops->set_crypt(request, \&sg, (unsigned int)input_length, iv);' 'ops->set_crypt(request, \&sg, (unsigned int)(input_length - (decrypt ? RK_AEAD_TAG_LENGTH : 0)), iv);'
 mutant wrong-seal-length 'ops->set_crypt(request, \&sg, (unsigned int)input_length, iv);' 'ops->set_crypt(request, \&sg, (unsigned int)(input_length + (decrypt ? 0 : RK_AEAD_TAG_LENGTH)), iv);'
@@ -60,8 +60,8 @@ guest()
 	fi
 	printf '%s\n' "$output"
 }
-guest "$here/success-check" "$tmp/solution/rootkitlings.ko" solution
-guest "$here/success-check" "$tmp/alternate/rootkitlings.ko" alternate
+guest "$here/success-check" "$tmp/solution/rklings.ko" solution
+guest "$here/success-check" "$tmp/alternate/rklings.ko" alternate
 for point in 1 2 3; do
 	case $point in
 		1) expected=12 ;;
@@ -71,7 +71,7 @@ for point in 1 2 3; do
 	sed -e "s/@LABEL@/authenticated-encryption failure point $point/g" \
 		-e "s/@ERRNO@/$expected/g" "$here/failure-check.in" \
 		>"$tmp/check-$point"
-	guest "$tmp/check-$point" "$tmp/fail-$point/rootkitlings.ko" \
+	guest "$tmp/check-$point" "$tmp/fail-$point/rklings.ko" \
 		"failure-point-$point"
 done
 printf '[+] authenticated-encryption passed\n'

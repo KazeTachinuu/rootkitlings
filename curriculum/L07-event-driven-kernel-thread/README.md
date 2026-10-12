@@ -88,7 +88,7 @@ Use supplied `RK_WORKER_NAME` when creating the task.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker proves creation failure and rollback, idle sleep, command gating,

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef ROOTKITLINGS_SECURE_CONTROL_H
-#define ROOTKITLINGS_SECURE_CONTROL_H
+#ifndef RKLINGS_SECURE_CONTROL_H
+#define RKLINGS_SECURE_CONTROL_H
 
 #include "aead.h"
 #include "framing.h"

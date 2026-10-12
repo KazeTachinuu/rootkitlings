@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate repository-local Markdown links and rootkitlings command examples."""
+"""Validate repository-local Markdown links and rklings command examples."""
 
 from pathlib import Path
 import re
@@ -29,12 +29,12 @@ for document in documents:
             failures.append(f"{shown}: missing link target: {target}")
 
     if re.search(
-        r"\./rootkitlings\s+(?:debug|prerequisites|prereqs|peek|readme)\b",
+        r"\./rklings\s+(?:debug|prerequisites|prereqs|peek|readme)\b",
         text,
     ):
-        failures.append(f"{shown}: uses a removed rootkitlings command")
+        failures.append(f"{shown}: uses a removed rklings command")
     if re.search(
-        r"\./rootkitlings\s+"
+        r"\./rklings\s+"
         r"(?:read|start|check|hint|solution|run|gdb|prereq)\s+[0-9]+\b",
         text,
     ):
@@ -44,7 +44,7 @@ for document in documents:
     if not serial:
         continue
     examples = re.findall(
-        r"\./rootkitlings\s+(read|start|check|hint|solution|run|gdb|prereq)"
+        r"\./rklings\s+(read|start|check|hint|solution|run|gdb|prereq)"
         r"(?:\s+(\S+))?",
         text,
     )
@@ -55,7 +55,7 @@ for document in documents:
                 f"{shown}: {command} example targets {selector}, expected {serial}"
             )
     if not any(command == "check" for command, _ in examples):
-        failures.append(f"{shown}: missing './rootkitlings check' example")
+        failures.append(f"{shown}: missing './rklings check' example")
 
 if failures:
     raise SystemExit("\n".join(failures))

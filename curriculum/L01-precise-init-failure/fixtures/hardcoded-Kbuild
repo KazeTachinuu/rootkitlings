@@ -1,3 +1,3 @@
-obj-m += rootkitlings.o
-rootkitlings-y := core/main.o
-ccflags-y += -DROOTKITLINGS_FAIL_POINT=0
+obj-m += rklings.o
+rklings-y := core/main.o
+ccflags-y += -DRKLINGS_FAIL_POINT=0

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-#ifndef ROOTKITLINGS_NETFILTER_FIXTURE_H
-#define ROOTKITLINGS_NETFILTER_FIXTURE_H
+#ifndef RKLINGS_NETFILTER_FIXTURE_H
+#define RKLINGS_NETFILTER_FIXTURE_H
 
 #include <stdbool.h>
 #include <stdint.h>

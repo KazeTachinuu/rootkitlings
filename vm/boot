@@ -94,7 +94,7 @@ if [[ -n $GDB ]] && ! command -v pwndbg >/dev/null && ! command -v gdb >/dev/nul
 	ui_die "GDB not found; install gdb or run make doctor for the package name"
 fi
 if [[ -n $CHECK ]]; then
-	export ROOTKITLINGS_QUIET=1
+	export RKLINGS_QUIET=1
 fi
 if [[ -t 1 && ${NO_COLOR+x} != x && ${TERM:-} != dumb ]]; then
 	GUEST_COLOR=1
@@ -109,8 +109,8 @@ trap 'exit 130' INT TERM
 ROOTFS="$WORK/rootfs"
 INITRAMFS="$WORK/initramfs.gz"
 RELEASE=$("$ROOT_DIR/scripts/kernel" release) || ui_die "Course kernel manifest is invalid"
-KERNEL=$("$ROOT_DIR/scripts/kernel" image) || ui_die "Course kernel is not ready; run: ./rootkitlings setup"
-VMLINUX=$("$ROOT_DIR/scripts/kernel" vmlinux) || ui_die "Course kernel is not ready; run: ./rootkitlings setup"
+KERNEL=$("$ROOT_DIR/scripts/kernel" image) || ui_die "Course kernel is not ready; run: ./rklings setup"
+VMLINUX=$("$ROOT_DIR/scripts/kernel" vmlinux) || ui_die "Course kernel is not ready; run: ./rklings setup"
 BUSYBOX=$(command -v busybox || true)
 BASH=$(command -v bash || true)
 SCRIPT=$(command -v script || true)
@@ -203,11 +203,11 @@ build_rootfs()
     local applet candidate library terminfo
 
     ui_heading "Building the BusyBox root filesystem"
-    mkdir -p "$ROOTFS"/{bin,dev,etc,lib,proc,rootkitlings,sys,tmp,vm/checks} \
+    mkdir -p "$ROOTFS"/{bin,dev,etc,lib,proc,rklings,sys,tmp,vm/checks} \
         "$ROOTFS/etc/modules-load.d" \
         "$ROOTFS/lib/modules/$RELEASE"
     : > "$ROOTFS/lib/modules/$RELEASE/modules.dep"
-	printf 'root:x:0:0:root:/rootkitlings:/bin/bash\nstudent:x:1000:1000:student:/home/student:/bin/bash\n' > "$ROOTFS/etc/passwd"
+	printf 'root:x:0:0:root:/rklings:/bin/bash\nstudent:x:1000:1000:student:/home/student:/bin/bash\n' > "$ROOTFS/etc/passwd"
 	printf 'root:!:0:::::\nstudent:!:0:::::\n' > "$ROOTFS/etc/shadow"
 	mkdir -p "$ROOTFS/home/student"
     cp "$BUSYBOX" "$ROOTFS/bin/busybox"
@@ -239,14 +239,14 @@ build_rootfs()
 	install -D -m 0644 -- "$terminfo" \
 		"$ROOTFS/usr/share/terminfo/x/xterm-256color"
 	printf '%s\n' \
-		"PS1='root@rootkitlings:\\w# '" \
+		"PS1='root@rklings:\\w# '" \
 		"unset HISTFILE" \
 		"bind 'set enable-bracketed-paste off' 2>/dev/null || true" \
-		> "$ROOTFS/etc/rootkitlings.bashrc"
+		> "$ROOTFS/etc/rklings.bashrc"
 	cat > "$ROOTFS/etc/profile" <<'PROFILE'
 if [ "$(id -u)" = 0 ]; then
 	export PS1='root@target:\w# '
-	cd /rootkitlings 2>/dev/null
+	cd /rklings 2>/dev/null
 else
 	export PS1='student@target:\w$ '
 fi
@@ -260,8 +260,8 @@ PROFILE
     chmod 4755 "$ROOTFS/bin/reboot"
     ln "$ROOTFS/bin/reboot" "$ROOTFS/bin/poweroff"
     if [[ -n $MODULE ]]; then
-        cp "$MODULE" "$ROOTFS/rootkitlings/$(basename "$MODULE")"
-        ui_success "Module copied to /rootkitlings/$(basename "$MODULE")"
+        cp "$MODULE" "$ROOTFS/rklings/$(basename "$MODULE")"
+        ui_success "Module copied to /rklings/$(basename "$MODULE")"
     fi
     if [[ -n $CHECK ]]; then
         cp "$ROOT_DIR/vm/checks/lib.sh" "$ROOTFS/vm/checks/lib.sh"
@@ -329,19 +329,19 @@ run_vm()
     esac
 
     if [[ -n $CHECK ]]; then
-        cmdline+=' rootkitlings=check'
+        cmdline+=' rklings=check'
     fi
     if [[ -n $BARE ]]; then
-        cmdline+=' rootkitlings=bare'
+        cmdline+=' rklings=bare'
     fi
     if [[ -n $NETWORK || -n $RUNTIME_SETUP ]]; then
-        cmdline+=' rootkitlings=network'
+        cmdline+=' rklings=network'
     fi
     if [[ -n $RUNTIME_SETUP ]]; then
-        cmdline+=' rootkitlings=runtime'
+        cmdline+=' rklings=runtime'
     fi
     if [[ -n $GUEST_COLOR ]]; then
-        cmdline+=' rootkitlings=color'
+        cmdline+=' rklings=color'
     fi
     if [[ -n $GDB ]]; then
         cmdline+=' nokaslr'

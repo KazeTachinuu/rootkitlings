@@ -42,9 +42,9 @@ kmem_trace_setup() {
     _kmem_old_tracing=$(cat "$_kmem_trace_root/tracing_on")
     _kmem_old_kmalloc=$(cat "$_kmem_kmalloc_enable")
     _kmem_old_kfree=$(cat "$_kmem_kfree_enable")
-    _kmem_trace_copy=/tmp/rootkitlings-kmem-trace
-    _kmem_allocs=/tmp/rootkitlings-kmem-allocs
-    _kmem_frees=/tmp/rootkitlings-kmem-frees
+    _kmem_trace_copy=/tmp/rklings-kmem-trace
+    _kmem_allocs=/tmp/rklings-kmem-allocs
+    _kmem_frees=/tmp/rklings-kmem-frees
 
     for format in \
         "$_kmem_trace_root/events/kmem/kmalloc/format" \
@@ -203,8 +203,8 @@ _show_command() {
 
 load() {
     local mod="$1"; shift
-    _show_command insmod "/rootkitlings/$mod" "$@"
-    if insmod "/rootkitlings/$mod" "$@"; then
+    _show_command insmod "/rklings/$mod" "$@"
+    if insmod "/rklings/$mod" "$@"; then
         _ok "loaded $mod"
     else
         _fail "failed to load $mod"
@@ -224,8 +224,8 @@ unload() {
 
 load_fail() {
     local mod="$1"; shift
-    _show_command insmod "/rootkitlings/$mod" "$@"
-    if insmod "/rootkitlings/$mod" "$@"; then
+    _show_command insmod "/rklings/$mod" "$@"
+    if insmod "/rklings/$mod" "$@"; then
         _fail "expected $mod to be rejected, but it loaded"
     else
         _ok "$mod correctly rejected"

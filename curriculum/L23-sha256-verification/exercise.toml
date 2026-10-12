@@ -33,7 +33,7 @@ label = "SHA-256 lifecycle and verification"
 expect_build = "pass"
 check = "curriculum/L23-sha256-verification/checks/success-check"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "0"
+RKLINGS_FAIL_POINT = "0"
 
 [[verification.cases]]
 id = "transform-allocation-failure"
@@ -42,12 +42,12 @@ expect_build = "pass"
 check = "curriculum/L23-sha256-verification/checks/failure-check.in"
 check_arguments = ["4", "SHA-256 transform allocation failure"]
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "1"
+RKLINGS_FAIL_POINT = "1"
 
 [[verification.cases]]
 id = "unknown-failure-point"
 label = "Reject unknown failure point"
 expect_build = "fail"
-build_output_contains = "unknown ROOTKITLINGS_FAIL_POINT"
+build_output_contains = "unknown RKLINGS_FAIL_POINT"
 [verification.cases.build_variables]
-ROOTKITLINGS_FAIL_POINT = "99"
+RKLINGS_FAIL_POINT = "99"

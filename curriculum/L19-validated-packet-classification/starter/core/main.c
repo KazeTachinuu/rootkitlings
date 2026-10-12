@@ -6,8 +6,8 @@
 
 #include "rootkit.h"
 
-#if ROOTKITLINGS_FAIL_POINT < 0 || ROOTKITLINGS_FAIL_POINT > 2
-#error "unknown ROOTKITLINGS_FAIL_POINT"
+#if RKLINGS_FAIL_POINT < 0 || RKLINGS_FAIL_POINT > 2
+#error "unknown RKLINGS_FAIL_POINT"
 #endif
 
 static ushort target_port = 47021;
@@ -51,4 +51,4 @@ module_init(rk_init);
 module_exit(rk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings bounded IPv4 UDP classifier");
+MODULE_DESCRIPTION("Rklings bounded IPv4 UDP classifier");

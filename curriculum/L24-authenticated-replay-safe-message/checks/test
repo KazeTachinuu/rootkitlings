@@ -4,7 +4,7 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-authenticated-replay-safe-message-test.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-authenticated-replay-safe-message-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || {
@@ -73,7 +73,7 @@ build_tree()
 
 	cp -a "$source" "$destination"
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		RKLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
 		cat "$log" >&2
 		exit 1
 	fi
@@ -91,7 +91,7 @@ build_tree "$HERE/../solution" "$scratch/key-failure" 2
 build_tree "$HERE/../solution" "$scratch/digest-failure" 3
 cp -a "$HERE/../solution" "$scratch/unknown-failure-point"
 if make -s -C "$KDIR" M="$scratch/unknown-failure-point" W=1 \
-	ROOTKITLINGS_FAIL_POINT=99 modules >"$scratch/unknown.log" 2>&1; then
+	RKLINGS_FAIL_POINT=99 modules >"$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure point compiled\n' >&2
 	exit 1
 fi
@@ -101,9 +101,9 @@ grep -Fq 'must be between 0 and 3' "$scratch/unknown.log" || {
 	exit 1
 }
 
-"$HERE/host-check" "$scratch/solution" "$scratch/solution/rootkitlings.ko"
+"$HERE/host-check" "$scratch/solution" "$scratch/solution/rklings.ko"
 if "$HERE/host-check" "$scratch/starter" \
-	"$scratch/starter/rootkitlings.ko" > "$scratch/starter-host.log" 2>&1; then
+	"$scratch/starter/rklings.ko" > "$scratch/starter-host.log" 2>&1; then
 	printf '[x] host checker accepted unfinished learner file\n' >&2
 	exit 1
 fi
@@ -116,12 +116,12 @@ build_mutant()
 	cp -a "$HERE/../solution" "$directory"
 	"$mutator" "$directory/message/authenticated.c"
 	if ! make -s -C "$KDIR" M="$directory" W=1 \
-		ROOTKITLINGS_FAIL_POINT=0 modules > "$log" 2>&1; then
+		RKLINGS_FAIL_POINT=0 modules > "$log" 2>&1; then
 		cat "$log" >&2
 		printf '[x] mutant did not compile: %s\n' "$name" >&2
 		exit 1
 	fi
-	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+	if "$HERE/host-check" "$directory" "$directory/rklings.ko" \
 		> "$scratch/$name-host.log" 2>&1; then
 		printf '[x] host checker accepted mutant: %s\n' "$name" >&2
 		exit 1
@@ -197,7 +197,7 @@ cp "$HERE/../fixtures/alternate/authenticated.c" \
 	"$scratch/alternate/message/authenticated.c"
 build_tree "$scratch/alternate" "$scratch/alternate-build"
 "$HERE/host-check" "$scratch/alternate-build" \
-	"$scratch/alternate-build/rootkitlings.ko"
+	"$scratch/alternate-build/rklings.ko"
 
 run_guest()
 {
@@ -211,16 +211,16 @@ run_guest()
 	printf '%s\n' "$output"
 }
 
-run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko" solution
+run_guest "$HERE/success-check" "$scratch/solution/rklings.ko" solution
 run_guest "$HERE/success-check" \
-	"$scratch/alternate-build/rootkitlings.ko" alternate
-run_guest "$HERE/failure-check" "$scratch/starter/rootkitlings.ko" starter
+	"$scratch/alternate-build/rklings.ko" alternate
+run_guest "$HERE/failure-check" "$scratch/starter/rklings.ko" starter
 run_guest "$HERE/allocation-failure-check" \
-	"$scratch/allocation/rootkitlings.ko" allocation-failure
+	"$scratch/allocation/rklings.ko" allocation-failure
 run_guest "$HERE/key-failure-check" \
-	"$scratch/key-failure/rootkitlings.ko" key-failure
+	"$scratch/key-failure/rklings.ko" key-failure
 run_guest "$HERE/digest-failure-check" \
-	"$scratch/digest-failure/rootkitlings.ko" digest-failure
+	"$scratch/digest-failure/rklings.ko" digest-failure
 
 assert_clean_tree
 

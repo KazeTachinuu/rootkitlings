@@ -1,5 +1,5 @@
-#ifndef ROOTKITLINGS_HOST_SEQ_FILE_H
-#define ROOTKITLINGS_HOST_SEQ_FILE_H
+#ifndef RKLINGS_HOST_SEQ_FILE_H
+#define RKLINGS_HOST_SEQ_FILE_H
 
 struct seq_file {
 	char text[32];

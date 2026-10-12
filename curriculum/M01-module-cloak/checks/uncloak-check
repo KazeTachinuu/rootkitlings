@@ -4,22 +4,22 @@
 
 begin "Module unhiding"
 
-endpoint=/proc/rootkitlings
+endpoint=/proc/rklings
 
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 assert_exists "$endpoint"
 
 # Cloak then uncloak.
 echo hide > "$endpoint"
-if lsmod | grep -q rootkitlings; then
+if lsmod | grep -q rklings; then
 	_fail "module visible after hide"
 else
 	_ok "module cloaked"
 fi
 
 echo unhide > "$endpoint"
-if lsmod | grep -q rootkitlings; then
+if lsmod | grep -q rklings; then
 	_ok "module visible again after unhide"
 else
 	_fail "module still hidden after unhide"
@@ -33,13 +33,13 @@ fi
 
 # Double uncloak should be a no-op.
 echo unhide > "$endpoint"
-if lsmod | grep -q rootkitlings; then
+if lsmod | grep -q rklings; then
 	_ok "double unhide is a no-op"
 else
 	_fail "double unhide hid the module"
 fi
 
-unload rootkitlings
+unload rklings
 assert_absent "$endpoint"
 
 summary

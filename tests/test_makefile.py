@@ -70,7 +70,7 @@ class MakefileTests(unittest.TestCase):
             record = temporary / "record"
             (fake_kernel / "Makefile").write_text(
                 "modules:\n"
-                f"\t@printf '%s\\n' '$(M)|$(MO)|$(ARCH)|$(CC)|$(HOSTCC)|$(W)|$(ROOTKITLINGS_FAIL_POINT)' > {record}\n",
+                f"\t@printf '%s\\n' '$(M)|$(MO)|$(ARCH)|$(CC)|$(HOSTCC)|$(W)|$(RKLINGS_FAIL_POINT)' > {record}\n",
                 encoding="utf-8",
             )
             result = make(
@@ -80,7 +80,7 @@ class MakefileTests(unittest.TestCase):
                 "ARCH=arm64",
                 "CC=false",
                 "HOSTCC=false",
-                "ROOTKITLINGS_FAIL_POINT=7",
+                "RKLINGS_FAIL_POINT=7",
                 "module",
             )
             self.assertEqual(result.returncode, 0, result.stdout)
@@ -120,7 +120,7 @@ class MakefileTests(unittest.TestCase):
         for source in sorted((ROOT / "vm/tools").glob("*.c")):
             relative_source = source.relative_to(ROOT)
             source_binary = relative_source.with_suffix("")
-            managed_binary = Path(".rootkitlings/build/tools") / source.stem
+            managed_binary = Path(".rklings/build/tools") / source.stem
             self.assertIn(f"-o {managed_binary} {relative_source}", result.stdout)
             self.assertNotIn(f"-o {source_binary} {relative_source}", result.stdout)
 

@@ -4,8 +4,8 @@
 
 begin "Timer to workqueue scheduler"
 
-endpoint=/proc/rootkitlings
-fixtures=/tmp/rootkitlings-scheduler
+endpoint=/proc/rklings
+fixtures=/tmp/rklings-scheduler
 actual=$fixtures/actual
 mkdir -p "$fixtures"
 
@@ -26,12 +26,12 @@ chmod 0644 "$fixtures"/*
 
 assert_not_loaded()
 {
-	assert_absent /sys/module/rootkitlings
+	assert_absent /sys/module/rklings
 	assert_absent "$endpoint"
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "rootkitlings appears in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings appears in /proc/modules"
 	else
-		_ok "rootkitlings is absent from /proc/modules"
+		_ok "rklings is absent from /proc/modules"
 	fi
 }
 
@@ -79,7 +79,7 @@ expect_errno()
 
 check_loaded()
 {
-	assert_loaded rootkitlings
+	assert_loaded rklings
 	assert_exists "$endpoint"
 	metadata=$(stat -c '%a:%u:%g' "$endpoint")
 	if [ "$metadata" = 644:0:0 ]; then
@@ -87,10 +87,10 @@ check_loaded()
 	else
 		_fail "$endpoint metadata: expected 644:0:0, got $metadata"
 	fi
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_ok "rootkitlings appears in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_ok "rklings appears in /proc/modules"
 	else
-		_fail "rootkitlings is absent from /proc/modules"
+		_fail "rklings is absent from /proc/modules"
 	fi
 	read_status disabled "module load" || true
 	if [ "$status_worker_runs" -eq 0 ]; then
@@ -270,13 +270,13 @@ check_concurrency()
 assert_not_loaded
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	load rootkitlings.ko
+	load rklings.ko
 	check_loaded
 	check_rejections
 	check_scheduler
 	check_repeated_writes
 	check_concurrency
-	if proc_write_test unload "$endpoint" "$fixtures/enable" rootkitlings > /dev/null; then
+	if proc_write_test unload "$endpoint" "$fixtures/enable" rklings > /dev/null; then
 		_ok "attempt $attempt rejects a held descriptor after unload"
 	else
 		_fail "attempt $attempt failed the held-descriptor unload check"

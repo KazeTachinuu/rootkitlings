@@ -11,7 +11,7 @@ die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
 artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
 [[ -f $artifact && ! -L $artifact ]] || die "artifact must be a regular file"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-cross-view-evidence-learner.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-cross-view-evidence-learner.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 build_variant()
@@ -20,7 +20,7 @@ build_variant()
 	cp -a "$build_dir" "$destination"
 	make -s -C "$KDIR" M="$destination" clean
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		RKLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
 		cat "$log" >&2
 		die "$name build failed"
 	fi
@@ -33,4 +33,4 @@ build_variant()
 build_variant success 0
 build_variant missing-target 4
 "$here/host-check" "$scratch/success" \
-	"$scratch/success/rootkitlings.ko" "$scratch/missing-target"
+	"$scratch/success/rklings.ko" "$scratch/missing-target"

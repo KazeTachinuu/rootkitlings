@@ -4,42 +4,42 @@
 
 begin "Procfs state read"
 
-expected=/tmp/rootkitlings-expected
+expected=/tmp/rklings-expected
 printf 'active=1\n' > "$expected"
 
 assert_not_loaded()
 {
-	assert_absent /sys/module/rootkitlings
-	assert_absent /proc/rootkitlings
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "rootkitlings appears in /proc/modules"
+	assert_absent /sys/module/rklings
+	assert_absent /proc/rklings
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings appears in /proc/modules"
 	else
-		_ok "rootkitlings is absent from /proc/modules"
+		_ok "rklings is absent from /proc/modules"
 	fi
 }
 
 check_loaded()
 {
-	assert_loaded rootkitlings
-	assert_exists /proc/rootkitlings
-	mode=$(stat -c '%a' /proc/rootkitlings)
+	assert_loaded rklings
+	assert_exists /proc/rklings
+	mode=$(stat -c '%a' /proc/rklings)
 	if [ "$mode" = 444 ]; then
-		_ok "/proc/rootkitlings mode is 0444"
+		_ok "/proc/rklings mode is 0444"
 	else
-		_fail "/proc/rootkitlings mode: expected 0444, got $mode"
+		_fail "/proc/rklings mode: expected 0444, got $mode"
 	fi
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_ok "rootkitlings appears in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_ok "rklings appears in /proc/modules"
 	else
-		_fail "rootkitlings is absent from /proc/modules"
+		_fail "rklings is absent from /proc/modules"
 	fi
 }
 
 assert_not_loaded
 for attempt in 1 2; do
-	load rootkitlings.ko
+	load rklings.ko
 	check_loaded
-	if proc_read_test /proc/rootkitlings "$expected" rootkitlings; then
+	if proc_read_test /proc/rklings "$expected" rklings; then
 		_ok "attempt $attempt passed the read and open-unload contract"
 	else
 		_fail "attempt $attempt failed the read or open-unload contract"

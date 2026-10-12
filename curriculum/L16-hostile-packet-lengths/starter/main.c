@@ -35,7 +35,7 @@ static int rk_expect(bool condition, const char *label)
 	rk_assertions++;
 	if (condition)
 		return 0;
-	pr_err("rootkitlings: IPv4 parser self-test failed: %s\n", label);
+	pr_err("rklings: IPv4 parser self-test failed: %s\n", label);
 	return -EINVAL;
 }
 
@@ -90,7 +90,7 @@ static int rk_parser_self_test(void)
 	return ret;
 }
 
-static int __init rootkitlings_init(void)
+static int __init rklings_init(void)
 {
 	int ret;
 
@@ -98,17 +98,17 @@ static int __init rootkitlings_init(void)
 	if (ret)
 		return ret;
 	rk_parser_selftest = true;
-	pr_info("rootkitlings: IPv4 parser self-tests passed: %u assertions\n",
+	pr_info("rklings: IPv4 parser self-tests passed: %u assertions\n",
 		rk_assertions);
 	return 0;
 }
 
-static void __exit rootkitlings_exit(void)
+static void __exit rklings_exit(void)
 {
 }
 
-module_init(rootkitlings_init);
-module_exit(rootkitlings_exit);
+module_init(rklings_init);
+module_exit(rklings_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings bounded IPv4 parser");
+MODULE_DESCRIPTION("Rklings bounded IPv4 parser");

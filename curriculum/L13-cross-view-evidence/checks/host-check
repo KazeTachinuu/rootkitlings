@@ -8,12 +8,12 @@ success_dir=$(realpath -e -- "$1" 2>/dev/null) || die "success directory not fou
 success_artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
 missing_dir=$(realpath -e -- "$3" 2>/dev/null) || die "missing-symbol directory not found: $3"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-cross-view-evidence-host.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-cross-view-evidence-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ -f $success_artifact && ! -L $success_artifact ]] ||
 	die "success artifact must be a regular file"
-[[ $success_artifact == "$success_dir/rootkitlings.ko" ]] ||
+[[ $success_artifact == "$success_dir/rklings.ko" ]] ||
 	die "success artifact must belong to the success build"
 
 for relative in Kbuild core/main.c core/state.c include/rootkit.h \
@@ -30,13 +30,13 @@ done
 	die "missing-symbol build lacks instrumentation/probes.o"
 
 gcc -std=c11 -Wall -Wextra -Werror -Wno-unused-parameter \
-	-DROOTKITLINGS_FAIL_POINT=0 \
+	-DRKLINGS_FAIL_POINT=0 \
 	-I "$here/../fixtures/host/include" -I "$success_dir/include" \
 	-I "$success_dir" "$here/../fixtures/host/proc_test.c" \
 	-o "$scratch/proc-test"
 "$scratch/proc-test"
 gcc -std=c11 -Wall -Wextra -Werror -Wno-unused-parameter \
-	-DROOTKITLINGS_FAIL_POINT=0 \
+	-DRKLINGS_FAIL_POINT=0 \
 	-I "$here/../fixtures/host/include" -I "$success_dir/include" \
 	-I "$success_dir" "$here/../fixtures/host/probe_test.c" \
 	-o "$scratch/probe-test"
@@ -93,12 +93,12 @@ for specification in \
 		die "module lifecycle must reference $symbol exactly $expected time(s)"
 done
 
-if grep -Fxq '__rootkitlings_missing_kprobe_target_7_2__' \
+if grep -Fxq '__rklings_missing_kprobe_target_7_2__' \
 	< <(strings "$success_artifact"); then
 	die "success artifact contains the negative-control target"
 fi
-grep -Fxq '__rootkitlings_missing_kprobe_target_7_2__' \
-	< <(strings "$missing_dir/rootkitlings.ko") ||
+grep -Fxq '__rklings_missing_kprobe_target_7_2__' \
+	< <(strings "$missing_dir/rklings.ko") ||
 	die "missing-symbol artifact lacks the negative-control target"
 
 printf '[+] behavioral item suppression, canonical identity, and lifecycle verified\n'

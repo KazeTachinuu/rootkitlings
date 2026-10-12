@@ -29,12 +29,12 @@ The supported host is x86-64 Linux.
 
 ```sh
 make doctor
-./rootkitlings setup
-./rootkitlings prereq L00
-./rootkitlings read L00
-./rootkitlings start L00
+./rklings setup
+./rklings prereq L00
+./rklings read L00
+./rklings start L00
 # Edit the paths printed by start.
-./rootkitlings check L00
+./rklings check L00
 ```
 
 - `setup` prepares the pinned kernel and verifies guest isolation.
@@ -46,7 +46,7 @@ make doctor
 Exercise commands accept a serial such as `L19`, a stable ID such as
 `netfilter-observer`, or an unambiguous prefix.
 Most commands use the current exercise when no selector is given.
-Run `./rootkitlings help` for the complete command list.
+Run `./rklings help` for the complete command list.
 
 ## Course
 
@@ -88,9 +88,9 @@ Use `list` for the full route and `prereq` for direct dependencies.
 `restore` and `reset` do different jobs:
 
 ```sh
-./rootkitlings restore L12
-./rootkitlings reset L12
-./rootkitlings reset --all --yes
+./rklings restore L12
+./rklings reset L12
+./rklings reset --all --yes
 ```
 
 - `restore` archives the current edits and recreates that exercise's starting
@@ -106,11 +106,11 @@ Use `list` for the full route and `prereq` for direct dependencies.
 ```text
 course.toml                         route, concepts, tags, and tools
 curriculum/<serial>-<stable-id>/   lessons, workspaces, and checks
-rootkitlings                       learner command
+rklings                       learner command
 engine/                            catalog, state, and verification
 vm/                                pinned guest runtime and tools
 work/<serial>/                     learner source code
-.rootkitlings/                     builds, state, snapshots, and backups
+.rklings/                     builds, state, snapshots, and backups
 ```
 
 Learner edits belong under `work/`.

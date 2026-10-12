@@ -181,7 +181,7 @@ int rk_authenticated_selftest(unsigned int *assertions)
 		wrong_key[index] = (u8)(index ^ 0xa5);
 	}
 
-#if ROOTKITLINGS_FAIL_POINT == 3
+#if RKLINGS_FAIL_POINT == 3
 	/* Reach the receiver with a precomputed valid message; signing also
 	 * fails. */
 	memset(message, 0, sizeof(message));

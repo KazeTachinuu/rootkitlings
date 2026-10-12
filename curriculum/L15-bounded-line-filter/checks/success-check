@@ -4,13 +4,13 @@
 
 begin "Bounded line removal"
 
-endpoint=/proc/rootkitlings
+endpoint=/proc/rklings
 registry=/sys/kernel/debug/kprobes/list
-target=/tmp/rootkitlings-read-target
-other=/tmp/rootkitlings-read-other
-hardlink=/tmp/rootkitlings-read-hardlink
-renamed=/tmp/rootkitlings-read-renamed
-fixtures=/tmp/rootkitlings-read-fixtures
+target=/tmp/rklings-read-target
+other=/tmp/rklings-read-other
+hardlink=/tmp/rklings-read-hardlink
+renamed=/tmp/rklings-read-renamed
+fixtures=/tmp/rklings-read-fixtures
 # "kept1\nSECRET\nkept2\n" (19 bytes)
 original=6b657074310a5345435245540a6b657074320a
 # "kept1\nkept2\n" (12 bytes) -- SECRET line removed
@@ -41,8 +41,8 @@ assert_status()
 
 cleanup()
 {
-	if test -d /sys/module/rootkitlings; then
-		rmmod rootkitlings 2>/dev/null || true
+	if test -d /sys/module/rklings; then
+		rmmod rklings 2>/dev/null || true
 	fi
 	rm -rf "$fixtures" "$target" "$other" "$hardlink" "$renamed" \
 		2>/dev/null || true
@@ -67,7 +67,7 @@ if awk '$3 == "vfs_read" { found = 1 } END { exit !found }' /proc/kallsyms; then
 else
 	_fail "vfs_read is absent"
 fi
-if awk '$3 == "__rootkitlings_missing_kretprobe_target_7_2__" { found = 1 }
+if awk '$3 == "__rklings_missing_kretprobe_target_7_2__" { found = 1 }
 	END { exit found }' /proc/kallsyms; then
 	_ok "negative-control probe target is absent"
 else
@@ -78,8 +78,8 @@ read_result_test write "$target" "$original"
 read_result_test write "$other" "$original"
 probe_before=$(probe_count)
 log_before=$(dmesg | wc -l)
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 assert_exists "$endpoint"
 if [ "$(stat -c %a "$endpoint")" = 400 ]; then
 	_ok "status endpoint is read-only mode 0400"
@@ -201,7 +201,7 @@ assert_status 1206 1 0 "concurrent reads"
 read_result_test stress "$target" 100000 "$filtered" "$original" &
 stress_pid=$!
 sleep 1
-unload rootkitlings
+unload rklings
 if wait "$stress_pid"; then
 	_ok "unload exposes only complete original or filtered results"
 else
@@ -214,10 +214,10 @@ else
 	_fail "unload leaked the return probe"
 fi
 
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 assert_status 0 0 0 "reload"
-unload rootkitlings
+unload rklings
 assert_absent "$endpoint"
 if read_result_test check read "$target" 0 4096 "$original"; then
 	_ok "final unload restores the original read result"

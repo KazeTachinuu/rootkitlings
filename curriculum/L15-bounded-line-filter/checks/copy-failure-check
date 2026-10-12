@@ -4,8 +4,8 @@
 
 begin "Deterministic no-fault copy failure"
 
-endpoint=/proc/rootkitlings
-target=/tmp/rootkitlings-read-target
+endpoint=/proc/rklings
+target=/tmp/rklings-read-target
 original=534543524554
 expected='limit=512
 redactions=0
@@ -16,16 +16,16 @@ returns_missed=0'
 
 cleanup()
 {
-	if test -d /sys/module/rootkitlings; then
-		rmmod rootkitlings 2>/dev/null || true
+	if test -d /sys/module/rklings; then
+		rmmod rklings 2>/dev/null || true
 	fi
 	rm -f "$target" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
 read_result_test write "$target" "$original"
-load rootkitlings.ko
-assert_loaded rootkitlings
+load rklings.ko
+assert_loaded rklings
 if read_result_test error read "$target" 14; then
 	_ok "injected copy failure changes the selected read to EFAULT"
 else
@@ -47,7 +47,7 @@ if read_result_test check mmap "$target" 0 6 "$original"; then
 else
 	_fail "underlying file bytes changed"
 fi
-unload rootkitlings
+unload rklings
 assert_absent "$endpoint"
 
 summary

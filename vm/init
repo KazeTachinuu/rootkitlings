@@ -5,7 +5,7 @@ set -eu
 export PATH=/bin
 export TERM=xterm-256color
 export LC_ALL=C
-export PS1='(rootkitlings) \w # '
+export PS1='(rklings) \w # '
 # shellcheck source=scripts/lib/ui.sh
 . /vm/ui.sh
 
@@ -32,11 +32,11 @@ chown 1000:1000 /home/student
 read -r _cmdline < /proc/cmdline
 for _word in $_cmdline; do
 	case "$_word" in
-		rootkitlings=check) _check=1 ;;
-		rootkitlings=network) _network=1 ;;
-		rootkitlings=runtime) _runtime=1 ;;
-		rootkitlings=bare) _bare=1 ;;
-		rootkitlings=color) _color=1 ;;
+		rklings=check) _check=1 ;;
+		rklings=network) _network=1 ;;
+		rklings=runtime) _runtime=1 ;;
+		rklings=bare) _bare=1 ;;
+		rklings=color) _color=1 ;;
 	esac
 done
 
@@ -57,15 +57,15 @@ if [ -b /dev/vda ]; then
 	mount --bind /mnt/persist/modules-load.d /etc/modules-load.d
 	mount --bind /mnt/persist/home/student /home/student
 fi
-[ -f /etc/modules-load.d/rootkitlings.conf ] || \
-	install -m 0600 /dev/null /etc/modules-load.d/rootkitlings.conf
+[ -f /etc/modules-load.d/rklings.conf ] || \
+	install -m 0600 /dev/null /etc/modules-load.d/rklings.conf
 
 # Load persisted modules (before check mode so persistence is testable)
 for _conf in /etc/modules-load.d/*.conf; do
 	[ -f "$_conf" ] || continue
 	while read -r _modname; do
 		[ -n "$_modname" ] || continue
-		_ko="/rootkitlings/${_modname}.ko"
+		_ko="/rklings/${_modname}.ko"
 		if [ -f "$_ko" ]; then
 			insmod "$_ko" 2>/dev/null
 		fi
@@ -74,16 +74,16 @@ done
 
 if [ "${_check:-}" = 1 ]; then
 	export NO_COLOR=1
-	printf '\nROOTKITLINGS_CHECK_BEGIN\n'
+	printf '\nRKLINGS_CHECK_BEGIN\n'
 	if [ -f /check.args ]; then
 		xargs -0 /check < /check.args && _rc=0 || _rc=$?
 	else
 		/check && _rc=0 || _rc=$?
 	fi
 	if [ "$_rc" -eq 0 ]; then
-		printf 'ROOTKITLINGS_RESULT=pass\n'
+		printf 'RKLINGS_RESULT=pass\n'
 	else
-		printf 'ROOTKITLINGS_RESULT=fail:%s\n' "$_rc"
+		printf 'RKLINGS_RESULT=fail:%s\n' "$_rc"
 	fi
 	reboot -f
 	while :; do sleep 1; done
@@ -120,11 +120,11 @@ fi
 
 ui_success "/init is PID $$"
 
-_module=$(ls /rootkitlings/*.ko 2>/dev/null | head -1)
-cd /rootkitlings || exit 1
+_module=$(ls /rklings/*.ko 2>/dev/null | head -1)
+cd /rklings || exit 1
 
 if [ "${_bare:-}" = 1 ]; then
-	if grep -q rootkitlings /proc/modules 2>/dev/null; then
+	if grep -q rklings /proc/modules 2>/dev/null; then
 		ui_success 'Bare mode: root shell, module loaded (persisted)'
 	else
 		ui_success 'Bare mode: root shell, no module loaded'
@@ -132,7 +132,7 @@ if [ "${_bare:-}" = 1 ]; then
 	ui_progress 'Load the module yourself with insmod'
 	setsid -c /bin/bash --login </dev/ttyS0 >/dev/ttyS0 2>&1 || true
 else
-	if grep -q rootkitlings /proc/modules 2>/dev/null; then
+	if grep -q rklings /proc/modules 2>/dev/null; then
 		ui_success 'Module loaded (persisted)'
 	elif [ -n "$_module" ]; then
 		show "insmod $_module"

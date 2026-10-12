@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef ROOTKITLINGS_SKB_ACCESS_H
-#define ROOTKITLINGS_SKB_ACCESS_H
+#ifndef RKLINGS_SKB_ACCESS_H
+#define RKLINGS_SKB_ACCESS_H
 
 #include <linux/skbuff.h>
 #include <linux/stddef.h>

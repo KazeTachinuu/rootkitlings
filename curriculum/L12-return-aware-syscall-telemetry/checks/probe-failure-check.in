@@ -6,7 +6,7 @@ expected_errno=${1:-@EXPECTED_ERRNO@}
 label=${2:-@LABEL@}
 begin "$label"
 
-endpoint=/proc/rootkitlings
+endpoint=/proc/rklings
 registry=/sys/kernel/debug/kprobes/list
 
 probe_count()
@@ -24,10 +24,10 @@ probe_count()
 assert_clean()
 {
 	label=$1
-	assert_absent /sys/module/rootkitlings
+	assert_absent /sys/module/rklings
 	assert_absent "$endpoint"
-	if grep -q '^rootkitlings ' /proc/modules; then
-		_fail "$label left rootkitlings in /proc/modules"
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "$label left rklings in /proc/modules"
 	else
 		_ok "$label leaves no loaded module"
 	fi
@@ -46,7 +46,7 @@ probe_before=$(probe_count)
 
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	if module_load_test /rootkitlings/rootkitlings.ko "$expected_errno"; then
+	if module_load_test /rklings/rklings.ko "$expected_errno"; then
 		_ok "attempt $attempt returned errno $expected_errno"
 	else
 		_fail "attempt $attempt returned the wrong error"

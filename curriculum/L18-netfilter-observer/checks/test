@@ -4,7 +4,7 @@ set -Eeuo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-netfilter-observer-test.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-netfilter-observer-test.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ $(uname -m) == x86_64 ]] || {
@@ -72,7 +72,7 @@ build_tree()
 	local log=$destination.log
 	cp -a "$source" "$destination"
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
-		ROOTKITLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
+		RKLINGS_FAIL_POINT="$point" modules > "$log" 2>&1; then
 		cat "$log" >&2
 		printf '[x] %s build failed\n' "${source##*/}" >&2
 		exit 1
@@ -89,7 +89,7 @@ build_tree "$HERE/../solution" "$scratch/solution"
 build_tree "$HERE/../solution" "$scratch/register-failure" 1
 build_tree "$HERE/../solution" "$scratch/proc-failure" 2
 "$HERE/host-check" "$scratch/solution" \
-	"$scratch/solution/rootkitlings.ko"
+	"$scratch/solution/rklings.ko"
 
 equivalent=$scratch/equivalent
 cp -a "$HERE/../solution" "$equivalent"
@@ -125,10 +125,10 @@ if grep -q 'warning:' "$equivalent.log"; then
 	printf '[x] equivalent implementation build has warnings\n' >&2
 	exit 1
 fi
-"$HERE/host-check" "$equivalent" "$equivalent/rootkitlings.ko"
+"$HERE/host-check" "$equivalent" "$equivalent/rklings.ko"
 
 if "$HERE/host-check" "$scratch/starter" \
-	"$scratch/starter/rootkitlings.ko" > "$scratch/starter-host.log" 2>&1; then
+	"$scratch/starter/rklings.ko" > "$scratch/starter-host.log" 2>&1; then
 	printf '[x] host checker accepted the unfinished callback\n' >&2
 	exit 1
 fi
@@ -136,7 +136,7 @@ fi
 expect_rejection()
 {
 	local directory=$1 label=$2
-	if "$HERE/host-check" "$directory" "$directory/rootkitlings.ko" \
+	if "$HERE/host-check" "$directory" "$directory/rklings.ko" \
 		> "$scratch/host-$label.log" 2>&1; then
 		printf '[x] host checker accepted %s\n' "$label" >&2
 		exit 1
@@ -214,7 +214,7 @@ expect_rejection "$hardcoded_snapshot" hardcoded-snapshot
 
 cp -a "$HERE/../solution" "$scratch/unknown"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 \
-	ROOTKITLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
+	RKLINGS_FAIL_POINT=99 modules > "$scratch/unknown.log" 2>&1; then
 	printf '[x] unknown failure-point value compiled successfully\n' >&2
 	exit 1
 fi
@@ -242,7 +242,7 @@ run_guest()
 }
 
 run_guest "$scratch/register-failure-check" \
-	"$scratch/register-failure/rootkitlings.ko"
+	"$scratch/register-failure/rklings.ko"
 run_guest "$scratch/proc-failure-check" \
-	"$scratch/proc-failure/rootkitlings.ko"
-run_guest "$HERE/success-check" "$scratch/solution/rootkitlings.ko"
+	"$scratch/proc-failure/rklings.ko"
+run_guest "$HERE/success-check" "$scratch/solution/rklings.ko"

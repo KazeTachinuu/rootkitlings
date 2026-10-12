@@ -3,7 +3,7 @@
 A module can choose what its own status page reports.
 That report may disagree with the kernel's independent record of live probes.
 
-Omit one probe from `/proc/rootkitlings` while keeping it registered and active.
+Omit one probe from `/proc/rklings` while keeping it registered and active.
 Success proves that hiding a row does not hide the underlying hook.
 
 The module still registers the two Kprobes from the previous exercise:
@@ -11,7 +11,7 @@ The module still registers the two Kprobes from the previous exercise:
 - `vfs_mkdir`
 - `filename_rmdir`
 
-This exercise changes only the list rendered by `/proc/rootkitlings`.
+This exercise changes only the list rendered by `/proc/rklings`.
 The `filename_rmdir` probe must remain registered and active, but its
 `listed_probe` row must not appear.
 
@@ -49,7 +49,7 @@ Do not add another symbol-name table or compare rendered strings.
 
 The two views have different owners:
 
-- `/proc/rootkitlings` is this module's selected view of its catalog.
+- `/proc/rklings` is this module's selected view of its catalog.
 - `/sys/kernel/debug/kprobes/list` is the kernel Kprobe registry.
 
 The checker uses the second view as independent evidence.
@@ -98,7 +98,7 @@ unchanged.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker covers exact seq-file behavior, live probes, independent registry

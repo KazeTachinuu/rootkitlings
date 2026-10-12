@@ -19,9 +19,9 @@ class GuestProtocolTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             serial_log = Path(directory) / "serial.log"
             serial_log.write_text(
-                "ROOTKITLINGS_CHECK_BEGIN\n"
+                "RKLINGS_CHECK_BEGIN\n"
                 "visible output\n"
-                "ROOTKITLINGS_RESULT=pass\n",
+                "RKLINGS_RESULT=pass\n",
                 encoding="utf-8",
             )
             result = subprocess.run(
@@ -38,10 +38,10 @@ class GuestProtocolTests(unittest.TestCase):
     def test_parses_exact_crlf_delimited_pass_envelope(self) -> None:
         result = parse_guest_check(
             "firmware output\r\n"
-            "ROOTKITLINGS_CHECK_BEGIN\r\n"
+            "RKLINGS_CHECK_BEGIN\r\n"
             "[*] lifecycle\r\n"
             "[+] unloaded\r\n"
-            "ROOTKITLINGS_RESULT=pass\r\n"
+            "RKLINGS_RESULT=pass\r\n"
             "reboot output\r\n"
         )
         self.assertTrue(result.passed)
@@ -50,9 +50,9 @@ class GuestProtocolTests(unittest.TestCase):
 
     def test_parses_failure_without_exposing_protocol_records(self) -> None:
         result = parse_guest_check(
-            "ROOTKITLINGS_CHECK_BEGIN\n"
+            "RKLINGS_CHECK_BEGIN\n"
             "[x] assertion failed\n"
-            "ROOTKITLINGS_RESULT=fail:7\n"
+            "RKLINGS_RESULT=fail:7\n"
         )
         self.assertFalse(result.passed)
         self.assertEqual(result.status, 7)
@@ -62,13 +62,13 @@ class GuestProtocolTests(unittest.TestCase):
         self,
     ) -> None:
         invalid = (
-            "ROOTKITLINGS_RESULT=pass\n",
-            "ROOTKITLINGS_CHECK_BEGIN\nROOTKITLINGS_RESULT=passenger\n",
-            "ROOTKITLINGS_CHECK_BEGIN\nROOTKITLINGS_RESULT=pass\n"
-            "ROOTKITLINGS_RESULT=pass\n",
-            "ROOTKITLINGS_CHECK_BEGIN\nROOTKITLINGS_RESULT=passenger\n"
-            "ROOTKITLINGS_RESULT=pass\n",
-            "ROOTKITLINGS_RESULT=pass\nROOTKITLINGS_CHECK_BEGIN\n",
+            "RKLINGS_RESULT=pass\n",
+            "RKLINGS_CHECK_BEGIN\nRKLINGS_RESULT=passenger\n",
+            "RKLINGS_CHECK_BEGIN\nRKLINGS_RESULT=pass\n"
+            "RKLINGS_RESULT=pass\n",
+            "RKLINGS_CHECK_BEGIN\nRKLINGS_RESULT=passenger\n"
+            "RKLINGS_RESULT=pass\n",
+            "RKLINGS_RESULT=pass\nRKLINGS_CHECK_BEGIN\n",
         )
         for text in invalid:
             with self.subTest(text=text), self.assertRaises(GuestProtocolError):

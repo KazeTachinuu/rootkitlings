@@ -92,4 +92,4 @@ static const struct proc_ops rk_proc_ops = {
 // 3. Unregister kprobe
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rootkitlings local covert control");
+MODULE_DESCRIPTION("Rklings local covert control");

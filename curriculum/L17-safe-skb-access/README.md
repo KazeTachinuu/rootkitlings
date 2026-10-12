@@ -98,7 +98,7 @@ Do not linearize, pull, allocate, or write to the packet.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker uses `W=1`, real linear and nonlinear buffers, protected integration

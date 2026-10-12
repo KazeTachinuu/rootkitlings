@@ -61,7 +61,7 @@ instrumented host implementation.
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 The checker uses NIST and independent boundary vectors, then checks allocation,

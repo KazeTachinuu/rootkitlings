@@ -4,7 +4,7 @@
 
 begin "Root shell timeout"
 port=46123
-capture=/tmp/rootkitlings-root-shell-timeout
+capture=/tmp/rklings-root-shell-timeout
 rm -f "$capture"
 ifconfig lo 127.0.0.1 up
 
@@ -17,8 +17,8 @@ printf '%s\n' 'printf "rkproof-%s\n" ready' 'sleep 60' |
 	nc -l -p "$port" >"$capture" 2>&1 &
 listener=$!
 sleep 0.1
-load rootkitlings.ko "shell_port=$port" shell_timeout_ms=1000
-ticket=$(cat /sys/module/rootkitlings/parameters/shell_ticket)
+load rklings.ko "shell_port=$port" shell_timeout_ms=1000
+ticket=$(cat /sys/module/rklings/parameters/shell_ticket)
 request_id=${ticket%% *}
 
 attempt=0
@@ -50,7 +50,7 @@ if [ -z "$leaked" ]; then
 else
 	_fail "timeout left a shell command running"
 fi
-if test "$(cat /sys/module/rootkitlings/parameters/shell_status)" = \
+if test "$(cat /sys/module/rklings/parameters/shell_status)" = \
 		"$request_id timed-out -110"; then
 	_ok "timeout reports the exact request and result"
 else
@@ -63,7 +63,7 @@ listener=$!
 sleep 0.1
 attempt=0
 while ! printf 46127 \
-		> /sys/module/rootkitlings/parameters/shell_port 2>/dev/null && \
+		> /sys/module/rklings/parameters/shell_port 2>/dev/null && \
 		[ "$attempt" -lt 100 ]; do
 	sleep 0.05
 	attempt=$((attempt + 1))
@@ -82,7 +82,7 @@ else
 	_fail "timed-out state did not release capacity"
 fi
 
-unload rootkitlings
-assert_absent /sys/module/rootkitlings
+unload rklings
+assert_absent /sys/module/rklings
 rm -f "$capture" "$capture.retry"
 summary

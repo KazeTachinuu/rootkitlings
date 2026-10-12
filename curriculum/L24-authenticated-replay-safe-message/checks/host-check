@@ -10,7 +10,7 @@ module=$(realpath -e -- "$2" 2>/dev/null) || die "module not found"
 command -v openssl >/dev/null ||
 	die "openssl is required for the independent HMAC oracle"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/rootkitlings-authenticated-replay-safe-message-host.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-authenticated-replay-safe-message-host.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
 [[ -f $module && ! -L $module ]] || die "module must be a regular file"

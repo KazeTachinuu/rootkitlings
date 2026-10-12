@@ -64,7 +64,7 @@ equal a stored value?). The proc interface accepts:
 | `unhide content <N>` | Remove content target at index N |
 | `unhide port <N>` | Remove port target at index N |
 
-Reading /proc/rootkitlings shows both target lists with their indices.
+Reading /proc/rklings shows both target lists with their indices.
 
 ## Your task
 
@@ -78,7 +78,7 @@ In `main.c`, implement:
 Run:
 
 ```sh
-./rootkitlings check
+./rklings check
 ```
 
 ## References

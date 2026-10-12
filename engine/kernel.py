@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and locate the pinned Rootkitlings guest kernel."""
+"""Build and locate the pinned Rklings guest kernel."""
 
 from __future__ import annotations
 
@@ -28,8 +28,8 @@ sys.path.insert(0, str(ROOT))
 from engine.console import Console  # noqa: E402
 
 
-UI = Console("rootkitlings.kernel")
-RUNTIME = ROOT / ".rootkitlings"
+UI = Console("rklings.kernel")
+RUNTIME = ROOT / ".rklings"
 TOOLBOX = ROOT / "scripts/toolbox"
 MANIFEST_PATH = ROOT / "vm/kernel.toml"
 # Increment only when the extraction, configuration, build environment, or
@@ -221,7 +221,7 @@ def libelf_identity(compiler: str) -> str:
 
 
 def build_identity(manifest: dict[str, object]) -> str:
-    digest = hashlib.sha256(b"rootkitlings-kernel-build-v1\0")
+    digest = hashlib.sha256(b"rklings-kernel-build-v1\0")
     revision = str(BUILD_RECIPE_REVISION).encode("ascii")
     digest.update(len(revision).to_bytes(8, "big"))
     digest.update(revision)
@@ -290,7 +290,7 @@ def sdk_digest(kit: Path, inputs: tuple[str, ...] = SDK_INPUT_PATHS) -> str:
                 base = Path(directory)
                 paths.update(base / name for name in names)
                 paths.update(base / name for name in files)
-    digest = hashlib.sha256(b"rootkitlings-module-sdk-v1\0")
+    digest = hashlib.sha256(b"rklings-module-sdk-v1\0")
     for path in sorted(paths, key=lambda value: value.relative_to(kit).as_posix()):
         relative = path.relative_to(kit).as_posix().encode("utf-8")
         metadata = path.lstat()
@@ -807,12 +807,12 @@ def parallel_jobs() -> int:
     memory = available_memory()
     memory_jobs = max(1, memory // (1536 * 1024 * 1024)) if memory is not None else cpus
     safe_limit = max(1, min(cpus, memory_jobs))
-    override = os.getenv("ROOTKITLINGS_JOBS")
+    override = os.getenv("RKLINGS_JOBS")
     if override is not None:
         if not override.isdigit() or int(override) < 1:
-            fail("ROOTKITLINGS_JOBS must be a positive integer")
+            fail("RKLINGS_JOBS must be a positive integer")
         if int(override) > cpus:
-            fail(f"ROOTKITLINGS_JOBS exceeds the available CPU limit ({cpus})")
+            fail(f"RKLINGS_JOBS exceeds the available CPU limit ({cpus})")
         return int(override)
     return safe_limit
 
@@ -855,7 +855,7 @@ def build_environment(manifest: dict[str, object], home: Path | None = None) -> 
         "CC": compiler,
         "HOSTCC": compiler,
         "KBUILD_BUILD_TIMESTAMP": "1970-01-01T00:00:00Z",
-        "KBUILD_BUILD_USER": "rootkitlings",
+        "KBUILD_BUILD_USER": "rklings",
         "KBUILD_BUILD_HOST": "course",
         "KBUILD_BUILD_VERSION": "1",
         "SOURCE_DATE_EPOCH": "0",

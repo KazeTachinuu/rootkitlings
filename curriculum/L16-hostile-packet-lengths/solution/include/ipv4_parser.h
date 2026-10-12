@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef ROOTKITLINGS_IPV4_PARSER_H
-#define ROOTKITLINGS_IPV4_PARSER_H
+#ifndef RKLINGS_IPV4_PARSER_H
+#define RKLINGS_IPV4_PARSER_H
 
 #ifdef __KERNEL__
 #include <linux/stddef.h>

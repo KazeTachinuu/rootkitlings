@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef ROOTKITLINGS_ROOT_SHELL_H
-#define ROOTKITLINGS_ROOT_SHELL_H
+#ifndef RKLINGS_ROOT_SHELL_H
+#define RKLINGS_ROOT_SHELL_H
 
 #include <linux/compiler_attributes.h>
 #include <linux/mutex.h>
