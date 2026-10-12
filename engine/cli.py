@@ -19,6 +19,7 @@ from engine.control_console import (
     create_target_session,
     read_target_session,
     run_control_console,
+    wait_for_operator,
 )
 from engine.state import StateStore, StateError
 from engine.verification import VerificationError, build_verification_cases
@@ -618,10 +619,14 @@ def boot_exercise(x, module):
         except OperatorError as error:
             raise CLIError(str(error)) from error
         try:
-            UI.section('Target console')
+            UI.section('Open another terminal and run')
+            UI.command(f'./rklings connect {label(x)}')
             UI.progress(
-                f'Connect the operator: ./rklings connect {label(x)}'
+                'Waiting for operator (QEMU needs the listener before boot)'
             )
+            wait_for_operator(target)
+            UI.success('Operator ready')
+            UI.section('Target console')
             command = [
                 str(ROOT / 'vm/boot'),
                 '--runtime-setup', str(ROOT / x.runtime.setup),
