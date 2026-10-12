@@ -84,6 +84,19 @@ else
 	_fail "/proc/rkling_status not found"
 fi
 
+if ! grep -q rootkitlings /proc/modules; then
+	_ok "module hidden from lsmod on load"
+else
+	_fail "module visible in lsmod after load"
+fi
+
+# Wait for the fixture to uncloak the module before rmmod
+if wait_marker uncloaked; then
+	_ok "fixture uncloaked module"
+else
+	_fail "fixture did not uncloak module"
+fi
+
 # Wait for the fixture to reach the final expect_eof point
 if wait_marker blocked_receive; then
 	_ok "fixture reached final phase"

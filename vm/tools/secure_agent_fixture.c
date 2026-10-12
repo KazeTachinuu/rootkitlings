@@ -970,6 +970,8 @@ static int serve(const char *directory, const char *port_text,
 		shell_peer = accept_shell(shell_server, request_id, cookie);
 		marker(directory, "fresh_sessions");
 		marker(directory, "blocked_shell");
+		expect_reply(peer, &channel, "UNHIDE MODULE", "OK");
+		marker(directory, "uncloaked");
 		marker(directory, "blocked_receive");
 		expect_eof(peer);
 		drain_shell_eof(shell_peer);
