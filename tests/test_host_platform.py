@@ -12,6 +12,38 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class HostPlatformTests(unittest.TestCase):
+    def test_debian_compiler_runtime_package_mapping(self) -> None:
+        command = (
+            f'. "{ROOT / "scripts/lib/host.sh"}"; '
+            'family=debian; package_name compiler-rt'
+        )
+        result = subprocess.run(
+            ["/usr/bin/bash", "-c", command],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(result.stdout, "libclang-rt-dev")
+
+    def test_fedora_script_package_mapping(self) -> None:
+        command = (
+            f'. "{ROOT / "scripts/lib/host.sh"}"; '
+            'family=fedora; package_name script'
+        )
+        result = subprocess.run(
+            ["/usr/bin/bash", "-c", command],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(result.stdout, "util-linux-script")
+
     def test_doctor_rejects_non_linux_before_dependency_checks(self) -> None:
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
             path = Path(directory)

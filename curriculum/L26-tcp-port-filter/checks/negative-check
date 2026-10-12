@@ -10,9 +10,9 @@ hidden_port=9999
 other_port=8888
 
 # Bind listeners on both ports.
-busybox nc -l -s 0.0.0.0 -p "$hidden_port" -e /bin/true &
+busybox nc -l -p "$hidden_port" 0.0.0.0 -e /bin/true &
 hidden_pid=$!
-busybox nc -l -s 0.0.0.0 -p "$other_port" -e /bin/true &
+busybox nc -l -p "$other_port" 0.0.0.0 -e /bin/true &
 other_pid=$!
 sleep 1
 

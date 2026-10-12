@@ -10,7 +10,7 @@ load rootkitlings.ko
 
 test_port=7777
 
-nc -l -s 0.0.0.0 -p "$test_port" &
+nc -l -p "$test_port" 0.0.0.0 &
 nc_pid=$!
 sleep 1
 

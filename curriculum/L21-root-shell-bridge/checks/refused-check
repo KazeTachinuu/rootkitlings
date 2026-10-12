@@ -23,7 +23,7 @@ fi
 
 capture=/tmp/rootkitlings-root-shell-retry
 printf '%s\n' 'printf "rkproof-%s\n" retry' 'exit' |
-	nc -l -p 46126 -s 127.0.0.1 >"$capture" 2>&1 &
+	nc -l -p 46126 >"$capture" 2>&1 &
 listener=$!
 sleep 0.1
 printf 46126 > /sys/module/rootkitlings/parameters/shell_port

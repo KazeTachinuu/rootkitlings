@@ -14,7 +14,7 @@ has_line()
 }
 
 printf '%s\n' 'printf "rkproof-%s\n" ready' 'while :; do :; done' |
-	nc -l -p "$port" -s 127.0.0.1 >"$capture" 2>&1 &
+	nc -l -p "$port" >"$capture" 2>&1 &
 listener=$!
 sleep 0.1
 load rootkitlings.ko "shell_port=$port" shell_timeout_ms=300000

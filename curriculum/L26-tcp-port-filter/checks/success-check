@@ -9,7 +9,7 @@ ifconfig lo 127.0.0.1 up
 test_port=9999
 
 # Bind a TCP listener on the test port.
-busybox nc -l -s 0.0.0.0 -p "$test_port" -e /bin/true &
+busybox nc -l -p "$test_port" 0.0.0.0 -e /bin/true &
 listener_pid=$!
 sleep 1
 

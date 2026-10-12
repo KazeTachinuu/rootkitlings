@@ -41,7 +41,7 @@ has_line()
 		'printf "rkproof-%s=%s\n" dir "$PWD"' \
 		'printf "rkproof-%s\n" marker' \
 		'exit'
-} | nc -l -p "$port" -s 127.0.0.2 >"$capture" 2>&1 &
+} | nc -l -p "$port" >"$capture" 2>&1 &
 listener=$!
 sleep 0.1
 
@@ -99,7 +99,7 @@ fi
 
 port=46122
 printf '%s\n' 'printf "rkproof-%s\n" second' 'exit' |
-	nc -l -p "$port" -s 127.0.0.2 >"$capture.second" 2>&1 &
+	nc -l -p "$port" >"$capture.second" 2>&1 &
 listener=$!
 sleep 0.1
 attempt=0

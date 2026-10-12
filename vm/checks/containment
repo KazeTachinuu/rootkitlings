@@ -28,13 +28,22 @@ assert_loopback_only()
 
 assert_no_host_disk()
 {
+	persistence_seen=
 	for device in /dev/sd? /dev/vd? /dev/nvme?n?; do
-		if [ -e "$device" ]; then
-			_fail "unexpected guest disk device: $device"
-			return
+		[ -e "$device" ] || continue
+		if [ "$device" = /dev/vda ] &&
+			[ "$(cat /sys/class/block/vda/size 2>/dev/null)" = 8192 ]; then
+			persistence_seen=1
+			continue
 		fi
+		_fail "unexpected guest disk device: $device"
+		return
 	done
-	_ok "no host-style disk device is exposed"
+	if [ -n "$persistence_seen" ]; then
+		_ok "only the 4 MiB guest persistence disk is exposed"
+	else
+		_fail "guest persistence disk is missing"
+	fi
 }
 
 assert_no_host_mount()
