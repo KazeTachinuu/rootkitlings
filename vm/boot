@@ -275,7 +275,7 @@ PROFILE
     if [[ -n $RUNTIME_SETUP ]]; then
         cp "$RUNTIME_SETUP" "$ROOTFS/runtime-setup"
         chmod 755 "$ROOTFS/runtime-setup"
-        printf '%s\n' "$CONTROL_KEY" 10.0.2.100 47023 47024 \
+        printf '%s\n' "$CONTROL_KEY" 10.0.2.2 "$CONTROL_PORT" "$SHELL_PORT" \
             > "$ROOTFS/runtime.args"
         chmod 0600 "$ROOTFS/runtime.args"
         ui_success "Target runtime setup copied to /runtime-setup"
@@ -381,9 +381,7 @@ run_vm()
     fi
 
     if [[ -n $RUNTIME_SETUP ]]; then
-        qemu_args+=(-nic "user,model=virtio-net-pci,restrict=on,\
-guestfwd=tcp:10.0.2.100:47023-tcp:127.0.0.1:$CONTROL_PORT,\
-guestfwd=tcp:10.0.2.100:47024-tcp:127.0.0.1:$SHELL_PORT")
+        qemu_args+=(-nic 'user,model=virtio-net-pci')
     elif [[ -n $NETWORK ]]; then
         qemu_args+=(-nic 'user,model=virtio-net-pci')
     else
