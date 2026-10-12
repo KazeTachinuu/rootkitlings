@@ -45,7 +45,7 @@ static bool rk_dirent_should_hide(const char *name, size_t name_length)
 {
 	unsigned int pid_val;
 
-	if (rk_target_prefix_match(&file_targets, name, name_length))
+	if (rk_target_match(&file_targets, name, name_length))
 		return true;
 	if (kstrtouint(name, 10, &pid_val) == 0 &&
 	    rk_target_number_match(&pid_targets, pid_val))

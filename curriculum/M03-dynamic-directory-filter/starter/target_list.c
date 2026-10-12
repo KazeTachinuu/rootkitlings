@@ -39,15 +39,14 @@ int rk_target_remove(struct rk_target_list *list, unsigned int index,
 	return -ENOSYS;
 }
 
-bool rk_target_prefix_match(struct rk_target_list *list, const char *name,
-			    size_t name_length)
+bool rk_target_match(struct rk_target_list *list, const char *name,
+		     size_t name_length)
 {
 	/*
-	 * TODO: return true if name starts with any entry in the list.
+	 * TODO: return true if name contains any entry as a substring.
 	 *
-	 * Iterate under spin_lock_irqsave. For each entry, compare
-	 * the first strlen(entry) bytes of name. If name_length >=
-	 * entry_len and memcmp matches, return true.
+	 * Iterate under spin_lock_irqsave. For each entry, use
+	 * strnstr(name, entry, name_length) to check for a match.
 	 */
 	return false;
 }

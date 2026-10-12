@@ -29,7 +29,7 @@ struct rk_read_data {
 
 // TODO: Implement rk_remove_matching_lines().
 // Walk the buffer line by line (find '\n' with memchr).
-// For each line, call rk_target_substring_match(&content_targets, ...).
+// For each line, call rk_target_match(&content_targets, line, len).
 // If matched, skip the line (don't copy to output position).
 // If not matched, memmove it down if needed.
 // Return the new total length.

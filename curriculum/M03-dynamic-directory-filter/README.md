@@ -26,10 +26,10 @@ spin_unlock_irqrestore(&list->lock, flags);
 Using plain `spin_lock` would deadlock if the kretprobe fires while
 the same CPU already holds the lock from a proc write.
 
-## Prefix matching vs exact matching
+## Substring matching vs exact matching
 
-File hiding uses prefix matching: `hide file rkling` hides every
-directory entry whose name starts with "rkling". This lets one rule
+File hiding uses substring matching: `hide file rkling` hides every
+directory entry whose name contains "rkling". This lets one rule
 cover `rkling_persist`, `rkling_shell`, `rkling_agent`, etc.
 
 PID hiding uses exact numeric matching: `hide pid 1234` hides the

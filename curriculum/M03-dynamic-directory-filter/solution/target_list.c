@@ -50,8 +50,8 @@ int rk_target_remove(struct rk_target_list *list, unsigned int index,
 	return 0;
 }
 
-bool rk_target_prefix_match(struct rk_target_list *list, const char *name,
-			    size_t name_length)
+bool rk_target_match(struct rk_target_list *list, const char *name,
+		     size_t name_length)
 {
 	unsigned long flags;
 	unsigned int i;
@@ -59,10 +59,7 @@ bool rk_target_prefix_match(struct rk_target_list *list, const char *name,
 
 	spin_lock_irqsave(&list->lock, flags);
 	for (i = 0; i < list->count; i++) {
-		size_t entry_len = strlen(list->entries[i]);
-
-		if (name_length >= entry_len &&
-		    memcmp(name, list->entries[i], entry_len) == 0) {
+		if (strnstr(name, list->entries[i], name_length)) {
 			found = true;
 			break;
 		}

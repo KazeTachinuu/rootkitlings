@@ -39,8 +39,8 @@ static size_t rk_remove_matching_lines(unsigned char *buf, size_t length)
 		size_t line_len = nl ? (size_t)(nl - line + 1)
 				     : (length - read_pos);
 
-		if (!rk_target_substring_match(&content_targets,
-					       line, line_len)) {
+		if (!rk_target_match(&content_targets,
+				     (const char *)line, line_len)) {
 			if (write_pos != read_pos)
 				memmove(buf + write_pos, line, line_len);
 			write_pos += line_len;

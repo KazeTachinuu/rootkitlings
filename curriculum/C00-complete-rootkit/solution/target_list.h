@@ -25,11 +25,8 @@ int rk_target_add(struct rk_target_list *list, const char *value);
 int rk_target_remove(struct rk_target_list *list, unsigned int index,
 		     char *removed, size_t removed_size);
 
-bool rk_target_prefix_match(struct rk_target_list *list,
-			    const char *name, size_t name_length);
-
-bool rk_target_substring_match(struct rk_target_list *list,
-			       const unsigned char *line, size_t line_length);
+bool rk_target_match(struct rk_target_list *list, const char *name,
+		     size_t name_length);
 
 bool rk_target_number_match(struct rk_target_list *list, unsigned int value);
 

