@@ -81,11 +81,9 @@ L26      port hiding
    +---> C00  complete rootkit
 ```
 
-Lessons isolate mechanisms.
-Milestones turn them into a small tool or a visible system behavior.
-Use `list` for the route and `prereq` for direct dependencies.
+Use `list` for the full route and `prereq` for direct dependencies.
 Use `./rootkitlings run C00 --reference` then `./rootkitlings connect C00` to
-operate the completed project in its restricted guest network.
+operate the completed rootkit in its restricted guest network.
 
 ## Recovery
 
