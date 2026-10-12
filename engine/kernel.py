@@ -465,18 +465,43 @@ def download(manifest: dict[str, object], paths: dict[str, Path | str]) -> Path:
     temporary = archive.with_name(archive.name + ".part")
     if temporary.exists() or temporary.is_symlink():
         temporary.unlink()
-    UI.progress(f"Downloading {url}")
+    total_mib = expected_size / (1024 * 1024)
+    UI.progress(f"Downloading {total_mib:.0f} MiB from {url}")
+    is_tty = sys.stdout.isatty()
     try:
+        import time as _time
         with urllib.request.urlopen(url, timeout=30) as response, temporary.open("xb") as target:
             header = response.headers.get("Content-Length")
             if header is not None and (not header.isdigit() or int(header) != expected_size):
                 fail(f"kernel download size header is {header}, expected {expected_size}")
             received = 0
+            dl_start = _time.monotonic()
             while block := response.read(min(1024 * 1024, expected_size + 1 - received)):
                 received += len(block)
                 if received > expected_size:
                     fail("kernel download exceeded its pinned size")
                 target.write(block)
+                if is_tty:
+                    pct = received * 100 // expected_size
+                    mib = received / (1024 * 1024)
+                    elapsed = _time.monotonic() - dl_start
+                    speed = mib / elapsed if elapsed > 0.1 else 0
+                    eta = (total_mib - mib) / speed if speed > 0 else 0
+                    bar_w = 30
+                    filled = pct * bar_w // 100
+                    bar = "#" * filled + "-" * (bar_w - filled)
+                    sys.stdout.write(
+                        f"\r  [{bar}] {pct:3d}%  "
+                        f"{mib:.0f}/{total_mib:.0f} MiB  "
+                        f"{speed:.1f} MiB/s  "
+                        f"ETA {_format_eta(eta)}"
+                    )
+                    sys.stdout.flush()
+            if is_tty:
+                elapsed = _time.monotonic() - dl_start
+                sys.stdout.write("\r\x1b[2K")
+                sys.stdout.flush()
+                UI.line(f"({total_mib:.0f} MiB in {_format_eta(elapsed)})", style="dim")
             target.flush()
             os.fsync(target.fileno())
     except (KernelError, OSError, urllib.error.URLError) as error:
@@ -556,22 +581,107 @@ def run(
     *,
     cwd: Path | None = None,
     env: dict[str, str] | None = None,
+    live: bool = False,
+    expected_steps: int = 0,
 ) -> None:
     shown = shlex.join(command)
     UI.transcript(command)
-    result = subprocess.run(
-        command,
-        cwd=cwd,
-        env=env,
-        check=False,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+    if live and sys.stdout.isatty() and expected_steps > 0:
+        _run_with_progress(command, cwd=cwd, env=env, shown=shown,
+                           expected_steps=expected_steps)
+    elif live:
+        result = subprocess.run(
+            command, cwd=cwd, env=env, check=False, stderr=subprocess.STDOUT,
+        )
+        UI.process_result(result.returncode)
+        if result.returncode:
+            fail(f"command failed with status {result.returncode}: {shown}")
+    else:
+        result = subprocess.run(
+            command, cwd=cwd, env=env, check=False, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        )
+        UI.process_output(result.stdout or "", error=bool(result.returncode))
+        UI.process_result(result.returncode)
+        if result.returncode:
+            fail(f"command failed with status {result.returncode}: {shown}")
+
+
+def _count_config_objects(config_path: Path) -> int:
+    """Count =y and =m lines in a .config to estimate compilation units."""
+    try:
+        text = config_path.read_text()
+    except OSError:
+        return 0
+    count = 0
+    for line in text.splitlines():
+        if line.endswith(("=y", "=m")) and not line.startswith("#"):
+            count += 1
+    return count
+
+
+def _format_eta(seconds: float) -> str:
+    if seconds < 60:
+        return f"{int(seconds)}s"
+    minutes = int(seconds) // 60
+    secs = int(seconds) % 60
+    return f"{minutes}m{secs:02d}s"
+
+
+def _run_with_progress(
+    command: list[str],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    shown: str,
+    expected_steps: int,
+) -> None:
+    import time
+    proc = subprocess.Popen(
+        command, cwd=cwd, env=env, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
     )
-    UI.process_output(result.stdout or "", error=bool(result.returncode))
-    UI.process_result(result.returncode)
-    if result.returncode:
-        fail(f"command failed with status {result.returncode}: {shown}")
+    assert proc.stdout is not None
+    steps = 0
+    start = time.monotonic()
+    stream = sys.stdout
+    is_tty = stream.isatty()
+    bar_w = 30
+    last_file = ""
+    _STEP_PREFIXES = ("CC ", "CC\t", "LD ", "LD\t", "AR ", "AR\t", "OBJCOPY ")
+    for raw in proc.stdout:
+        line = raw.lstrip()
+        if line.startswith(_STEP_PREFIXES):
+            steps += 1
+            parts = line.split()
+            if len(parts) > 1:
+                last_file = parts[-1]
+        if not is_tty:
+            continue
+        elapsed = time.monotonic() - start
+        rate = steps / elapsed if elapsed > 0.5 else 0
+        if expected_steps > 0:
+            pct = min(steps * 100 // expected_steps, 99)
+            filled = pct * bar_w // 100
+            bar = "#" * filled + "-" * (bar_w - filled)
+            remaining = expected_steps - steps
+            eta_str = f"ETA ~{_format_eta(remaining / rate)}" if rate > 1 else ""
+            stream.write(f"\r\x1b[2K  [{bar}] {pct:3d}%  {steps}/~{expected_steps}  {eta_str}")
+        else:
+            stream.write(f"\r\x1b[2K  {steps} steps  {rate:.0f}/s  {_format_eta(elapsed)}")
+        stream.flush()
+    if is_tty:
+        stream.write("\r\x1b[2K")
+        stream.flush()
+    rc = proc.wait()
+    elapsed = time.monotonic() - start
+    if rc:
+        UI.line(f"(build failed after {steps} steps)", style="dim")
+    else:
+        UI.line(f"({steps} steps in {_format_eta(elapsed)})", style="dim")
+    UI.process_result(rc)
+    if rc:
+        fail(f"command failed with status {rc}: {shown}")
 
 
 def cgroup_memberships(text: str) -> dict[str, PurePosixPath]:
@@ -853,7 +963,20 @@ def build(manifest: dict[str, object], paths: dict[str, Path | str]) -> None:
             fail("Python tar extraction filters are required; use a patched Python 3.11 or newer")
         with tarfile.open(archive, mode="r:xz") as source:
             members = safe_members(source, str(manifest["version"]))
-            source.extractall(kit, members=members, filter="data")
+            total = len(members)
+            is_tty = sys.stdout.isatty()
+            for i, member in enumerate(members, 1):
+                source.extract(member, kit, filter="data")
+                if is_tty and i % 200 == 0:
+                    pct = i * 100 // total
+                    bar_w = 30
+                    filled = pct * bar_w // 100
+                    bar = "#" * filled + "-" * (bar_w - filled)
+                    sys.stdout.write(f"\r  [{bar}] {pct:3d}%  {i}/{total} files")
+                    sys.stdout.flush()
+            if is_tty:
+                sys.stdout.write("\r\x1b[2K")
+                sys.stdout.flush()
         extracted = kit / f"linux-{manifest['version']}"
         source_tree = kit / "source"
         extracted.rename(source_tree)
@@ -879,9 +1002,11 @@ def build(manifest: dict[str, object], paths: dict[str, Path | str]) -> None:
         run(make + ["olddefconfig"], env=environment)
         verify_config(build_tree / ".config", fragment, str(manifest["local_version"]))
         jobs = parallel_jobs()
-        UI.progress(f"Building the course kernel with {jobs} parallel job(s)")
-        # The modules pass publishes Module.symvers for external-module modpost.
-        run(make + [f"-j{jobs}", "bzImage", "modules"], env=environment)
+        make_build = ["make", "-C", str(source_tree), f"O={build_tree}"]
+        estimated = _count_config_objects(build_tree / ".config") * 2
+        UI.progress(f"Building the course kernel (~{estimated} steps, {jobs} parallel jobs)")
+        run(make_build + [f"-j{jobs}", "bzImage", "modules"],
+            env=environment, live=True, expected_steps=estimated)
         release = subprocess.run(
             make + ["-s", "kernelrelease"],
             env=environment,
