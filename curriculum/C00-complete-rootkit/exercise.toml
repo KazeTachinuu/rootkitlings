@@ -45,7 +45,6 @@ files = [
   "network/protocol.c",
   "security/control.c",
   "target_list.c",
-  "target_list.h",
 ]
 editable = ["core/main.c"]
 build = "."

@@ -70,15 +70,7 @@ static bool persist_requested;
 
 // TODO: rk_escalate_pid(unsigned int pid)
 
-// TODO: rk_parse_local_command(path) dispatch table:
-//   "e"           -> rk_escalate_self()
-//   "h.m" / "u.m" -> module hide/unhide
-//   "persist"     -> set persist_requested
-//   "h.f.VALUE"   -> rk_target_add(&file_targets, VALUE)
-//   "h.i.VALUE"   -> rk_target_add(&pid_targets, VALUE)
-//   "h.c.VALUE"   -> rk_target_add(&content_targets, VALUE)
-//   "h.p.VALUE"   -> rk_target_add(&port_targets, VALUE)
-//   "u.{f,i,c,p}.ARG" -> rk_target_remove_either
+// TODO: rk_parse_local_command(path) -- parse and dispatch local commands
 
 // TODO: mkdir kretprobe (local command interception)
 
