@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import mimetypes
 import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
+
+from aiohttp import web
 
 if TYPE_CHECKING:
     from engine.server import Target, TargetManager
@@ -16,8 +17,9 @@ if TYPE_CHECKING:
 HTTP_PORT = 8080
 
 _manager: TargetManager | None = None
-_ws_clients: set = set()
+_ws_clients: set[web.WebSocketResponse] = set()
 _event_log: list[dict] = []
+_loop: asyncio.AbstractEventLoop | None = None
 
 
 def _enum_indexed(t: Target, cmd: str, prefix: str,
@@ -42,7 +44,6 @@ def _enum_indexed(t: Target, cmd: str, prefix: str,
 def _parse_entry(reply: str):
     parts = reply.split(None, 2)
     return parts[2] if reply.startswith("ENTRY ") and len(parts) > 2 else None
-
 
 
 def _target_to_dict(t: Target) -> dict:
@@ -97,38 +98,38 @@ def _broadcast(data: str) -> None:
     """Send data to all connected WS clients."""
     for ws in list(_ws_clients):
         try:
-            asyncio.run_coroutine_threadsafe(ws.send(data), _loop)
+            asyncio.run_coroutine_threadsafe(ws.send_str(data), _loop)
         except Exception:
             _ws_clients.discard(ws)
 
 
-_loop: asyncio.AbstractEventLoop | None = None
-
-
-async def _ws_handler(ws):
+async def _ws_endpoint(request: web.Request) -> web.WebSocketResponse:
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
     _ws_clients.add(ws)
     try:
-        await ws.send(json.dumps(_snapshot()))
-
-        async for raw in ws:
+        await ws.send_str(json.dumps(_snapshot()))
+        async for msg in ws:
+            if msg.type != web.WSMsgType.TEXT:
+                break
             try:
-                msg = json.loads(raw)
+                data = json.loads(msg.data)
             except json.JSONDecodeError:
                 continue
 
-            cmd_type = msg.get("type", "")
+            cmd_type = data.get("type", "")
 
             if cmd_type == "refresh":
-                await ws.send(json.dumps(_snapshot()))
+                await ws.send_str(json.dumps(_snapshot()))
 
             elif cmd_type == "command":
-                target_id = msg.get("target")
-                command = msg.get("command", "").strip()
+                target_id = data.get("target")
+                command = data.get("command", "").strip()
                 if not target_id or not command:
                     continue
                 target = _manager.get(target_id) if _manager else None
                 if not target or not target.online:
-                    await ws.send(json.dumps({
+                    await ws.send_str(json.dumps({
                         "type": "result",
                         "target": target_id,
                         "command": command,
@@ -138,7 +139,7 @@ async def _ws_handler(ws):
                     continue
                 try:
                     reply = target.exchange(command)
-                    await ws.send(json.dumps({
+                    await ws.send_str(json.dumps({
                         "type": "result",
                         "target": target_id,
                         "command": command,
@@ -147,7 +148,7 @@ async def _ws_handler(ws):
                     }))
                     add_event(f"{target.id}: {command}", "cmd")
                 except Exception as e:
-                    await ws.send(json.dumps({
+                    await ws.send_str(json.dumps({
                         "type": "result",
                         "target": target_id,
                         "command": command,
@@ -156,97 +157,27 @@ async def _ws_handler(ws):
                     }))
     finally:
         _ws_clients.discard(ws)
+    return ws
 
 
-def _is_ws_upgrade(request: bytes) -> str | None:
-    """Return the Sec-WebSocket-Key if this is a WS upgrade request."""
-    for line in request.decode(errors="replace").splitlines():
-        if line.lower().startswith("sec-websocket-key:"):
-            return line.split(":", 1)[1].strip()
-    return None
-
-
-async def _http_handler(reader: asyncio.StreamReader,
-                        writer: asyncio.StreamWriter,
-                        root: Path, index: str) -> None:
-    """Serve static files and WebSocket upgrades on the same port."""
-    from engine.ws import WebSocket, _accept_key
-
-    try:
-        request = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5.0)
-    except (asyncio.TimeoutError, asyncio.IncompleteReadError):
-        writer.close()
-        return
-
-    ws_key = _is_ws_upgrade(request)
-    if ws_key is not None:
-        response = (
-            "HTTP/1.1 101 Switching Protocols\r\n"
-            "Upgrade: websocket\r\n"
-            "Connection: Upgrade\r\n"
-            f"Sec-WebSocket-Accept: {_accept_key(ws_key)}\r\n"
-            "\r\n"
-        )
-        writer.write(response.encode())
-        await writer.drain()
-        ws = WebSocket(reader, writer)
-        try:
-            await _ws_handler(ws)
-        finally:
-            ws.close()
-        return
-
-    line = request.split(b"\r\n", 1)[0].decode(errors="replace")
-    parts = line.split()
-    if len(parts) < 2 or parts[0] != "GET":
-        writer.write(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")
-        await writer.drain()
-        writer.close()
-        return
-
-    path = parts[1].split("?", 1)[0].split("#", 1)[0]
-    if path == "/" or path == "/index.html":
-        path = f"/{index}"
-
-    resolved = (root / path.lstrip("/")).resolve()
-    if not resolved.is_relative_to(root) or not resolved.is_file():
-        writer.write(b"HTTP/1.1 404 Not Found\r\n\r\n")
-        await writer.drain()
-        writer.close()
-        return
-
-    body = resolved.read_bytes()
-    content_type = mimetypes.guess_type(resolved.name)[0] or "application/octet-stream"
-    header = (
-        f"HTTP/1.1 200 OK\r\n"
-        f"Content-Type: {content_type}\r\n"
-        f"Content-Length: {len(body)}\r\n"
-        f"Connection: close\r\n"
-        f"\r\n"
-    )
-    writer.write(header.encode() + body)
-    await writer.drain()
-    writer.close()
-
-
-def _run_server(http_port: int, html_path: Path) -> None:
-    """Single event loop for HTTP + WS on one port."""
+def _run_server(http_port: int, static_root: Path) -> None:
+    """Single event loop: aiohttp serves static files + WS on one port."""
     global _loop
-
-    root = html_path.parent.resolve()
-    index = html_path.name
 
     async def run():
         global _loop
         _loop = asyncio.get_running_loop()
 
-        server = await asyncio.start_server(
-            lambda r, w: _http_handler(r, w, root, index),
-            "0.0.0.0", http_port,
-        )
+        app = web.Application()
+        app.router.add_get("/ws", _ws_endpoint)
+        app.router.add_static("/assets", static_root / "assets")
+        app.router.add_static("/", static_root, show_index=False)
 
-        async with server:
-            await server.serve_forever()
+        runner = web.AppRunner(app, access_log=None)
+        await runner.setup()
+        site = web.TCPSite(runner, "0.0.0.0", http_port)
+        await site.start()
+        await asyncio.Event().wait()
 
     asyncio.run(run())
 
@@ -263,9 +194,11 @@ def start_dashboard(
     global _manager
     _manager = manager
 
+    static_root = html_path.parent.resolve()
+
     threading.Thread(
         target=_run_server,
-        args=(http_port, html_path),
+        args=(http_port, static_root),
         daemon=True, name="dashboard",
     ).start()
 

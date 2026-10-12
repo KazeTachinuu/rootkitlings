@@ -14,7 +14,7 @@ export function useWs() {
     const host = location.hostname || 'localhost'
     const port = location.port === '5173' ? 8080 : (location.port || '8080')
     try {
-      const ws = new WebSocket(`ws://${host}:${port}`)
+      const ws = new WebSocket(`ws://${host}:${port}/ws`)
       ws.onopen = () => {
         wsRef.current = ws
         setConnected(true)
