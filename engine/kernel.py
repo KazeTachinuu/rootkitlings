@@ -583,9 +583,11 @@ def run(
     env: dict[str, str] | None = None,
     live: bool = False,
     expected_steps: int = 0,
+    quiet: bool = False,
 ) -> None:
     shown = shlex.join(command)
-    UI.transcript(command)
+    if not quiet:
+        UI.transcript(command)
     if live and sys.stdout.isatty() and expected_steps > 0:
         _run_with_progress(command, cwd=cwd, env=env, shown=shown,
                            expected_steps=expected_steps)
@@ -601,8 +603,12 @@ def run(
             command, cwd=cwd, env=env, check=False, text=True,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         )
-        UI.process_output(result.stdout or "", error=bool(result.returncode))
-        UI.process_result(result.returncode)
+        if not quiet:
+            UI.process_output(result.stdout or "", error=bool(result.returncode))
+            UI.process_result(result.returncode)
+        elif result.returncode:
+            UI.process_output(result.stdout or "", error=True)
+            UI.process_result(result.returncode)
         if result.returncode:
             fail(f"command failed with status {result.returncode}: {shown}")
 
@@ -984,7 +990,8 @@ def build(manifest: dict[str, object], paths: dict[str, Path | str]) -> None:
         build_tree.mkdir()
         environment = build_environment(manifest, build_tree / ".home")
         make = ["make", "-s", "-C", str(source_tree), f"O={build_tree}"]
-        run(make + [str(manifest["base_config"])], env=environment)
+        UI.progress("Configuring kernel")
+        run(make + [str(manifest["base_config"])], env=environment, quiet=True)
         fragment = ROOT / str(manifest["config"])
         merge = source_tree / "scripts/kconfig/merge_config.sh"
         run(
@@ -992,14 +999,16 @@ def build(manifest: dict[str, object], paths: dict[str, Path | str]) -> None:
              str(build_tree / ".config"), str(fragment)],
             cwd=source_tree,
             env=environment,
+            quiet=True,
         )
         config_tool = source_tree / "scripts/config"
         run(
             [str(config_tool), "--file", str(build_tree / ".config"),
              "--set-str", "LOCALVERSION", str(manifest["local_version"])],
             env=environment,
+            quiet=True,
         )
-        run(make + ["olddefconfig"], env=environment)
+        run(make + ["olddefconfig"], env=environment, quiet=True)
         verify_config(build_tree / ".config", fragment, str(manifest["local_version"]))
         jobs = parallel_jobs()
         make_build = ["make", "-C", str(source_tree), f"O={build_tree}"]
