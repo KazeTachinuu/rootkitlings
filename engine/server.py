@@ -354,7 +354,12 @@ def _handle_session(
     success: Callable[[str], None],
     warning: Callable[[str], None],
 ) -> None:
-    """Accept a connection from a newly discovered target session."""
+    """Accept connections from a target forever. Re-accept after each drop.
+
+    Each accepted connection must authenticate (HELLO handshake) or get
+    dropped. Authenticated connections become targets in the manager.
+    When a connection dies the thread loops back to accept.
+    """
     try:
         session = read_target_session(root, exercise)
         operator = HostOperator.from_session(session)
@@ -362,56 +367,91 @@ def _handle_session(
         warning(f"skip     {exercise}: {error}\n")
         return
 
+    mark_operator_ready(session)
+    sys.stdout.write(f"\r\033[K")
+    output(
+        f"  session  {exercise}"
+        f"  control=:{operator.control_port}"
+        f"  shell=:{operator.shell_port}\n"
+    )
+    sys.stdout.write(ServerConsole.prompt)
+    sys.stdout.flush()
+
+    process = TargetProcess(session)
+    target_id = None
+
     try:
-        mark_operator_ready(session)
-        sys.stdout.write(f"\r\033[K")
-        output(
-            f"  session  {exercise}"
-            f"  control=:{operator.control_port}"
-            f"  shell=:{operator.shell_port}\n"
-        )
-        sys.stdout.write(ServerConsole.prompt)
-        sys.stdout.flush()
+        while process.poll() is None:
+            # Wait for the next inbound connection (no timeout)
+            try:
+                peer = accept_while_running(
+                    operator.control_listener, process,
+                )
+                peer.settimeout(30)
+            except OperatorError:
+                break
 
-        peer = accept_while_running(
-            operator.control_listener, TargetProcess(session), 120,
-        )
-        peer.settimeout(30)
+            # Authenticate: HELLO handshake or drop
+            try:
+                secure = SecureControl(
+                    operator.key,
+                    lambda key: OpenSslAead(key, helper, output),
+                )
+                session_id = secure.accept_hello(receive_frame(peer))
+            except Exception:
+                peer.close()
+                continue
 
-        secure = SecureControl(
-            operator.key,
-            lambda key: OpenSslAead(key, helper, output),
-        )
-        session_id = secure.accept_hello(receive_frame(peer))
+            target = manager.add(
+                exercise, session, operator, peer, secure, process,
+            )
+            target_id = target.id
 
-        target = manager.add(
-            exercise, session, operator, peer, secure, TargetProcess(session),
-        )
+            try:
+                reply = target.exchange("INFO")
+                if reply.startswith("INFO "):
+                    parts = reply[5:].split(None, 2)
+                    if len(parts) >= 3:
+                        target.hostname, target.kernel, target.arch = parts
+            except Exception:
+                pass
 
-        try:
-            reply = target.exchange("INFO")
-            if reply.startswith("INFO "):
-                parts = reply[5:].split(None, 2)
-                if len(parts) >= 3:
-                    target.hostname, target.kernel, target.arch = parts
-        except Exception:
-            pass
+            info = f" [{target.hostname}]" if target.hostname else ""
+            sys.stdout.write(f"\r\033[K")
+            success(
+                f"connect  {target.id}  {exercise}{info}"
+                f"  session={session_id:016x}"
+            )
+            add_event(
+                f"connect {target.id} {exercise}{info}", "connect",
+            )
+            sys.stdout.write(ServerConsole.prompt)
+            sys.stdout.flush()
 
-        info = f" [{target.hostname}]" if target.hostname else ""
-        sys.stdout.write(f"\r\033[K")
-        success(
-            f"connect  {target.id}  {exercise}{info}"
-            f"  session={session_id:016x}"
-        )
-        add_event(f"connect {target.id} {exercise}{info}", "connect")
-        sys.stdout.write(ServerConsole.prompt)
-        sys.stdout.flush()
-    except OperatorError as error:
+            # Serve until the agent disconnects
+            while target.online and process.poll() is None:
+                try:
+                    target.exchange("PING")
+                except Exception:
+                    break
+                time.sleep(2)
+
+            target.online = False
+            if process.poll() is not None:
+                break
+
+            sys.stdout.write(f"\r\033[K")
+            warning(
+                f"lost     {target_id} ({exercise}):"
+                " agent disconnected, waiting for reconnect\n"
+            )
+            add_event(
+                f"offline {target_id} ({exercise})", "disconnect",
+            )
+            sys.stdout.write(ServerConsole.prompt)
+            sys.stdout.flush()
+    finally:
         operator.close()
-        warning(f"failed   {exercise}: {error}\n")
-    except Exception as error:
-        operator.close()
-        warning(f"error    {exercise}: {error}\n")
 
 
 def server_running(root: Path) -> bool:

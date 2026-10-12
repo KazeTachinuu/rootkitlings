@@ -893,22 +893,23 @@ def build_crypto_helper(
 def accept_while_running(
     listener: socket.socket,
     process,
-    timeout: float,
+    timeout: float = 0,
 ) -> socket.socket:
-    deadline = time.monotonic() + timeout
+    deadline = (time.monotonic() + timeout) if timeout > 0 else 0
     listener.settimeout(0.25)
-    while time.monotonic() < deadline:
+    while True:
         if process.poll() is not None:
             status = process.returncode
             raise OperatorError(
                 f"target stopped before connecting ({status})"
             )
+        if deadline and time.monotonic() > deadline:
+            raise OperatorError("timed out waiting for the target callback")
         try:
             peer, _ = listener.accept()
             return peer
         except TimeoutError:
             continue
-    raise OperatorError("timed out waiting for the target callback")
 
 
 def parse_shell_ticket(reply: str) -> tuple[int, int]:
