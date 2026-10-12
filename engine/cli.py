@@ -21,6 +21,7 @@ from engine.control_console import (
     run_control_console,
     wait_for_operator,
 )
+from engine.server import run_server, server_running
 from engine.state import StateStore, StateError
 from engine.verification import VerificationError, build_verification_cases
 from engine.workspace import (
@@ -619,11 +620,12 @@ def boot_exercise(x, module):
         except OperatorError as error:
             raise CLIError(str(error)) from error
         try:
-            UI.section('Open another terminal and run')
-            UI.command(f'./rklings connect {label(x)}')
-            UI.progress(
-                'Waiting for operator (QEMU needs the listener before boot)'
-            )
+            if server_running(ROOT):
+                UI.progress('Server detected, waiting for port binding')
+            else:
+                UI.section('Start the operator server first')
+                UI.command('./rklings server')
+                UI.progress('Waiting for operator')
             wait_for_operator(target)
             UI.success('Operator ready')
             UI.section('Target console')
@@ -916,6 +918,22 @@ def cmd_run(a, gdb=False):
     raise SystemExit(run(command, visible=True).returncode)
 
 
+def cmd_server(a):
+    none(a, 'server')
+    try:
+        status = run_server(
+            ROOT,
+            transcript=UI.transcript,
+            output=UI.raw,
+            success=UI.success,
+            warning=UI.warning,
+        )
+    except OperatorError as error:
+        raise CLIError(str(error)) from error
+    if status:
+        die(f'Server exited with status {status}')
+
+
 def cmd_connect(a):
     with STORE.read_locked() as state:
         item = resolve(one(a, 'connect'), state)
@@ -1146,6 +1164,7 @@ def usage():
             ('check [EXERCISE]', 'Build and verify in a disposable guest'),
             ('run [EXERCISE]', 'Run your module in a disposable guest'),
             ('run ID --reference', 'Run the completed reference'),
+            ('server', 'Start the multi-target operator server'),
             ('connect [EXERCISE]', 'Connect to its control console'),
             ('gdb [EXERCISE]', 'Open a guest waiting for GDB'),
         )),
@@ -1183,6 +1202,7 @@ CMDS = {
     'hint': cmd_hint,
     'solution': cmd_solution,
     'run': cmd_run,
+    'server': cmd_server,
     'connect': cmd_connect,
     'gdb': lambda a: cmd_run(a, True),
     'status': cmd_status,
@@ -1216,7 +1236,7 @@ def main(a):
         CMDS[command](arguments)
         return 0
     initialize_runtime()
-    if command in {'build', 'check', 'run', 'gdb', 'connect'}:
+    if command in {'build', 'check', 'run', 'gdb', 'connect', 'server'}:
         require_setup()
     CMDS[command](arguments)
     return 0

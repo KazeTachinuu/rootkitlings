@@ -668,6 +668,18 @@ static void expect_reply(int peer, struct channel *channel,
 	}
 }
 
+static void expect_prefix(int peer, struct channel *channel,
+			   const char *request, const char *prefix)
+{
+	char reply[FRAME_MAX];
+
+	command(peer, channel, request, reply);
+	if (strncmp(reply, prefix, strlen(prefix))) {
+		errno = EPROTO;
+		fail("reply prefix");
+	}
+}
+
 static void parse_ticket(const char *reply, uint32_t *request_id,
 			 uint64_t *cookie)
 {
@@ -799,6 +811,38 @@ static int crypto_selftest(void)
 	return 0;
 }
 
+/* Send a count-then-index enumeration command and verify every entry. */
+static void verify_enumeration(int peer, struct channel *channel,
+			       const char *cmd, const char *entry_prefix)
+{
+	char reply[FRAME_MAX];
+	char request[FRAME_MAX];
+	size_t cmd_length = strlen(cmd);
+	unsigned int count, index;
+
+	/* bare command returns the count */
+	command(peer, channel, cmd, reply);
+	if (strncmp(reply, cmd, cmd_length) || reply[cmd_length] != ' ') {
+		errno = EPROTO;
+		fail("enumeration count prefix");
+	}
+	count = (unsigned int)strtoul(reply + cmd_length + 1, NULL, 10);
+
+	/* fetch each entry and check the entry prefix */
+	for (index = 0; index < count && index < 200; index++) {
+		(void)snprintf(request, sizeof(request), "%s %u", cmd, index);
+		command(peer, channel, request, reply);
+		if (strncmp(reply, entry_prefix, strlen(entry_prefix))) {
+			errno = EPROTO;
+			fail("enumeration entry prefix");
+		}
+	}
+
+	/* out of bounds returns an error */
+	(void)snprintf(request, sizeof(request), "%s %u", cmd, count);
+	expect_reply(peer, channel, request, "ERR index");
+}
+
 static void quit_session(int peer, struct channel *channel)
 {
 	uint8_t envelope[FRAME_MAX];
@@ -844,8 +888,10 @@ static int serve(const char *directory, const char *port_text,
 		peer = accept_peer(server);
 		previous = receive_hello(peer, previous, &channel);
 		expect_reply(peer, &channel, "PING", "PONG");
-		expect_reply(peer, &channel, "INFO", "INFO rklings");
+		expect_prefix(peer, &channel, "INFO", "INFO ");
 		expect_reply(peer, &channel, "MARK alpha_7", "MARKED alpha_7");
+		verify_enumeration(peer, &channel, "PS", "PROC ");
+		verify_enumeration(peer, &channel, "PORTS", "PORT ");
 		expect_reply(peer, &channel, "UNKNOWN", "ERR");
 		replay_length = seal_envelope(
 			REQUEST, channel.session, channel.request_sequence - 1,
@@ -971,7 +1017,7 @@ static int serve(const char *directory, const char *port_text,
 		marker(directory, "fresh_sessions");
 		marker(directory, "blocked_shell");
 		expect_reply(peer, &channel, "UNHIDE MODULE", "OK");
-		marker(directory, "uncloaked");
+		marker(directory, "unhidden");
 		marker(directory, "blocked_receive");
 		expect_eof(peer);
 		drain_shell_eof(shell_peer);

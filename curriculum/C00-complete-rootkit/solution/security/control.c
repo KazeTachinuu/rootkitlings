@@ -1,19 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
-#ifdef __KERNEL__
 #include <linux/string.h>
-#else
-#include <string.h>
-#endif
 
 #include "secure_control.h"
 
 void rk_secure_clear(void *buffer, size_t length)
 {
-#ifdef __KERNEL__
 	memzero_explicit(buffer, length);
-#else
-	memset(buffer, 0, length);
-#endif
 }
 
 static void rk_write_be64(u8 *bytes, u64 value)

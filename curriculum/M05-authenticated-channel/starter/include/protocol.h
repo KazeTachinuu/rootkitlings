@@ -2,13 +2,7 @@
 #ifndef RKLINGS_PROTOCOL_H
 #define RKLINGS_PROTOCOL_H
 
-#ifdef __KERNEL__
 #include <linux/types.h>
-#else
-#include <stddef.h>
-#include <stdint.h>
-typedef uint16_t u16;
-#endif
 
 enum rk_command_kind {
 	RK_COMMAND_INVALID,

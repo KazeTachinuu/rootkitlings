@@ -2,13 +2,7 @@
 #ifndef RKLINGS_PROTOCOL_H
 #define RKLINGS_PROTOCOL_H
 
-#ifdef __KERNEL__
 #include <linux/types.h>
-#else
-#include <stddef.h>
-#include <stdint.h>
-typedef uint16_t u16;
-#endif
 
 #define RK_HIDE_VALUE_MAX 64
 
@@ -37,10 +31,6 @@ enum rk_command_kind {
 	RK_COMMAND_HIDE_MODULE,
 	RK_COMMAND_UNHIDE_MODULE,
 	RK_COMMAND_ESCALATE,
-	RK_COMMAND_MARK,
-	RK_COMMAND_ENABLE,
-	RK_COMMAND_DISABLE,
-	RK_COMMAND_RUN,
 };
 
 struct rk_command {
@@ -50,8 +40,6 @@ struct rk_command {
 	size_t hide_value_length;
 	unsigned int unhide_index;
 	unsigned int escalate_pid;
-	char mark_value[RK_HIDE_VALUE_MAX];
-	size_t mark_value_length;
 	unsigned int list_index;
 	int list_has_index;
 };

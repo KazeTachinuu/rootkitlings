@@ -25,6 +25,10 @@ int rk_target_add(struct rk_target_list *list, const char *value);
 int rk_target_remove(struct rk_target_list *list, unsigned int index,
 		     char *removed, size_t removed_size);
 
+int rk_target_remove_by_value(struct rk_target_list *list, const char *value);
+
+int rk_target_remove_either(struct rk_target_list *list, const char *arg);
+
 bool rk_target_match(struct rk_target_list *list, const char *name,
 		     size_t name_length);
 

@@ -98,6 +98,10 @@ label = "Cryptography"
 id = "detection"
 label = "Detection"
 
+[[tradecraft_tags]]
+id = "enumeration"
+label = "Enumeration"
+
 [[tools]]
 id = "agent-fixture"
 binary = "vm/tools/agent_fixture"
@@ -297,6 +301,10 @@ id = "list-del-module-hiding"
 label = "list_del module hiding"
 
 [[concepts]]
+id = "tcp-hashinfo"
+label = "TCP hash-table enumeration"
+
+[[concepts]]
 id = "tcp-seq-show-suppression"
 label = "tcp4_seq_show suppression"
 
@@ -421,6 +429,10 @@ id = "false-eof-avoidance"
 label = "False-EOF avoidance"
 
 [[concepts]]
+id = "for-each-process"
+label = "for_each_process iteration"
+
+[[concepts]]
 id = "fixed-command-grammar"
 label = "Fixed command grammar"
 
@@ -463,6 +475,14 @@ label = "Kernel memory allocation"
 [[concepts]]
 id = "kernel-crypto-api"
 label = "Kernel Crypto API"
+
+[[concepts]]
+id = "kernel-port-enumeration"
+label = "Kernel port enumeration"
+
+[[concepts]]
+id = "kernel-process-enumeration"
+label = "Kernel process enumeration"
 
 [[concepts]]
 id = "kernel-socket-context-constraints"

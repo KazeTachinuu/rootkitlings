@@ -1,0 +1,68 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. /vm/checks/lib.sh
+
+begin "Kernel-space enumeration"
+
+ifconfig lo 127.0.0.1 up
+
+load rklings.ko
+
+test_port=8888
+
+nc -l -p "$test_port" 0.0.0.0 &
+nc_pid=$!
+sleep 1
+
+# Verify the port is visible before hiding.
+port_hex=$(printf '%04X' "$test_port")
+if ! grep -q "$port_hex" /proc/net/tcp; then
+	_fail "port $test_port not found in /proc/net/tcp before test"
+	kill "$nc_pid" 2>/dev/null
+	unload rklings
+	summary
+fi
+
+# Hide the port.
+echo "hide port $test_port" > /proc/rklings
+
+# Confirm it disappeared from netstat (userspace view).
+if netstat -tlnp 2>/dev/null | grep -q ":${test_port} "; then
+	_fail "port $test_port still visible in netstat after hiding"
+else
+	_ok "port $test_port hidden from netstat"
+fi
+
+# The proc output should still show the port (kernel-space view).
+if cat /proc/rklings | grep -q "listening_ports:"; then
+	_ok "proc output contains listening_ports section"
+else
+	_fail "proc output missing listening_ports section"
+	kill "$nc_pid" 2>/dev/null
+	unload rklings
+	summary
+fi
+
+if cat /proc/rklings | grep -q "  $test_port "; then
+	_ok "hidden port $test_port visible in kernel enumeration"
+else
+	_fail "hidden port $test_port not found in kernel enumeration"
+fi
+
+# Process enumeration: the nc listener should appear.
+if cat /proc/rklings | grep -q "processes:"; then
+	_ok "proc output contains processes section"
+else
+	_fail "proc output missing processes section"
+fi
+
+if cat /proc/rklings | grep -q " nc$"; then
+	_ok "nc process visible in kernel process list"
+else
+	_fail "nc process not found in kernel process list"
+fi
+
+kill "$nc_pid" 2>/dev/null
+unload rklings
+
+summary

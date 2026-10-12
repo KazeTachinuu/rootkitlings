@@ -1,0 +1,41 @@
+- generic [ref=f7e2]:
+  - complementary [ref=f7e3]:
+    - generic [ref=f7e4]: Rootkitlings
+    - navigation [ref=f7e8]:
+      - link "Dashboard" [ref=f7e9] [cursor=pointer]:
+        - /url: "#/"
+      - link "Events" [ref=f7e15] [cursor=pointer]:
+        - /url: "#/events"
+    - generic [ref=f7e19]: Targets
+  - generic [ref=f7e21]:
+    - banner [ref=f7e22]:
+      - button "Toggle sidebar" [ref=f7e23] [cursor=pointer]
+      - generic [ref=f7e25]: disconnected
+      - button "Toggle theme" [ref=f7e28] [cursor=pointer]
+    - main [ref=f7e31]:
+      - generic [ref=f7e32]:
+        - generic [ref=f7e34]:
+          - generic [ref=f7e35]: Total Targets
+          - generic [ref=f7e36]: "0"
+        - generic [ref=f7e42]:
+          - generic [ref=f7e43]: Online
+          - generic [ref=f7e44]: "0"
+        - generic [ref=f7e50]:
+          - generic [ref=f7e51]: Cloaked
+          - generic [ref=f7e52]: "0"
+        - generic [ref=f7e58]:
+          - generic [ref=f7e59]: Hidden Items
+          - generic [ref=f7e60]: "0"
+      - generic [ref=f7e64]:
+        - generic [ref=f7e65]:
+          - generic [ref=f7e66]: Connected Targets
+          - generic [ref=f7e67]: 0 of 0 targets
+        - generic [ref=f7e68]:
+          - textbox "Search targets..." [ref=f7e70]
+          - generic [ref=f7e71]:
+            - button "Grid" [ref=f7e72] [cursor=pointer]
+            - button "Table" [ref=f7e78] [cursor=pointer]
+          - button "Refresh" [ref=f7e80] [cursor=pointer]
+      - generic [ref=f7e84]:
+        - generic [ref=f7e91]: No targets connected
+        - generic [ref=f7e92]: ./rklings run EXERCISE --reference

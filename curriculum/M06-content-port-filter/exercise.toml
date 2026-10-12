@@ -1,12 +1,12 @@
 schema_version = 2
 id = "content-port-filter"
-title = "Content and port hiding"
+title = "Content hiding, port hiding, and kernel enumeration"
 stage = "advanced-hiding"
 kind = "milestone"
-tradecraft = ["concealment", "instrumentation"]
+tradecraft = ["concealment", "instrumentation", "enumeration"]
 difficulty = "advanced"
 prerequisites = ["tcp-port-filter", "bounded-line-filter", "dynamic-directory-filter"]
-teaches = ["dynamic-content-hiding", "dynamic-port-hiding"]
+teaches = ["dynamic-content-hiding", "dynamic-port-hiding", "kernel-process-enumeration", "kernel-port-enumeration", "for-each-process", "tcp-hashinfo"]
 requires = ["kretprobes", "tcp-seq-show-suppression", "dynamic-target-list"]
 
 [workspace]
@@ -38,3 +38,9 @@ id = "port-hiding"
 label = "Ports hidden from /proc/net/tcp"
 expect_build = "pass"
 check = "curriculum/M06-content-port-filter/checks/port-check"
+
+[[verification.cases]]
+id = "enumeration"
+label = "Kernel-space process and port enumeration"
+expect_build = "pass"
+check = "curriculum/M06-content-port-filter/checks/enumerate-check"

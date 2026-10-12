@@ -1,0 +1,8 @@
+[  717386ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://getrev.sh/favicon.ico:0
+[  740377ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://getrev.sh/test.com/44.4.4:0
+[  740408ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://getrev.sh/favicon.ico:0
+[  747637ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://getrev.sh/test.com/4.4.4.4:0
+[  747679ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://getrev.sh/favicon.ico:0
+[  751538ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://getrev.sh/test.com:4.4.4.4:0
+[  751570ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://getrev.sh/favicon.ico:0
+[  757024ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://getrev.sh/favicon.ico:0

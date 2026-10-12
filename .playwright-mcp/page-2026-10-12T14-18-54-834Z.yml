@@ -1,0 +1,111 @@
+- generic [ref=f30e3]:
+  - complementary [ref=f30e4]:
+    - generic [ref=f30e5]: Rootkitlings
+    - navigation [ref=f30e15]:
+      - button "Dashboard" [ref=f30e16]
+      - button "Events" [ref=f30e22]
+    - generic [ref=f30e25]:
+      - generic [ref=f30e26]: Targets
+      - generic [ref=f30e27]:
+        - button "target-vm C00" [ref=f30e28]:
+          - generic [ref=f30e30]: target-vm
+          - generic [ref=f30e31]: C00
+        - button "dev-box M03" [ref=f30e32]:
+          - generic [ref=f30e34]: dev-box
+          - generic [ref=f30e35]: M03
+        - button "web-srv M06" [ref=f30e36]:
+          - generic [ref=f30e38]: web-srv
+          - generic [ref=f30e39]: M06
+    - generic [ref=f30e40]: Disconnected
+  - generic [ref=f30e49]:
+    - banner [ref=f30e50]:
+      - generic [ref=f30e51]:
+        - button [ref=f30e52] [cursor=pointer]
+        - generic [ref=f30e54]: Operator Console
+      - generic [ref=f30e55]:
+        - generic [ref=f30e56]: 2/3 online
+        - generic [ref=f30e57]: OFFLINE
+        - button [ref=f30e59] [cursor=pointer]
+    - main [ref=f30e62]:
+      - generic [ref=f30e204]:
+        - generic [ref=f30e205]:
+          - generic [ref=f30e206]:
+            - button "Back" [ref=f30e207] [cursor=pointer]
+            - generic [ref=f30e210]:
+              - heading "target-vm" [level=1] [ref=f30e211]
+              - generic [ref=f30e212]:
+                - generic [ref=f30e213]: target-1
+                - generic [ref=f30e214]: C00
+                - generic [ref=f30e215]: 6.1.0 x86_64
+                - generic [ref=f30e216]: Online
+          - generic [ref=f30e218]:
+            - button "Uncloak" [ref=f30e219] [cursor=pointer]
+            - button "Ping" [ref=f30e223] [cursor=pointer]
+            - button "Status" [ref=f30e229] [cursor=pointer]
+        - generic [ref=f30e232]:
+          - button "Hidden Items 5" [ref=f30e233]:
+            - text: Hidden Items
+            - generic [ref=f30e234]: "5"
+          - button "Processes 6" [active] [ref=f30e235]:
+            - text: Processes
+            - generic [ref=f30e236]: "6"
+          - button "Ports 3" [ref=f30e237]:
+            - text: Ports
+            - generic [ref=f30e238]: "3"
+          - button "Command Log 0" [ref=f30e239]:
+            - text: Command Log
+            - generic [ref=f30e240]: "0"
+          - button "Events 5" [ref=f30e241]:
+            - text: Events
+            - generic [ref=f30e242]: "5"
+        - generic [ref=f30e244]:
+          - generic [ref=f30e245]:
+            - generic [ref=f30e246]:
+              - generic [ref=f30e247]: Processes
+              - generic [ref=f30e248]: "6"
+            - textbox "Filter by PID or command..." [ref=f30e253]
+          - table [ref=f30e254]:
+            - rowgroup [ref=f30e255]:
+              - row [ref=f30e256]:
+                - columnheader "PID" [ref=f30e257]
+                - columnheader "UID" [ref=f30e258]
+                - columnheader "Command" [ref=f30e259]
+                - columnheader [ref=f30e260]
+            - rowgroup [ref=f30e261]:
+              - row [ref=f30e262]:
+                - cell "1" [ref=f30e263]
+                - cell "0" [ref=f30e264]
+                - cell "init" [ref=f30e265]
+                - cell [ref=f30e266]:
+                  - button "hide" [ref=f30e267] [cursor=pointer]
+              - row [ref=f30e268]:
+                - cell "2" [ref=f30e269]
+                - cell "0" [ref=f30e270]
+                - cell "kthreadd" [ref=f30e271]
+                - cell [ref=f30e272]:
+                  - button "hide" [ref=f30e273] [cursor=pointer]
+              - row [ref=f30e274]:
+                - cell "42" [ref=f30e275]
+                - cell "0" [ref=f30e276]
+                - cell "kthread" [ref=f30e277]
+                - cell [ref=f30e278]:
+                  - button "hide" [ref=f30e279] [cursor=pointer]
+              - row [ref=f30e280]:
+                - cell "400" [ref=f30e281]
+                - cell "0" [ref=f30e282]
+                - cell "sshd" [ref=f30e283]
+                - cell [ref=f30e284]:
+                  - button "hide" [ref=f30e285] [cursor=pointer]
+              - row [ref=f30e286]:
+                - cell "1337" [ref=f30e287]
+                - cell "1000" [ref=f30e288]
+                - cell "nc -lvp 4444" [ref=f30e289]
+                - cell [ref=f30e290]:
+                  - button "unhide" [ref=f30e291] [cursor=pointer]
+              - row [ref=f30e292]:
+                - cell "1500" [ref=f30e293]
+                - cell "33" [ref=f30e294]
+                - cell "apache2" [ref=f30e295]
+                - cell [ref=f30e296]:
+                  - button "hide" [ref=f30e297] [cursor=pointer]
+        - textbox "HIDE FILE secret.txt / UNHIDE PID 0 / PS / PORTS / STATUS ..." [ref=f30e301]

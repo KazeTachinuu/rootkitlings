@@ -1,0 +1,5 @@
+[     105ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:8093/dashboard/main.js:47
+[     129ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://localhost:8093/favicon.ico:0
+[    3107ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:8093/dashboard/main.js:47
+[    6109ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:8093/dashboard/main.js:47
+[    9112ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:8093/dashboard/main.js:47

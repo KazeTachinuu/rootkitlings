@@ -1,0 +1,107 @@
+- generic [ref=f35e3]:
+  - complementary [ref=f35e4]:
+    - navigation [ref=f35e13]:
+      - button "Dashboard" [ref=f35e14]
+      - button "Events" [ref=f35e20]
+    - generic [ref=f35e24]:
+      - button "target-vm (C00)" [ref=f35e25]
+      - button "dev-box (M03)" [ref=f35e27]
+      - button "web-srv (M06)" [ref=f35e29]
+    - button "Expand sidebar" [ref=f35e32]
+  - generic [ref=f35e44]:
+    - banner [ref=f35e45]:
+      - generic [ref=f35e46]: Operator Console
+      - generic [ref=f35e47]:
+        - generic [ref=f35e48]: 2/3 online
+        - generic [ref=f35e49]: OFFLINE
+    - main [ref=f35e51]:
+      - generic [ref=f35e52]:
+        - generic [ref=f35e53]:
+          - button [ref=f35e54] [cursor=pointer]
+          - heading "target-vm" [level=1] [ref=f35e57]
+          - generic [ref=f35e58]: Online
+          - generic [ref=f35e60]:
+            - generic [ref=f35e61]: target-1
+            - generic [ref=f35e62]: C00
+            - generic [ref=f35e63]: 6.1.0 x86_64
+            - generic [ref=f35e64]: Cloaked
+          - button "Ping" [ref=f35e68] [cursor=pointer]
+        - generic [ref=f35e74]:
+          - button "Overview" [ref=f35e75]
+          - button "Files 3" [ref=f35e76]:
+            - text: Files
+            - generic [ref=f35e77]: "3"
+          - button "Processes 6" [ref=f35e78]:
+            - text: Processes
+            - generic [ref=f35e79]: "6"
+          - button "Ports 3" [ref=f35e80]:
+            - text: Ports
+            - generic [ref=f35e81]: "3"
+          - button "Shell" [ref=f35e82]
+          - button "Command Log 2" [ref=f35e86]:
+            - text: Command Log
+            - generic [ref=f35e87]: "2"
+          - button "Events 5" [ref=f35e88]:
+            - text: Events
+            - generic [ref=f35e89]: "5"
+        - generic [ref=f35e91]:
+          - generic [ref=f35e92]:
+            - button "Up" [ref=f35e93]
+            - button "Refresh" [ref=f35e96]
+            - textbox [ref=f35e103]: /
+            - generic [ref=f35e104]:
+              - button "Explorer" [ref=f35e105]
+              - button "Hidden 3" [ref=f35e106]
+          - generic [ref=f35e107]:
+            - generic [ref=f35e108]: Name
+            - generic [ref=f35e109]: Size
+            - generic [ref=f35e110]: Perm
+            - generic [ref=f35e111]: Act
+          - generic [ref=f35e112]:
+            - generic [ref=f35e113] [cursor=pointer]:
+              - generic [ref=f35e114]: bin
+              - generic [ref=f35e118]: "-"
+              - generic [ref=f35e119]: rwxr-xr-x
+              - button "Hide" [ref=f35e121]
+            - generic [ref=f35e127] [cursor=pointer]:
+              - generic [ref=f35e128]: etc
+              - generic [ref=f35e132]: "-"
+              - generic [ref=f35e133]: rwxr-xr-x
+              - button "Hide" [ref=f35e135]
+            - generic [ref=f35e141] [cursor=pointer]:
+              - generic [ref=f35e142]: home
+              - generic [ref=f35e146]: "-"
+              - generic [ref=f35e147]: rwxr-xr-x
+              - button "Hide" [ref=f35e149]
+            - generic [ref=f35e155] [cursor=pointer]:
+              - generic [ref=f35e156]: proc
+              - generic [ref=f35e160]: "-"
+              - generic [ref=f35e161]: r-xr-xr-x
+              - button "Hide" [ref=f35e163]
+            - generic [ref=f35e169] [cursor=pointer]:
+              - generic [ref=f35e170]: root
+              - generic [ref=f35e174]: "-"
+              - generic [ref=f35e175]: rwx------
+              - button "Hide" [ref=f35e177]
+            - generic [ref=f35e183] [cursor=pointer]:
+              - generic [ref=f35e184]: tmp
+              - generic [ref=f35e188]: "-"
+              - generic [ref=f35e189]: rwxrwxrwt
+              - button "Hide" [ref=f35e191]
+            - generic [ref=f35e197] [cursor=pointer]:
+              - generic [ref=f35e198]: var
+              - generic [ref=f35e202]: "-"
+              - generic [ref=f35e203]: rwxr-xr-x
+              - button "Hide" [ref=f35e205]
+            - generic [ref=f35e211] [cursor=pointer]:
+              - generic [ref=f35e212]: usr
+              - generic [ref=f35e216]: "-"
+              - generic [ref=f35e217]: rwxr-xr-x
+              - button "Hide" [ref=f35e219]
+          - generic [ref=f35e225]:
+            - generic [ref=f35e226]: 8 items
+            - generic [ref=f35e227]:
+              - button "Hide" [ref=f35e228]
+              - button "Download" [ref=f35e234]
+              - button "Upload" [ref=f35e238]
+        - textbox "HIDE FILE secret.txt / UNHIDE PID 0 / PS / PORTS / STATUS ..." [ref=f35e245]

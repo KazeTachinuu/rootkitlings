@@ -15,9 +15,9 @@ if test "$before" = "0"; then
 fi
 _ok "test user starts as uid $before"
 
-after=$(su student -c 'mkdir_escalation_test rkling.e')
+after=$(su student -c 'mkdir_escalation_test rklings.e')
 if test "$after" = "0"; then
-	_ok "mkdir rkling.e escalated to uid 0"
+	_ok "mkdir rklings.e escalated to uid 0"
 else
 	_fail "escalation failed: uid is $after"
 fi

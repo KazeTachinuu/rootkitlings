@@ -1,101 +1,102 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/errno.h>
 #include <linux/minmax.h>
+#include <linux/net.h>
+#include <linux/uio.h>
 
 #include "framing.h"
 
-static int rk_send_exact(const struct rk_transport_ops *ops, void *context,
-			 struct socket *socket, const unsigned char *bytes,
+static int rk_send_exact(struct socket *socket, const unsigned char *bytes,
 			 size_t length)
 {
 	size_t offset = 0;
 
 	while (offset < length) {
-		ssize_t result = ops->send(socket, bytes + offset,
-					   length - offset, context);
+		struct msghdr msg = { };
+		struct kvec vec = {
+			.iov_base = (void *)(bytes + offset),
+			.iov_len = length - offset,
+		};
+		ssize_t sent;
 
-		if (result < 0)
-			return result;
-		if (result == 0)
+		sent = kernel_sendmsg(socket, &msg, &vec, 1, length - offset);
+		if (sent < 0)
+			return sent;
+		if (sent == 0)
 			return -EPIPE;
-		if ((size_t)result > length - offset)
-			return -EPROTO;
-		offset += result;
+		offset += sent;
 	}
 	return 0;
 }
 
-static int rk_receive_exact(const struct rk_transport_ops *ops, void *context,
-			    struct socket *socket, unsigned char *bytes,
+static int rk_receive_exact(struct socket *socket, unsigned char *bytes,
 			    size_t length)
 {
 	size_t offset = 0;
 
 	while (offset < length) {
-		ssize_t result = ops->receive(socket, bytes + offset,
-					      length - offset, context);
+		struct msghdr msg = { };
+		struct kvec vec = {
+			.iov_base = bytes + offset,
+			.iov_len = length - offset,
+		};
+		ssize_t got;
 
-		if (result < 0)
-			return result;
-		if (result == 0)
+		got = kernel_recvmsg(socket, &msg, &vec, 1, length - offset, 0);
+		if (got < 0)
+			return got;
+		if (got == 0)
 			return -ECONNRESET;
-		if ((size_t)result > length - offset)
-			return -EPROTO;
-		offset += result;
+		offset += got;
 	}
 	return 0;
 }
 
-int rk_send_frame(const struct rk_transport_ops *ops, void *context,
-		  struct socket *socket, const unsigned char *payload,
+int rk_send_frame(struct socket *socket, const unsigned char *payload,
 		  size_t length)
 {
 	unsigned char header[2];
 	int error;
 
-	if (!ops || !ops->send || !socket || length > RK_FRAME_MAX ||
-	    (length && !payload))
+	if (!socket || length > RK_FRAME_MAX || (length && !payload))
 		return -EINVAL;
 	header[0] = length >> 8;
 	header[1] = length;
-	error = rk_send_exact(ops, context, socket, header, sizeof(header));
+	error = rk_send_exact(socket, header, sizeof(header));
 	if (error)
 		return error;
-	return rk_send_exact(ops, context, socket, payload, length);
+	return rk_send_exact(socket, payload, length);
 }
 
-int rk_receive_frame(const struct rk_transport_ops *ops, void *context,
-		     struct socket *socket, struct rk_frame *frame)
+int rk_receive_frame(struct socket *socket, struct rk_frame *frame)
 {
-	unsigned char scratch[RK_DRAIN_CHUNK];
 	unsigned char header[2];
 	struct rk_frame received = { };
-	size_t remaining;
 	int error;
 
-	if (!ops || !ops->receive || !socket || !frame)
+	if (!socket || !frame)
 		return -EINVAL;
-	error = rk_receive_exact(ops, context, socket, header, sizeof(header));
+	error = rk_receive_exact(socket, header, sizeof(header));
 	if (error)
 		return error;
 	received.length = ((size_t)header[0] << 8) | header[1];
-	if (received.length <= RK_FRAME_MAX) {
-		error = rk_receive_exact(ops, context, socket, received.payload,
-					 received.length);
-		if (error)
-			return error;
-		*frame = received;
-		return 0;
-	}
+	if (received.length > RK_FRAME_MAX) {
+		unsigned char scratch[64];
+		size_t remaining = received.length;
 
-	remaining = received.length;
-	while (remaining) {
-		size_t chunk = min_t(size_t, remaining, sizeof(scratch));
+		while (remaining) {
+			size_t chunk = min_t(size_t, remaining, sizeof(scratch));
 
-		error = rk_receive_exact(ops, context, socket, scratch, chunk);
-		if (error)
-			return error;
-		remaining -= chunk;
+			error = rk_receive_exact(socket, scratch, chunk);
+			if (error)
+				return error;
+			remaining -= chunk;
+		}
+		return -EMSGSIZE;
 	}
-	return -EMSGSIZE;
+	error = rk_receive_exact(socket, received.payload, received.length);
+	if (error)
+		return error;
+	*frame = received;
+	return 0;
 }

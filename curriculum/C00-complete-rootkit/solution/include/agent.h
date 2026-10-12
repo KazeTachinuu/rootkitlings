@@ -28,17 +28,9 @@ struct rk_agent {
 	bool stopping;
 	bool connected;
 	bool shutdown_started;
-	bool shell_enabled;
 	unsigned int retry_base_ms;
 	unsigned int retry_max_ms;
 	unsigned int retry_delay_ms;
-	u64 attempts;
-	u64 connections;
-	u64 commands;
-	u64 retries;
-	u64 transport_errors;
-	u64 protocol_errors;
-	u64 session;
 	struct rk_secure_channel secure;
 };
 

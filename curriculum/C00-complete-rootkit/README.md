@@ -17,16 +17,16 @@ operator -----> AEAD control -----> authenticated agent (remote)
                      +--> shell             (M04: UMH reverse shell)
                      +--> status            (agent state + target lists)
 
-local user ---> mkdir rkling.X -----> mkdir kprobe (local)
+local user ---> mkdir rklings.X ----> mkdir kprobe (local)
                      |
-                     +--> rkling.e          escalate calling process
-                     +--> rkling.h.m        hide module
-                     +--> rkling.u.m        unhide module
-                     +--> rkling.h.f.NAME   hide file prefix
-                     +--> rkling.h.i.PID    hide process
-                     +--> rkling.h.c.STR    hide content
-                     +--> rkling.h.p.PORT   hide port
-                     +--> rkling.persist    stage boot-load
+                     +--> rklings.e          escalate calling process
+                     +--> rklings.h.m        hide module
+                     +--> rklings.u.m        unhide module
+                     +--> rklings.h.f.NAME   hide file prefix
+                     +--> rklings.h.i.PID    hide process
+                     +--> rklings.h.c.STR    hide content
+                     +--> rklings.h.p.PORT   hide port
+                     +--> rklings.persist    stage boot-load
 ```
 
 ## Remote operator commands
@@ -55,14 +55,14 @@ without network access. Any user on the system can issue commands:
 
 | Command | Effect |
 |---------|--------|
-| mkdir rkling.e | Escalate calling process to root |
-| mkdir rkling.h.m | Hide module from lsmod |
-| mkdir rkling.u.m | Unhide module |
-| mkdir rkling.h.f.NAME | Hide file prefix |
-| mkdir rkling.h.i.PID | Hide PID |
-| mkdir rkling.h.c.STR | Hide content string |
-| mkdir rkling.h.p.PORT | Hide port |
-| mkdir rkling.persist | Stage boot-load request |
+| mkdir rklings.e | Escalate calling process to root |
+| mkdir rklings.h.m | Hide module from lsmod |
+| mkdir rklings.u.m | Unhide module |
+| mkdir rklings.h.f.NAME | Hide file prefix |
+| mkdir rklings.h.i.PID | Hide PID |
+| mkdir rklings.h.c.STR | Hide content string |
+| mkdir rklings.h.p.PORT | Hide port |
+| mkdir rklings.persist | Stage boot-load request |
 
 ## OPSEC
 
@@ -71,17 +71,24 @@ The proc interface is at `/proc/rkling_status` (read-only, mode 0400).
 On init, the module adds "rkling" to the file target list so the proc
 entry, kernel threads, and .ko file are hidden by default.
 
+## Init sequence
+
+The module has one load order and one teardown order. Both must be
+correct: a failed step rolls back everything before it.
+
+```text
+init:                               exit (reverse):
+  parse key + peer address            unhide module
+  init target lists                   remove /proc/rkling_status
+  init shell, start agent             unregister probes (all four)
+  register probes (all four)          stop agent + shell
+  create /proc/rkling_status          zeroize key
+  auto-stealth (hide "rkling")
+```
+
 ## Your task
 
-In `core/main.c`, wire the init/exit sequence:
-
-1. Parse control key and peer address
-2. Init all four target lists (file, pid, content, port)
-3. Init root shell, start authenticated agent
-4. Register probes (getdents64, vfs_read, tcp4_seq_show, mkdir)
-5. Create /proc/rkling_status
-6. Auto-stealth: add "rkling" to file targets
-7. On exit: uncloak, remove proc, unregister all probes, stop agent/shell
+In `core/main.c`, implement `rk_init` and `rk_exit`.
 
 Run:
 

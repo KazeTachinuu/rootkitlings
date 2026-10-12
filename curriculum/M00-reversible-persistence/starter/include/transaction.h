@@ -2,20 +2,10 @@
 #ifndef RKLINGS_TRANSACTION_H
 #define RKLINGS_TRANSACTION_H
 
-#ifdef __KERNEL__
 #include <linux/errno.h>
 #include <linux/stddef.h>
 #include <linux/string.h>
 #include <linux/types.h>
-#else
-#include <errno.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
-typedef uint8_t u8;
-typedef uint64_t u64;
-#endif
 
 enum {
 	RK_FILE_MAX = 256,

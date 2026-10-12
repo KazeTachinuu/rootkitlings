@@ -2,13 +2,10 @@
 #ifndef RKLINGS_SECURE_CONTROL_H
 #define RKLINGS_SECURE_CONTROL_H
 
+#include <linux/types.h>
+
 #include "aead.h"
 #include "framing.h"
-
-#ifndef __KERNEL__
-typedef uint32_t u32;
-typedef uint64_t u64;
-#endif
 
 enum {
 	RK_SECURE_VERSION = 1,

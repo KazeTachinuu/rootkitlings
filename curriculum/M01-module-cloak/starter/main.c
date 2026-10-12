@@ -11,15 +11,15 @@
 #include <linux/uaccess.h>
 
 static struct list_head *saved_prev;
-static bool cloaked;
+static bool module_hidden;
 static struct proc_dir_entry *control_entry;
 
-static void rk_module_cloak(void)
+static void rk_module_hide(void)
 {
 	/* TODO: hide the module from /proc/modules (lsmod). */
 }
 
-static void rk_module_uncloak(void)
+static void rk_module_unhide(void)
 {
 	/* TODO: restore the module to /proc/modules. */
 }
@@ -39,9 +39,9 @@ static ssize_t rk_control_write(struct file *file, const char __user *buffer,
 	if (length > 0 && command[length - 1] == '\n')
 		command[--length] = '\0';
 	if (!strcmp(command, "hide"))
-		rk_module_cloak();
+		rk_module_hide();
 	else if (!strcmp(command, "unhide"))
-		rk_module_uncloak();
+		rk_module_unhide();
 	else
 		return -EINVAL;
 	return count;
@@ -49,7 +49,7 @@ static ssize_t rk_control_write(struct file *file, const char __user *buffer,
 
 static int rk_status_show(struct seq_file *output, void *unused)
 {
-	seq_printf(output, "hidden=%s\n", cloaked ? "true" : "false");
+	seq_printf(output, "hidden=%s\n", module_hidden ? "true" : "false");
 	return 0;
 }
 
@@ -74,7 +74,7 @@ static int __init rk_init(void)
 
 static void __exit rk_exit(void)
 {
-	rk_module_uncloak();
+	rk_module_unhide();
 	proc_remove(control_entry);
 }
 

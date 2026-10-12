@@ -214,7 +214,7 @@ build_rootfs()
     for applet in adduser cat chmod clear cmp cp cut dd df diff dmesg echo env \
 		find grep head hexdump id \
 		ifconfig insmod kill less ln ls lsmod mkdir modinfo mount mv nc \
-		ping printf ps rm rmdir rmmod sed setsid sh \
+		netstat ping printf ps rm rmdir rmmod sed setsid sh \
 		sha256sum sleep sort stat stty su tail test touch tr tty \
 		umount uname vi wc whoami xargs xxd od; do
         ln -s busybox "$ROOTFS/bin/$applet"

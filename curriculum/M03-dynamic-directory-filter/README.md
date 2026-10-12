@@ -1,4 +1,4 @@
-# M03: Hide files and PIDs with dynamic target lists
+# Hide files and PIDs with dynamic target lists
 
 The L14 directory filter hides a single hardcoded filename. A real
 rootkit needs to hide arbitrary files and PIDs at runtime, decided by

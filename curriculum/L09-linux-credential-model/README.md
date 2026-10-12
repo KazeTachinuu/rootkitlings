@@ -6,7 +6,26 @@ the user namespace in which those capabilities have meaning.
 Success proves that the record describes one consistent caller while rendering
 its numeric IDs for the process that opened the channel.
 
-Linux stores this identity and authority in an immutable **credential** object.
+Linux stores this identity and authority in an immutable **credential** object:
+
+```text
+struct cred (immutable once published)
++----------------------------------+
+| uid, euid, suid, fsuid           |  4 user IDs
+| gid, egid, sgid, fsgid           |  4 group IDs
++----------------------------------+
+| cap_permitted                    |  what may be enabled
+| cap_effective                    |  what is active now
+| cap_inheritable / cap_bset / ... |  (not printed here)
++----------------------------------+
+| user_ns                          |  initial or nested
++----------------------------------+
+
+current_cred() --> const struct cred *
+                   (immutable, no lock needed
+                    while running in current task)
+```
+
 Extend `/proc/rklings` with that snapshot:
 
 ```text

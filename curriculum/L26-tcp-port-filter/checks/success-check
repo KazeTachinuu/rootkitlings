@@ -34,13 +34,6 @@ else
 	_ok "port $test_port is hidden from /proc/net/tcp"
 fi
 
-# ss also reads /proc/net/tcp; verify it too.
-if ss -tlnp 2>/dev/null | grep -q ":${test_port} "; then
-	_fail "port $test_port is still visible via ss"
-else
-	_ok "port $test_port is hidden from ss"
-fi
-
 unload rklings
 
 # After unload, the port should reappear.

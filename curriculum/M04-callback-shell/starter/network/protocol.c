@@ -1,12 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-#ifdef __KERNEL__
 #include <linux/errno.h>
 #include <linux/string.h>
-#else
-#include <errno.h>
-#include <stdbool.h>
-#include <string.h>
-#endif
 
 #include "protocol.h"
 

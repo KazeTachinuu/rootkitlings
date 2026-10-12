@@ -1,17 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef RKLINGS_AEAD_H
 #define RKLINGS_AEAD_H
-#ifdef __KERNEL__
 #include <linux/errno.h>
 #include <linux/stddef.h>
 #include <linux/types.h>
-#else
-#include <errno.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-typedef uint8_t u8;
-#endif
 enum { RK_AEAD_KEY_LENGTH=32, RK_AEAD_NONCE_LENGTH=12, RK_AEAD_TAG_LENGTH=16,
 	RK_AEAD_AAD_MAX=32, RK_AEAD_PLAINTEXT_MAX=64,
 	RK_AEAD_SEALED_MAX=RK_AEAD_PLAINTEXT_MAX+RK_AEAD_TAG_LENGTH,

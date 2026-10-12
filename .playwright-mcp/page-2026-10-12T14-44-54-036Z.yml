@@ -1,0 +1,51 @@
+- generic [ref=f35e3]:
+  - complementary [ref=f35e4]:
+    - navigation [ref=f35e13]:
+      - button "Dashboard" [ref=f35e14]
+      - button "Events" [ref=f35e20]
+    - generic [ref=f35e24]:
+      - button "target-vm (C00)" [ref=f35e25]
+      - button "dev-box (M03)" [ref=f35e27]
+      - button "web-srv (M06)" [ref=f35e29]
+    - button "Expand sidebar" [ref=f35e32]
+  - generic [ref=f35e44]:
+    - banner [ref=f35e45]:
+      - generic [ref=f35e46]: Operator Console
+      - generic [ref=f35e47]:
+        - generic [ref=f35e48]: 2/3 online
+        - generic [ref=f35e49]: OFFLINE
+    - main [ref=f35e51]:
+      - generic [ref=f35e52]:
+        - generic [ref=f35e53]:
+          - button [ref=f35e54] [cursor=pointer]
+          - heading "target-vm" [level=1] [ref=f35e57]
+          - generic [ref=f35e58]: Online
+          - generic [ref=f35e60]:
+            - generic [ref=f35e61]: target-1
+            - generic [ref=f35e62]: C00
+            - generic [ref=f35e63]: 6.1.0 x86_64
+            - generic [ref=f35e64]: Cloaked
+          - button "Ping" [ref=f35e68] [cursor=pointer]
+        - generic [ref=f35e74]:
+          - button "Overview" [ref=f35e75]
+          - button "Files 3" [ref=f35e76]:
+            - text: Files
+            - generic [ref=f35e77]: "3"
+          - button "Processes 6" [ref=f35e78]:
+            - text: Processes
+            - generic [ref=f35e79]: "6"
+          - button "Ports 3" [ref=f35e80]:
+            - text: Ports
+            - generic [ref=f35e81]: "3"
+          - button "Shell" [active] [ref=f35e82]
+          - button "Command Log 3" [ref=f35e332]:
+            - text: Command Log
+            - generic [ref=f35e87]: "3"
+          - button "Events 5" [ref=f35e88]:
+            - text: Events
+            - generic [ref=f35e89]: "5"
+        - generic [ref=f35e484]:
+          - paragraph [ref=f35e489]: Remote Shell
+          - paragraph [ref=f35e490]: Open an interactive reverse shell to target-vm via the rootkit agent.
+          - button "Open Shell" [ref=f35e491] [cursor=pointer]
+        - textbox "HIDE FILE secret.txt / UNHIDE PID 0 / PS / PORTS / STATUS ..." [ref=f35e245]

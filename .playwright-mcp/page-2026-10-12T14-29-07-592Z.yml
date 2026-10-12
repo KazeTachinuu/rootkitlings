@@ -1,0 +1,127 @@
+- generic [ref=f30e1043]:
+  - complementary [ref=f30e1044]:
+    - generic [ref=f30e1045]: Rootkitlings
+    - navigation [ref=f30e1055]:
+      - button "Dashboard" [ref=f30e1056]
+      - button "Events" [ref=f30e1062]
+    - generic [ref=f30e1065]:
+      - generic [ref=f30e1066]: Targets
+      - generic [ref=f30e1067]:
+        - button "target-vm C00" [ref=f30e1068]:
+          - generic [ref=f30e1070]: target-vm
+          - generic [ref=f30e1071]: C00
+        - button "dev-box M03" [ref=f30e1072]:
+          - generic [ref=f30e1074]: dev-box
+          - generic [ref=f30e1075]: M03
+        - button "web-srv M06" [ref=f30e1076]:
+          - generic [ref=f30e1078]: web-srv
+          - generic [ref=f30e1079]: M06
+    - generic [ref=f30e1080]: Disconnected
+  - generic [ref=f30e1089]:
+    - banner [ref=f30e1090]:
+      - generic [ref=f30e1091]:
+        - button [ref=f30e1092] [cursor=pointer]
+        - generic [ref=f30e1094]: Operator Console
+      - generic [ref=f30e1095]:
+        - generic [ref=f30e1096]: 2/3 online
+        - generic [ref=f30e1097]: OFFLINE
+    - main [ref=f30e1099]:
+      - generic [ref=f30e1100]:
+        - generic [ref=f30e1102]:
+          - button "Back to dashboard" [ref=f30e1103] [cursor=pointer]
+          - generic [ref=f30e1106]:
+            - generic [ref=f30e1107]:
+              - heading "target-vm" [level=1] [ref=f30e1108]
+              - generic [ref=f30e1109]: Online
+            - generic [ref=f30e1111]:
+              - generic [ref=f30e1112]: target-1
+              - generic [ref=f30e1116]: C00
+              - generic [ref=f30e1119]: 6.1.0 x86_64
+              - generic [ref=f30e1120]: Cloaked
+          - button "Actions" [ref=f30e1124] [cursor=pointer]
+        - generic [ref=f30e1127]:
+          - button "Files 3" [ref=f30e1128]:
+            - text: Files
+            - generic [ref=f30e1129]: "3"
+          - button "Processes 6" [ref=f30e1130]:
+            - text: Processes
+            - generic [ref=f30e1131]: "6"
+          - button "Ports 3" [ref=f30e1132]:
+            - text: Ports
+            - generic [ref=f30e1133]: "3"
+          - button "Shell" [ref=f30e1134]
+          - button "Command Log 0" [ref=f30e1138]:
+            - text: Command Log
+            - generic [ref=f30e1139]: "0"
+          - button "Events 5" [ref=f30e1140]:
+            - text: Events
+            - generic [ref=f30e1141]: "5"
+        - generic [ref=f30e1143]:
+          - generic [ref=f30e1144]:
+            - generic [ref=f30e1145]:
+              - generic [ref=f30e1146]:
+                - generic [ref=f30e1147]:
+                  - generic [ref=f30e1148]:
+                    - generic [ref=f30e1149]: Hidden Files
+                    - generic [ref=f30e1150]: "2"
+                  - text: Paths hidden from userspace
+                - generic [ref=f30e1151]:
+                  - textbox "/etc/secret.conf" [ref=f30e1152]
+                  - button "+ Add" [ref=f30e1153] [cursor=pointer]
+              - generic [ref=f30e1154]:
+                - generic [ref=f30e1155]:
+                  - generic [ref=f30e1156]: "0"
+                  - generic [ref=f30e1157]: rkling
+                - button "remove" [ref=f30e1158]
+              - generic [ref=f30e1159]:
+                - generic [ref=f30e1160]:
+                  - generic [ref=f30e1161]: "1"
+                  - generic [ref=f30e1162]: agent.sock
+                - button "remove" [ref=f30e1163]
+            - generic [ref=f30e1164]:
+              - generic [ref=f30e1165]:
+                - generic [ref=f30e1166]:
+                  - generic [ref=f30e1167]:
+                    - generic [ref=f30e1168]: Hidden Content
+                    - generic [ref=f30e1169]: "1"
+                  - text: Strings filtered from file reads
+                - generic [ref=f30e1170]:
+                  - textbox "rootkit" [ref=f30e1171]
+                  - button "+ Add" [ref=f30e1172] [cursor=pointer]
+              - generic [ref=f30e1173]:
+                - generic [ref=f30e1174]:
+                  - generic [ref=f30e1175]: "0"
+                  - generic [ref=f30e1176]: rootkit
+                - button "remove" [ref=f30e1177]
+          - generic [ref=f30e1178]:
+            - generic [ref=f30e1179]:
+              - generic [ref=f30e1180]:
+                - generic [ref=f30e1181]:
+                  - generic [ref=f30e1182]:
+                    - generic [ref=f30e1183]: Hidden PIDs
+                    - generic [ref=f30e1184]: "1"
+                  - text: Processes hidden from ps/proc
+                - generic [ref=f30e1185]:
+                  - textbox "1337" [ref=f30e1186]
+                  - button "+ Add" [ref=f30e1187] [cursor=pointer]
+              - generic [ref=f30e1188]:
+                - generic [ref=f30e1189]:
+                  - generic [ref=f30e1190]: "0"
+                  - generic [ref=f30e1191]: "1337"
+                - button "remove" [ref=f30e1192]
+            - generic [ref=f30e1193]:
+              - generic [ref=f30e1194]:
+                - generic [ref=f30e1195]:
+                  - generic [ref=f30e1196]:
+                    - generic [ref=f30e1197]: Hidden Ports
+                    - generic [ref=f30e1198]: "1"
+                  - text: Ports hidden from netstat/ss
+                - generic [ref=f30e1199]:
+                  - textbox "4444" [ref=f30e1200]
+                  - button "+ Add" [ref=f30e1201] [cursor=pointer]
+              - generic [ref=f30e1202]:
+                - generic [ref=f30e1203]:
+                  - generic [ref=f30e1204]: "0"
+                  - generic [ref=f30e1205]: "4444"
+                - button "remove" [ref=f30e1206]
+        - textbox "HIDE FILE secret.txt / UNHIDE PID 0 / PS / PORTS / STATUS ..." [ref=f30e1210]

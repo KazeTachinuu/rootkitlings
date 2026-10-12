@@ -18,10 +18,22 @@ While actions are enabled, creation sets only `vfs_mkdir_seen` and removal sets
 Both operations must still complete normally.
 
 ```text
-active=1
-actions=enabled
-vfs_mkdir_seen=1
-filename_rmdir_seen=0
+  userspace                    kernelspace
+                               vfs_mkdir(dir, dentry, mode)
+  mkdir /tmp/test                    |
+       |                       kprobe pre_handler fires
+       v                             |
+  syscall                      actions enabled?
+       |                        yes: vfs_mkdir_seen = true
+       v                             |
+  directory created  <----------  return 0 (continue normally)
+
+
+  register_kprobes([&mkdir_probe, &rmdir_probe])
+       |
+  success: both installed as one set
+       |
+  failure at probe[1]: probe[0] auto-unregistered
 ```
 
 ## Work against the pinned kernel

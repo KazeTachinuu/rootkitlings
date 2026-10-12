@@ -1,4 +1,4 @@
-# M05: Authenticated control channel
+# Authenticated control channel
 
 M04's callback agent talks in plaintext: anyone who can see the traffic
 can read commands and inject their own. This milestone wraps the wire

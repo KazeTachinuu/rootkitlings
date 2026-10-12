@@ -1,0 +1,121 @@
+- generic [ref=f38e3]:
+  - complementary [ref=f38e4]:
+    - generic [ref=f38e5]: Rootkitlings
+    - navigation [ref=f38e14]:
+      - button "Dashboard" [ref=f38e15]
+      - button "Events" [ref=f38e21]
+    - generic [ref=f38e24]:
+      - generic [ref=f38e25]: Targets
+      - generic [ref=f38e49]:
+        - button "target-vm C00" [ref=f38e50]:
+          - generic [ref=f38e52]: target-vm
+          - generic [ref=f38e53]: C00
+        - button "dev-box M03" [ref=f38e54]:
+          - generic [ref=f38e56]: dev-box
+          - generic [ref=f38e57]: M03
+        - button "web-srv M06" [ref=f38e58]:
+          - generic [ref=f38e60]: web-srv
+          - generic [ref=f38e61]: M06
+    - generic [ref=f38e26]:
+      - button "Collapse sidebar" [ref=f38e27]
+      - generic [ref=f38e31]: Disconnected
+  - generic [ref=f38e39]:
+    - banner [ref=f38e40]:
+      - generic [ref=f38e41]: Operator Console
+      - generic [ref=f38e42]:
+        - generic [ref=f38e43]: 2/3 online
+        - generic [ref=f38e44]: OFFLINE
+    - main [ref=f38e46]:
+      - generic [ref=f38e47]:
+        - generic [ref=f38e62]:
+          - button [ref=f38e63] [cursor=pointer]
+          - heading "web-srv" [level=1] [ref=f38e66]
+          - generic [ref=f38e67]: Offline
+          - generic [ref=f38e69]:
+            - generic [ref=f38e70]: target-3
+            - generic [ref=f38e71]: M06
+            - generic [ref=f38e72]: 5.15.0 x86_64
+          - button "Ping" [ref=f38e74] [cursor=pointer]
+        - generic [ref=f38e80]:
+          - button "Overview" [ref=f38e81]
+          - button "Files" [ref=f38e82]
+          - button "Processes" [ref=f38e83]
+          - button "Ports" [ref=f38e84]
+          - button "Shell" [ref=f38e85]
+          - button "Command Log" [ref=f38e89]
+          - button "Events 5" [ref=f38e90]:
+            - text: Events
+            - generic [ref=f38e91]: "5"
+        - generic [ref=f38e93]:
+          - generic [ref=f38e94]:
+            - generic [ref=f38e95]:
+              - heading "Module Control" [level=3] [ref=f38e96]
+              - generic [ref=f38e97]:
+                - generic [ref=f38e98]:
+                  - generic [ref=f38e99]: Cloaking
+                  - generic [ref=f38e100]: Hide from lsmod, /proc/modules
+                - generic [ref=f38e101]:
+                  - generic [ref=f38e102]: "off"
+                  - button "Cloak" [disabled]
+              - generic [ref=f38e103]:
+                - generic [ref=f38e104]:
+                  - generic [ref=f38e105]: Persistence
+                  - generic [ref=f38e106]: Survive reboot via boot-load staging
+                - button "Toggle" [disabled]
+            - generic [ref=f38e107]:
+              - heading "Actions" [level=3] [ref=f38e108]
+              - generic [ref=f38e109]:
+                - button "Status" [disabled]
+                - button "Ping" [disabled]
+                - button "Processes" [disabled]
+                - button "Ports" [disabled]
+          - generic [ref=f38e110]:
+            - generic [ref=f38e111]:
+              - heading "Hidden Items 0" [level=3] [ref=f38e112]
+              - generic [ref=f38e113]:
+                - generic [ref=f38e114]:
+                  - generic [ref=f38e115]: Files
+                  - generic [ref=f38e116]: "0"
+                - generic [ref=f38e117]:
+                  - generic [ref=f38e118]: PIDs
+                  - generic [ref=f38e119]: "0"
+                - generic [ref=f38e120]:
+                  - generic [ref=f38e121]: Ports
+                  - generic [ref=f38e122]: "0"
+                - generic [ref=f38e123]:
+                  - generic [ref=f38e124]: Content
+                  - generic [ref=f38e125]: "0"
+            - generic [ref=f38e127]:
+              - heading "Resources" [level=3] [ref=f38e128]
+              - generic [ref=f38e129]:
+                - generic [ref=f38e130]:
+                  - generic [ref=f38e131]: Procs
+                  - generic [ref=f38e132]: "0"
+                - generic [ref=f38e133]:
+                  - generic [ref=f38e134]: Ports
+                  - generic [ref=f38e135]: "0"
+          - generic [ref=f38e137]:
+            - heading "System" [level=3] [ref=f38e138]
+            - generic [ref=f38e139]:
+              - generic [ref=f38e140]:
+                - generic [ref=f38e141]: Hostname
+                - generic [ref=f38e142]: web-srv
+              - generic [ref=f38e143]:
+                - generic [ref=f38e144]: ID
+                - generic [ref=f38e145]: target-3
+              - generic [ref=f38e146]:
+                - generic [ref=f38e147]: Exercise
+                - generic [ref=f38e148]: M06
+              - generic [ref=f38e149]:
+                - generic [ref=f38e150]: Kernel
+                - generic [ref=f38e151]: 5.15.0 x86_64
+              - generic [ref=f38e152]:
+                - generic [ref=f38e153]: Module
+                - generic [ref=f38e154]: Visible
+              - generic [ref=f38e155]:
+                - generic [ref=f38e156]: Status
+                - generic [ref=f38e157]: Offline
+              - generic [ref=f38e158]:
+                - generic [ref=f38e159]: Hidden
+                - generic [ref=f38e160]: 0 items
+        - textbox "HIDE FILE secret.txt / UNHIDE PID 0 / PS / PORTS / STATUS ..." [ref=f38e164]

@@ -14,6 +14,25 @@ This exercise joins three already-tested pieces:
 - the bounded `sk_buff` reader copies packet bytes safely;
 - the Netfilter observer runs the inspection from an IPv4 `LOCAL_OUT` hook.
 
+```text
+IPv4 packet (validated by L16)
++------+---------------------+--------------------+----------+
+| IPv4 | IPv4 options (0-40) |     UDP header     | payload  |
+| 20B  |                     |       8 bytes      |          |
++------+---------------------+--------------------+----------+
+|<-- header_length --------->|<-- payload_length ----------->|
+
+UDP header (8 bytes, network byte order)
++--------+--------+--------+-----------+
+| src    | dst    | length | checksum  |
+| port   | port   |        | (ignored) |
+| 2B     | 2B     | 2B     | 2B        |
++--------+--------+--------+-----------+
+         |        |
+         |        +-- >= 8, <= payload_length
+         +-- match against target_port
+```
+
 Classify a separate eight-byte transport header from a validated IPv4 view
 without touching the packet.
 

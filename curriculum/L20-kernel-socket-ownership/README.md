@@ -17,6 +17,24 @@ is in another network namespace.
 It also accepts only `AF_INET`, `SOCK_STREAM`, `IPPROTO_TCP`, blocking connect
 flags, a nonzero port, and `127.0.0.1`.
 
+```text
+sock_create_kern(init_net, AF_INET, SOCK_STREAM, IPPROTO_TCP)
+        |
+        v
+kernel_connect(sock, &addr, sizeof(addr), 0)
+        |
+        v
+kernel_getsockname / kernel_getpeername
+        |
+   +----+----+
+   |         |
+ valid     invalid
+   |         |
+   v         v
+ publish   shutdown + release
+ socket    return error
+```
+
 Keep the new socket in a local variable while it is incomplete:
 
 1. Create it with `sock_create_kern()`.

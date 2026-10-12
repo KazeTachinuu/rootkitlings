@@ -1,4 +1,4 @@
-# M01: Hide the module from lsmod
+# Hide the module from lsmod
 
 The first thing an investigator checks is `lsmod`. If your module
 appears there, the game is over. This milestone teaches the idiomatic

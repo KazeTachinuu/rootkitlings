@@ -50,6 +50,35 @@ int rk_target_remove(struct rk_target_list *list, unsigned int index,
 	return 0;
 }
 
+int rk_target_remove_either(struct rk_target_list *list, const char *arg)
+{
+	unsigned int index;
+
+	if (kstrtouint(arg, 10, &index) == 0)
+		return rk_target_remove(list, index, NULL, 0);
+	return rk_target_remove_by_value(list, arg);
+}
+
+int rk_target_remove_by_value(struct rk_target_list *list, const char *value)
+{
+	unsigned long flags;
+	unsigned int i;
+
+	spin_lock_irqsave(&list->lock, flags);
+	for (i = 0; i < list->count; i++) {
+		if (strcmp(list->entries[i], value) == 0) {
+			for (; i + 1 < list->count; i++)
+				memcpy(list->entries[i], list->entries[i + 1],
+				       RK_TARGET_MAX_LEN);
+			list->count--;
+			spin_unlock_irqrestore(&list->lock, flags);
+			return 0;
+		}
+	}
+	spin_unlock_irqrestore(&list->lock, flags);
+	return -ENOENT;
+}
+
 bool rk_target_match(struct rk_target_list *list,
 		     const char *name, size_t name_length)
 {
@@ -66,6 +95,15 @@ bool rk_target_match(struct rk_target_list *list,
 	}
 	spin_unlock_irqrestore(&list->lock, flags);
 	return found;
+}
+
+void rk_target_clear(struct rk_target_list *list)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&list->lock, flags);
+	list->count = 0;
+	spin_unlock_irqrestore(&list->lock, flags);
 }
 
 bool rk_target_number_match(struct rk_target_list *list, unsigned int value)

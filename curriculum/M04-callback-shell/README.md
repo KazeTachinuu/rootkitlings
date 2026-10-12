@@ -1,4 +1,4 @@
-# M04: Call home and open a root shell
+# Call home and open a root shell
 
 A rootkit that cannot communicate is a one-shot tool. This milestone
 builds the callback agent: a kernel thread that connects out to the
@@ -56,12 +56,12 @@ bytes payload). Supported commands:
 
 | Command | Reply | Effect |
 |---------|-------|--------|
-| PING | PONG | Keepalive |
-| INFO | INFO rklings | Identify the implant |
-| STATUS | STATUS connected=... attempts=... | Agent state |
-| SHELL port | OPEN request_id cookie | Open reverse shell to operator:port |
-| SHELL STATUS | STATE request_id state result | Shell session state |
-| QUIT | (closes) | End session gracefully |
+| `PING` | `PONG` | Keepalive |
+| `INFO` | `INFO rklings` | Identify the implant |
+| `STATUS` | `STATUS connected=true\|false` | Agent state |
+| `SHELL <port>` | `OPEN <id> <cookie>` | Open reverse shell to operator:port |
+| `SHELL STATUS` | `STATE <id> <state> <result>` | Shell session state |
+| `QUIT` | (closes) | End session gracefully |
 
 ## Root shell via UMH
 
@@ -72,10 +72,8 @@ interactive root Bash session.
 
 ## Your task
 
-1. In `core/main.c`: wire the init/exit sequence (init the shell, start
-   the agent, tear down in reverse order on exit)
-2. In `network/agent.c`: implement the command handler switch and add
-   jitter to the retry delay
+1. `core/main.c`: init/exit sequence
+2. `network/agent.c`: command dispatch and retry jitter
 
 Run:
 

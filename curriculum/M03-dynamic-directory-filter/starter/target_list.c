@@ -8,57 +8,120 @@
 
 int rk_target_add(struct rk_target_list *list, const char *value)
 {
-	/*
-	 * TODO: add a target to the list.
-	 *
-	 * Validate: value must be non-empty and shorter than
-	 * RK_TARGET_MAX_LEN.
-	 *
-	 * Use spin_lock_irqsave / spin_unlock_irqrestore (NOT
-	 * spin_lock) because match functions are called from
-	 * kretprobe handlers which may run in interrupt context.
-	 *
-	 * Check list->count < RK_MAX_TARGETS, return -ENOSPC if full.
-	 * Copy the string with strscpy, increment count.
-	 * Return the index of the new entry.
-	 */
-	return -ENOSYS;
+	unsigned long flags;
+	size_t len;
+	int index;
+
+	if (!value || !value[0])
+		return -EINVAL;
+	len = strnlen(value, RK_TARGET_MAX_LEN);
+	if (len >= RK_TARGET_MAX_LEN)
+		return -EINVAL;
+
+	spin_lock_irqsave(&list->lock, flags);
+	if (list->count >= RK_MAX_TARGETS) {
+		spin_unlock_irqrestore(&list->lock, flags);
+		return -ENOSPC;
+	}
+	index = (int)list->count;
+	strscpy(list->entries[index], value, RK_TARGET_MAX_LEN);
+	list->count++;
+	spin_unlock_irqrestore(&list->lock, flags);
+	return index;
 }
 
 int rk_target_remove(struct rk_target_list *list, unsigned int index,
 		     char *removed, size_t removed_size)
 {
-	/*
-	 * TODO: remove a target by index.
-	 *
-	 * Validate index < count, return -EINVAL otherwise.
-	 * Optionally copy the removed entry to `removed`.
-	 * Compact the array by shifting later entries down.
-	 * Decrement count.
-	 */
-	return -ENOSYS;
+	unsigned long flags;
+	unsigned int i;
+
+	spin_lock_irqsave(&list->lock, flags);
+	if (index >= list->count) {
+		spin_unlock_irqrestore(&list->lock, flags);
+		return -EINVAL;
+	}
+	if (removed && removed_size > 0)
+		strscpy(removed, list->entries[index], removed_size);
+	for (i = index; i + 1 < list->count; i++)
+		memcpy(list->entries[i], list->entries[i + 1], RK_TARGET_MAX_LEN);
+	list->count--;
+	spin_unlock_irqrestore(&list->lock, flags);
+	return 0;
 }
 
-bool rk_target_match(struct rk_target_list *list, const char *name,
-		     size_t name_length)
+int rk_target_remove_either(struct rk_target_list *list, const char *arg)
 {
-	/*
-	 * TODO: return true if name contains any entry as a substring.
-	 *
-	 * Iterate under spin_lock_irqsave. For each entry, use
-	 * strnstr(name, entry, name_length) to check for a match.
-	 */
-	return false;
+	unsigned int index;
+
+	if (kstrtouint(arg, 10, &index) == 0)
+		return rk_target_remove(list, index, NULL, 0);
+	return rk_target_remove_by_value(list, arg);
+}
+
+int rk_target_remove_by_value(struct rk_target_list *list, const char *value)
+{
+	unsigned long flags;
+	unsigned int i;
+
+	spin_lock_irqsave(&list->lock, flags);
+	for (i = 0; i < list->count; i++) {
+		if (strcmp(list->entries[i], value) == 0) {
+			for (; i + 1 < list->count; i++)
+				memcpy(list->entries[i], list->entries[i + 1],
+				       RK_TARGET_MAX_LEN);
+			list->count--;
+			spin_unlock_irqrestore(&list->lock, flags);
+			return 0;
+		}
+	}
+	spin_unlock_irqrestore(&list->lock, flags);
+	return -ENOENT;
+}
+
+bool rk_target_match(struct rk_target_list *list,
+		     const char *name, size_t name_length)
+{
+	unsigned long flags;
+	unsigned int i;
+	bool found = false;
+
+	spin_lock_irqsave(&list->lock, flags);
+	for (i = 0; i < list->count; i++) {
+		if (strnstr(name, list->entries[i], name_length)) {
+			found = true;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&list->lock, flags);
+	return found;
+}
+
+void rk_target_clear(struct rk_target_list *list)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&list->lock, flags);
+	list->count = 0;
+	spin_unlock_irqrestore(&list->lock, flags);
 }
 
 bool rk_target_number_match(struct rk_target_list *list, unsigned int value)
 {
-	/*
-	 * TODO: return true if value matches any entry parsed as uint.
-	 *
-	 * Iterate under spin_lock_irqsave. Parse each entry with
-	 * kstrtouint. If it parses successfully and equals value,
-	 * return true.
-	 */
-	return false;
+	unsigned long flags;
+	unsigned int i;
+	bool found = false;
+
+	spin_lock_irqsave(&list->lock, flags);
+	for (i = 0; i < list->count; i++) {
+		unsigned int entry_val;
+
+		if (kstrtouint(list->entries[i], 10, &entry_val) == 0 &&
+		    entry_val == value) {
+			found = true;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&list->lock, flags);
+	return found;
 }

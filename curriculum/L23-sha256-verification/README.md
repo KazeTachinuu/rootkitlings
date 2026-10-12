@@ -17,6 +17,34 @@ exercise adds a secret key with HMAC.
 
 ## Linux synchronous hash lifecycle
 
+```text
+crypto_alloc_shash("sha256")
+        |
+        v
+crypto_shash_digestsize() == 32?
+        |
+        v
+kmalloc(sizeof(shash_desc) + descsize)
+        |
+   desc->tfm = tfm
+        |
+        v
+crypto_shash_digest(desc, data, len, out)
+        |
+   +----+----+
+   |         |
+ success   error
+   |         |
+   v         v
+ copy out  preserve error
+   |         |
+   +----+----+
+        |
+        v
+  kfree(desc), crypto_free_shash(tfm)
+  memzero_explicit(local digest)
+```
+
 Use the supplied API in this order:
 
 1. Allocate `"sha256"` with `crypto_alloc_shash()` and preserve an error-pointer
