@@ -82,8 +82,6 @@ L26      port hiding
 ```
 
 Use `list` for the full route and `prereq` for direct dependencies.
-Use `./rootkitlings run C00 --reference` then `./rootkitlings connect C00` to
-operate the completed rootkit in its restricted guest network.
 
 ## Recovery
 
