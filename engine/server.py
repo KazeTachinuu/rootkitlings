@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import cmd
 import os
+import select
+import socket
+import socketserver
 import sys
 import threading
 import time
@@ -21,7 +24,6 @@ from engine.control_console import (
     TargetProcess,
     TargetSession,
     accept_shell_while_running,
-    accept_while_running,
     build_crypto_helper,
     encode_control_command,
     mark_operator_ready,
@@ -345,6 +347,95 @@ def _watcher_loop(
             time.sleep(1)
 
 
+class _SessionHandler(socketserver.BaseRequestHandler):
+    """Handle one agent connection: authenticate or drop."""
+
+    def handle(self):
+        ctx = self.server.session_ctx
+        peer = self.request
+        peer.settimeout(30)
+
+        try:
+            secure = SecureControl(
+                ctx["key"],
+                lambda key: OpenSslAead(key, ctx["helper"], ctx["output"]),
+            )
+            session_id = secure.accept_hello(receive_frame(peer))
+        except Exception:
+            return
+
+        target = ctx["manager"].add(
+            ctx["exercise"], ctx["session"], ctx["operator"],
+            peer, secure, ctx["process"],
+        )
+
+        try:
+            reply = target.exchange("INFO")
+            if reply.startswith("INFO "):
+                parts = reply[5:].split(None, 2)
+                if len(parts) >= 3:
+                    target.hostname, target.kernel, target.arch = parts
+        except Exception:
+            pass
+
+        info = f" [{target.hostname}]" if target.hostname else ""
+        _server_print(
+            ctx["success"],
+            f"connect  {target.id}  {ctx['exercise']}{info}"
+            f"  session={session_id:016x}",
+        )
+        add_event(
+            f"connect {target.id} {ctx['exercise']}{info}", "connect",
+        )
+
+        # TCP keepalive: let the OS detect dead connections
+        peer.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 5)
+        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 2)
+        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+
+        # Block until disconnected: select detects EOF/error
+        try:
+            while target.online:
+                readable, _, _ = select.select([peer], [], [], 5.0)
+                if readable:
+                    if not peer.recv(1, socket.MSG_PEEK):
+                        break
+        except Exception:
+            pass
+
+        target.online = False
+        _server_print(
+            ctx["warning"],
+            f"lost     {target.id} ({ctx['exercise']}):"
+            " agent disconnected, waiting for reconnect",
+        )
+        add_event(
+            f"offline {target.id} ({ctx['exercise']})", "disconnect",
+        )
+
+
+class _SessionServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+    def __init__(self, existing_socket, ctx):
+        self.session_ctx = ctx
+        # Skip bind/listen: reuse the socket HostOperator already bound
+        socketserver.TCPServer.__init__(
+            self, existing_socket.getsockname(), _SessionHandler,
+            bind_and_activate=False,
+        )
+        self.socket = existing_socket
+
+
+def _server_print(fn, msg):
+    sys.stdout.write(f"\r\033[K")
+    fn(msg)
+    sys.stdout.write(ServerConsole.prompt)
+    sys.stdout.flush()
+
+
 def _handle_session(
     root: Path,
     exercise: str,
@@ -354,11 +445,10 @@ def _handle_session(
     success: Callable[[str], None],
     warning: Callable[[str], None],
 ) -> None:
-    """Accept connections from a target forever. Re-accept after each drop.
+    """Run a ThreadingTCPServer on the session's control port.
 
-    Each accepted connection must authenticate (HELLO handshake) or get
-    dropped. Authenticated connections become targets in the manager.
-    When a connection dies the thread loops back to accept.
+    Accepts any number of connections. Each one authenticates via HELLO
+    handshake or gets dropped. Runs until the target process dies.
     """
     try:
         session = read_target_session(root, exercise)
@@ -368,90 +458,41 @@ def _handle_session(
         return
 
     mark_operator_ready(session)
-    sys.stdout.write(f"\r\033[K")
-    output(
+    _server_print(
+        output,
         f"  session  {exercise}"
         f"  control=:{operator.control_port}"
-        f"  shell=:{operator.shell_port}\n"
+        f"  shell=:{operator.shell_port}\n",
     )
-    sys.stdout.write(ServerConsole.prompt)
-    sys.stdout.flush()
 
     process = TargetProcess(session)
-    target_id = None
 
-    try:
-        while process.poll() is None:
-            # Wait for the next inbound connection (no timeout)
-            try:
-                peer = accept_while_running(
-                    operator.control_listener, process,
-                )
-                peer.settimeout(30)
-            except OperatorError:
-                break
+    ctx = {
+        "exercise": exercise,
+        "session": session,
+        "operator": operator,
+        "process": process,
+        "manager": manager,
+        "helper": helper,
+        "output": output,
+        "success": success,
+        "warning": warning,
+        "key": operator.key,
+    }
 
-            # Authenticate: HELLO handshake or drop
-            try:
-                secure = SecureControl(
-                    operator.key,
-                    lambda key: OpenSslAead(key, helper, output),
-                )
-                session_id = secure.accept_hello(receive_frame(peer))
-            except Exception:
-                peer.close()
-                continue
+    server = _SessionServer(operator.control_listener, ctx)
 
-            target = manager.add(
-                exercise, session, operator, peer, secure, process,
-            )
-            target_id = target.id
+    server_thread = threading.Thread(
+        target=server.serve_forever, daemon=True,
+    )
+    server_thread.start()
 
-            try:
-                reply = target.exchange("INFO")
-                if reply.startswith("INFO "):
-                    parts = reply[5:].split(None, 2)
-                    if len(parts) >= 3:
-                        target.hostname, target.kernel, target.arch = parts
-            except Exception:
-                pass
+    # Wait until the target process dies
+    while process.poll() is None:
+        time.sleep(1)
 
-            info = f" [{target.hostname}]" if target.hostname else ""
-            sys.stdout.write(f"\r\033[K")
-            success(
-                f"connect  {target.id}  {exercise}{info}"
-                f"  session={session_id:016x}"
-            )
-            add_event(
-                f"connect {target.id} {exercise}{info}", "connect",
-            )
-            sys.stdout.write(ServerConsole.prompt)
-            sys.stdout.flush()
-
-            # Serve until the agent disconnects
-            while target.online and process.poll() is None:
-                try:
-                    target.exchange("PING")
-                except Exception:
-                    break
-                time.sleep(2)
-
-            target.online = False
-            if process.poll() is not None:
-                break
-
-            sys.stdout.write(f"\r\033[K")
-            warning(
-                f"lost     {target_id} ({exercise}):"
-                " agent disconnected, waiting for reconnect\n"
-            )
-            add_event(
-                f"offline {target_id} ({exercise})", "disconnect",
-            )
-            sys.stdout.write(ServerConsole.prompt)
-            sys.stdout.flush()
-    finally:
-        operator.close()
+    server.shutdown()
+    operator.close()
 
 
 def server_running(root: Path) -> bool:
