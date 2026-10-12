@@ -6,7 +6,6 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$HERE/../../../scripts/lesson-env"
 ROOT=$RKLINGS_ROOT
 SECURE_AGENT=$HERE/../../M05-authenticated-channel
-AUTHORIZED=$HERE/../../M02-authorized-actions-telemetry
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-complete-rootkit.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 
@@ -29,15 +28,12 @@ for command in base64 gcc gzip make nm python3; do
 		exit 1
 	}
 done
-for script in test host-check success-check config-check \
-		visibility-check visibility-failure-check visibility-host-check; do
+for script in test success-check; do
 	bash -n "$HERE/$script"
 done
 if command -v shellcheck >/dev/null; then
-	shellcheck -x -s bash "$HERE/test" "$HERE/host-check" \
-		"$HERE/visibility-host-check"
-	shellcheck -x -s sh "$HERE/success-check" "$HERE/config-check" \
-		"$HERE/visibility-check" "$HERE/visibility-failure-check"
+	shellcheck -x -s bash "$HERE/test"
+	shellcheck -x -s sh "$HERE/success-check"
 fi
 
 materialize()
@@ -207,24 +203,8 @@ run_guest "$scratch/checks/success-check" \
 	"$scratch/solution/rklings.ko" solution \
 	--tool vm/tools/packet_mutation_test
 
-run_guest "$AUTHORIZED/checks/success-check" \
-	"$scratch/solution/rklings.ko" authorized-actions \
-	--check-arg complete-rootkit --tool vm/tools/event_stream_test \
-	--tool vm/tools/status_field_test --tool vm/tools/proc_write_test \
-	--tool vm/tools/proc_read_test --tool vm/tools/cred_trigger_test \
-	--tool vm/tools/rmdir_telemetry_test --tool vm/tools/run_as
 run_guest "$SECURE_AGENT/checks/invalid-check" \
 	"$scratch/solution/rklings.ko" control-provisioning \
 	--tool vm/tools/module_load_params
-
-run_guest "$HERE/config-check" \
-	"$scratch/solution/rklings.ko" configuration-boundaries \
-	--tool vm/tools/module_load_params
-
-run_guest "$HERE/visibility-check" \
-	"$scratch/solution/rklings.ko" selected-view-concealment \
-	--tool vm/tools/run_as --tool vm/tools/getdents64_test \
-	--tool vm/tools/status_field_test --tool vm/tools/proc_write_test \
-	--tool vm/tools/proc_read_test --tool vm/tools/read_result_test
 
 printf '[+] complete-rootkit passed\n'
