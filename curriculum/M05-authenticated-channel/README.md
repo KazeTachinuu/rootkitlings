@@ -9,7 +9,7 @@ who holds the pre-shared key can issue commands.
 
 Every frame between the agent and operator is now an AEAD envelope:
 
-```
+```text
 [version:1][kind:1][session:8][sequence:8]  <-- 18-byte header (AAD)
 [ciphertext + 16-byte GCM tag]              <-- sealed payload
 ```

@@ -1,4 +1,4 @@
-# M00: Stage a reversible boot-load request
+# Stage a reversible boot-load request
 
 A rootkit that disappears on reboot is no rootkit at all. This milestone
 teaches the standard Linux persistence mechanism: writing a
