@@ -1,9 +1,0 @@
-[     965ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:8093/dashboard/main.js:57
-[    7010ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:8093/dashboard/main.js:57
-[   12211ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:8093/dashboard/main.js:57
-[   14312ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:8093/dashboard/main.js:57
-[   21655ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:8093/dashboard/main.js:57
-[   26944ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:8093/dashboard/main.js:57
-[   31637ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:8093/dashboard/main.js:57
-[   37530ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:8093/dashboard/main.js:57
-[   43209ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:8093/dashboard/main.js:57

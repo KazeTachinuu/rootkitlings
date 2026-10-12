@@ -1,2 +1,0 @@
-[    2914ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:5175/src/hooks/useWs.js:186
-[    4872ms] [ERROR] WebSocket connection to 'ws://localhost:8081/' failed:  @ http://localhost:5175/src/hooks/useWs.js:186
