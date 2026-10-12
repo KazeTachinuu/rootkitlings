@@ -108,11 +108,10 @@ if [ "${_runtime:-}" = 1 ]; then
 		ui_error "Target setup failed with exit $_setup_status"
 		/bin/reboot
 	fi
-	ui_progress 'Use this console to inspect the target; exit powers it off'
-	cd /rootkitlings || exit 1
-	show 'setsid -c /bin/bash --noprofile --rcfile /etc/rootkitlings.bashrc -i'
-	setsid -c /bin/bash --noprofile \
-		--rcfile /etc/rootkitlings.bashrc -i \
+	ui_progress 'Use this console to test the rootkit as an unprivileged user'
+	ui_progress 'Try: mkdir rkling.e (escalate), mkdir rkling.h.m (hide module)'
+	show 'setsid -c su -l student'
+	setsid -c su -l student \
 		</dev/ttyS0 >/dev/ttyS0 2>&1 || true
 	/bin/poweroff
 fi

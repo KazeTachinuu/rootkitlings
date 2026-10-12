@@ -52,6 +52,8 @@ struct rk_command {
 	unsigned int escalate_pid;
 	char mark_value[RK_HIDE_VALUE_MAX];
 	size_t mark_value_length;
+	unsigned int list_index;
+	int list_has_index;
 };
 
 int rk_command_parse(const unsigned char *bytes, size_t length,
