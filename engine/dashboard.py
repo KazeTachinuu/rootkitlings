@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import mimetypes
 import threading
 import time
 from pathlib import Path
@@ -20,6 +21,7 @@ _manager: TargetManager | None = None
 _ws_clients: set[web.WebSocketResponse] = set()
 _event_log: list[dict] = []
 _loop: asyncio.AbstractEventLoop | None = None
+_static_root: Path | None = None
 
 
 def _enum_indexed(t: Target, cmd: str, prefix: str,
@@ -160,9 +162,25 @@ async def _ws_endpoint(request: web.Request) -> web.WebSocketResponse:
     return ws
 
 
+async def _static_handler(request: web.Request) -> web.Response:
+    path = request.match_info.get("path", "")
+    if not path or path == "index.html":
+        file = _static_root / "index.html"
+    else:
+        file = (_static_root / path).resolve()
+        if not file.is_relative_to(_static_root):
+            raise web.HTTPForbidden()
+
+    if not file.is_file():
+        file = _static_root / "index.html"
+
+    content_type = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
+    return web.Response(body=file.read_bytes(), content_type=content_type)
+
+
 def _run_server(http_port: int, static_root: Path) -> None:
-    """Single event loop: aiohttp serves static files + WS on one port."""
-    global _loop
+    global _loop, _static_root
+    _static_root = static_root
 
     async def run():
         global _loop
@@ -170,8 +188,7 @@ def _run_server(http_port: int, static_root: Path) -> None:
 
         app = web.Application()
         app.router.add_get("/ws", _ws_endpoint)
-        app.router.add_static("/assets", static_root / "assets")
-        app.router.add_static("/", static_root, show_index=False)
+        app.router.add_get("/{path:.*}", _static_handler)
 
         runner = web.AppRunner(app, access_log=None)
         await runner.setup()
