@@ -64,11 +64,11 @@ fi
 # Load persisted modules (before check mode so persistence is testable)
 for _conf in /etc/modules-load.d/*.conf; do
 	[ -f "$_conf" ] || continue
-	while read -r _modname; do
+	while read -r _modname _params; do
 		[ -n "$_modname" ] || continue
 		_ko="/rklings/${_modname}.ko"
 		if [ -f "$_ko" ]; then
-			insmod "$_ko" 2>/dev/null
+			eval "insmod \"$_ko\" $_params" 2>/dev/null
 		fi
 	done < "$_conf"
 done
@@ -91,23 +91,27 @@ if [ "${_check:-}" = 1 ]; then
 fi
 
 if [ "${_runtime:-}" = 1 ]; then
-	{
-		read -r _control_key
-		read -r _callback_peer
-		read -r _control_port
-		read -r _shell_port
-	} < /runtime.args
-	_setup_command="/runtime-setup <control-key> $_callback_peer"
-	_setup_command="$_setup_command $_control_port $_shell_port"
-	show "$_setup_command"
-	/runtime-setup "$_control_key" "$_callback_peer" \
-		"$_control_port" "$_shell_port" \
-		&& _setup_status=0 || _setup_status=$?
-	if [ "$_setup_status" -eq 0 ]; then
-		ui_success 'Target ready; the rootkit is waiting for its operator'
+	if grep -q rklings /proc/modules 2>/dev/null; then
+		ui_success 'Rootkit loaded (persisted across reboot)'
 	else
-		ui_error "Target setup failed with exit $_setup_status"
-		/bin/reboot
+		{
+			read -r _control_key
+			read -r _callback_peer
+			read -r _control_port
+			read -r _shell_port
+		} < /runtime.args
+		_setup_command="/runtime-setup <control-key> $_callback_peer"
+		_setup_command="$_setup_command $_control_port $_shell_port"
+		show "$_setup_command"
+		/runtime-setup "$_control_key" "$_callback_peer" \
+			"$_control_port" "$_shell_port" \
+			&& _setup_status=0 || _setup_status=$?
+		if [ "$_setup_status" -eq 0 ]; then
+			ui_success 'Target ready; the rootkit is waiting for its operator'
+		else
+			ui_error "Target setup failed with exit $_setup_status"
+			/bin/reboot
+		fi
 	fi
 	ui_progress 'Use this console to test the rootkit as an unprivileged user'
 	ui_progress 'Try: mkdir rklings.e (escalate), mkdir rklings.h.m (hide module)'

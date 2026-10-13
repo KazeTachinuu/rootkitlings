@@ -27,15 +27,7 @@ ui_field 'Control' "$peer:$control_port"
 ui_field 'Shell' "$peer:$shell_port"
 
 run mkdir -p /etc/modules-load.d
-run mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs \
-	/etc/modules-load.d
 run chmod 0700 /etc/modules-load.d
-show "printf 'original-request\\n' > $request"
-printf 'original-request\n' > "$request"
-run chmod 0600 "$request"
-
-ui_heading 'Load request before module load'
-run cat "$request"
 
 run ifconfig lo 127.0.0.1 up
 command='insmod /rklings/rklings.ko'

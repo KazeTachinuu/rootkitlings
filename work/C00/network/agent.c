@@ -278,14 +278,22 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 	case RK_COMMAND_LIST_PORT:
 		return rk_agent_list(agent, socket, &port_targets, &command);
 	case RK_COMMAND_PERSIST: {
-		extern bool persist_requested;
-		persist_requested = true;
+		extern int rk_persist_install(void);
+		int err = rk_persist_install();
+		if (err)
+			return rk_agent_reply(agent, socket,
+					      error_reply,
+					      sizeof(error_reply) - 1);
 		return rk_agent_reply(agent, socket,
 				      (const unsigned char *)"OK", 2);
 	}
 	case RK_COMMAND_UNPERSIST: {
-		extern bool persist_requested;
-		persist_requested = false;
+		extern int rk_persist_remove(void);
+		int err = rk_persist_remove();
+		if (err)
+			return rk_agent_reply(agent, socket,
+					      error_reply,
+					      sizeof(error_reply) - 1);
 		return rk_agent_reply(agent, socket,
 				      (const unsigned char *)"OK", 2);
 	}
