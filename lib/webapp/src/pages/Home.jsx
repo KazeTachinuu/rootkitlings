@@ -29,6 +29,8 @@ export function Home({ targets, onNavigate }) {
 }
 
 function NetworkMap({ targets, onNavigate }) {
+  const hasTargets = targets.length > 0
+
   return (
     <div className="nb-card overflow-hidden">
       <div className="px-4 py-2 border-b-2 border-border bg-bg-2 flex items-center gap-2">
@@ -37,87 +39,93 @@ function NetworkMap({ targets, onNavigate }) {
         <span className="text-[10px] font-mono text-fg-3 ml-auto tabular-nums">{API_HOST}</span>
       </div>
 
-      <div className="relative bg-bg p-6" style={{
-        backgroundImage: 'radial-gradient(circle, var(--color-border) 1px, transparent 1px)',
-        backgroundSize: '20px 20px',
+      <div className="bg-bg px-6 py-8" style={{
+        backgroundImage: 'radial-gradient(circle, var(--color-border) 0.8px, transparent 0.8px)',
+        backgroundSize: '16px 16px',
       }}>
-        {/* C2 operator node - centered */}
-        <div className="flex justify-center mb-6">
-          <div className="border-2 border-border rounded-[var(--radius)] bg-main px-5 py-3 shadow-[4px_4px_0px_0px_var(--color-border)] text-center">
+        <div className="flex flex-col items-center">
+          {/* C2 operator node */}
+          <div className="border-2 border-border rounded-[var(--radius)] bg-main px-6 py-3.5 shadow-[4px_4px_0px_0px_var(--color-border)] text-center">
             <div className="flex items-center justify-center gap-2 mb-1">
               <Radio size={16} className="text-main-fg" />
               <span className="text-base font-bold text-main-fg uppercase tracking-wider">C2 Operator</span>
             </div>
             <div className="text-sm font-mono text-main-fg/80">{API_HOST}</div>
           </div>
-        </div>
 
-        {/* connection lines - SVG overlay */}
-        {targets.length > 0 && (
-          <div className="flex justify-center mb-2">
-            <svg width={Math.max(200, targets.length * 200)} height="40" className="overflow-visible">
-              {targets.map((t, i) => {
-                const total = targets.length
-                const spacing = Math.min(200, 600 / Math.max(total, 1))
-                const x = (i - (total - 1) / 2) * spacing + (total * spacing) / 2
-                const centerX = (total * spacing) / 2
+          {/* vertical trunk line from C2 down */}
+          {hasTargets && (
+            <div className="w-0.5 bg-border" style={{ height: 32 }} />
+          )}
+
+          {/* horizontal branch + drops */}
+          {hasTargets && targets.length > 1 && (
+            <div className="relative w-full flex justify-center">
+              {/* horizontal bar spanning across target centers */}
+              <div className="h-0.5 bg-border absolute top-0" style={{
+                width: `calc(${((targets.length - 1) / targets.length) * 100}% - 32px)`,
+              }} />
+            </div>
+          )}
+
+          {/* target row */}
+          {hasTargets ? (
+            <div className={`grid gap-5 w-full ${targets.length === 1 ? '' : `grid-cols-${Math.min(targets.length, 4)}`}`}
+              style={targets.length > 1 ? { gridTemplateColumns: `repeat(${Math.min(targets.length, 4)}, minmax(0, 1fr))` } : undefined}>
+              {targets.map(t => {
+                const name = t.label || (t.hostname && t.hostname !== '(none)' ? t.hostname : t.id)
                 return (
-                  <g key={t.id}>
-                    <line
-                      x1={centerX} y1="0" x2={x} y2="40"
-                      stroke={t.online ? 'var(--color-green)' : 'var(--color-red)'}
-                      strokeWidth="2"
-                      strokeDasharray={t.online ? 'none' : '6 4'}
-                    />
-                    <polygon
-                      points={`${x - 4},34 ${x + 4},34 ${x},42`}
-                      fill={t.online ? 'var(--color-green)' : 'var(--color-red)'}
-                    />
-                  </g>
+                  <div key={t.id} className="flex flex-col items-center">
+                    {/* drop line */}
+                    <div className={`w-0.5 ${t.online ? 'bg-green' : 'bg-red'}`} style={{ height: targets.length > 1 ? 24 : 0 }} />
+                    {/* arrow head */}
+                    <svg width="12" height="8" viewBox="0 0 12 8" className="shrink-0 -mt-px mb-1">
+                      <polygon points="0,0 12,0 6,8" fill={t.online ? 'var(--color-green)' : 'var(--color-red)'} />
+                    </svg>
+                    {/* target card */}
+                    <button
+                      className={`w-full border-2 rounded-[var(--radius)] bg-bg shadow-[3px_3px_0px_0px_var(--color-border)] text-left cursor-pointer
+                        transition-all duration-150 hover:translate-y-[-2px] hover:shadow-[3px_5px_0px_0px_var(--color-border)]
+                        active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_var(--color-border)]
+                        ${t.online ? 'border-green' : 'border-red border-dashed opacity-70'}`}
+                      onClick={() => onNavigate(t.id)}
+                    >
+                      <div className="flex items-stretch">
+                        {/* icon column */}
+                        <div className={`flex items-center justify-center px-3 py-3 border-r-2 shrink-0 ${t.online ? 'border-green/30' : 'border-red/30'}`}>
+                          <PlatformIcon kernel={t.kernel} size={36} />
+                        </div>
+                        {/* info */}
+                        <div className="flex-1 min-w-0 px-3 py-2.5">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${t.online ? 'bg-green pulse' : 'bg-red'}`} />
+                            <span className="font-bold text-sm truncate">{name}</span>
+                          </div>
+                          <div className="text-xs font-mono text-fg-3 truncate">{t.peer || t.id}</div>
+                          <div className="text-[11px] font-mono text-fg-3/50 truncate">{t.kernel} {t.arch}</div>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            {t.module_hidden && (
+                              <span className="text-[9px] font-bold bg-green/15 text-green px-1.5 py-0.5 rounded uppercase tracking-wider">Hidden</span>
+                            )}
+                            {t.persisted && (
+                              <span className="text-[9px] font-bold bg-main/15 text-main px-1.5 py-0.5 rounded uppercase tracking-wider">Persist</span>
+                            )}
+                            <span className="text-[10px] font-mono text-fg-3/50 ml-auto">{t.id}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
                 )
               })}
-            </svg>
-          </div>
-        )}
-
-        {/* target nodes - row */}
-        {targets.length > 0 ? (
-          <div className="flex flex-wrap justify-center gap-4">
-            {targets.map(t => {
-              const name = t.label || (t.hostname && t.hostname !== '(none)' ? t.hostname : t.id)
-              return (
-                <button
-                  key={t.id}
-                  className={`border-2 rounded-[var(--radius)] bg-bg px-4 py-3 shadow-[3px_3px_0px_0px_var(--color-border)] text-left cursor-pointer transition-transform hover:translate-y-[-2px] hover:shadow-[3px_5px_0px_0px_var(--color-border)] min-w-[180px] max-w-[240px] ${
-                    t.online ? 'border-green' : 'border-red border-dashed opacity-70'
-                  }`}
-                  onClick={() => onNavigate(t.id)}
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${t.online ? 'bg-green pulse' : 'bg-red'}`} />
-                    <span className="font-bold text-sm truncate">{name}</span>
-                  </div>
-                  <div className="text-xs font-mono text-fg-3 truncate">{t.peer || t.id}</div>
-                  <div className="text-[11px] font-mono text-fg-3/60 truncate mt-0.5">{t.kernel} {t.arch}</div>
-                  <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border/50">
-                    {t.module_hidden && (
-                      <span className="text-[10px] font-bold text-green uppercase tracking-wider">Hidden</span>
-                    )}
-                    {t.persisted && (
-                      <span className="text-[10px] font-bold text-main uppercase tracking-wider">Persist</span>
-                    )}
-                    <span className="text-[10px] font-mono text-fg-3 ml-auto">{t.id}</span>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="text-center py-8">
-            <Monitor size={28} className="mx-auto text-fg-3 mb-2" />
-            <div className="text-sm text-fg-3 font-mono">Waiting for callbacks...</div>
-          </div>
-        )}
+            </div>
+          ) : (
+            <div className="text-center py-6 mt-4">
+              <Monitor size={28} className="mx-auto text-fg-3 mb-2" />
+              <div className="text-sm text-fg-3 font-mono">Waiting for callbacks...</div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
