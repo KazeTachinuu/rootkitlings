@@ -4,7 +4,9 @@
 import sys
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
 SERVER_DIR = Path(__file__).resolve().parent / "server"
+sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(SERVER_DIR))
 
 from control_console import OperatorError

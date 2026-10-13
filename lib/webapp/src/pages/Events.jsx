@@ -1,4 +1,5 @@
 import { RefreshCw } from 'lucide-react'
+import { EventBadge } from '../components/EventBadge'
 
 export function Events({ events, onRefresh }) {
   return (
@@ -31,9 +32,4 @@ export function Events({ events, onRefresh }) {
       )}
     </div>
   )
-}
-
-function EventBadge({ type }) {
-  const colors = { connect: 'bg-green', disconnect: 'bg-red', cmd: 'bg-blue', sys: 'bg-bg-2' }
-  return <span className={`nb-badge ${colors[type] || 'bg-bg-2'} w-24 justify-center`}>{type}</span>
 }

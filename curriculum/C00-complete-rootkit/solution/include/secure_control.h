@@ -28,7 +28,6 @@ struct rk_secure_channel {
 	bool ready;
 };
 
-void rk_secure_clear(void *buffer, size_t length);
 int rk_secure_channel_start(struct rk_secure_channel *channel,
 			    const u8 *key, size_t key_length, u64 session);
 void rk_secure_channel_stop(struct rk_secure_channel *channel);

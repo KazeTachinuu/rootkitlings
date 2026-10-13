@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Menu, LayoutDashboard, Activity, Radio, Wifi, WifiOff, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { LayoutDashboard, Activity, Radio, Wifi, WifiOff, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useWs } from './hooks/useWs'
 import { ToastProvider, useToast } from './components/Toast'
 import { Home } from './pages/Home'

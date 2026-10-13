@@ -8,6 +8,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE
+sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE / "server"))
 os.chdir(HERE)
 

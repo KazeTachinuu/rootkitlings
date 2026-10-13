@@ -6,6 +6,8 @@ import {
 } from 'lucide-react'
 import { Badge, StatusPill } from '../components/Badge'
 import { CmdBar } from '../components/CmdBar'
+import { EventBadge } from '../components/EventBadge'
+import { Th } from '../components/Th'
 import { wsUrl } from '../api'
 
 const _cache = new Map()
@@ -355,7 +357,6 @@ function FilesTab({ target: t, cmd, query, execCmd, downloadFile }) {
       } else {
         snap.fail(result.output || 'failed')
       }
-      snap.setLoading(false)
     })
   }, [execCmd, t.id, snap])
 
@@ -528,7 +529,7 @@ function FilesTab({ target: t, cmd, query, execCmd, downloadFile }) {
       )}
 
       {preview && (
-        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setPreview(null)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setPreview(null)}>
           <div className="bg-bg border-2 border-border rounded-[var(--radius)] shadow-lg w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b-2 border-border bg-secondary">
               <div className="flex items-center gap-2 min-w-0">
@@ -659,7 +660,6 @@ function ProcsTab({ target: t, cmd, query, execCmd }) {
       } else {
         snap.fail(r.output || 'failed')
       }
-      snap.setLoading(false)
     })
   }, [execCmd, t.id, snap])
 
@@ -834,7 +834,6 @@ function PortsTab({ target: t, cmd, execCmd }) {
       } else {
         snap.fail(r.output || 'failed')
       }
-      snap.setLoading(false)
     })
   }, [execCmd, t.id, snap])
 
@@ -1063,12 +1062,6 @@ function ShellTab({ target: t }) {
   )
 }
 
-/* -- Tables -------------------------------------------------- */
-
-function Th({ children }) {
-  return <th className="text-left px-4 py-2.5 font-bold text-xs uppercase tracking-wide">{children}</th>
-}
-
 /* -- Log + Events -------------------------------------------- */
 
 function LogTab({ entries }) {
@@ -1111,7 +1104,3 @@ function EventsTab({ events }) {
   )
 }
 
-function EventBadge({ type }) {
-  const colors = { connect: 'bg-green text-white', disconnect: 'bg-red text-white', cmd: 'bg-blue text-white', sys: 'bg-bg-2' }
-  return <span className={`nb-badge ${colors[type] || 'bg-bg-2'} w-24 justify-center`}>{type}</span>
-}

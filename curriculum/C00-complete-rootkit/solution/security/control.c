@@ -1,32 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/unaligned.h>
 #include <linux/string.h>
 
 #include "secure_control.h"
-
-void rk_secure_clear(void *buffer, size_t length)
-{
-	memzero_explicit(buffer, length);
-}
-
-static void rk_write_be64(u8 *bytes, u64 value)
-{
-	int index;
-
-	for (index = 7; index >= 0; index--) {
-		bytes[index] = (u8)value;
-		value >>= 8;
-	}
-}
-
-static u64 rk_read_be64(const u8 *bytes)
-{
-	u64 value = 0;
-	size_t index;
-
-	for (index = 0; index < 8; index++)
-		value = (value << 8) | bytes[index];
-	return value;
-}
 
 static int rk_nonce(u64 session, u64 sequence, u8 kind,
 		    u8 nonce[RK_AEAD_NONCE_LENGTH])
@@ -36,7 +12,7 @@ static int rk_nonce(u64 session, u64 sequence, u8 kind,
 	if (!session || !sequence || sequence > RK_SECURE_SEQUENCE_MAX ||
 	    (kind != RK_SECURE_REQUEST && kind != RK_SECURE_REPLY))
 		return -EINVAL;
-	rk_write_be64(nonce, session);
+	put_unaligned_be64(session, nonce);
 	counter = (u32)(sequence << 1) | (kind == RK_SECURE_REPLY);
 	nonce[8] = (u8)(counter >> 24);
 	nonce[9] = (u8)(counter >> 16);
@@ -60,14 +36,14 @@ int rk_secure_channel_start(struct rk_secure_channel *channel,
 	candidate.next_reply = 1;
 	candidate.ready = true;
 	*channel = candidate;
-	rk_secure_clear(&candidate, sizeof(candidate));
+	memzero_explicit(&candidate, sizeof(candidate));
 	return 0;
 }
 
 void rk_secure_channel_stop(struct rk_secure_channel *channel)
 {
 	if (channel)
-		rk_secure_clear(channel, sizeof(*channel));
+		memzero_explicit(channel, sizeof(*channel));
 }
 
 int rk_secure_open_request(struct rk_secure_channel *channel,
@@ -90,8 +66,8 @@ int rk_secure_open_request(struct rk_secure_channel *channel,
 	if (plaintext_capacity < envelope_length - RK_SECURE_HEADER_LENGTH -
 				 RK_AEAD_TAG_LENGTH)
 		return -ENOSPC;
-	session = rk_read_be64(envelope + 2);
-	sequence = rk_read_be64(envelope + 10);
+	session = get_unaligned_be64(envelope + 2);
+	sequence = get_unaligned_be64(envelope + 10);
 	error = rk_nonce(session, sequence, envelope[1], nonce);
 	if (error)
 		goto out;
@@ -134,10 +110,10 @@ int rk_secure_open_request(struct rk_secure_channel *channel,
 	error = 0;
 out:
 	if (error) {
-		rk_secure_clear(plaintext, plaintext_capacity);
+		memzero_explicit(plaintext, plaintext_capacity);
 		*plaintext_length = 0;
 	}
-	rk_secure_clear(nonce, sizeof(nonce));
+	memzero_explicit(nonce, sizeof(nonce));
 	return error;
 }
 
@@ -165,8 +141,8 @@ int rk_secure_seal_reply(struct rk_secure_channel *channel,
 	sequence = channel->next_reply;
 	envelope[0] = RK_SECURE_VERSION;
 	envelope[1] = RK_SECURE_REPLY;
-	rk_write_be64(envelope + 2, channel->session);
-	rk_write_be64(envelope + 10, sequence);
+	put_unaligned_be64(channel->session, envelope + 2);
+	put_unaligned_be64(sequence, envelope + 10);
 	error = rk_nonce(channel->session, sequence, RK_SECURE_REPLY, nonce);
 	if (error)
 		goto out;
@@ -189,9 +165,9 @@ int rk_secure_seal_reply(struct rk_secure_channel *channel,
 	error = 0;
 out:
 	if (error) {
-		rk_secure_clear(envelope, envelope_capacity);
+		memzero_explicit(envelope, envelope_capacity);
 		*envelope_length = 0;
 	}
-	rk_secure_clear(nonce, sizeof(nonce));
+	memzero_explicit(nonce, sizeof(nonce));
 	return error;
 }

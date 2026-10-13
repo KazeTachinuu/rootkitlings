@@ -24,18 +24,20 @@ from engine.control_console import (
     REQUEST,
     SecureControl,
     TargetProcess,
-    _accept_shell_while_running,
-    _next_control_command,
-    _nonce,
-    _poll_shell_status,
-    _process_start,
-    _shell_input,
+    accept_shell_while_running,
     create_target_session,
+    encode_control_command,
     parse_shell_ticket,
+    poll_shell_status,
     read_target_session,
     receive_frame,
     run_control_console,
     send_frame,
+)
+from lib.operator.control_console import (
+    _nonce,
+    _process_start,
+    _shell_input,
 )
 
 
@@ -327,7 +329,7 @@ class FramingTests(unittest.TestCase):
             wrong.start()
             wrong.join(timeout=2)
             correct.start()
-            peer = _accept_shell_while_running(
+            peer = accept_shell_while_running(
                 listener,
                 process,
                 42,
@@ -354,7 +356,7 @@ class FramingTests(unittest.TestCase):
                 OperatorError,
                 r"target stopped before connecting \(stopped\)",
             ):
-                _accept_shell_while_running(
+                accept_shell_while_running(
                     listener,
                     process,
                     1,
@@ -390,37 +392,16 @@ class FramingTests(unittest.TestCase):
                 with self.assertRaisesRegex(OperatorError, "invalid ticket"):
                     parse_shell_ticket(reply)
 
-    def test_worker_command_maps_to_run(self) -> None:
-        self.assertEqual(
-            _next_control_command(
-                io.StringIO("worker\n"),
-                lambda _text: None,
-                lambda _text: None,
-            ),
-            ("RUN", b"RUN"),
-        )
+    def test_encode_control_command_ascii_only(self) -> None:
+        with self.assertRaisesRegex(OperatorError, "ASCII"):
+            encode_control_command("mark caf\xe9")
 
-    def test_invalid_input_warns_then_returns_next_command(self) -> None:
-        stream = io.StringIO(
-            "unknown\n"
-            "mark caf\xe9\n"
-            "mark this message is much too long\n"
-            "help\n"
-            "status\n"
-        )
-        output: list[str] = []
-        warnings: list[str] = []
+    def test_encode_control_command_length_limit(self) -> None:
+        with self.assertRaisesRegex(OperatorError, "maximum"):
+            encode_control_command("x" * 4100)
 
-        self.assertEqual(
-            _next_control_command(stream, output.append, warnings.append),
-            ("STATUS", b"STATUS"),
-        )
-        self.assertEqual(len(warnings), 3)
-        self.assertIn("unknown command", warnings[0])
-        self.assertIn("ASCII", warnings[1])
-        self.assertIn("maximum 30", warnings[2])
-        self.assertTrue(any(line.startswith("Observe\n") for line in output))
-        self.assertEqual(output.count("operator> "), 5)
+    def test_encode_control_command_valid(self) -> None:
+        self.assertEqual(encode_control_command("status"), b"status")
 
     def test_shell_status_is_polled_until_terminal(self) -> None:
         replies = iter((
@@ -435,7 +416,7 @@ class FramingTests(unittest.TestCase):
             return next(replies)
 
         self.assertEqual(
-            _poll_shell_status(42, exchange, pauses.append),
+            poll_shell_status(42, exchange, pauses.append),
             "STATE 0000002a exited 0",
         )
         self.assertEqual(commands, ["SHELL STATUS", "SHELL STATUS"])
@@ -443,7 +424,7 @@ class FramingTests(unittest.TestCase):
 
     def test_shell_status_rejects_another_request(self) -> None:
         with self.assertRaisesRegex(OperatorError, "invalid status"):
-            _poll_shell_status(
+            poll_shell_status(
                 42,
                 lambda _command: "STATE 0000002b exited 0",
             )
@@ -473,7 +454,7 @@ class OpenSslAeadTests(unittest.TestCase):
                     "-O2",
                     "-o",
                     helper,
-                    ROOT / "engine/control_aead.c",
+                    ROOT / "lib/operator/control_aead.c",
                     "-lcrypto",
                 ],
                 stdout=subprocess.PIPE,

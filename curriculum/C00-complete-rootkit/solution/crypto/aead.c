@@ -47,14 +47,11 @@ static int rk_run(const struct rk_aead_ops *ops, const u8 *key,
 	if (output_capacity < result_length)
 		return -ENOSPC;
 	work_length = aad_length + input_length + (decrypt ? 0 : RK_AEAD_TAG_LENGTH);
-	for (size_t i = 0; i < aad_length; i++)
-		work[i] = aad[i];
-	for (size_t i = 0; i < input_length; i++)
-		work[aad_length + i] = input[i];
-	for (size_t i = aad_length + input_length; i < work_length; i++)
-		work[i] = 0;
-	for (size_t i = 0; i < sizeof(iv); i++)
-		iv[i] = nonce[i];
+	memcpy(work, aad, aad_length);
+	memcpy(work + aad_length, input, input_length);
+	memset(work + aad_length + input_length, 0,
+	       work_length - aad_length - input_length);
+	memcpy(iv, nonce, sizeof(iv));
 
 	tfm = ops->alloc();
 	if (!tfm || ops->is_error(tfm)) {
@@ -93,10 +90,9 @@ static int rk_run(const struct rk_aead_ops *ops, const u8 *key,
 		error = -EPROTO;
 	if (error)
 		goto out;
-	for (size_t i = 0; i < result_length; i++)
-		output[i] = work[aad_length + i];
+	memcpy(output, work + aad_length, result_length);
 	*output_length = result_length;
-	out:
+out:
 	if (request)
 		ops->request_free(request);
 	if (tfm)

