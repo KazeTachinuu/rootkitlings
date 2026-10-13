@@ -207,6 +207,9 @@ class OperatorConsole(cmd.Cmd):
     def do_persist(self, arg: str) -> None:
         self._send("PERSIST")
 
+    def do_unpersist(self, arg: str) -> None:
+        self._send("UNPERSIST")
+
     def do_shell(self, arg: str) -> None:
         sub = arg.strip().lower()
         if sub == "status":
@@ -300,7 +303,7 @@ SESSION_FILES = frozenset((
     "session.toml", "shell.sock",
 ))
 SESSION_FIELDS = frozenset((
-    "schema_version", "exercise", "target_pid", "target_start",
+    "schema_version", "label", "target_pid", "target_start",
     "control_port", "shell_port",
 ))
 
@@ -537,7 +540,7 @@ class TargetSession:
     """Private connection state shared by the target and operator CLIs."""
 
     directory: Path
-    exercise: str
+    label: str
     target_pid: int
     target_start: int
     control_port: int
@@ -607,7 +610,7 @@ def _write_private(path: Path, content: str) -> None:
 
 def create_target_session(
     root: Path,
-    exercise: str,
+    label: str,
 ) -> TargetSession:
     """Create one private run directory for a foreground target."""
     run_root = root / ".rklings/run"
@@ -619,15 +622,19 @@ def create_target_session(
             f"target session root has the wrong owner: {run_root}"
         )
     run_root.chmod(0o700)
-    directory = run_root / exercise
+    directory = run_root / label
     if directory.exists():
         try:
-            previous = read_target_session(root, exercise)
+            previous = read_target_session(root, label)
         except OperatorError:
             previous = None
         if previous is not None:
-            raise OperatorError(f"target {exercise} is already running")
-        _remove_stale_session(directory)
+            n = 2
+            while (run_root / f"{label}-{n}").exists():
+                n += 1
+            directory = run_root / f"{label}-{n}"
+        else:
+            _remove_stale_session(directory)
     directory.mkdir(mode=0o700)
     key = _new_key()
     control_port = _available_port()
@@ -638,7 +645,7 @@ def create_target_session(
         raise OperatorError("could not identify the target process")
     session = TargetSession(
         directory,
-        exercise,
+        label,
         target_pid,
         target_start,
         control_port,
@@ -649,7 +656,7 @@ def create_target_session(
         _write_private(session.key_file, key.hex() + "\n")
         metadata = (
             "schema_version = 1\n"
-            f'exercise = "{exercise}"\n'
+            f'label = "{label}"\n'
             f"target_pid = {session.target_pid}\n"
             f"target_start = {session.target_start}\n"
             f"control_port = {control_port}\n"
@@ -690,13 +697,13 @@ def _read_private(path: Path) -> str:
 
 def read_target_session(
     root: Path,
-    exercise: str,
+    label: str,
 ) -> TargetSession:
     """Load and validate the private state for a running target."""
-    directory = root / ".rklings/run" / exercise
+    directory = root / ".rklings/run" / label
     if directory.is_symlink() or not directory.is_dir():
         raise OperatorError(
-            f"target {exercise} is not running; start it in another terminal"
+            f"target {label} is not running; start it in another terminal"
         )
     details = directory.stat()
     if stat.S_IMODE(details.st_mode) != 0o700 or details.st_uid != os.getuid():
@@ -710,13 +717,14 @@ def read_target_session(
         key_text = _read_private(key_path)
     except tomllib.TOMLDecodeError as error:
         raise OperatorError("target session state is invalid") from error
-    if set(metadata) != SESSION_FIELDS:
+    fields = set(metadata)
+    if "exercise" in fields and "label" not in fields:
+        metadata["label"] = metadata.pop("exercise")
+        fields = set(metadata)
+    if fields != SESSION_FIELDS:
         raise OperatorError("target session fields are invalid")
-    if (
-        metadata["schema_version"] != 1
-        or metadata["exercise"] != exercise
-    ):
-        raise OperatorError("target session does not match this exercise")
+    if metadata["schema_version"] != 1:
+        raise OperatorError("target session schema mismatch")
     numbers = (
         metadata["target_pid"],
         metadata["target_start"],
@@ -741,7 +749,7 @@ def read_target_session(
         raise OperatorError("target session key is invalid")
     return TargetSession(
         directory,
-        exercise,
+        label,
         target_pid,
         target_start,
         control_port,

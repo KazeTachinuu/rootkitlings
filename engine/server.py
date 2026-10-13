@@ -42,7 +42,7 @@ class Target:
     def __init__(
         self,
         target_id: str,
-        exercise: str,
+        label: str,
         session: TargetSession,
         operator: HostOperator,
         peer,
@@ -50,7 +50,7 @@ class Target:
         process: TargetProcess,
     ):
         self.id = target_id
-        self.exercise = exercise
+        self.label = label
         self.session = session
         self.operator = operator
         self.peer = peer
@@ -137,7 +137,7 @@ class TargetManager:
 
     def add(
         self,
-        exercise: str,
+        label: str,
         session: TargetSession,
         operator: HostOperator,
         peer,
@@ -148,7 +148,7 @@ class TargetManager:
             target_id = f"target-{self._next_id}"
             self._next_id += 1
             target = Target(
-                target_id, exercise, session, operator, peer, secure, process,
+                target_id, label, session, operator, peer, secure, process,
             )
             self._targets[target_id] = target
             return target
@@ -214,7 +214,7 @@ class ServerConsole(cmd.Cmd):
             except Exception:
                 pass
             self._output(
-                f"  {t.id:<12} {t.exercise:<6} {status:<8}{peer_addr}{info}\n"
+                f"  {t.id:<12} {t.label:<6} {status:<8}{peer_addr}{info}\n"
             )
 
     def do_use(self, arg: str) -> None:
@@ -358,7 +358,7 @@ def _watcher_loop(
                 time.sleep(1)
                 continue
 
-            # ponytail: purge stale entries so re-runs of the same exercise work
+            # ponytail: purge stale entries so re-runs work
             known -= {name for name in known if not (run_dir / name).is_dir()}
 
             for entry in run_dir.iterdir():
@@ -389,11 +389,11 @@ def _watcher_loop(
                     target.online = False
                     sys.stdout.write(f"\r\033[K")
                     warning(
-                        f"{target.id} ({target.exercise}):"
+                        f"{target.id} ({target.label}):"
                         " target process stopped\n"
                     )
                     add_event(
-                        f"offline {target.id} ({target.exercise})",
+                        f"offline {target.id} ({target.label})",
                         "disconnect",
                     )
                     sys.stdout.write(ServerConsole.prompt)
@@ -421,12 +421,12 @@ class _SessionHandler(socketserver.BaseRequestHandler):
         except Exception as e:
             _server_print(
                 ctx["warning"],
-                f"reject   {ctx['exercise']}: {e}\n",
+                f"reject   {ctx['label']}: {e}\n",
             )
             return
 
         target = ctx["manager"].add(
-            ctx["exercise"], ctx["session"], ctx["operator"],
+            ctx["label"], ctx["session"], ctx["operator"],
             peer, secure, ctx["process"],
         )
 
@@ -443,11 +443,11 @@ class _SessionHandler(socketserver.BaseRequestHandler):
         info = f" [{target.hostname}]" if target.hostname else ""
         _server_print(
             ctx["success"],
-            f"connect  {target.id}  {ctx['exercise']}{info}"
+            f"connect  {target.id}  {ctx['label']}{info}"
             f"  session={session_id:016x}",
         )
         add_event(
-            f"connect {target.id} {ctx['exercise']}{info}", "connect",
+            f"connect {target.id} {ctx['label']}{info}", "connect",
         )
 
         # TCP keepalive so the OS detects dead connections
@@ -464,11 +464,11 @@ class _SessionHandler(socketserver.BaseRequestHandler):
             time.sleep(1)
         _server_print(
             ctx["warning"],
-            f"lost     {target.id} ({ctx['exercise']}):"
+            f"lost     {target.id} ({ctx['label']}):"
             " agent disconnected, waiting for reconnect",
         )
         add_event(
-            f"offline {target.id} ({ctx['exercise']})", "disconnect",
+            f"offline {target.id} ({ctx['label']})", "disconnect",
         )
 
 
@@ -495,7 +495,7 @@ def _server_print(fn, msg):
 
 def _handle_session(
     root: Path,
-    exercise: str,
+    label: str,
     manager: TargetManager,
     helper: Path,
     output: Callable[[str], None],
@@ -508,16 +508,16 @@ def _handle_session(
     handshake or gets dropped. Runs until the target process dies.
     """
     try:
-        session = read_target_session(root, exercise)
+        session = read_target_session(root, label)
         operator = HostOperator.from_session(session)
     except OperatorError as error:
-        warning(f"skip     {exercise}: {error}\n")
+        warning(f"skip     {label}: {error}\n")
         return
 
     mark_operator_ready(session)
     _server_print(
         output,
-        f"  session  {exercise}"
+        f"  session  {label}"
         f"  control=:{operator.control_port}"
         f"  shell=:{operator.shell_port}\n",
     )
@@ -525,7 +525,7 @@ def _handle_session(
     process = TargetProcess(session)
 
     ctx = {
-        "exercise": exercise,
+        "label": label,
         "session": session,
         "operator": operator,
         "process": process,
@@ -578,7 +578,7 @@ def run_server(
     output(
         "Rklings operator server\n"
         "Watching for targets. Start one with:\n"
-        "  ./rklings run <EXERCISE> --reference\n\n"
+        "  ./rklings run <TARGET> --reference\n\n"
     )
 
     helper = build_crypto_helper(

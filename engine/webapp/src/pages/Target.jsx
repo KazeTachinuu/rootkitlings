@@ -72,7 +72,6 @@ export function Target({ target: t, log, events, sendCmd, query, execCmd, onBack
         <Badge label={t.online ? 'Online' : 'Offline'} color={t.online ? 'green' : 'red'} />
         <div className="hidden sm:flex items-center gap-4 text-xs font-mono text-fg-3 ml-1">
           <span>{t.id}</span>
-          <span>{t.exercise}</span>
           <span>{t.kernel} {t.arch}</span>
           {t.module_hidden && <span className="text-green font-bold flex items-center gap-1"><Shield size={12} />Hidden</span>}
         </div>
@@ -123,7 +122,7 @@ export function Target({ target: t, log, events, sendCmd, query, execCmd, onBack
 /* -- Overview ------------------------------------------------ */
 
 function OverviewTab({ target: t, cmd, query }) {
-  const [persistStatus, setPersistStatus] = useState(null)
+  const [persistPending, setPersistPending] = useState(false)
   const hidden = {
     file: (t.hidden?.file || []).length,
     pid: (t.hidden?.pid || []).length,
@@ -132,12 +131,10 @@ function OverviewTab({ target: t, cmd, query }) {
   }
   const total = hidden.file + hidden.pid + hidden.port + hidden.content
 
-  const doPersist = useCallback(() => {
-    setPersistStatus('pending')
-    query('PERSIST', t.id).then(r => {
-      setPersistStatus(r.ok ? 'ok' : 'error')
-    })
-  }, [query, t.id])
+  const togglePersist = useCallback(() => {
+    setPersistPending(true)
+    query(t.persisted ? 'UNPERSIST' : 'PERSIST', t.id).then(() => setPersistPending(false))
+  }, [query, t.id, t.persisted])
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 h-full">
@@ -165,18 +162,19 @@ function OverviewTab({ target: t, cmd, query }) {
           <div className="nb-card-flat p-4 flex items-center justify-between gap-4 mt-2">
             <div className="min-w-0">
               <div className="font-bold">Persistence</div>
-              <div className="text-xs text-fg-3 mt-1">Write to modules-load.d for reboot survival</div>
+              <div className="text-xs text-fg-3 mt-1">Survive reboot via modules-load.d</div>
             </div>
             <div className="flex items-center gap-3 shrink-0">
-              {persistStatus === 'ok' && <span className="text-xs font-bold text-green uppercase">persisted</span>}
-              {persistStatus === 'error' && <span className="text-xs font-bold text-red uppercase">failed</span>}
-              {persistStatus === 'pending' && <Loader size={12} className="animate-spin text-fg-3" />}
+              <span className={`text-xs font-bold uppercase ${t.persisted ? 'text-green' : 'text-fg-3'}`}>
+                {t.persisted ? 'active' : 'off'}
+              </span>
+              {persistPending && <Loader size={12} className="animate-spin text-fg-3" />}
               <button
-                className={`nb-btn px-3 py-1.5 text-sm flex items-center gap-1.5 ${persistStatus === 'ok' ? 'bg-green text-white' : ''}`}
-                onClick={doPersist}
-                disabled={!t.online || persistStatus === 'pending'}
+                className={`nb-btn px-3 py-1.5 text-sm flex items-center gap-1.5 ${t.persisted ? 'bg-green text-white' : ''}`}
+                onClick={togglePersist}
+                disabled={!t.online || persistPending}
               >
-                <Shield size={12} /> {persistStatus === 'ok' ? 'Persisted' : 'Persist'}
+                <Shield size={12} /> {t.persisted ? 'Unpersist' : 'Persist'}
               </button>
             </div>
           </div>
@@ -233,7 +231,6 @@ function OverviewTab({ target: t, cmd, query }) {
           <div className="nb-card-flat overflow-hidden">
             <InfoRow label="Hostname" value={t.hostname || t.id} />
             <InfoRow label="ID" value={t.id} />
-            <InfoRow label="Exercise" value={t.exercise} />
             <InfoRow label="Kernel" value={`${t.kernel} ${t.arch}`} />
             {t.build_id && <InfoRow label="Build" value={t.build_id} />}
             {t.peer && <InfoRow label="Peer" value={t.peer} />}

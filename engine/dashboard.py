@@ -76,7 +76,7 @@ def _target_to_dict(t: Target) -> dict:
 
     return {
         "id": t.id,
-        "exercise": t.exercise,
+        "label": t.label,
         "hostname": t.hostname,
         "kernel": t.kernel,
         "arch": t.arch,
@@ -84,6 +84,7 @@ def _target_to_dict(t: Target) -> dict:
         "online": t.online,
         "peer": peer_addr,
         "module_hidden": status.get("hidden", "?") == "yes",
+        "persisted": status.get("persisted", "?") == "yes",
         "counts": {k: int(status.get(k, 0))
                    for k in ("files", "pids", "content", "ports")},
         "hidden": hidden,

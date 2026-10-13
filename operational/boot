@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Boot a target VM and register it with the operator server."""
+
+import os
+import sys
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE
+sys.path.insert(0, str(HERE / "server"))
+os.chdir(HERE)
+
+from control_console import OperatorError, create_target_session
+from server import server_running
+
+VM_BOOT = HERE.parent / "vm" / "boot"
+RUNTIME = HERE.parent / "vm" / "runtime" / "complete-rootkit"
+MODULE = HERE / "rootkit" / "rklings.ko"
+
+label = sys.argv[1] if len(sys.argv) > 1 else "C00"
+
+if not MODULE.is_file():
+    sys.exit(f"[x] Build the rootkit first: make rootkit")
+
+if not VM_BOOT.is_file():
+    sys.exit(f"[x] vm/boot not found at {VM_BOOT}")
+
+try:
+    target = create_target_session(ROOT, label)
+except OperatorError as error:
+    sys.exit(f"[x] {error}")
+
+try:
+    if server_running(ROOT):
+        print("[+] Server detected, waiting for port binding")
+    else:
+        print("[!] Start the server first: make server")
+        print("[*] Waiting for operator...")
+
+    ready_file = target.ready_file
+    deadline = time.monotonic() + 30
+    while not ready_file.exists():
+        if time.monotonic() > deadline:
+            sys.exit("[x] Timed out waiting for operator")
+        time.sleep(0.2)
+
+    print("[+] Operator ready")
+
+    command = [
+        str(VM_BOOT),
+        "--runtime-setup", str(RUNTIME),
+        "--control-key-file", str(target.key_file),
+        "--control-port", str(target.control_port),
+        "--shell-port", str(target.shell_port),
+        str(MODULE),
+    ]
+    os.execvp(command[0], command)
+finally:
+    target.close()

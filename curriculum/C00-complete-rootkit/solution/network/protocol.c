@@ -190,6 +190,8 @@ int rk_command_parse(const unsigned char *bytes, size_t length,
 		parsed.kind = RK_COMMAND_QUIT;
 	else if (rk_bytes_equal(bytes, length, "PERSIST", 7))
 		parsed.kind = RK_COMMAND_PERSIST;
+	else if (rk_bytes_equal(bytes, length, "UNPERSIST", 9))
+		parsed.kind = RK_COMMAND_UNPERSIST;
 	else if (length > 9 && !memcmp(bytes, "ESCALATE ", 9)) {
 		if (rk_parse_uint(bytes + 9, length - 9,
 				  &parsed.escalate_pid))

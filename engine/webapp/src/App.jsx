@@ -46,6 +46,11 @@ function Shell() {
   const selectedTarget = targets.find(t => t.id === page.targetId)
   const online = targets.filter(t => t.online).length
 
+  useEffect(() => {
+    if (page.view === 'target' && targets.length && !selectedTarget)
+      navigate('#/')
+  }, [page.view, targets, selectedTarget])
+
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
       {/* Sidebar: full or icon-only */}

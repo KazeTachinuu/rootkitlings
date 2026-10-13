@@ -19,7 +19,7 @@ export function Home({ targets, onNavigate, onRefresh }) {
     ? targets.filter(t =>
         (t.hostname || '').toLowerCase().includes(q) ||
         (t.id || '').toLowerCase().includes(q) ||
-        (t.exercise || '').toLowerCase().includes(q)
+        (t.label || '').toLowerCase().includes(q)
       )
     : targets
 
@@ -74,7 +74,7 @@ export function Home({ targets, onNavigate, onRefresh }) {
           <Monitor size={40} className="mx-auto text-fg-3 mb-3" />
           <p className="font-bold text-fg-2">{targets.length ? 'No matching targets' : 'No targets connected'}</p>
           <p className="text-sm text-fg-3 font-mono mt-1">
-            {targets.length ? 'Try a different search term' : './rklings run EXERCISE --reference'}
+            {targets.length ? 'Try a different search term' : 'Waiting for targets to connect...'}
           </p>
         </div>
       ) : view === 'grid' ? (
