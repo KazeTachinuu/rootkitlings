@@ -1,14 +1,12 @@
-import { Monitor, ChevronRight, Shield, Network } from 'lucide-react'
+import { Monitor, ChevronRight, Shield, Network, Radio, SquareTerminal } from 'lucide-react'
 import { API_HOST } from '../api'
-import { useRef, useEffect, useCallback } from 'react'
-import cytoscape from 'cytoscape'
 
 export function Home({ targets, onNavigate }) {
   const online = targets.filter(t => t.online).length
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-5">
-      <NetworkGraph targets={targets} onNavigate={onNavigate} />
+    <div className="p-6 max-w-5xl mx-auto space-y-5">
+      <NetworkMap targets={targets} onNavigate={onNavigate} />
 
       <div className="flex items-baseline justify-between">
         <h2 className="text-lg font-bold">Targets</h2>
@@ -30,201 +28,7 @@ export function Home({ targets, onNavigate }) {
   )
 }
 
-const CS_ROOT = getComputedStyle(document.documentElement)
-function cssVar(name) { return CS_ROOT.getPropertyValue(name).trim() }
-
-function NetworkGraph({ targets, onNavigate }) {
-  const containerRef = useRef(null)
-  const cyRef = useRef(null)
-
-  const buildElements = useCallback(() => {
-    const els = [
-      {
-        data: {
-          id: 'operator',
-          label: 'C2',
-          fullLabel: `C2\n${API_HOST}`,
-          type: 'operator',
-        },
-      },
-    ]
-    targets.forEach(t => {
-      const name = t.label || (t.hostname && t.hostname !== '(none)' ? t.hostname : t.id)
-      const detail = `${t.kernel || ''} ${t.arch || ''}`.trim()
-      const lines = [name, t.peer || t.id]
-      if (detail) lines.push(detail)
-      els.push({
-        data: {
-          id: t.id,
-          label: name,
-          fullLabel: lines.join('\n'),
-          type: 'target',
-          online: t.online,
-          hidden: t.module_hidden,
-          persisted: t.persisted,
-        },
-      })
-      els.push({
-        data: {
-          id: `edge-${t.id}`,
-          source: 'operator',
-          target: t.id,
-          online: t.online,
-        },
-      })
-    })
-    return els
-  }, [targets])
-
-  useEffect(() => {
-    if (!containerRef.current) return
-
-    const border = cssVar('--color-border') || '#222'
-    const bg = cssVar('--color-bg') || '#fff'
-    const bg2 = cssVar('--color-bg-2') || '#f5f5f5'
-    const fg = cssVar('--color-fg') || '#111'
-    const fg3 = cssVar('--color-fg-3') || '#999'
-    const main = cssVar('--color-main') || '#7c3aed'
-    const mainFg = cssVar('--color-main-fg') || '#fff'
-    const green = cssVar('--color-green') || '#22c55e'
-    const red = cssVar('--color-red') || '#ef4444'
-
-    const cy = cytoscape({
-      container: containerRef.current,
-      elements: buildElements(),
-      userZoomingEnabled: false,
-      userPanningEnabled: false,
-      boxSelectionEnabled: false,
-      autoungrabify: true,
-      style: [
-        {
-          selector: 'node[type="operator"]',
-          style: {
-            'shape': 'round-rectangle',
-            'width': 90,
-            'height': 50,
-            'background-color': main,
-            'border-width': 2.5,
-            'border-color': border,
-            'label': 'data(fullLabel)',
-            'text-valign': 'center',
-            'text-halign': 'center',
-            'text-wrap': 'wrap',
-            'text-max-width': 80,
-            'font-size': 11,
-            'color': mainFg,
-            'text-justification': 'center',
-          },
-        },
-        {
-          selector: 'node[type="target"]',
-          style: {
-            'shape': 'round-rectangle',
-            'width': 140,
-            'height': 56,
-            'background-color': bg,
-            'border-width': 2.5,
-            'border-color': border,
-            'label': 'data(fullLabel)',
-            'text-valign': 'center',
-            'text-halign': 'center',
-            'text-wrap': 'wrap',
-            'text-max-width': 130,
-            'font-size': 10,
-            'color': fg,
-            'text-justification': 'center',
-          },
-        },
-        {
-          selector: 'node[type="target"][?online]',
-          style: {
-            'border-color': green,
-          },
-        },
-        {
-          selector: 'node[type="target"][!online]',
-          style: {
-            'border-color': red,
-            'border-style': 'dashed',
-            'opacity': 0.6,
-          },
-        },
-        {
-          selector: 'edge',
-          style: {
-            'width': 2,
-            'line-color': green,
-            'curve-style': 'bezier',
-            'target-arrow-shape': 'triangle',
-            'target-arrow-color': green,
-            'arrow-scale': 0.8,
-          },
-        },
-        {
-          selector: 'edge[!online]',
-          style: {
-            'line-color': red,
-            'line-style': 'dashed',
-            'target-arrow-color': red,
-            'opacity': 0.5,
-          },
-        },
-      ],
-      layout: {
-        name: 'concentric',
-        concentric: node => node.data('type') === 'operator' ? 2 : 1,
-        levelWidth: () => 1,
-        minNodeSpacing: 60,
-        padding: 50,
-        animate: false,
-      },
-    })
-
-    cy.on('tap', 'node[type="target"]', evt => {
-      onNavigate(evt.target.data('id'))
-    })
-
-    cyRef.current = cy
-    return () => cy.destroy()
-  }, [buildElements, onNavigate])
-
-  // update data without recreating
-  useEffect(() => {
-    const cy = cyRef.current
-    if (!cy) return
-    const newEls = buildElements()
-
-    const existingIds = new Set(cy.elements().map(e => e.data('id')))
-    const newIds = new Set(newEls.map(e => e.data.id))
-
-    // remove old
-    cy.elements().forEach(e => {
-      if (!newIds.has(e.data('id'))) e.remove()
-    })
-
-    // add or update
-    newEls.forEach(el => {
-      if (existingIds.has(el.data.id)) {
-        const existing = cy.getElementById(el.data.id)
-        existing.data(el.data)
-      } else {
-        cy.add(el)
-      }
-    })
-
-    if (newEls.length !== existingIds.size) {
-      cy.layout({
-        name: 'concentric',
-        concentric: node => node.data('type') === 'operator' ? 2 : 1,
-        levelWidth: () => 1,
-        minNodeSpacing: 60,
-        padding: 40,
-        animate: true,
-        animationDuration: 300,
-      }).run()
-    }
-  })
-
+function NetworkMap({ targets, onNavigate }) {
   return (
     <div className="nb-card overflow-hidden">
       <div className="px-4 py-2 border-b-2 border-border bg-bg-2 flex items-center gap-2">
@@ -232,7 +36,89 @@ function NetworkGraph({ targets, onNavigate }) {
         <span className="text-sm font-bold uppercase tracking-wide">Network</span>
         <span className="text-[10px] font-mono text-fg-3 ml-auto tabular-nums">{API_HOST}</span>
       </div>
-      <div ref={containerRef} style={{ height: 300 }} className="bg-bg" />
+
+      <div className="relative bg-bg p-6" style={{
+        backgroundImage: 'radial-gradient(circle, var(--color-border) 1px, transparent 1px)',
+        backgroundSize: '20px 20px',
+      }}>
+        {/* C2 operator node - centered */}
+        <div className="flex justify-center mb-6">
+          <div className="border-2 border-border rounded-[var(--radius)] bg-main px-5 py-3 shadow-[4px_4px_0px_0px_var(--color-border)] text-center">
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <Radio size={16} className="text-main-fg" />
+              <span className="text-base font-bold text-main-fg uppercase tracking-wider">C2 Operator</span>
+            </div>
+            <div className="text-sm font-mono text-main-fg/80">{API_HOST}</div>
+          </div>
+        </div>
+
+        {/* connection lines - SVG overlay */}
+        {targets.length > 0 && (
+          <div className="flex justify-center mb-2">
+            <svg width={Math.max(200, targets.length * 200)} height="40" className="overflow-visible">
+              {targets.map((t, i) => {
+                const total = targets.length
+                const spacing = Math.min(200, 600 / Math.max(total, 1))
+                const x = (i - (total - 1) / 2) * spacing + (total * spacing) / 2
+                const centerX = (total * spacing) / 2
+                return (
+                  <g key={t.id}>
+                    <line
+                      x1={centerX} y1="0" x2={x} y2="40"
+                      stroke={t.online ? 'var(--color-green)' : 'var(--color-red)'}
+                      strokeWidth="2"
+                      strokeDasharray={t.online ? 'none' : '6 4'}
+                    />
+                    <polygon
+                      points={`${x - 4},34 ${x + 4},34 ${x},42`}
+                      fill={t.online ? 'var(--color-green)' : 'var(--color-red)'}
+                    />
+                  </g>
+                )
+              })}
+            </svg>
+          </div>
+        )}
+
+        {/* target nodes - row */}
+        {targets.length > 0 ? (
+          <div className="flex flex-wrap justify-center gap-4">
+            {targets.map(t => {
+              const name = t.label || (t.hostname && t.hostname !== '(none)' ? t.hostname : t.id)
+              return (
+                <button
+                  key={t.id}
+                  className={`border-2 rounded-[var(--radius)] bg-bg px-4 py-3 shadow-[3px_3px_0px_0px_var(--color-border)] text-left cursor-pointer transition-transform hover:translate-y-[-2px] hover:shadow-[3px_5px_0px_0px_var(--color-border)] min-w-[180px] max-w-[240px] ${
+                    t.online ? 'border-green' : 'border-red border-dashed opacity-70'
+                  }`}
+                  onClick={() => onNavigate(t.id)}
+                >
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${t.online ? 'bg-green pulse' : 'bg-red'}`} />
+                    <span className="font-bold text-sm truncate">{name}</span>
+                  </div>
+                  <div className="text-xs font-mono text-fg-3 truncate">{t.peer || t.id}</div>
+                  <div className="text-[11px] font-mono text-fg-3/60 truncate mt-0.5">{t.kernel} {t.arch}</div>
+                  <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border/50">
+                    {t.module_hidden && (
+                      <span className="text-[10px] font-bold text-green uppercase tracking-wider">Hidden</span>
+                    )}
+                    {t.persisted && (
+                      <span className="text-[10px] font-bold text-main uppercase tracking-wider">Persist</span>
+                    )}
+                    <span className="text-[10px] font-mono text-fg-3 ml-auto">{t.id}</span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <Monitor size={28} className="mx-auto text-fg-3 mb-2" />
+            <div className="text-sm text-fg-3 font-mono">Waiting for callbacks...</div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
