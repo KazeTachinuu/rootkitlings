@@ -136,6 +136,13 @@ h1, h2, h3, h4, h5, h6 { font-weight: 700; }
 }
 .pulse { animation: pulse-dot 2s ease-in-out infinite; }
 
+/* idle CTA float */
+@keyframes nb-float {
+  0%, 100% { transform: translateY(0) }
+  50% { transform: translateY(-6px) }
+}
+.nb-float { animation: nb-float 3s ease-in-out infinite; }
+
 /* selection */
 ::selection { background: var(--color-main); color: var(--color-main-fg); }
 

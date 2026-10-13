@@ -1113,7 +1113,7 @@ function EmptySnapshotCta({ icon: Icon, title, subtitle, onCapture, online, load
   return (
     <div className="flex-1 flex items-center justify-center h-full">
       <div className="text-center px-6 py-10">
-        <div className="mx-auto w-16 h-16 rounded-[var(--radius)] border-2 border-border bg-main/10 flex items-center justify-center mb-5 shadow-[3px_3px_0px_0px_var(--color-border)]">
+        <div className="mx-auto w-16 h-16 rounded-[var(--radius)] border-2 border-border bg-main/10 flex items-center justify-center mb-5 shadow-[3px_3px_0px_0px_var(--color-border)] nb-float">
           <Icon size={28} className="text-main" />
         </div>
         <div className="text-lg font-bold mb-1">{title}</div>
@@ -1593,7 +1593,7 @@ const ShellTab = forwardRef(function ShellTab({ target: t, onStatusChange, visib
       ) : (
         <div className="flex-1 flex items-center justify-center h-full">
           <div className="text-center px-6 py-10">
-            <div className="mx-auto w-16 h-16 rounded-[var(--radius)] border-2 border-border bg-[#1a1028] flex items-center justify-center mb-5 shadow-[3px_3px_0px_0px_var(--color-border)]">
+            <div className="mx-auto w-16 h-16 rounded-[var(--radius)] border-2 border-border bg-[#1a1028] flex items-center justify-center mb-5 shadow-[3px_3px_0px_0px_var(--color-border)] nb-float">
               <SquareTerminal size={28} className="text-[#a78bfa]" />
             </div>
             <div className="text-lg font-bold mb-1">Reverse Shell</div>
