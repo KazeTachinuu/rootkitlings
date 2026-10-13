@@ -28,9 +28,9 @@ the same CPU already holds the lock from a proc write.
 
 ## Substring matching vs exact matching
 
-File hiding uses substring matching: `hide file rkling` hides every
-directory entry whose name contains "rkling". This lets one rule
-cover `rkling_persist`, `rkling_shell`, `rkling_agent`, etc.
+File hiding uses substring matching: `hide file rklings` hides every
+directory entry whose name contains "rklings". This lets one rule
+cover `rklings_persist`, `rklings_shell`, `rklings_agent`, etc.
 
 PID hiding uses exact numeric matching: `hide pid 1234` hides the
 directory entry named "1234" from /proc listings. The entry's name is
@@ -42,7 +42,7 @@ parsed as an unsigned integer and compared against the stored value.
 userspace buffer (from getdents64 return):
 
 +----------+----------+----------+----------+----------+
-| "."      | "secret" | "normal" | "rkling" | "data"   |
+| "."      | "secret" | "normal" | "rklings"| "data"   |
 | reclen=32| reclen=40| reclen=32| reclen=40| reclen=32|
 +----------+----------+----------+----------+----------+
                  ^                      ^
@@ -74,7 +74,7 @@ writable). Write commands to manage the target lists:
 
 | Command | Effect |
 |---------|--------|
-| `echo "hide file rkling" > /proc/rklings` | Hide entries starting with "rkling" |
+| `echo "hide file rklings" > /proc/rklings` | Hide entries starting with "rklings" |
 | `echo "hide pid 1234" > /proc/rklings` | Hide PID 1234 from /proc |
 | `echo "unhide file 0" > /proc/rklings` | Remove file target at index 0 |
 | `echo "unhide pid 0" > /proc/rklings` | Remove PID target at index 0 |

@@ -32,6 +32,10 @@ struct rk_agent {
 	unsigned int retry_max_ms;
 	unsigned int retry_delay_ms;
 	struct rk_secure_channel secure;
+	/* Work buffers kept off the stack to avoid overflow. */
+	struct rk_frame rx_frame;
+	unsigned char rx_plain[RK_SECURE_PLAINTEXT_MAX];
+	unsigned char tx_envelope[RK_FRAME_MAX];
 };
 
 __must_check int rk_agent_start(struct rk_agent *agent,

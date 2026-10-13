@@ -10,6 +10,9 @@ export function useWs() {
   const pendingRef = useRef({})
   const execPendingRef = useRef({})
   const execIdRef = useRef(0)
+  const dlPendingRef = useRef({})
+  const dlProgressRef = useRef({})
+  const dlIdRef = useRef(0)
   const disposedRef = useRef(false)
 
   const connect = useCallback(() => {
@@ -50,6 +53,20 @@ export function useWs() {
             execPendingRef.current[id](msg)
             delete execPendingRef.current[id]
           }
+        } else if (msg.type === 'download_progress') {
+          const id = msg._dlId
+          if (id != null && dlProgressRef.current[id]) {
+            dlProgressRef.current[id](msg.received, msg.total)
+          }
+        } else if (msg.type === 'download_result') {
+          const id = msg._dlId
+          if (id != null) {
+            delete dlProgressRef.current[id]
+            if (dlPendingRef.current[id]) {
+              dlPendingRef.current[id](msg)
+              delete dlPendingRef.current[id]
+            }
+          }
         } else if (msg.type === 'event') {
           setEvents(prev => [...prev, msg.event])
         }
@@ -65,6 +82,10 @@ export function useWs() {
           execPendingRef.current[id]({ ok: false, output: 'disconnected' })
         }
         execPendingRef.current = {}
+        for (const id of Object.keys(dlPendingRef.current)) {
+          dlPendingRef.current[id]({ ok: false, error: 'disconnected' })
+        }
+        dlPendingRef.current = {}
         if (!disposedRef.current) setTimeout(connect, 3000)
       }
       ws.onerror = () => ws.close()
@@ -116,6 +137,21 @@ export function useWs() {
     return Promise.resolve({ ok: false, output: 'not connected' })
   }, [])
 
+  const downloadFile = useCallback((path, targetId, onProgress) => {
+    if (!targetId || !path) return Promise.resolve({ ok: false, error: 'missing args' })
+    if (wsRef.current?.readyState === 1) {
+      const id = ++dlIdRef.current
+      return new Promise((resolve) => {
+        dlPendingRef.current[id] = resolve
+        if (onProgress) dlProgressRef.current[id] = onProgress
+        wsRef.current.send(JSON.stringify({
+          type: 'download', target: targetId, path, _dlId: id,
+        }))
+      })
+    }
+    return Promise.resolve({ ok: false, error: 'not connected' })
+  }, [])
+
   useEffect(() => {
     disposedRef.current = false
     connect()
@@ -125,5 +161,5 @@ export function useWs() {
     }
   }, [connect])
 
-  return { targets, events, log, connected, sendCmd, query, execCmd, refresh }
+  return { targets, events, log, connected, sendCmd, query, execCmd, downloadFile, refresh }
 }

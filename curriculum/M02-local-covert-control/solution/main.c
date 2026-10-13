@@ -145,7 +145,7 @@ static int __init rk_init(void)
 	if (error)
 		return error;
 
-	proc_entry = proc_create("rkling_status", 0400, NULL, &rk_proc_ops);
+	proc_entry = proc_create("rklings_status", 0400, NULL, &rk_proc_ops);
 	if (!proc_entry) {
 		unregister_kretprobe(&mkdir_probe);
 		return -ENOMEM;

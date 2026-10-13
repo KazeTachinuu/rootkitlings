@@ -80,7 +80,7 @@ static bool persist_requested;
 
 // TODO: tcp4_seq_show kretprobe (port hiding)
 
-// TODO: /proc/rkling_status (read-only status)
+// TODO: /proc/rklings_status (read-only status)
 
 // TODO: hex key parser
 

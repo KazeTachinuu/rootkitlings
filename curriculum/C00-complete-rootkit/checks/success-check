@@ -78,10 +78,10 @@ else
 	_fail "shell command tamper not rejected"
 fi
 
-if test -r /proc/rkling_status; then
-	_ok "/proc/rkling_status exists"
+if test -r /proc/rklings_status; then
+	_ok "/proc/rklings_status exists"
 else
-	_fail "/proc/rkling_status not found"
+	_fail "/proc/rklings_status not found"
 fi
 
 if ! grep -q rklings /proc/modules; then

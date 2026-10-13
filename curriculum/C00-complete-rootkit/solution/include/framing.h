@@ -5,7 +5,7 @@
 #include <linux/compiler_attributes.h>
 #include <linux/types.h>
 
-#define RK_FRAME_MAX 128
+#define RK_FRAME_MAX 4096
 
 struct socket;
 

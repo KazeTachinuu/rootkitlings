@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import mimetypes
 import socket
@@ -151,8 +152,11 @@ async def _ws_endpoint(request: web.Request) -> web.WebSocketResponse:
                         "reply": "target offline",
                     }))
                     continue
+                loop = asyncio.get_event_loop()
                 try:
-                    reply = target.exchange(command)
+                    reply = await loop.run_in_executor(
+                        None, target.exchange, command,
+                    )
                     await ws.send_str(json.dumps({
                         "type": "result",
                         "target": target_id,
@@ -168,6 +172,58 @@ async def _ws_endpoint(request: web.Request) -> web.WebSocketResponse:
                         "command": command,
                         "ok": False,
                         "reply": str(e),
+                    }))
+
+            elif cmd_type == "download":
+                target_id = data.get("target")
+                remote_path = data.get("path", "").strip()
+                dl_id = data.get("_dlId")
+                if not target_id or not remote_path:
+                    continue
+                target = _manager.get(target_id) if _manager else None
+                if not target or not target.online:
+                    await ws.send_str(json.dumps({
+                        "type": "download_result", "target": target_id,
+                        "_dlId": dl_id,
+                        "path": remote_path,
+                        "ok": False, "error": "target offline",
+                    }))
+                    continue
+                loop = asyncio.get_event_loop()
+
+                def _dl_progress(received: int, total: int) -> None:
+                    asyncio.run_coroutine_threadsafe(
+                        ws.send_str(json.dumps({
+                            "type": "download_progress",
+                            "_dlId": dl_id,
+                            "received": received,
+                            "total": total,
+                        })),
+                        loop,
+                    )
+
+                try:
+                    file_bytes, total = await loop.run_in_executor(
+                        None, target.download_file, remote_path,
+                        _dl_progress,
+                    )
+                    await ws.send_str(json.dumps({
+                        "type": "download_result", "target": target_id,
+                        "_dlId": dl_id,
+                        "path": remote_path, "ok": True,
+                        "size": total,
+                        "data": base64.b64encode(file_bytes).decode("ascii"),
+                    }))
+                    add_event(
+                        f"{target.id}: download {remote_path} ({len(file_bytes)}B)",
+                        "cmd",
+                    )
+                except Exception as e:
+                    await ws.send_str(json.dumps({
+                        "type": "download_result", "target": target_id,
+                        "_dlId": dl_id,
+                        "path": remote_path,
+                        "ok": False, "error": str(e),
                     }))
 
             elif cmd_type == "exec":

@@ -30,3 +30,4 @@ __pycache__/
 .playwright-mcp/
 .superpowers/
 docs/superpowers/
+operational/.state/

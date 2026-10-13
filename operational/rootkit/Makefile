@@ -1,4 +1,4 @@
-KDIR ?= /lib/modules/$(shell uname -r)/build
+KDIR ?= $(shell find $(CURDIR)/../../.rklings/kernel/kits -maxdepth 1 -mindepth 1 -type d | head -1)/build
 
 .PHONY: all clean
 

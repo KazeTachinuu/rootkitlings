@@ -61,7 +61,19 @@ class Target:
         self.arch = ""
         self.build_id = ""
         self.online = True
+        self._generation = 0
         self._lock = threading.Lock()
+
+    def reconnect(self, peer, secure):
+        with self._lock:
+            try:
+                self.peer.close()
+            except Exception:
+                pass
+            self.peer = peer
+            self.secure = secure
+            self._generation += 1
+            self.online = True
 
     def exchange(self, command: str) -> str:
         with self._lock:
@@ -74,18 +86,65 @@ class Target:
                 self.online = False
                 raise
 
+    def download_file(self, path: str,
+                      on_progress: Callable[[int, int], None] | None = None,
+                      ) -> tuple[bytes, int]:
+        """Download a file from the target via the control channel.
+
+        Returns (file_bytes, total_size).
+        """
+        with self._lock:
+            try:
+                payload = encode_control_command(f"DOWNLOAD {path}")
+                send_frame(self.peer, self.secure.seal_request(payload))
+                header = self.secure.open_reply(
+                    receive_frame(self.peer)
+                ).decode("ascii", errors="replace")
+                if header.startswith("ERR"):
+                    raise OperatorError(f"download failed: {header}")
+                if not header.startswith("FILE "):
+                    raise OperatorError(f"unexpected reply: {header}")
+                total = int(header.split()[1])
+                chunks = []
+                received = 0
+                while True:
+                    raw = self.secure.open_reply(receive_frame(self.peer))
+                    if raw == b"EOF":
+                        break
+                    chunks.append(raw)
+                    received += len(raw)
+                    if on_progress:
+                        on_progress(received, total)
+                return b"".join(chunks), total
+            except Exception:
+                self.online = False
+                raise
+
     def open_shell(self, timeout: float = 10) -> socket.socket:
-        shell_port = self.operator.shell_port
-        reply = self.exchange(f"SHELL {shell_port}")
-        request_id, cookie = parse_shell_ticket(reply)
-        return accept_shell_while_running(
-            self.operator.shell_listener,
-            self.process,
-            request_id,
-            cookie,
-            timeout,
-            lambda msg: None,
-        )
+        with self._lock:
+            for attempt in range(10):
+                try:
+                    shell_port = self.operator.shell_port
+                    payload = encode_control_command(f"SHELL {shell_port}")
+                    send_frame(self.peer, self.secure.seal_request(payload))
+                    reply = self.secure.open_reply(
+                        receive_frame(self.peer)
+                    ).decode("ascii", errors="replace")
+                except Exception:
+                    self.online = False
+                    raise
+                if not reply.startswith("ERR busy"):
+                    break
+                time.sleep(0.3)
+            request_id, cookie = parse_shell_ticket(reply)
+            return accept_shell_while_running(
+                self.operator.shell_listener,
+                self.process,
+                request_id,
+                cookie,
+                timeout,
+                lambda msg: None,
+            )
 
     def exec_shell(self, command: str, timeout: float = 5) -> str:
         start_marker = "__RK_START__"
@@ -143,15 +202,21 @@ class TargetManager:
         peer,
         secure: SecureControl,
         process: TargetProcess,
-    ) -> Target:
+    ) -> tuple[Target, bool]:
+        """Register a target. Returns (target, is_reconnect)."""
         with self._lock:
+            port = operator.control_port
+            for existing in self._targets.values():
+                if existing.operator.control_port == port and not existing.online:
+                    existing.reconnect(peer, secure)
+                    return existing, True
             target_id = f"target-{self._next_id}"
             self._next_id += 1
             target = Target(
                 target_id, label, session, operator, peer, secure, process,
             )
             self._targets[target_id] = target
-            return target
+            return target, False
 
     def remove(self, target_id: str) -> Target | None:
         with self._lock:
@@ -350,7 +415,7 @@ def _watcher_loop(
 ) -> None:
     """Watch for new target sessions and accept connections."""
     run_dir = root / ".rklings/run"
-    known: set[str] = set()
+    known: dict[str, float] = {}
 
     while True:
         try:
@@ -358,13 +423,11 @@ def _watcher_loop(
                 time.sleep(1)
                 continue
 
-            # ponytail: purge stale entries so re-runs work
-            known -= {name for name in known if not (run_dir / name).is_dir()}
+            for gone in [n for n in known if not (run_dir / n).is_dir()]:
+                del known[gone]
 
             for entry in run_dir.iterdir():
                 if not entry.is_dir() or entry.is_symlink():
-                    continue
-                if entry.name in known:
                     continue
 
                 session_file = entry / "session.toml"
@@ -373,7 +436,14 @@ def _watcher_loop(
                 if not session_file.exists() or not key_file.exists():
                     continue
 
-                known.add(entry.name)
+                try:
+                    mtime = session_file.stat().st_mtime
+                except OSError:
+                    continue
+                if known.get(entry.name) == mtime:
+                    continue
+
+                known[entry.name] = mtime
                 threading.Thread(
                     target=_handle_session,
                     args=(
@@ -425,7 +495,7 @@ class _SessionHandler(socketserver.BaseRequestHandler):
             )
             return
 
-        target = ctx["manager"].add(
+        target, is_reconnect = ctx["manager"].add(
             ctx["label"], ctx["session"], ctx["operator"],
             peer, secure, ctx["process"],
         )
@@ -441,13 +511,15 @@ class _SessionHandler(socketserver.BaseRequestHandler):
             pass
 
         info = f" [{target.hostname}]" if target.hostname else ""
+        verb = "reconn" if is_reconnect else "connect"
         _server_print(
             ctx["success"],
-            f"connect  {target.id}  {ctx['label']}{info}"
+            f"{verb}  {target.id}  {ctx['label']}{info}"
             f"  session={session_id:016x}",
         )
         add_event(
-            f"connect {target.id} {ctx['label']}{info}", "connect",
+            f"{verb} {target.id} {ctx['label']}{info}",
+            "reconnect" if is_reconnect else "connect",
         )
 
         # TCP keepalive so the OS detects dead connections
@@ -456,12 +528,12 @@ class _SessionHandler(socketserver.BaseRequestHandler):
         peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 2)
         peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
 
-        # Wait until the connection drops. The socket is shared with
-        # dashboard and console threads via target.exchange(), so we
-        # must not read/peek from it here. A failed exchange() sets
-        # target.online = False; we just watch that flag.
-        while target.online and ctx["process"].poll() is None:
+        my_gen = target._generation
+        while target.online and target._generation == my_gen \
+                and ctx["process"].poll() is None:
             time.sleep(1)
+        if target._generation != my_gen:
+            return
         _server_print(
             ctx["warning"],
             f"lost     {target.id} ({ctx['label']}):"

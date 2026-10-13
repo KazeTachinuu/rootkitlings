@@ -68,7 +68,7 @@ static const struct proc_ops rk_proc_ops = {
 	.proc_release = single_release,
 };
 
-// TODO: rk_init (register kprobe, create /proc/rkling_status)
+// TODO: rk_init (register kprobe, create /proc/rklings_status)
 
 // TODO: rk_exit (unhide, remove proc, unregister kprobe)
 

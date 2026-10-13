@@ -75,9 +75,7 @@ int rk_secure_open_request(struct rk_secure_channel *channel,
 			   u8 *plaintext, size_t plaintext_capacity,
 			   size_t *plaintext_length)
 {
-	u8 candidate[RK_SECURE_PLAINTEXT_MAX] = { 0 };
 	u8 nonce[RK_AEAD_NONCE_LENGTH] = { 0 };
-	size_t candidate_length = 0;
 	u64 session;
 	u64 sequence;
 	int error;
@@ -97,11 +95,12 @@ int rk_secure_open_request(struct rk_secure_channel *channel,
 	error = rk_nonce(session, sequence, envelope[1], nonce);
 	if (error)
 		goto out;
+	*plaintext_length = 0;
 	error = rk_aead_open(channel->key, nonce, envelope,
 			     RK_SECURE_HEADER_LENGTH,
 			     envelope + RK_SECURE_HEADER_LENGTH,
 			     envelope_length - RK_SECURE_HEADER_LENGTH,
-			     candidate, sizeof(candidate), &candidate_length);
+			     plaintext, plaintext_capacity, plaintext_length);
 	if (error)
 		goto out;
 	if (envelope[0] != RK_SECURE_VERSION) {
@@ -128,15 +127,16 @@ int rk_secure_open_request(struct rk_secure_channel *channel,
 		error = -ERANGE;
 		goto out;
 	}
-	memcpy(plaintext, candidate, candidate_length);
-	*plaintext_length = candidate_length;
 	if (sequence == RK_SECURE_SEQUENCE_MAX)
 		channel->request_exhausted = true;
 	else
 		channel->next_request = sequence + 1;
 	error = 0;
 out:
-	rk_secure_clear(candidate, sizeof(candidate));
+	if (error) {
+		rk_secure_clear(plaintext, plaintext_capacity);
+		*plaintext_length = 0;
+	}
 	rk_secure_clear(nonce, sizeof(nonce));
 	return error;
 }
@@ -146,7 +146,6 @@ int rk_secure_seal_reply(struct rk_secure_channel *channel,
 			 u8 *envelope, size_t envelope_capacity,
 			 size_t *envelope_length)
 {
-	u8 candidate[RK_SECURE_ENVELOPE_MAX] = { 0 };
 	u8 nonce[RK_AEAD_NONCE_LENGTH] = { 0 };
 	size_t sealed_length = 0;
 	u64 sequence;
@@ -164,17 +163,17 @@ int rk_secure_seal_reply(struct rk_secure_channel *channel,
 	if (channel->reply_exhausted)
 		return -EOVERFLOW;
 	sequence = channel->next_reply;
-	candidate[0] = RK_SECURE_VERSION;
-	candidate[1] = RK_SECURE_REPLY;
-	rk_write_be64(candidate + 2, channel->session);
-	rk_write_be64(candidate + 10, sequence);
+	envelope[0] = RK_SECURE_VERSION;
+	envelope[1] = RK_SECURE_REPLY;
+	rk_write_be64(envelope + 2, channel->session);
+	rk_write_be64(envelope + 10, sequence);
 	error = rk_nonce(channel->session, sequence, RK_SECURE_REPLY, nonce);
 	if (error)
 		goto out;
-	error = rk_aead_seal(channel->key, nonce, candidate,
+	error = rk_aead_seal(channel->key, nonce, envelope,
 			     RK_SECURE_HEADER_LENGTH, plaintext, plaintext_length,
-			     candidate + RK_SECURE_HEADER_LENGTH,
-			     sizeof(candidate) - RK_SECURE_HEADER_LENGTH,
+			     envelope + RK_SECURE_HEADER_LENGTH,
+			     envelope_capacity - RK_SECURE_HEADER_LENGTH,
 			     &sealed_length);
 	if (error)
 		goto out;
@@ -182,7 +181,6 @@ int rk_secure_seal_reply(struct rk_secure_channel *channel,
 		error = -EPROTO;
 		goto out;
 	}
-	memcpy(envelope, candidate, RK_SECURE_HEADER_LENGTH + sealed_length);
 	*envelope_length = RK_SECURE_HEADER_LENGTH + sealed_length;
 	if (sequence == RK_SECURE_SEQUENCE_MAX)
 		channel->reply_exhausted = true;
@@ -190,7 +188,10 @@ int rk_secure_seal_reply(struct rk_secure_channel *channel,
 		channel->next_reply = sequence + 1;
 	error = 0;
 out:
-	rk_secure_clear(candidate, sizeof(candidate));
+	if (error) {
+		rk_secure_clear(envelope, envelope_capacity);
+		*envelope_length = 0;
+	}
 	rk_secure_clear(nonce, sizeof(nonce));
 	return error;
 }

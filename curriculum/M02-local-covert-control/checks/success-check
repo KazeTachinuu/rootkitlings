@@ -6,7 +6,7 @@ begin "Local covert control"
 
 load rklings.ko
 assert_loaded rklings
-assert_exists /proc/rkling_status
+assert_exists /proc/rklings_status
 
 if lsmod | grep -q rklings; then
 	_ok "module visible before cloak"
@@ -29,10 +29,10 @@ else
 fi
 
 if ! mkdir /tmp/rklings.nonexistent 2>/dev/null; then
-	_ok "unrecognized rkling path returns error"
+	_ok "unrecognized rklings path returns error"
 else
 	rmdir /tmp/rklings.nonexistent 2>/dev/null
-	_fail "unrecognized rkling path created a directory"
+	_fail "unrecognized rklings path created a directory"
 fi
 
 if mkdir /tmp/normaldir 2>/dev/null; then
@@ -43,7 +43,7 @@ else
 fi
 
 unload rklings
-assert_absent /proc/rkling_status
+assert_absent /proc/rklings_status
 
 if dmesg | grep -Eqi '(BUG:|WARNING:|Oops:|KASAN:|UBSAN:|hung task)'; then
 	_fail "kernel log contains a fault report"

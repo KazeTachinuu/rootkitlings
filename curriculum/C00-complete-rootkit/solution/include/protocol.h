@@ -32,6 +32,7 @@ enum rk_command_kind {
 	RK_COMMAND_HIDE_MODULE,
 	RK_COMMAND_UNHIDE_MODULE,
 	RK_COMMAND_ESCALATE,
+	RK_COMMAND_DOWNLOAD,
 };
 
 struct rk_command {

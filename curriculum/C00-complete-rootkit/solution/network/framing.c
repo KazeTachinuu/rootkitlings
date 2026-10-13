@@ -71,7 +71,6 @@ int rk_send_frame(struct socket *socket, const unsigned char *payload,
 int rk_receive_frame(struct socket *socket, struct rk_frame *frame)
 {
 	unsigned char header[2];
-	struct rk_frame received = { };
 	int error;
 
 	if (!socket || !frame)
@@ -79,10 +78,10 @@ int rk_receive_frame(struct socket *socket, struct rk_frame *frame)
 	error = rk_receive_exact(socket, header, sizeof(header));
 	if (error)
 		return error;
-	received.length = ((size_t)header[0] << 8) | header[1];
-	if (received.length > RK_FRAME_MAX) {
+	frame->length = ((size_t)header[0] << 8) | header[1];
+	if (frame->length > RK_FRAME_MAX) {
 		unsigned char scratch[64];
-		size_t remaining = received.length;
+		size_t remaining = frame->length;
 
 		while (remaining) {
 			size_t chunk = min_t(size_t, remaining, sizeof(scratch));
@@ -92,11 +91,13 @@ int rk_receive_frame(struct socket *socket, struct rk_frame *frame)
 				return error;
 			remaining -= chunk;
 		}
+		frame->length = 0;
 		return -EMSGSIZE;
 	}
-	error = rk_receive_exact(socket, received.payload, received.length);
-	if (error)
+	error = rk_receive_exact(socket, frame->payload, frame->length);
+	if (error) {
+		frame->length = 0;
 		return error;
-	*frame = received;
+	}
 	return 0;
 }

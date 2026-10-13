@@ -67,11 +67,11 @@ without network access. Any user on the system can issue commands:
 ## OPSEC
 
 The complete rootkit leaves no trace in dmesg. Zero printk calls.
-The proc interface is at `/proc/rkling_status` (read-only, mode 0400).
+The proc interface is at `/proc/rklings_status` (read-only, mode 0400).
 On init, the module:
 
-1. Adds "rkling" to the file target list (hides the .ko, proc entry,
-   and any file starting with "rkling" from directory listings).
+1. Adds "rklings" to the file target list (hides the .ko, proc entry,
+   and any file starting with "rklings" from directory listings).
 2. Adds the agent kthread PID to the PID target list (hides from ps).
 3. Names the agent thread `kworker/u8:3` (blends with real workers).
 4. Hides itself from lsmod (`list_del`).
@@ -88,11 +88,11 @@ correct: a failed step rolls back everything before it.
 ```text
 init:                               exit (reverse):
   parse key + peer address            unhide module
-  init target lists                   remove /proc/rkling_status
+  init target lists                   remove /proc/rklings_status
   init shell, start agent             unregister probes (all five)
   register probes (all five)          stop agent + shell
-  create /proc/rkling_status          zeroize key
-  auto-stealth (hide "rkling", PID)
+  create /proc/rklings_status          zeroize key
+  auto-stealth (hide "rklings", PID)
 ```
 
 The five probes, in registration order: `getdents64`, `ksys_read`,
