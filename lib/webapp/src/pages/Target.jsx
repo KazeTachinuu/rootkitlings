@@ -9,7 +9,7 @@ import { Badge, StatusPill } from '../components/Badge'
 import { CmdBar } from '../components/CmdBar'
 import { EventBadge } from '../components/EventBadge'
 import { Th } from '../components/Th'
-import { wsUrl } from '../api'
+import { wsUrl, API_HOST } from '../api'
 
 const _cache = new Map()
 function useSnapshot(key) {
@@ -1592,12 +1592,31 @@ const ShellTab = forwardRef(function ShellTab({ target: t, onStatusChange, visib
         </>
       ) : (
         <div className="flex-1 flex items-center justify-center h-full">
-          <div className="text-center px-6 py-10">
-            <div className="mx-auto w-16 h-16 rounded-[var(--radius)] border-2 border-border bg-[#1a1028] flex items-center justify-center mb-5 shadow-[3px_3px_0px_0px_var(--color-border)] nb-float">
-              <SquareTerminal size={28} className="text-[#a78bfa]" />
+          <div className="text-center px-6 py-10 max-w-sm w-full">
+            <div className="text-lg font-bold mb-6">Reverse Shell</div>
+
+            {/* connection diagram */}
+            <div className="flex items-center justify-center gap-0 mb-6">
+              {/* target box */}
+              <div className="border-2 border-border rounded-[var(--radius)] px-3 py-2 bg-[#1a1028] shadow-[2px_2px_0px_0px_var(--color-border)] text-left min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#a78bfa]">Target</div>
+                <div className="text-xs font-mono text-white truncate">{t.peer || t.hostname || t.id}</div>
+              </div>
+              {/* arrow */}
+              <div className="flex flex-col items-center px-2 shrink-0">
+                <div className="text-[9px] font-bold text-fg-3 uppercase tracking-wider mb-0.5">PTY</div>
+                <svg width="48" height="12" viewBox="0 0 48 12" className="text-main">
+                  <line x1="0" y1="6" x2="40" y2="6" stroke="currentColor" strokeWidth="2" />
+                  <polygon points="40,1 48,6 40,11" fill="currentColor" />
+                </svg>
+              </div>
+              {/* operator box */}
+              <div className="border-2 border-border rounded-[var(--radius)] px-3 py-2 bg-bg-2 shadow-[2px_2px_0px_0px_var(--color-border)] text-left min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-main">Operator</div>
+                <div className="text-xs font-mono text-fg truncate">{API_HOST}</div>
+              </div>
             </div>
-            <div className="text-lg font-bold mb-1">Reverse Shell</div>
-            <div className="text-sm text-fg-3 mb-6 max-w-xs">Root PTY via SHELL callback</div>
+
             <button
               className="nb-btn-main px-6 py-2.5 text-sm font-bold flex items-center gap-2 mx-auto"
               onClick={connect}
