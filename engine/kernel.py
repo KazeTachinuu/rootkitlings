@@ -744,28 +744,61 @@ def build(manifest: dict[str, object], paths: dict[str, Path | str]) -> None:
     assert isinstance(kit, Path)
     backup = begin_kit_build(kit)
     try:
-        UI.progress(f"Extracting Linux {manifest['version']}")
         if not hasattr(tarfile, "data_filter"):
             fail("Python tar extraction filters are required; use Python 3.12 or newer")
         with tarfile.open(archive, mode="r:xz") as source:
             members = safe_members(source, str(manifest["version"]))
-            source.extractall(kit, members=members, filter="data")
+            total = len(members)
+            show = _progress_capable()
+            UI.progress(f"Extracting Linux {manifest['version']} ({total} files)")
+            start = time.monotonic()
+            for i, member in enumerate(members, 1):
+                source.extract(member, kit, filter="data")
+                if show and i % 1000 == 0:
+                    pct = i * 100 // total
+                    filled = pct * 30 // 100
+                    bar = "#" * filled + "-" * (30 - filled)
+                    elapsed = time.monotonic() - start
+                    eta = elapsed / i * (total - i) if i else 0
+                    sys.stdout.write(
+                        f"\r  [{bar}] {pct:3d}%  {i}/{total}  "
+                        f"ETA {_format_eta(eta)}")
+                    sys.stdout.flush()
+            if show:
+                elapsed = time.monotonic() - start
+                sys.stdout.write("\r\x1b[2K")
+                sys.stdout.flush()
+                UI.line(f"({total} files in {_format_eta(elapsed)})", style="dim")
         (kit / f"linux-{manifest['version']}").rename(kit / "source")
         build_tree = kit / "build"
         build_tree.mkdir()
         env = build_environment(manifest, build_tree / ".home")
         make = ["make", "-s", "-C", str(kit / "source"), f"O={build_tree}"]
+        show = _progress_capable()
+        config_steps = ["base config", "merge fragment", "local version", "olddefconfig"]
         UI.progress("Configuring kernel")
-        run(make + [str(manifest["base_config"])], env=env, quiet=True)
-        fragment = ROOT / str(manifest["config"])
-        run([str(kit / "source/scripts/kconfig/merge_config.sh"), "-m", "-O",
-             str(build_tree), str(build_tree / ".config"), str(fragment)],
-            cwd=kit / "source", env=env, quiet=True)
-        run([str(kit / "source/scripts/config"), "--file",
-             str(build_tree / ".config"), "--set-str", "LOCALVERSION",
-             str(manifest["local_version"])], env=env, quiet=True)
-        run(make + ["olddefconfig"], env=env, quiet=True)
-        verify_config(build_tree / ".config", fragment, str(manifest["local_version"]))
+        config_commands = [
+            (make + [str(manifest["base_config"])], dict(env=env, quiet=True)),
+            ([str(kit / "source/scripts/kconfig/merge_config.sh"), "-m", "-O",
+              str(build_tree), str(build_tree / ".config"),
+              str(ROOT / str(manifest["config"]))],
+             dict(cwd=kit / "source", env=env, quiet=True)),
+            ([str(kit / "source/scripts/config"), "--file",
+              str(build_tree / ".config"), "--set-str", "LOCALVERSION",
+              str(manifest["local_version"])], dict(env=env, quiet=True)),
+            (make + ["olddefconfig"], dict(env=env, quiet=True)),
+        ]
+        for i, (cmd, kwargs) in enumerate(config_commands):
+            if show:
+                sys.stdout.write(f"\r  [{i+1}/{len(config_steps)}] {config_steps[i]}")
+                sys.stdout.flush()
+            run(cmd, **kwargs)
+        if show:
+            sys.stdout.write("\r\x1b[2K")
+            sys.stdout.flush()
+        verify_config(build_tree / ".config",
+                      ROOT / str(manifest["config"]),
+                      str(manifest["local_version"]))
         jobs = parallel_jobs()
         make_build = ["make", "-C", str(kit / "source"), f"O={build_tree}"]
         estimated = _count_config_objects(build_tree / ".config") * 2
