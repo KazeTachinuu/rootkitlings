@@ -52,7 +52,11 @@ function Shell() {
     const handler = () => {
       const hash = location.hash || '#/'
       const m = hash.match(/^#\/target\/(.+)$/)
-      if (m) setPage({ view: 'target', targetId: decodeURIComponent(m[1]) })
+      if (m) {
+        const tab = window.__rkl_initial_tab
+        delete window.__rkl_initial_tab
+        setPage({ view: 'target', targetId: decodeURIComponent(m[1]), initialTab: tab || null })
+      }
       else if (hash === '#/events') setPage({ view: 'events', targetId: null })
       else setPage({ view: 'home', targetId: null })
     }
@@ -155,10 +159,13 @@ function Shell() {
 
         <main className="flex-1 overflow-auto bg-bg">
           {page.view === 'home' && (
-            <Home targets={targets} onNavigate={id => navigate(`#/target/${id}`)} />
+            <Home targets={targets} onNavigate={(id, tab) => {
+                if (tab) window.__rkl_initial_tab = tab
+                navigate(`#/target/${id}`)
+              }} />
           )}
           {page.view === 'target' && (
-            <Target target={selectedTarget} log={log} events={events} sendCmd={sendCmdWithToast} query={query} execCmd={execCmd} startDownload={startDownload} downloads={downloads} onBack={() => navigate('#/')} renameTarget={renameTarget} refresh={refresh} />
+            <Target target={selectedTarget} initialTab={page.initialTab} log={log} events={events} sendCmd={sendCmdWithToast} query={query} execCmd={execCmd} startDownload={startDownload} downloads={downloads} onBack={() => navigate('#/')} renameTarget={renameTarget} refresh={refresh} />
           )}
           {page.view === 'events' && (
             <Events events={events} onRefresh={refresh} />

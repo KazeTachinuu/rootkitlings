@@ -1,5 +1,6 @@
-import { Monitor, ChevronRight, Shield, Network, Radio, SquareTerminal } from 'lucide-react'
+import { Monitor, ChevronRight, Shield, Network, Radio, SquareTerminal, FolderOpen, Activity, Wifi, Eye } from 'lucide-react'
 import { API_HOST } from '../api'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 export function Home({ targets, onNavigate }) {
   const online = targets.filter(t => t.online).length
@@ -28,8 +29,52 @@ export function Home({ targets, onNavigate }) {
   )
 }
 
+function ContextMenu({ x, y, target, onNavigate, onClose }) {
+  const ref = useRef()
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose() }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  const items = [
+    { icon: Eye, label: 'Overview', tab: 'overview' },
+    { icon: SquareTerminal, label: 'Shell', tab: 'shell' },
+    { icon: FolderOpen, label: 'Files', tab: 'files' },
+    { icon: Activity, label: 'Processes', tab: 'procs' },
+    { icon: Wifi, label: 'Ports', tab: 'ports' },
+  ]
+
+  const name = target.label || (target.hostname && target.hostname !== '(none)' ? target.hostname : target.id)
+
+  return (
+    <div ref={ref} className="fixed z-50 border-2 border-border rounded-[var(--radius)] bg-secondary shadow-[4px_4px_0px_0px_var(--color-border)] min-w-[180px] py-1"
+      style={{ left: x, top: y }}>
+      <div className="px-3 py-1.5 border-b-2 border-border flex items-center gap-2">
+        <span className={`w-2 h-2 rounded-full shrink-0 ${target.online ? 'bg-green pulse' : 'bg-red'}`} />
+        <span className="text-xs font-bold truncate">{name}</span>
+      </div>
+      {items.map(({ icon: Icon, label, tab }) => (
+        <button key={tab}
+          className="w-full px-3 py-1.5 text-left text-sm flex items-center gap-2.5 hover:bg-main hover:text-main-fg transition-colors"
+          onClick={() => { onNavigate(target.id, tab); onClose() }}>
+          <Icon size={14} />
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function NetworkMap({ targets, onNavigate }) {
   const hasTargets = targets.length > 0
+  const [ctx, setCtx] = useState(null)
+
+  const onCtx = useCallback((e, t) => {
+    e.preventDefault()
+    setCtx({ x: e.clientX, y: e.clientY, target: t })
+  }, [])
 
   return (
     <div className="nb-card overflow-hidden">
@@ -45,74 +90,61 @@ function NetworkMap({ targets, onNavigate }) {
       }}>
         <div className="flex flex-col items-center">
           {/* C2 operator node */}
-          <div className="border-2 border-border rounded-[var(--radius)] bg-main px-6 py-3.5 shadow-[4px_4px_0px_0px_var(--color-border)] text-center">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <Radio size={16} className="text-main-fg" />
-              <span className="text-base font-bold text-main-fg uppercase tracking-wider">C2 Operator</span>
-            </div>
-            <div className="text-sm font-mono text-main-fg/80">{API_HOST}</div>
+          <div className="border-2 border-border rounded-[var(--radius)] bg-main px-5 py-2.5 shadow-[4px_4px_0px_0px_var(--color-border)] flex items-center gap-2">
+            <Radio size={14} className="text-main-fg" />
+            <span className="text-sm font-bold text-main-fg uppercase tracking-wider">C2</span>
+            <span className="text-xs font-mono text-main-fg/70">{API_HOST}</span>
           </div>
 
-          {/* vertical trunk line from C2 down */}
-          {hasTargets && (
-            <div className="w-0.5 bg-border" style={{ height: 32 }} />
-          )}
+          {/* trunk */}
+          {hasTargets && <div className="w-0.5 bg-border" style={{ height: 28 }} />}
 
-          {/* horizontal branch + drops */}
+          {/* horizontal branch for multiple targets */}
           {hasTargets && targets.length > 1 && (
-            <div className="relative w-full flex justify-center">
-              {/* horizontal bar spanning across target centers */}
+            <div className="relative w-full flex justify-center" style={{ height: 0 }}>
               <div className="h-0.5 bg-border absolute top-0" style={{
-                width: `calc(${((targets.length - 1) / targets.length) * 100}% - 32px)`,
+                width: `calc(${((targets.length - 1) / targets.length) * 100}% - 24px)`,
               }} />
             </div>
           )}
 
-          {/* target row */}
+          {/* target nodes */}
           {hasTargets ? (
-            <div className={`grid gap-5 w-full ${targets.length === 1 ? '' : `grid-cols-${Math.min(targets.length, 4)}`}`}
-              style={targets.length > 1 ? { gridTemplateColumns: `repeat(${Math.min(targets.length, 4)}, minmax(0, 1fr))` } : undefined}>
+            <div className="flex flex-wrap justify-center gap-4"
+              style={targets.length > 1 ? { display: 'grid', gridTemplateColumns: `repeat(${Math.min(targets.length, 4)}, auto)`, gap: '16px', justifyContent: 'center' } : undefined}>
               {targets.map(t => {
                 const name = t.label || (t.hostname && t.hostname !== '(none)' ? t.hostname : t.id)
                 return (
                   <div key={t.id} className="flex flex-col items-center">
-                    {/* drop line */}
-                    <div className={`w-0.5 ${t.online ? 'bg-green' : 'bg-red'}`} style={{ height: targets.length > 1 ? 24 : 0 }} />
-                    {/* arrow head */}
-                    <svg width="12" height="8" viewBox="0 0 12 8" className="shrink-0 -mt-px mb-1">
-                      <polygon points="0,0 12,0 6,8" fill={t.online ? 'var(--color-green)' : 'var(--color-red)'} />
-                    </svg>
-                    {/* target card */}
+                    {targets.length > 1 && <>
+                      <div className={`w-0.5 ${t.online ? 'bg-green' : 'bg-red'}`} style={{ height: 20 }} />
+                      <svg width="10" height="6" viewBox="0 0 10 6" className="shrink-0 -mt-px mb-1">
+                        <polygon points="0,0 10,0 5,6" fill={t.online ? 'var(--color-green)' : 'var(--color-red)'} />
+                      </svg>
+                    </>}
                     <button
-                      className={`w-full border-2 rounded-[var(--radius)] bg-bg shadow-[3px_3px_0px_0px_var(--color-border)] text-left cursor-pointer
-                        transition-all duration-150 hover:translate-y-[-2px] hover:shadow-[3px_5px_0px_0px_var(--color-border)]
-                        active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_var(--color-border)]
+                      className={`border-2 rounded-[var(--radius)] bg-bg shadow-[2px_2px_0px_0px_var(--color-border)] cursor-pointer
+                        transition-all duration-150 hover:translate-y-[-2px] hover:shadow-[2px_4px_0px_0px_var(--color-border)]
+                        active:translate-y-[1px] active:shadow-[0px_0px_0px_0px_var(--color-border)]
                         ${t.online ? 'border-green' : 'border-red border-dashed opacity-70'}`}
                       onClick={() => onNavigate(t.id)}
+                      onContextMenu={(e) => onCtx(e, t)}
                     >
-                      <div className="flex items-stretch">
-                        {/* icon column */}
-                        <div className={`flex items-center justify-center px-3 py-3 border-r-2 shrink-0 ${t.online ? 'border-green/30' : 'border-red/30'}`}>
-                          <PlatformIcon kernel={t.kernel} size={36} />
-                        </div>
-                        {/* info */}
-                        <div className="flex-1 min-w-0 px-3 py-2.5">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${t.online ? 'bg-green pulse' : 'bg-red'}`} />
-                            <span className="font-bold text-sm truncate">{name}</span>
+                      <div className="flex items-center gap-2.5 px-3 py-2">
+                        <PlatformIcon kernel={t.kernel} size={24} />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${t.online ? 'bg-green pulse' : 'bg-red'}`} />
+                            <span className="font-bold text-xs truncate">{name}</span>
                           </div>
-                          <div className="text-xs font-mono text-fg-3 truncate">{t.peer || t.id}</div>
-                          <div className="text-[11px] font-mono text-fg-3/50 truncate">{t.kernel} {t.arch}</div>
-                          <div className="flex items-center gap-2 mt-1.5">
-                            {t.module_hidden && (
-                              <span className="text-[9px] font-bold bg-green/15 text-green px-1.5 py-0.5 rounded uppercase tracking-wider">Hidden</span>
-                            )}
-                            {t.persisted && (
-                              <span className="text-[9px] font-bold bg-main/15 text-main px-1.5 py-0.5 rounded uppercase tracking-wider">Persist</span>
-                            )}
-                            <span className="text-[10px] font-mono text-fg-3/50 ml-auto">{t.id}</span>
-                          </div>
+                          <div className="text-[10px] font-mono text-fg-3 truncate">{t.peer || t.id}</div>
                         </div>
+                        {(t.module_hidden || t.persisted) && (
+                          <div className="flex flex-col gap-0.5 shrink-0">
+                            {t.module_hidden && <span className="text-[8px] font-bold bg-green/15 text-green px-1 py-px rounded uppercase">hid</span>}
+                            {t.persisted && <span className="text-[8px] font-bold bg-main/15 text-main px-1 py-px rounded uppercase">per</span>}
+                          </div>
+                        )}
                       </div>
                     </button>
                   </div>
@@ -127,6 +159,8 @@ function NetworkMap({ targets, onNavigate }) {
           )}
         </div>
       </div>
+
+      {ctx && <ContextMenu x={ctx.x} y={ctx.y} target={ctx.target} onNavigate={onNavigate} onClose={() => setCtx(null)} />}
     </div>
   )
 }

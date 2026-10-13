@@ -49,8 +49,8 @@ const TABS = [
   { key: 'events', label: 'Events' },
 ]
 
-export function Target({ target: t, log, events, sendCmd, query, execCmd, startDownload, downloads, onBack, renameTarget, refresh }) {
-  const [tab, setTab] = useState('overview')
+export function Target({ target: t, initialTab, log, events, sendCmd, query, execCmd, startDownload, downloads, onBack, renameTarget, refresh }) {
+  const [tab, setTab] = useState(initialTab || 'overview')
   const [persistPending, setPersistPending] = useState(false)
   const [pingResult, setPingResult] = useState(null)
   const [editing, setEditing] = useState(false)
@@ -59,10 +59,11 @@ export function Target({ target: t, log, events, sendCmd, query, execCmd, startD
   const shellRef = useRef(null)
 
   useEffect(() => {
-    setTab('overview')
+    setTab(initialTab || 'overview')
     setPingResult(null)
     setEditing(false)
   }, [t?.id])
+
 
   if (!t) return (
     <div className="flex items-center justify-center h-full">
