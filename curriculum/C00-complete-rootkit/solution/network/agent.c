@@ -247,15 +247,14 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 			goto download_close;
 		while (pos < total) {
 			ssize_t got = kernel_read(f, agent->rx_plain,
-						  sizeof(agent->rx_plain),
+						  RK_AEAD_PLAINTEXT_MAX,
 						  &pos);
 
 			if (got <= 0)
 				break;
 			error = rk_agent_reply(agent, socket,
 					       agent->rx_plain, got);
-			memzero_explicit(agent->rx_plain,
-					 sizeof(agent->rx_plain));
+			memzero_explicit(agent->rx_plain, got);
 			if (error || kthread_should_stop())
 				goto download_close;
 		}

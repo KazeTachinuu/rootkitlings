@@ -111,6 +111,7 @@ if [ "${_runtime:-}" = 1 ]; then
 	fi
 	ui_progress 'Use this console to test the rootkit as an unprivileged user'
 	ui_progress 'Try: mkdir rklings.e (escalate), mkdir rklings.h.m (hide module)'
+	stty echo </dev/ttyS0
 	show 'setsid -c su -l student'
 	setsid -c su -l student \
 		</dev/ttyS0 >/dev/ttyS0 2>&1 || true
