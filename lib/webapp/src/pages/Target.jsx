@@ -1179,7 +1179,7 @@ function ProcsTab({ target: t, cmd, query, execCmd, busy }) {
 
   if (!snap.time && !snap.loading)
     return <EmptySnapshotCta icon={Activity} title="Processes"
-      subtitle="Scan /proc for running processes (close any active shell first)"
+      subtitle="Scan /proc for running processes on the target"
       onCapture={capture} online={t.online && !busy} loading={snap.loading} />
 
   return (
@@ -1369,7 +1369,7 @@ function PortsTab({ target: t, cmd, execCmd, busy }) {
 
   if (!snap.time && !snap.loading)
     return <EmptySnapshotCta icon={Network} title="TCP Connections"
-      subtitle="Scan for TCP connections and listeners (close any active shell first)"
+      subtitle="Scan for TCP connections and listeners on the target"
       onCapture={capture} online={t.online && !busy} loading={snap.loading} />
 
   return (
