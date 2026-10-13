@@ -131,9 +131,7 @@ class Target:
                     if on_progress:
                         on_progress(received, total)
                 return b"".join(chunks), total
-            except Exception as e:
-                import sys
-                print(f"[download] FAIL chunk={chunk_num} received={received}/{total} err={e}", file=sys.stderr)
+            except Exception:
                 self.online = False
                 raise
 

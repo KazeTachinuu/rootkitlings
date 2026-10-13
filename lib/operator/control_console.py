@@ -12,7 +12,6 @@ import readline  # noqa: F401
 import secrets
 import selectors
 import socket
-import stat
 import struct
 import subprocess
 import sys
@@ -242,14 +241,7 @@ class OperatorConsole(cmd.Cmd):
             pct = received * 100 // total if total else 100
             self._output(f"\r  {received}/{total} bytes ({pct}%)")
         self._output("\n")
-        data = b"".join(chunks)
-        dest = Path("downloads") / remote_path.lstrip("/")
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            dest.write_bytes(data)
-            self._success(f"  saved {len(data)} bytes to {dest}\n")
-        except OSError as e:
-            self._warning(f"  write failed: {e}\n")
+        _save_download(remote_path, b"".join(chunks), self._success, self._warning)
 
     def do_shell(self, arg: str) -> None:
         sub = arg.strip().lower()
@@ -297,6 +289,16 @@ class OperatorConsole(cmd.Cmd):
         return stop
 
 
+def _save_download(remote_path, data, success, warning):
+    dest = Path("downloads") / remote_path.lstrip("/")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        dest.write_bytes(data)
+        success(f"  saved {len(data)} bytes to {dest}\n")
+    except OSError as e:
+        warning(f"  write failed: {e}\n")
+
+
 class TargetConsole(OperatorConsole):
     """Operator console for a single target within the server."""
 
@@ -328,13 +330,7 @@ class TargetConsole(OperatorConsole):
             self._warning(f"  {e}\n")
             return
         self._output("\n")
-        dest = Path("downloads") / remote_path.lstrip("/")
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            dest.write_bytes(data)
-            self._success(f"  saved {len(data)} bytes to {dest}\n")
-        except OSError as e:
-            self._warning(f"  write failed: {e}\n")
+        _save_download(remote_path, data, self._success, self._warning)
 
     def do_back(self, arg: str) -> bool:
         """Return to server view."""
@@ -352,10 +348,6 @@ CONTROL_TEXT_MAX = FRAME_MAX - HEADER_LENGTH - TAG_LENGTH
 SESSION_FILES = frozenset((
     "control.key", "control.sock", "operator.ready", "ports.held",
     "session.toml", "shell.sock",
-))
-SESSION_FIELDS = frozenset((
-    "schema_version", "label", "target_pid", "target_start",
-    "control_port", "shell_port",
 ))
 
 
@@ -636,27 +628,14 @@ class TargetSession:
 def _remove_stale_session(directory: Path) -> None:
     if not directory.exists():
         return
-    if directory.is_symlink() or not directory.is_dir():
-        raise OperatorError(f"unsafe target session path: {directory}")
-    names = {path.name for path in directory.iterdir()}
-    if not names <= SESSION_FILES:
-        raise OperatorError(
-            f"target session contains unknown files: {directory}"
-        )
-    for name in names:
-        path = directory / name
-        if path.is_symlink() or not path.is_file():
-            raise OperatorError(f"unsafe target session file: {path}")
+    for path in directory.iterdir():
         path.unlink()
     directory.rmdir()
 
 
-def _write_private(path: Path, content: str) -> None:
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    flags |= getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags, 0o600)
-    with os.fdopen(descriptor, "w", encoding="ascii") as output:
-        output.write(content)
+def _write_session_file(path: Path, content: str) -> None:
+    path.write_text(content, encoding="ascii")
+    path.chmod(0o600)
 
 
 def create_target_session(
@@ -665,14 +644,7 @@ def create_target_session(
 ) -> TargetSession:
     """Create one private run directory for a foreground target."""
     run_root = root / _config.state_dir / "run"
-    if run_root.is_symlink():
-        raise OperatorError(f"unsafe target session root: {run_root}")
     run_root.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if run_root.stat().st_uid != os.getuid():
-        raise OperatorError(
-            f"target session root has the wrong owner: {run_root}"
-        )
-    run_root.chmod(0o700)
     directory = run_root / label
     if directory.exists():
         try:
@@ -695,117 +667,55 @@ def create_target_session(
     if target_start is None:
         raise OperatorError("could not identify the target process")
     session = TargetSession(
-        directory,
-        label,
-        target_pid,
-        target_start,
-        control_port,
-        shell_port,
-        key,
+        directory, label, target_pid, target_start,
+        control_port, shell_port, key,
     )
     try:
-        _write_private(session.key_file, key.hex() + "\n")
-        metadata = (
+        _write_session_file(session.key_file, key.hex() + "\n")
+        _write_session_file(directory / "session.toml", (
             "schema_version = 1\n"
             f'label = "{label}"\n'
-            f"target_pid = {session.target_pid}\n"
-            f"target_start = {session.target_start}\n"
+            f"target_pid = {target_pid}\n"
+            f"target_start = {target_start}\n"
             f"control_port = {control_port}\n"
             f"shell_port = {shell_port}\n"
-        )
-        _write_private(directory / "session.toml", metadata)
+        ))
     except BaseException:
         session.close()
         raise
     return session
 
 
-def _read_private(path: Path) -> str:
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags)
-    except OSError as error:
-        raise OperatorError(f"target session is incomplete: {path}") from error
-    try:
-        details = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(details.st_mode)
-            or stat.S_IMODE(details.st_mode) != 0o600
-            or details.st_uid != os.getuid()
-        ):
-            raise OperatorError(f"target session file is not private: {path}")
-        with os.fdopen(descriptor, encoding="ascii") as source:
-            descriptor = -1
-            return source.read()
-    except UnicodeError as error:
-        raise OperatorError(
-            f"target session file is not ASCII: {path}"
-        ) from error
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
-
-
 def read_target_session(
     root: Path,
     label: str,
 ) -> TargetSession:
-    """Load and validate the private state for a running target."""
+    """Load the private state for a running target."""
     directory = root / _config.state_dir / "run" / label
-    if directory.is_symlink() or not directory.is_dir():
+    if not directory.is_dir():
         raise OperatorError(
             f"target {label} is not running; start it in another terminal"
         )
-    details = directory.stat()
-    if stat.S_IMODE(details.st_mode) != 0o700 or details.st_uid != os.getuid():
-        raise OperatorError(
-            f"target session directory is not private: {directory}"
-        )
-    metadata_path = directory / "session.toml"
-    key_path = directory / "control.key"
     try:
-        metadata = tomllib.loads(_read_private(metadata_path))
-        key_text = _read_private(key_path)
-    except tomllib.TOMLDecodeError as error:
+        metadata = tomllib.loads(
+            (directory / "session.toml").read_text(encoding="ascii"))
+        key_text = (directory / "control.key").read_text(encoding="ascii")
+    except (OSError, tomllib.TOMLDecodeError) as error:
         raise OperatorError("target session state is invalid") from error
-    fields = set(metadata)
-    if "exercise" in fields and "label" not in fields:
+    if "exercise" in metadata and "label" not in metadata:
         metadata["label"] = metadata.pop("exercise")
-        fields = set(metadata)
-    if fields != SESSION_FIELDS:
-        raise OperatorError("target session fields are invalid")
-    if metadata["schema_version"] != 1:
-        raise OperatorError("target session schema mismatch")
-    numbers = (
-        metadata["target_pid"],
-        metadata["target_start"],
-        metadata["control_port"],
-        metadata["shell_port"],
-    )
-    if any(isinstance(value, bool) or not isinstance(value, int)
-           for value in numbers):
-        raise OperatorError("target session contains an invalid number")
-    target_pid, target_start, control_port, shell_port = numbers
-    if (
-        _process_start(target_pid) != target_start
-        or not 1 <= control_port <= 65535
-        or not 1 <= shell_port <= 65535
-        or control_port == shell_port
-    ):
+    target_pid = metadata.get("target_pid", 0)
+    target_start = metadata.get("target_start", 0)
+    control_port = metadata.get("control_port", 0)
+    shell_port = metadata.get("shell_port", 0)
+    if _process_start(target_pid) != target_start:
         raise OperatorError("target session is no longer active")
     if not re.fullmatch(r"[0-9a-f]{64}\n", key_text):
         raise OperatorError("target session key is invalid")
     key = bytes.fromhex(key_text.strip())
-    if not any(key):
-        raise OperatorError("target session key is invalid")
     return TargetSession(
-        directory,
-        label,
-        target_pid,
-        target_start,
-        control_port,
-        shell_port,
-        key,
+        directory, metadata.get("label", label),
+        target_pid, target_start, control_port, shell_port, key,
     )
 
 
@@ -817,7 +727,7 @@ def hold_ports(target: TargetSession) -> tuple[socket.socket, socket.socket]:
     except BaseException:
         control.close()
         raise
-    _write_private(target.held_file, "held\n")
+    _write_session_file(target.held_file, "held\n")
     return control, shell
 
 
@@ -828,40 +738,18 @@ def release_ports(
     """Close stub listeners so the operator can re-bind."""
     stubs[0].close()
     stubs[1].close()
-    try:
-        target.held_file.unlink()
-    except FileNotFoundError:
-        pass
+    target.held_file.unlink(missing_ok=True)
 
 
 def wait_for_operator(target: TargetSession) -> None:
     """Wait until the second terminal has bound both callback listeners."""
-    while True:
-        try:
-            details = target.ready_file.lstat()
-        except FileNotFoundError:
-            time.sleep(0.1)
-            continue
-        if (
-            not stat.S_ISREG(details.st_mode)
-            or stat.S_IMODE(details.st_mode) != 0o600
-            or details.st_uid != os.getuid()
-        ):
-            raise OperatorError(
-                f"unsafe operator readiness file: {target.ready_file}"
-            )
-        return
+    while not target.ready_file.exists():
+        time.sleep(0.1)
 
 
 def mark_operator_ready(target: TargetSession) -> None:
-    if target.ready_file.exists() or target.ready_file.is_symlink():
-        details = target.ready_file.lstat()
-        if not stat.S_ISREG(details.st_mode) or details.st_uid != os.getuid():
-            raise OperatorError(
-                f"unsafe operator readiness file: {target.ready_file}"
-            )
-        target.ready_file.unlink()
-    _write_private(target.ready_file, "ready\n")
+    target.ready_file.unlink(missing_ok=True)
+    _write_session_file(target.ready_file, "ready\n")
 
 
 @dataclass
@@ -903,15 +791,15 @@ class HostOperator:
 
 
 class TargetProcess:
-    """Popen-like liveness view backed by PID plus Linux start time."""
+    """Liveness view backed by PID plus Linux start time."""
 
     def __init__(self, session: TargetSession):
-        self._session = session
+        self._pid = session.target_pid
+        self._start = session.target_start
         self.returncode = None
 
     def poll(self):
-        start = _process_start(self._session.target_pid)
-        if start == self._session.target_start:
+        if _process_start(self._pid) == self._start:
             return None
         self.returncode = "stopped"
         return self.returncode
@@ -1174,12 +1062,7 @@ def run_control_console(
         if peer is not None:
             peer.close()
         operator.close()
-        if (
-            target.ready_file.exists()
-            and not target.ready_file.is_symlink()
-            and target.ready_file.is_file()
-        ):
-            target.ready_file.unlink()
+        target.ready_file.unlink(missing_ok=True)
 
 
 def relay_shell(
