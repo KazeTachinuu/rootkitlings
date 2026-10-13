@@ -120,22 +120,18 @@ class Target:
                 self.online = False
                 raise
 
-    def open_shell(self, timeout: float = 10) -> socket.socket:
+    def _request_shell(self, command: str, timeout: float) -> socket.socket:
         with self._lock:
-            for attempt in range(10):
-                try:
-                    shell_port = self.operator.shell_port
-                    payload = encode_control_command(f"SHELL {shell_port}")
-                    send_frame(self.peer, self.secure.seal_request(payload))
-                    reply = self.secure.open_reply(
-                        receive_frame(self.peer)
-                    ).decode("ascii", errors="replace")
-                except Exception:
-                    self.online = False
-                    raise
-                if not reply.startswith("ERR busy"):
-                    break
-                time.sleep(0.3)
+            try:
+                shell_port = self.operator.shell_port
+                payload = encode_control_command(f"{command} {shell_port}")
+                send_frame(self.peer, self.secure.seal_request(payload))
+                reply = self.secure.open_reply(
+                    receive_frame(self.peer)
+                ).decode("ascii", errors="replace")
+            except Exception:
+                self.online = False
+                raise
             request_id, cookie = parse_shell_ticket(reply)
             return accept_shell_while_running(
                 self.operator.shell_listener,
@@ -146,10 +142,16 @@ class Target:
                 lambda msg: None,
             )
 
+    def open_shell(self, timeout: float = 10) -> socket.socket:
+        return self._request_shell("SHELL", timeout)
+
+    def open_exec_shell(self, timeout: float = 10) -> socket.socket:
+        return self._request_shell("EXEC_SHELL", timeout)
+
     def exec_shell(self, command: str, timeout: float = 5) -> str:
         start_marker = "__RK_START__"
         end_marker = "__RK_EOF__"
-        shell = self.open_shell(timeout)
+        shell = self.open_exec_shell(timeout)
         try:
             shell.settimeout(timeout)
             shell.recv(4096)

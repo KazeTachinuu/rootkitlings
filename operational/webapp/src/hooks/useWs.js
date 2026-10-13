@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { wsUrl } from '../api'
 
 export function useWs() {
   const [targets, setTargets] = useState([])
@@ -16,10 +17,8 @@ export function useWs() {
   const disposedRef = useRef(false)
 
   const connect = useCallback(() => {
-    const host = location.hostname || 'localhost'
-    const port = location.port === '5173' ? 8080 : (location.port || '8080')
     try {
-      const ws = new WebSocket(`ws://${host}:${port}/ws`)
+      const ws = new WebSocket(wsUrl('/ws'))
       ws.onopen = () => {
         wsRef.current = ws
         setConnected(true)

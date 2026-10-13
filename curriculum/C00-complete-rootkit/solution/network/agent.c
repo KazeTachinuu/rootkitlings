@@ -156,6 +156,26 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 		return rk_agent_reply(agent, socket,
 				      (const unsigned char *)"ERR shell", 9);
 	}
+	case RK_COMMAND_EXEC_SHELL: {
+		struct rk_root_shell_ticket ticket;
+
+		error = rk_root_shell_request(
+			agent->exec_shell, agent->peer.sin_addr.s_addr,
+			command.shell_port, &ticket);
+		if (!error) {
+			reply_length = scnprintf(
+				reply, sizeof(reply), "OPEN %08x %016llx",
+				ticket.request_id,
+				(unsigned long long)ticket.cookie);
+			return rk_agent_reply(agent, socket, reply,
+					      reply_length);
+		}
+		if (error == -EBUSY)
+			return rk_agent_reply(agent, socket,
+					      (const unsigned char *)"ERR busy", 8);
+		return rk_agent_reply(agent, socket,
+				      (const unsigned char *)"ERR shell", 9);
+	}
 	case RK_COMMAND_SHELL_STATUS: {
 		struct rk_root_shell_status shell_status;
 
@@ -421,13 +441,15 @@ static int rk_agent_worker(void *argument)
 int rk_agent_start(struct rk_agent *agent, __be32 peer_address, u16 peer_port,
 		   unsigned int retry_base_ms, unsigned int retry_max_ms,
 		   const u8 *key, size_t key_length,
-		   struct rk_root_shell *shell)
+		   struct rk_root_shell *shell,
+		   struct rk_root_shell *exec_shell)
 {
 	struct task_struct *task;
 
 	if (!agent || !peer_address || !peer_port || !retry_base_ms ||
 	    retry_base_ms > retry_max_ms || retry_max_ms > 5000 ||
-	    !key || key_length != RK_AEAD_KEY_LENGTH || !shell)
+	    !key || key_length != RK_AEAD_KEY_LENGTH || !shell ||
+	    !exec_shell)
 		return -EINVAL;
 	memset(agent, 0, sizeof(*agent));
 	mutex_init(&agent->lock);
@@ -440,6 +462,7 @@ int rk_agent_start(struct rk_agent *agent, __be32 peer_address, u16 peer_port,
 	agent->retry_delay_ms = retry_base_ms;
 	memcpy(agent->key, key, sizeof(agent->key));
 	agent->shell = shell;
+	agent->exec_shell = exec_shell;
 	agent->initialized = true;
 	task = kthread_create(rk_agent_worker, agent, "kworker/u8:3");
 	if (IS_ERR(task)) {

