@@ -46,6 +46,7 @@ fi
 
 if [ "${_network:-}" = 1 ]; then
 	run ifconfig eth0 10.0.2.15 up
+	hostname target
 fi
 
 # Mount persistent disk (all modes, survives reboots)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import mimetypes
+import socket
 import threading
 import time
 from pathlib import Path
@@ -65,13 +66,23 @@ def _target_to_dict(t: Target) -> dict:
     hidden = {cat: _enum_indexed(t, f"LIST {cat.upper()}", "LIST", _parse_entry)
               for cat in ("file", "pid", "content", "port")} if t.online else {}
 
+    peer_addr = ""
+    if t.online:
+        try:
+            addr, port = t.peer.getpeername()
+            peer_addr = f"{addr}:{port}"
+        except Exception:
+            pass
+
     return {
         "id": t.id,
         "exercise": t.exercise,
         "hostname": t.hostname,
         "kernel": t.kernel,
         "arch": t.arch,
+        "build_id": getattr(t, "build_id", ""),
         "online": t.online,
+        "peer": peer_addr,
         "module_hidden": status.get("hidden", "?") == "yes",
         "counts": {k: int(status.get(k, 0))
                    for k in ("files", "pids", "content", "ports")},
@@ -157,8 +168,94 @@ async def _ws_endpoint(request: web.Request) -> web.WebSocketResponse:
                         "ok": False,
                         "reply": str(e),
                     }))
+
+            elif cmd_type == "exec":
+                target_id = data.get("target")
+                shell_cmd = data.get("command", "").strip()
+                exec_id = data.get("_execId")
+                if not target_id or not shell_cmd:
+                    continue
+                target = _manager.get(target_id) if _manager else None
+                if not target or not target.online:
+                    await ws.send_str(json.dumps({
+                        "type": "exec_result", "target": target_id,
+                        "_execId": exec_id,
+                        "ok": False, "output": "target offline",
+                    }))
+                    continue
+                loop = asyncio.get_event_loop()
+                try:
+                    output = await loop.run_in_executor(
+                        None, target.exec_shell, shell_cmd,
+                    )
+                    await ws.send_str(json.dumps({
+                        "type": "exec_result", "target": target_id,
+                        "_execId": exec_id,
+                        "ok": True, "output": output,
+                    }))
+                except Exception as e:
+                    await ws.send_str(json.dumps({
+                        "type": "exec_result", "target": target_id,
+                        "_execId": exec_id,
+                        "ok": False, "output": str(e),
+                    }))
+
     finally:
         _ws_clients.discard(ws)
+    return ws
+
+
+async def _shell_endpoint(request: web.Request) -> web.WebSocketResponse:
+    target_id = request.query.get("target", "")
+    target = _manager.get(target_id) if _manager else None
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+    if not target or not target.online:
+        await ws.send_str(json.dumps({"type": "error", "msg": "target offline"}))
+        await ws.close()
+        return ws
+
+    loop = asyncio.get_event_loop()
+    try:
+        shell = await loop.run_in_executor(None, target.open_shell)
+    except Exception as e:
+        await ws.send_str(json.dumps({"type": "error", "msg": str(e)}))
+        await ws.close()
+        return ws
+
+    await ws.send_str(json.dumps({"type": "ready"}))
+    add_event(f"{target.id}: shell opened", "shell")
+
+    async def _read_shell():
+        try:
+            while not ws.closed:
+                data = await loop.run_in_executor(None, shell.recv, 4096)
+                if not data:
+                    break
+                await ws.send_bytes(data)
+        except (OSError, asyncio.CancelledError):
+            pass
+        finally:
+            if not ws.closed:
+                await ws.close()
+
+    reader = asyncio.ensure_future(_read_shell())
+    try:
+        async for msg in ws:
+            if msg.type == web.WSMsgType.BINARY:
+                await loop.run_in_executor(None, shell.sendall, msg.data)
+            elif msg.type == web.WSMsgType.TEXT:
+                await loop.run_in_executor(
+                    None, shell.sendall, msg.data.encode(),
+                )
+    finally:
+        reader.cancel()
+        try:
+            shell.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        shell.close()
+        add_event(f"{target.id}: shell closed", "shell")
     return ws
 
 
@@ -188,6 +285,7 @@ def _run_server(http_port: int, static_root: Path) -> None:
 
         app = web.Application()
         app.router.add_get("/ws", _ws_endpoint)
+        app.router.add_get("/shell", _shell_endpoint)
         app.router.add_get("/{path:.*}", _static_handler)
 
         runner = web.AppRunner(app, access_log=None)

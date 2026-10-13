@@ -138,8 +138,16 @@ static int rk_tcp_show_return(struct kretprobe_instance *inst,
 	return 0;
 }
 
-static struct kretprobe tcp_probe = {
+static struct kretprobe tcp4_probe = {
 	.kp.symbol_name = "tcp4_seq_show",
+	.entry_handler = rk_tcp_show_entry,
+	.handler = rk_tcp_show_return,
+	.data_size = sizeof(struct rk_tcp_data),
+	.maxactive = 8,
+};
+
+static struct kretprobe tcp6_probe = {
+	.kp.symbol_name = "tcp6_seq_show",
 	.entry_handler = rk_tcp_show_entry,
 	.handler = rk_tcp_show_return,
 	.data_size = sizeof(struct rk_tcp_data),
@@ -287,19 +295,25 @@ static int __init rk_init(void)
 	if (error)
 		return error;
 
-	error = register_kretprobe(&tcp_probe);
+	error = register_kretprobe(&tcp4_probe);
 	if (error)
 		goto unregister_read;
+
+	error = register_kretprobe(&tcp6_probe);
+	if (error)
+		goto unregister_tcp4;
 
 	proc_entry = proc_create("rklings", 0666, NULL, &rk_proc_ops);
 	if (!proc_entry) {
 		error = -ENOMEM;
-		goto unregister_tcp;
+		goto unregister_tcp6;
 	}
 	return 0;
 
-unregister_tcp:
-	unregister_kretprobe(&tcp_probe);
+unregister_tcp6:
+	unregister_kretprobe(&tcp6_probe);
+unregister_tcp4:
+	unregister_kretprobe(&tcp4_probe);
 unregister_read:
 	unregister_kretprobe(&read_probe);
 	return error;
@@ -308,7 +322,8 @@ unregister_read:
 static void __exit rk_exit(void)
 {
 	proc_remove(proc_entry);
-	unregister_kretprobe(&tcp_probe);
+	unregister_kretprobe(&tcp6_probe);
+	unregister_kretprobe(&tcp4_probe);
 	unregister_kretprobe(&read_probe);
 }
 

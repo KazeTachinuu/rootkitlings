@@ -256,6 +256,7 @@ PROFILE
     chmod 755 "$ROOTFS/init"
 
     rm -f "$ROOTFS/bin/reboot" "$ROOTFS/bin/poweroff"
+    gcc -static -o "$ROOTFS/bin/cat" "$VM_DIR/tools/cat.c"
     gcc -o "$ROOTFS/bin/reboot" "$VM_DIR/reboot.c"
     chmod 4755 "$ROOTFS/bin/reboot"
     ln "$ROOTFS/bin/reboot" "$ROOTFS/bin/poweroff"

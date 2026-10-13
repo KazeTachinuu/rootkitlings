@@ -15,7 +15,7 @@ export default function App() {
 }
 
 function Shell() {
-  const { targets, events, log, connected, sendCmd, query, refresh } = useWs()
+  const { targets, events, log, connected, sendCmd, query, execCmd, refresh } = useWs()
   const { toast } = useToast()
   const [page, setPage] = useState({ view: 'home', targetId: null })
   const [collapsed, setCollapsed] = useState(false)
@@ -122,7 +122,7 @@ function Shell() {
             <Home targets={targets} onNavigate={id => navigate(`#/target/${id}`)} onRefresh={refresh} />
           )}
           {page.view === 'target' && (
-            <Target target={selectedTarget} log={log} events={events} sendCmd={sendCmdWithToast} query={query} onBack={() => navigate('#/')} />
+            <Target target={selectedTarget} log={log} events={events} sendCmd={sendCmdWithToast} query={query} execCmd={execCmd} onBack={() => navigate('#/')} />
           )}
           {page.view === 'events' && (
             <Events events={events} onRefresh={refresh} />

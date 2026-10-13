@@ -8,8 +8,8 @@ order, one rollback path, and one clean unload.
 operator -----> AEAD control -----> authenticated agent (remote)
                      |
                      +--> hide file/pid     (M03: getdents64 probe)
-                     +--> hide content      (M06: vfs_read probe)
-                     +--> hide port         (M06: tcp4_seq_show probe)
+                     +--> hide content      (L15: ksys_read probe)
+                     +--> hide port         (L26: tcp4/tcp6_seq_show probes)
                      +--> hide module       (M01: list_del/list_add)
                      +--> unhide module     (M01: list_add restore)
                      +--> escalate PID      (M02: remote cred replace)
@@ -68,8 +68,17 @@ without network access. Any user on the system can issue commands:
 
 The complete rootkit leaves no trace in dmesg. Zero printk calls.
 The proc interface is at `/proc/rkling_status` (read-only, mode 0400).
-On init, the module adds "rkling" to the file target list so the proc
-entry, kernel threads, and .ko file are hidden by default.
+On init, the module:
+
+1. Adds "rkling" to the file target list (hides the .ko, proc entry,
+   and any file starting with "rkling" from directory listings).
+2. Adds the agent kthread PID to the PID target list (hides from ps).
+3. Names the agent thread `kworker/u8:3` (blends with real workers).
+4. Hides itself from lsmod (`list_del`).
+
+The agent auto-hides its C2 connection port after `kernel_connect`
+and removes it on disconnect before reconnect, so the ephemeral port
+never appears in `/proc/net/tcp` or `/proc/net/tcp6`.
 
 ## Init sequence
 
@@ -80,11 +89,60 @@ correct: a failed step rolls back everything before it.
 init:                               exit (reverse):
   parse key + peer address            unhide module
   init target lists                   remove /proc/rkling_status
-  init shell, start agent             unregister probes (all four)
-  register probes (all four)          stop agent + shell
+  init shell, start agent             unregister probes (all five)
+  register probes (all five)          stop agent + shell
   create /proc/rkling_status          zeroize key
-  auto-stealth (hide "rkling")
+  auto-stealth (hide "rkling", PID)
 ```
+
+The five probes, in registration order: `getdents64`, `ksys_read`,
+`tcp4_seq_show`, `tcp6_seq_show`, `__x64_sys_mkdir`.
+
+## Techniques introduced in this capstone
+
+Three patterns appear here for the first time, building on earlier lings.
+
+### Deferred credential replacement
+
+L10 teaches `prepare_kernel_cred` + `commit_creds` for self-escalation:
+the calling process replaces its own credentials. Remote escalation
+(escalating a different PID) cannot call `commit_creds` from the agent
+kthread, because `commit_creds` operates on `current`. On kernels with
+CET/IBT (Control-flow Enforcement Technology), directly swapping another
+task's credential pointer also triggers a control-protection fault.
+
+The solution: pre-allocate root credentials in the agent context, store
+them with an atomic PID flag, and let the target process pick them up
+on its next `ksys_read` call. The read entry handler checks
+`task_tgid_vnr(current)` against the stored PID, and if it matches,
+calls `commit_creds(escalate_cred)` in the target's own context.
+
+An `smp_wmb()` after storing the cred pointer (before the PID flag)
+and `smp_rmb()` after reading the PID flag (before using the pointer)
+ensure correct ordering on SMP systems. L05 and L06 link the kernel
+memory-barriers documentation; this is the first time a barrier appears
+in exercise code.
+
+### Namespace-aware PID translation
+
+L08 introduces `task_pid_nr()` for global PID numbers. The deferred
+escalation check uses `task_tgid_vnr(current)` instead, which returns
+the thread-group ID as seen from the task's PID namespace. This matches
+what `ps` and the operator see, which is what matters when the operator
+sends `ESCALATE <pid>`.
+
+### IPv6 port hiding
+
+L26 hooks `tcp4_seq_show` to hide ports from `/proc/net/tcp`. Many
+listeners (including BusyBox `nc`) bind on IPv6 by default (`:::port`),
+which appears in `/proc/net/tcp6` via `tcp6_seq_show`. The same entry
+handler works for both: `inet_sk(sk)->inet_sport` gives the source
+port regardless of address family.
+
+### Thread name disguise
+
+The agent kthread is named `kworker/u8:3` to blend with real kernel
+worker threads in `ps` output. This is an OPSEC detail, not a new API.
 
 ## Your task
 

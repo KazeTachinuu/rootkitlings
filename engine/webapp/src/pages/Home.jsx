@@ -108,6 +108,7 @@ function TargetCard({ target: t, onClick }) {
           <Field label="Kernel" value={`${t.kernel || '--'} ${t.arch || ''}`} />
           <Field label="Module" value={t.module_hidden ? 'Hidden' : 'Visible'} color={t.module_hidden ? 'text-green' : 'text-fg-3'} />
           <Field label="Hidden" value={total ? `${total} items` : 'None'} color={total ? 'text-amber' : 'text-fg-3'} />
+          {t.peer && <Field label="Peer" value={t.peer} />}
         </div>
 
         <div className="flex items-center justify-between pt-2 border-t-2 border-border text-sm">
@@ -137,7 +138,7 @@ function TargetTable({ targets, onNavigate }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b-2 border-border bg-bg-2">
-            <Th>Status</Th><Th>Target</Th><Th>Kernel</Th><Th>Module</Th><Th>Hidden</Th><th className="w-8" />
+            <Th>Status</Th><Th>Target</Th><Th>Peer</Th><Th>Kernel</Th><Th>Module</Th><Th>Hidden</Th><th className="w-8" />
           </tr>
         </thead>
         <tbody>
@@ -150,6 +151,7 @@ function TargetTable({ targets, onNavigate }) {
                   <div className="font-bold">{(t.hostname && t.hostname !== '(none)') ? t.hostname : t.id}</div>
                   <div className="text-xs font-mono text-fg-3">{t.id}</div>
                 </td>
+                <td className="px-4 py-2.5 font-mono text-xs text-fg-3">{t.peer || '-'}</td>
                 <td className="px-4 py-2.5 font-mono text-xs">{t.kernel || '--'} {t.arch || ''}</td>
                 <td className="px-4 py-2.5">{t.module_hidden ? <span className="font-bold text-green">Hidden</span> : <span className="text-fg-3">Visible</span>}</td>
                 <td className="px-4 py-2.5">{total ? <span className="font-bold text-amber">{total}</span> : <span className="text-fg-3">0</span>}</td>

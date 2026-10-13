@@ -59,6 +59,7 @@ class Target:
         self.hostname = ""
         self.kernel = ""
         self.arch = ""
+        self.build_id = ""
         self.online = True
         self._lock = threading.Lock()
 
@@ -72,6 +73,50 @@ class Target:
             except Exception:
                 self.online = False
                 raise
+
+    def open_shell(self, timeout: float = 10) -> socket.socket:
+        shell_port = self.operator.shell_port
+        reply = self.exchange(f"SHELL {shell_port}")
+        request_id, cookie = parse_shell_ticket(reply)
+        return accept_shell_while_running(
+            self.operator.shell_listener,
+            self.process,
+            request_id,
+            cookie,
+            timeout,
+            lambda msg: None,
+        )
+
+    def exec_shell(self, command: str, timeout: float = 5) -> str:
+        start_marker = "__RK_START__"
+        end_marker = "__RK_EOF__"
+        shell = self.open_shell(timeout)
+        try:
+            shell.settimeout(timeout)
+            shell.recv(4096)
+            wire = f"echo {start_marker}\n{command}\necho {end_marker}\n"
+            shell.sendall(wire.encode())
+            buf = b""
+            while end_marker.encode() not in buf:
+                chunk = shell.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk
+            shell.sendall(b"exit\n")
+        finally:
+            try:
+                shell.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            shell.close()
+        text = buf.decode("utf-8", errors="replace")
+        start = text.find(start_marker)
+        if start >= 0:
+            text = text[start + len(start_marker):]
+        end = text.find(end_marker)
+        if end >= 0:
+            text = text[:end]
+        return text.strip()
 
     def close(self) -> None:
         self.online = False
@@ -162,7 +207,15 @@ class ServerConsole(cmd.Cmd):
             info = ""
             if t.hostname:
                 info = f"  {t.hostname} {t.kernel} {t.arch}"
-            self._output(f"  {t.id:<12} {t.exercise:<6} {status}{info}\n")
+            peer_addr = ""
+            try:
+                addr, port = t.peer.getpeername()
+                peer_addr = f"  {addr}:{port}"
+            except Exception:
+                pass
+            self._output(
+                f"  {t.id:<12} {t.exercise:<6} {status:<8}{peer_addr}{info}\n"
+            )
 
     def do_use(self, arg: str) -> None:
         """Switch to a target's operator console."""
@@ -278,7 +331,7 @@ def _run_target_console(
 
     console = TargetConsole(
         exchange, exchange_quiet, output, warning, success, handle_shell,
-        target.operator.shell_port,
+        target.operator.shell_port, target=target,
     )
     console.prompt = f"{target.id}> "
     try:
@@ -380,9 +433,10 @@ class _SessionHandler(socketserver.BaseRequestHandler):
         try:
             reply = target.exchange("INFO")
             if reply.startswith("INFO "):
-                parts = reply[5:].split(None, 2)
+                parts = reply[5:].split(None, 3)
                 if len(parts) >= 3:
-                    target.hostname, target.kernel, target.arch = parts
+                    target.hostname, target.kernel, target.arch = parts[:3]
+                    target.build_id = parts[3] if len(parts) > 3 else ""
         except Exception:
             pass
 

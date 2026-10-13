@@ -272,6 +272,16 @@ class OperatorConsole(cmd.Cmd):
 class TargetConsole(OperatorConsole):
     """Operator console for a single target within the server."""
 
+    def __init__(self, *args, target=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._target = target
+
+    def postcmd(self, stop: bool, line: str) -> bool:
+        if self._target and not self._target.online:
+            self._warning(f"{self._target.id} went offline\n")
+            return True
+        return stop
+
     def do_back(self, arg: str) -> bool:
         """Return to server view."""
         return True
