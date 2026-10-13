@@ -553,11 +553,21 @@ class _SessionHandler(socketserver.BaseRequestHandler):
 
         my_gen = target._generation
         # Wait until the connection drops or a newer handler supersedes us.
+        # Use select() so TCP keepalive failures are detected promptly.
+        import select
         while target.online and target._generation == my_gen \
                 and ctx["process"].poll() is None:
-            time.sleep(1)
+            try:
+                ready, _, _ = select.select([peer], [], [], 1.0)
+                if ready:
+                    chunk = peer.recv(1, socket.MSG_PEEK)
+                    if not chunk:
+                        break
+            except (OSError, socket.error):
+                break
         if target._generation != my_gen:
             return
+        target.online = False
         _server_print(
             ctx["warning"],
             f"lost     {target.id} ({ctx['label']}):"
