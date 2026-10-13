@@ -65,7 +65,7 @@ class Target:
         self._generation = 0
         self._lock = threading.Lock()
 
-    def reconnect(self, peer, secure):
+    def reconnect(self, peer, secure, session=None, operator=None, process=None):
         with self._lock:
             try:
                 self.peer.close()
@@ -73,6 +73,12 @@ class Target:
                 pass
             self.peer = peer
             self.secure = secure
+            if session is not None:
+                self.session = session
+            if operator is not None:
+                self.operator = operator
+            if process is not None:
+                self.process = process
             self._generation += 1
             self.online = True
 
@@ -223,10 +229,9 @@ class TargetManager:
     ) -> tuple[Target, bool]:
         """Register a target. Returns (target, is_reconnect)."""
         with self._lock:
-            port = operator.control_port
             for existing in self._targets.values():
-                if existing.operator.control_port == port and not existing.online:
-                    existing.reconnect(peer, secure)
+                if existing.label == label and not existing.online:
+                    existing.reconnect(peer, secure, session, operator, process)
                     return existing, True
             target_id = f"target-{self._next_id}"
             self._next_id += 1
