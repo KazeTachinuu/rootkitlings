@@ -138,10 +138,10 @@ export function Target({ target: t, log, events, sendCmd, query, execCmd, startD
             className={`nb-btn px-3 py-1.5 text-sm flex items-center gap-1.5 ${t.persisted ? 'nb-btn-main' : ''}`}
             onClick={togglePersist}
             disabled={!t.online || persistPending || targetBusy}
-            title={t.persisted ? 'Survives reboot' : 'Will not survive reboot'}
+            title={t.persisted ? 'Rootkit persisted to disk, survives reboot' : 'Rootkit in memory only, lost on reboot'}
           >
             {persistPending ? <Loader size={14} className="animate-spin" /> : <Shield size={14} />}
-            {t.persisted ? 'Persisted' : 'Volatile'}
+            {t.persisted ? 'Persist On' : 'Persist Off'}
           </button>
           <button className={`nb-btn px-3 py-1.5 text-sm flex items-center gap-1.5
             ${pingResult && pingResult !== '...' && pingResult !== 'FAIL' ? 'nb-btn-main' : pingResult === 'FAIL' ? '!bg-red !text-white !border-border' : ''}`}
@@ -1591,22 +1591,22 @@ const ShellTab = forwardRef(function ShellTab({ target: t, onStatusChange, visib
           <div ref={termRef} className="flex-1 bg-[#1a1028]" style={{ padding: '8px' }} />
         </>
       ) : (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="mx-auto w-12 h-12 rounded-lg bg-[#1a1028] flex items-center justify-center mb-4">
-              <SquareTerminal size={22} className="text-[#a78bfa]" />
+        <div className="flex-1 flex items-center justify-center h-full">
+          <div className="text-center px-6 py-10">
+            <div className="mx-auto w-16 h-16 rounded-[var(--radius)] border-2 border-border bg-[#1a1028] flex items-center justify-center mb-5 shadow-[3px_3px_0px_0px_var(--color-border)]">
+              <SquareTerminal size={28} className="text-[#a78bfa]" />
             </div>
-            <div className="font-bold mb-0.5">Reverse Shell</div>
-            <div className="text-xs text-fg-3 mb-4">Root PTY via SHELL callback</div>
+            <div className="text-lg font-bold mb-1">Reverse Shell</div>
+            <div className="text-sm text-fg-3 mb-6 max-w-xs">Root PTY via SHELL callback</div>
             <button
-              className="nb-btn-main px-4 py-2 text-sm font-bold flex items-center gap-2 mx-auto"
+              className="nb-btn-main px-6 py-2.5 text-sm font-bold flex items-center gap-2 mx-auto"
               onClick={connect}
               disabled={!t.online}
             >
-              <SquareTerminal size={14} /> Connect
+              <SquareTerminal size={16} /> Connect
             </button>
             {!t.online && (
-              <div className="text-xs text-red mt-3">Target offline</div>
+              <div className="text-sm text-red mt-4 font-bold">Target offline</div>
             )}
           </div>
         </div>
