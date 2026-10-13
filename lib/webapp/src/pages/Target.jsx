@@ -1592,41 +1592,59 @@ const ShellTab = forwardRef(function ShellTab({ target: t, onStatusChange, visib
         </>
       ) : (
         <div className="flex-1 flex items-center justify-center h-full">
-          <div className="text-center px-6 py-10 max-w-sm w-full">
-            <div className="text-lg font-bold mb-6">Reverse Shell</div>
+          <div className="px-8 py-10 max-w-md w-full">
+            <div className="text-center mb-8">
+              <div className="text-lg font-bold">Reverse Shell</div>
+              <div className="text-xs text-fg-3 mt-1">Encrypted PTY channel via SHELL callback</div>
+            </div>
 
             {/* connection diagram */}
-            <div className="flex items-center justify-center gap-0 mb-6">
-              {/* target box */}
-              <div className="border-2 border-border rounded-[var(--radius)] px-3 py-2 bg-[#1a1028] shadow-[2px_2px_0px_0px_var(--color-border)] text-left min-w-0">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[#a78bfa]">Target</div>
-                <div className="text-xs font-mono text-white truncate">{t.peer || t.hostname || t.id}</div>
-              </div>
-              {/* arrow */}
-              <div className="flex flex-col items-center px-2 shrink-0">
-                <div className="text-[9px] font-bold text-fg-3 uppercase tracking-wider mb-0.5">PTY</div>
-                <svg width="48" height="12" viewBox="0 0 48 12" className="text-main">
-                  <line x1="0" y1="6" x2="40" y2="6" stroke="currentColor" strokeWidth="2" />
-                  <polygon points="40,1 48,6 40,11" fill="currentColor" />
-                </svg>
-              </div>
-              {/* operator box */}
-              <div className="border-2 border-border rounded-[var(--radius)] px-3 py-2 bg-bg-2 shadow-[2px_2px_0px_0px_var(--color-border)] text-left min-w-0">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-main">Operator</div>
-                <div className="text-xs font-mono text-fg truncate">{API_HOST}</div>
+            <div className="border-2 border-border rounded-[var(--radius)] bg-bg-2 shadow-[4px_4px_0px_0px_var(--color-border)] p-4 mb-8">
+              <div className="flex items-stretch gap-0">
+                {/* target node */}
+                <div className="flex-1 min-w-0 border-2 border-border rounded-[var(--radius)] bg-[#1a1028] p-3">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <SquareTerminal size={12} className="text-[#a78bfa] shrink-0" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#a78bfa]">Target</span>
+                  </div>
+                  <div className="text-[11px] font-mono text-white/90 truncate">{t.hostname || t.id}</div>
+                  {t.peer && <div className="text-[10px] font-mono text-white/50 mt-0.5 truncate">{t.peer}</div>}
+                  {t.kernel && <div className="text-[10px] font-mono text-white/40 mt-0.5 truncate">{t.kernel}</div>}
+                </div>
+
+                {/* connection line */}
+                <div className="flex flex-col items-center justify-center w-14 shrink-0">
+                  <svg width="56" height="24" viewBox="0 0 56 24" className="text-main">
+                    <line x1="0" y1="12" x2="46" y2="12" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" />
+                    <polygon points="46,7 56,12 46,17" fill="currentColor" />
+                  </svg>
+                  <span className="text-[8px] font-bold uppercase tracking-widest text-fg-3 mt-0.5">pty</span>
+                </div>
+
+                {/* operator node */}
+                <div className="flex-1 min-w-0 border-2 border-border rounded-[var(--radius)] bg-bg p-3">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Network size={12} className="text-main shrink-0" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-main">Operator</span>
+                  </div>
+                  <div className="text-[11px] font-mono text-fg truncate">{API_HOST}</div>
+                  <div className="text-[10px] font-mono text-fg-3 mt-0.5">ws:/shell</div>
+                </div>
               </div>
             </div>
 
-            <button
-              className="nb-btn-main px-6 py-2.5 text-sm font-bold flex items-center gap-2 mx-auto"
-              onClick={connect}
-              disabled={!t.online}
-            >
-              <SquareTerminal size={16} /> Connect
-            </button>
-            {!t.online && (
-              <div className="text-sm text-red mt-4 font-bold">Target offline</div>
-            )}
+            <div className="text-center">
+              <button
+                className="nb-btn-main px-6 py-2.5 text-sm font-bold inline-flex items-center gap-2"
+                onClick={connect}
+                disabled={!t.online}
+              >
+                <SquareTerminal size={16} /> Connect
+              </button>
+              {!t.online && (
+                <div className="text-sm text-red mt-4 font-bold">Target offline</div>
+              )}
+            </div>
           </div>
         </div>
       )}
