@@ -91,9 +91,10 @@ if [ "${_check:-}" = 1 ]; then
 fi
 
 if [ "${_runtime:-}" = 1 ]; then
+	_first_boot=/mnt/persist/.runtime-deployed
 	if grep -q rklings /proc/modules 2>/dev/null; then
 		ui_success 'Rootkit loaded (persisted across reboot)'
-	else
+	elif [ ! -f "$_first_boot" ]; then
 		{
 			read -r _control_key
 			read -r _callback_peer
@@ -107,11 +108,14 @@ if [ "${_runtime:-}" = 1 ]; then
 			"$_control_port" "$_shell_port" \
 			&& _setup_status=0 || _setup_status=$?
 		if [ "$_setup_status" -eq 0 ]; then
+			touch "$_first_boot"
 			ui_success 'Target ready; the rootkit is waiting for its operator'
 		else
 			ui_error "Target setup failed with exit $_setup_status"
 			/bin/reboot
 		fi
+	else
+		ui_progress 'Rootkit not persisted; module not loaded'
 	fi
 	ui_progress 'Use this console to test the rootkit as an unprivileged user'
 	ui_progress 'Try: mkdir rklings.e (escalate), mkdir rklings.h.m (hide module)'
