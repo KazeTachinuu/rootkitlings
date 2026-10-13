@@ -68,7 +68,7 @@ for _conf in /etc/modules-load.d/*.conf; do
 		[ -n "$_modname" ] || continue
 		_ko="/rklings/${_modname}.ko"
 		if [ -f "$_ko" ]; then
-			eval "insmod \"$_ko\" $_params" 2>/dev/null
+			insmod "$_ko" $_params 2>/dev/null
 		fi
 	done < "$_conf"
 done
