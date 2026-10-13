@@ -29,7 +29,7 @@ const COMMANDS = [
 
 const _history = []
 
-export function CmdBar({ onSend, query, targetId }) {
+export function CmdBar({ onSend, query, targetId, busy }) {
   const [value, setValue] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [results, setResults] = useState([])
@@ -178,17 +178,20 @@ export function CmdBar({ onSend, query, targetId }) {
       )}
 
       {/* Input bar */}
-      <div className="flex items-center gap-2 px-4 py-2">
-        <Terminal size={14} className="text-main shrink-0" />
+      <div className={`flex items-center gap-2 px-4 py-2 ${busy ? 'opacity-50' : ''}`}>
+        {busy
+          ? <Loader size={14} className="text-amber animate-spin shrink-0" />
+          : <Terminal size={14} className="text-main shrink-0" />}
         <input
           ref={inputRef}
           className="flex-1 bg-transparent text-sm font-mono outline-none placeholder:text-fg-3"
-          placeholder="Type a command... (Tab to complete, HELP for reference)"
+          placeholder={busy ? 'Target busy (downloading...) commands will queue until done' : 'Type a command... (Tab to complete, HELP for reference)'}
           value={value}
           onChange={e => onInput(e.target.value)}
           onKeyDown={onKey}
           spellCheck={false}
           autoComplete="off"
+          disabled={busy}
         />
         {results.length > 0 && (
           <button className="p-1 text-fg-3 hover:text-fg" onClick={() => setExpanded(!expanded)} title={expanded ? 'Collapse' : 'Expand'}>
