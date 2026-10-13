@@ -1,6 +1,7 @@
 import { Monitor, ChevronRight, Shield, Network, Radio, SquareTerminal, FolderOpen, Activity, Wifi, Eye } from 'lucide-react'
 import { API_HOST } from '../api'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 
 export function Home({ targets, onNavigate }) {
   const online = targets.filter(t => t.online).length
@@ -34,8 +35,15 @@ function ContextMenu({ x, y, target, onNavigate, onClose }) {
 
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose() }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    const id = requestAnimationFrame(() => {
+      document.addEventListener('mousedown', handler)
+      document.addEventListener('contextmenu', handler)
+    })
+    return () => {
+      cancelAnimationFrame(id)
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('contextmenu', handler)
+    }
   }, [onClose])
 
   const items = [
@@ -160,7 +168,10 @@ function NetworkMap({ targets, onNavigate }) {
         </div>
       </div>
 
-      {ctx && <ContextMenu x={ctx.x} y={ctx.y} target={ctx.target} onNavigate={onNavigate} onClose={() => setCtx(null)} />}
+      {ctx && createPortal(
+        <ContextMenu x={ctx.x} y={ctx.y} target={ctx.target} onNavigate={onNavigate} onClose={() => setCtx(null)} />,
+        document.body
+      )}
     </div>
   )
 }
