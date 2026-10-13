@@ -7,7 +7,6 @@ GUEST_TOOL_NAMES := \
 	agent_fixture \
 	cred_trigger_test \
 	credential_snapshot_test \
-	event_stream_test \
 	getdents64_test \
 	module_load_params \
 	mkdir_escalation_test \
@@ -23,8 +22,7 @@ GUEST_TOOL_NAMES := \
 	secure_agent_fixture \
 	socket_owner_fixture \
 	status_field_test \
-	task_attribution_test \
-	tcp_session_fixture
+	task_attribution_test
 GUEST_TOOLS := $(addprefix $(TOOL_OUT)/,$(GUEST_TOOL_NAMES))
 
 .PHONY: all help module clean compile-db doctor tools tool-output-directory
@@ -77,9 +75,6 @@ $(TOOL_OUT)/cred_trigger_test: vm/tools/cred_trigger_test.c | tool-output-direct
 $(TOOL_OUT)/credential_snapshot_test: vm/tools/credential_snapshot_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
 
-$(TOOL_OUT)/event_stream_test: vm/tools/event_stream_test.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
-
 $(TOOL_OUT)/getdents64_test: vm/tools/getdents64_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
 
@@ -127,9 +122,6 @@ $(TOOL_OUT)/status_field_test: vm/tools/status_field_test.c | tool-output-direct
 
 $(TOOL_OUT)/task_attribution_test: vm/tools/task_attribution_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
-
-$(TOOL_OUT)/tcp_session_fixture: vm/tools/tcp_session_fixture.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
 
 clean:
 	@test "$(TOOL_OUT)" = .rklings/build/tools || \

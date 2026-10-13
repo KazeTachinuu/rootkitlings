@@ -320,10 +320,32 @@ def write_database(database: list[dict[str, object]], path: Path = DATABASE) -> 
             temporary.unlink()
 
 
+def guest_tool_entries() -> list[dict[str, object]]:
+    """Simple gcc entries for userspace C files (vm/tools, vm/reboot, etc.)."""
+    root_str = str(ROOT)
+    entries: list[dict[str, object]] = []
+    for source in sorted((ROOT / "vm/tools").glob("*.c")):
+        entries.append({
+            "directory": root_str,
+            "command": f"gcc -std=c11 -Wall -Wextra -D_GNU_SOURCE -c -o /dev/null {source}",
+            "file": str(source),
+        })
+    for extra in ["vm/reboot.c", "lib/operator/control_aead.c"]:
+        path = ROOT / extra
+        if path.exists():
+            entries.append({
+                "directory": root_str,
+                "command": f"gcc -std=c11 -Wall -Wextra -D_GNU_SOURCE -c -o /dev/null {path}",
+                "file": str(path),
+            })
+    return entries
+
+
 def generate() -> int:
     try:
         with tempfile.TemporaryDirectory(prefix="rklings-compile-db-") as directory:
             database = captured_database(Catalog(ROOT), Path(directory))
+        database.extend(guest_tool_entries())
         write_database(database)
     except (CompileDatabaseError, OSError, ProcessError, ProcessTimeout) as error:
         raise CompileDatabaseError(str(error)) from error

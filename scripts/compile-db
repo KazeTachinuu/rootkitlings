@@ -23,7 +23,7 @@ def main() -> int:
     except CompileDatabaseError as error:
         UI.error(str(error))
         return 1
-    UI.success(f"compile_commands.json: {count} course sources")
+    UI.success(f"compile_commands.json: {count} sources")
     return 0
 
 

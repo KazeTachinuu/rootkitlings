@@ -319,7 +319,7 @@ class RuntimeMetadataTests(unittest.TestCase):
 
     def test_final_project_has_its_own_runtime_setup(self) -> None:
         catalog = Catalog(ROOT)
-        milestone = catalog.by_id["authenticated-reverse-shell"]
+        milestone = catalog.by_id["authenticated-channel"]
         final = catalog.by_id["complete-rootkit"]
 
         self.assertEqual(
