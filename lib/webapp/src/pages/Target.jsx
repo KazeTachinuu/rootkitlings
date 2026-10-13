@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 import {
   ArrowLeft, RefreshCw, Search, Shield, Network,
   SquareTerminal, Folder, FileText, ChevronRight, LayoutGrid, LayoutList,
@@ -18,6 +18,15 @@ function useSnapshot(key) {
   const [time, setTime] = useState(cached.time)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const prevKey = useRef(key)
+  if (prevKey.current !== key) {
+    prevKey.current = key
+    const fresh = _cache.get(key) || { data: null, time: null }
+    setData(fresh.data)
+    setTime(fresh.time)
+    setLoading(false)
+    setError(null)
+  }
   const set = useCallback((d) => {
     const now = new Date()
     _cache.set(key, { data: d, time: now })
@@ -46,6 +55,8 @@ export function Target({ target: t, log, events, sendCmd, query, execCmd, startD
   const [pingResult, setPingResult] = useState(null)
   const [editing, setEditing] = useState(false)
   const [editVal, setEditVal] = useState('')
+  const [shellStatus, setShellStatus] = useState('idle')
+  const shellRef = useRef(null)
 
   useEffect(() => {
     setTab('overview')
@@ -169,6 +180,9 @@ export function Target({ target: t, log, events, sendCmd, query, execCmd, startD
           >
             {TabIcon && <TabIcon size={14} />}
             {label}
+            {key === 'shell' && shellStatus === 'connected' && (
+              <span className="w-2 h-2 rounded-full bg-green pulse shrink-0" />
+            )}
             {tabCounts[key] !== null && tabCounts[key] > 0 && (
               <span className={`text-xs px-1.5 py-0.5 font-mono rounded-[var(--radius)] border-2 border-border
                 ${tab === key ? 'bg-secondary text-fg' : 'bg-bg-2'}`}>
@@ -188,14 +202,34 @@ export function Target({ target: t, log, events, sendCmd, query, execCmd, startD
       )}
 
       {/* Content */}
-      <div className="flex-1 overflow-auto min-h-0">
+      <div className="flex-1 overflow-auto min-h-0 relative">
         {tab === 'overview' && <OverviewTab target={t} cmd={cmd} busy={targetBusy} />}
         {tab === 'files' && <FilesTab target={t} cmd={cmd} query={query} execCmd={execCmd} startDownload={startDownload} downloads={downloads} busy={targetBusy} />}
         {tab === 'procs' && <ProcsTab target={t} cmd={cmd} query={query} execCmd={execCmd} busy={targetBusy} />}
         {tab === 'ports' && <PortsTab target={t} cmd={cmd} execCmd={execCmd} busy={targetBusy} />}
-        {tab === 'shell' && <ShellTab target={t} />}
+        <div className={`flex flex-col h-full ${tab === 'shell' ? '' : 'hidden'}`}>
+          <ShellTab ref={shellRef} target={t} onStatusChange={setShellStatus} visible={tab === 'shell'} />
+        </div>
         {tab === 'log' && <LogTab entries={targetLog} />}
         {tab === 'events' && <EventsTab events={events} />}
+
+        {/* Shell alive island */}
+        {tab !== 'shell' && shellStatus === 'connected' && (
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-2 rounded-[var(--radius)] border-2 border-border bg-bg shadow-[3px_3px_0px_0px_var(--color-border)] cursor-pointer transition-transform hover:translate-y-[-1px] z-10"
+            onClick={() => setTab('shell')}
+          >
+            <span className="w-2 h-2 rounded-full bg-green pulse shrink-0" />
+            <SquareTerminal size={13} className="text-fg-2" />
+            <span className="text-xs font-bold text-fg-2">Shell active</span>
+            <button
+              className="ml-1 p-0.5 rounded hover:bg-bg-2 text-fg-3 hover:text-fg transition-colors"
+              onClick={e => { e.stopPropagation(); shellRef.current?.disconnect() }}
+              title="Close shell session"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
       </div>
 
       <CmdBar onSend={cmd} query={query} targetId={t.id} busy={targetBusy} />
@@ -433,19 +467,31 @@ function PreviewPanel({ preview, onClose, onHideContent, onHideFile, online }) {
           </button>
         </div>
       </div>
-      {sel && (
-        <div className="flex items-center gap-2 px-4 py-2 border-b-2 border-border bg-amber/10">
-          <span className="text-[11px] font-bold text-fg-2 shrink-0">Selected:</span>
-          <code className="text-[11px] font-mono text-fg truncate">{sel.length > 40 ? sel.slice(0, 40) + '...' : sel}</code>
-          <button
-            className="nb-btn-main px-2.5 py-1 text-[11px] flex items-center gap-1 ml-auto shrink-0"
-            onClick={() => { onHideContent(sel); setSel('') }}
-            disabled={!online}
-          >
-            <Shield size={10} /> Hide Content
-          </button>
-        </div>
-      )}
+      {sel && (() => {
+        const patterns = sel.split('\n').map(l => l.trim()).filter(Boolean)
+        if (!patterns.length) return null
+        const multi = patterns.length > 1
+        return (
+          <div className="flex items-center gap-2 px-4 py-2 border-b-2 border-border bg-amber/10 min-w-0">
+            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+              <span className="text-[11px] font-bold text-fg-2">
+                {multi ? `${patterns.length} patterns to hide` : 'Pattern to hide'}
+              </span>
+              <code className="text-[10px] font-mono text-fg-3 truncate block">
+                {multi ? patterns.map(p => `"${p.length > 25 ? p.slice(0, 25) + '...' : p}"`).join(', ') : `"${patterns[0]}"`}
+              </code>
+              {multi && <span className="text-[10px] text-fg-3">Lines containing any of these patterns will be hidden from read()</span>}
+            </div>
+            <button
+              className="nb-btn-main px-2.5 py-1 text-[11px] flex items-center gap-1 shrink-0"
+              onClick={() => { onHideContent(sel); setSel('') }}
+              disabled={!online}
+            >
+              <Shield size={10} /> Hide {multi ? `${patterns.length} Patterns` : 'Pattern'}
+            </button>
+          </div>
+        )
+      })()}
       <pre className="px-4 py-3 text-xs font-mono text-fg-2 whitespace-pre-wrap break-all overflow-auto flex-1" onMouseUp={onMouseUp}>{preview.content}</pre>
     </div>
   )
@@ -474,15 +520,19 @@ function FilesTab({ target: t, cmd, query, execCmd, startDownload, downloads, bu
   const hiddenFiles = t.hidden?.file || []
   const hiddenContent = t.hidden?.content || []
 
+  const cwdRef = useRef(cwd)
+  cwdRef.current = cwd
+  const pendingNav = useRef(null)
   const fetchDir = useCallback((path, force) => {
+    const key = `files:${t.id}:${path}`
     if (!force) {
-      const key = `files:${t.id}:${path}`
       const cached = _cache.get(key)
       if (cached?.data) return
     }
     snap.setLoading(true)
     const attempt = (retries) => {
       execCmd(`ls -la --color=never ${path}`, t.id).then(result => {
+        if (path !== cwdRef.current) return
         if (result.ok) {
           snap.set(parseShellLs(result.output))
         } else if (retries > 0 && (result.output || '').includes('busy')) {
@@ -495,20 +545,22 @@ function FilesTab({ target: t, cmd, query, execCmd, startDownload, downloads, bu
     attempt(3)
   }, [execCmd, t.id, snap])
 
-  useEffect(() => { fetchDir(cwd) }, [cwd, fetchDir])
+  useEffect(() => { pendingNav.current = null; fetchDir(cwd) }, [cwd, fetchDir])
 
   const navigateTo = (path, force) => {
-    const resolved = resolvePath(path, cwd)
+    const base = pendingNav.current || cwd
+    const resolved = resolvePath(path, base)
+    if (resolved === base && !force) return
     setSelected(null)
     setPreview(null)
     if (resolved === cwd && force) {
       fetchDir(cwd, true)
       return
     }
+    pendingNav.current = resolved
     setCwd(resolved)
     setPathInput(resolved)
     setPathError(false)
-    if (force) fetchDir(resolved, true)
   }
 
   const submitPath = (e) => {
@@ -775,7 +827,10 @@ function FilesTab({ target: t, cmd, query, execCmd, startDownload, downloads, bu
               <PreviewPanel
                 preview={preview}
                 onClose={() => { setPreview(null); setSelected(null) }}
-                onHideContent={pattern => cmd(`HIDE CONTENT ${pattern}`)}
+                onHideContent={pattern => {
+                  const lines = pattern.split('\n').map(l => l.trim()).filter(Boolean)
+                  for (const line of lines) cmd(`HIDE CONTENT ${line}`)
+                }}
                 onHideFile={() => cmd(`HIDE FILE ${preview.path.split('/').pop()}`)}
                 online={t.online && !busy}
               />
@@ -1056,16 +1111,16 @@ function SnapshotBar({ title, icon: Icon, count, hiddenCount, time, loading, onS
 
 function EmptySnapshotCta({ icon: Icon, title, subtitle, onCapture, online, loading }) {
   return (
-    <div className="flex-1 flex items-center justify-center">
-      <div className="text-center">
-        <div className="mx-auto w-12 h-12 rounded-lg bg-main/10 flex items-center justify-center mb-4">
-          <Icon size={22} className="text-main" />
+    <div className="flex-1 flex items-center justify-center h-full">
+      <div className="text-center px-6 py-10">
+        <div className="mx-auto w-16 h-16 rounded-[var(--radius)] border-2 border-border bg-main/10 flex items-center justify-center mb-5 shadow-[3px_3px_0px_0px_var(--color-border)]">
+          <Icon size={28} className="text-main" />
         </div>
-        <div className="font-bold mb-0.5">{title}</div>
-        <div className="text-xs text-fg-3 mb-4">{subtitle}</div>
-        <button className="nb-btn-main px-4 py-2 text-sm font-bold flex items-center gap-2 mx-auto" onClick={onCapture} disabled={!online || loading}>
-          {loading ? <Loader size={14} className="animate-spin" /> : <Radio size={14} />}
-          {loading ? 'Scanning...' : 'Capture'}
+        <div className="text-lg font-bold mb-1">{title}</div>
+        <div className="text-sm text-fg-3 mb-6 max-w-xs">{subtitle}</div>
+        <button className="nb-btn-main px-6 py-2.5 text-sm font-bold flex items-center gap-2 mx-auto" onClick={onCapture} disabled={!online || loading}>
+          {loading ? <Loader size={16} className="animate-spin" /> : <Radio size={16} />}
+          {loading ? 'Scanning...' : 'Capture Snapshot'}
         </button>
       </div>
     </div>
@@ -1403,11 +1458,16 @@ function PortsTab({ target: t, cmd, execCmd, busy }) {
 
 /* -- Shell --------------------------------------------------- */
 
-function ShellTab({ target: t }) {
+const ShellTab = forwardRef(function ShellTab({ target: t, onStatusChange, visible }, ref) {
   const termRef = useRef(null)
   const wsRef = useRef(null)
   const xtermRef = useRef(null)
   const [status, setStatus] = useState('idle')
+  const prevStatus = useRef(status)
+  if (prevStatus.current !== status) {
+    prevStatus.current = status
+    onStatusChange?.(status)
+  }
 
   const initTerm = useCallback(async () => {
     if (xtermRef.current) return
@@ -1482,7 +1542,10 @@ function ShellTab({ target: t }) {
 
   const disconnect = useCallback(() => {
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
+    setStatus('idle')
   }, [])
+
+  useImperativeHandle(ref, () => ({ disconnect }), [disconnect])
 
   useEffect(() => () => {
     if (wsRef.current) wsRef.current.close()
@@ -1550,7 +1613,7 @@ function ShellTab({ target: t }) {
       )}
     </div>
   )
-}
+})
 
 /* -- Log + Events -------------------------------------------- */
 
