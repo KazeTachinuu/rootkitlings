@@ -190,17 +190,15 @@ class OperatorConsole(cmd.Cmd):
         reply = self._exchange_quiet("STATUS")
         if not reply.startswith("STATUS "):
             return
-        fields = {}
+        width = max(
+            (len(k) for pair in reply[7:].split() if "=" in pair
+             for k, _ in [pair.split("=", 1)]),
+            default=0,
+        )
         for pair in reply[7:].split():
             if "=" in pair:
                 k, v = pair.split("=", 1)
-                fields[k] = v
-        self._output(f"  module hidden:   {fields.get('hidden', '?')}\n")
-        self._output(f"  persisted:       {fields.get('persisted', '?')}\n")
-        self._output(f"  file targets:    {fields.get('files', '?')}\n")
-        self._output(f"  pid targets:     {fields.get('pids', '?')}\n")
-        self._output(f"  content targets: {fields.get('content', '?')}\n")
-        self._output(f"  port targets:    {fields.get('ports', '?')}\n")
+                self._output(f"  {k:<{width}}  {v}\n")
 
     def do_escalate(self, arg: str) -> None:
         pid = arg.strip()
