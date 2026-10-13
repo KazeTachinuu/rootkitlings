@@ -81,7 +81,7 @@ int rk_persist_install(void)
 			retry_base_ms, retry_max_ms,
 			control_key, shell_timeout_ms);
 
-	f = filp_open(RK_PERSIST_PATH, O_WRONLY | O_TRUNC, 0600);
+	f = filp_open(RK_PERSIST_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0600);
 	if (IS_ERR(f))
 		return PTR_ERR(f);
 	kernel_write(f, buf, len, &pos);
@@ -95,7 +95,7 @@ int rk_persist_remove(void)
 	struct file *f;
 	loff_t pos = 0;
 
-	f = filp_open(RK_PERSIST_PATH, O_WRONLY | O_TRUNC, 0600);
+	f = filp_open(RK_PERSIST_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0600);
 	if (IS_ERR(f))
 		return PTR_ERR(f);
 	kernel_write(f, "", 0, &pos);
