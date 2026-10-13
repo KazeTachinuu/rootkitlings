@@ -196,6 +196,7 @@ class OperatorConsole(cmd.Cmd):
                 k, v = pair.split("=", 1)
                 fields[k] = v
         self._output(f"  module hidden:   {fields.get('hidden', '?')}\n")
+        self._output(f"  persisted:       {fields.get('persisted', '?')}\n")
         self._output(f"  file targets:    {fields.get('files', '?')}\n")
         self._output(f"  pid targets:     {fields.get('pids', '?')}\n")
         self._output(f"  content targets: {fields.get('content', '?')}\n")
