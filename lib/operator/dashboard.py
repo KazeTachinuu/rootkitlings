@@ -118,12 +118,41 @@ def _broadcast(data: str) -> None:
             _ws_clients.discard(ws)
 
 
+async def _watch_target(ws: web.WebSocketResponse, target_id: str,
+                        cancel: asyncio.Event, loop) -> None:
+    """Poll one target every 5s and push updates until cancelled."""
+    prev = None
+    while not cancel.is_set():
+        try:
+            await asyncio.wait_for(cancel.wait(), timeout=5.0)
+            return
+        except asyncio.TimeoutError:
+            pass
+        if not _manager:
+            continue
+        target = _manager.get(target_id)
+        if not target:
+            continue
+        try:
+            data = await loop.run_in_executor(None, _target_to_dict, target)
+            payload = json.dumps({"type": "target_update", "target": data})
+            if payload != prev:
+                await ws.send_str(payload)
+                prev = payload
+        except Exception:
+            return
+
+
 async def _ws_endpoint(request: web.Request) -> web.WebSocketResponse:
     ws = web.WebSocketResponse()
     await ws.prepare(request)
     _ws_clients.add(ws)
+    watch_cancel: asyncio.Event | None = None
+    watch_task: asyncio.Task | None = None
     try:
-        await ws.send_str(json.dumps(_snapshot()))
+        loop = asyncio.get_event_loop()
+        snap = await loop.run_in_executor(None, _snapshot)
+        await ws.send_str(json.dumps(snap))
         async for msg in ws:
             if msg.type != web.WSMsgType.TEXT:
                 break
@@ -134,8 +163,33 @@ async def _ws_endpoint(request: web.Request) -> web.WebSocketResponse:
 
             cmd_type = data.get("type", "")
 
-            if cmd_type == "refresh":
-                await ws.send_str(json.dumps(_snapshot()))
+            if cmd_type == "watch":
+                tid = data.get("target")
+                if watch_cancel:
+                    watch_cancel.set()
+                if watch_task:
+                    watch_task.cancel()
+                if tid:
+                    watch_cancel = asyncio.Event()
+                    watch_task = asyncio.ensure_future(
+                        _watch_target(ws, tid, watch_cancel, loop))
+                else:
+                    watch_cancel = None
+                    watch_task = None
+
+            elif cmd_type == "refresh":
+                snap = await loop.run_in_executor(None, _snapshot)
+                await ws.send_str(json.dumps(snap))
+
+            elif cmd_type == "rename":
+                target_id = data.get("target")
+                new_label = data.get("label", "").strip()
+                if target_id and new_label and _manager:
+                    target = _manager.get(target_id)
+                    if target:
+                        target.label = new_label
+                        snap = await loop.run_in_executor(None, _snapshot)
+                        _broadcast(json.dumps(snap))
 
             elif cmd_type == "command":
                 target_id = data.get("target")
@@ -152,7 +206,6 @@ async def _ws_endpoint(request: web.Request) -> web.WebSocketResponse:
                         "reply": "target offline",
                     }))
                     continue
-                loop = asyncio.get_event_loop()
                 try:
                     reply = await loop.run_in_executor(
                         None, target.exchange, command,
@@ -189,42 +242,39 @@ async def _ws_endpoint(request: web.Request) -> web.WebSocketResponse:
                         "ok": False, "error": "target offline",
                     }))
                     continue
-                loop = asyncio.get_event_loop()
 
-                def _dl_progress(received: int, total: int) -> None:
-                    asyncio.run_coroutine_threadsafe(
-                        ws.send_str(json.dumps({
-                            "type": "download_progress",
-                            "_dlId": dl_id,
-                            "received": received,
-                            "total": total,
-                        })),
-                        loop,
-                    )
+                async def _do_download(t, path, did, tid):
+                    def _progress(received: int, total: int) -> None:
+                        asyncio.run_coroutine_threadsafe(
+                            ws.send_str(json.dumps({
+                                "type": "download_progress",
+                                "_dlId": did,
+                                "received": received,
+                                "total": total,
+                            })),
+                            loop,
+                        )
+                    try:
+                        file_bytes, total = await loop.run_in_executor(
+                            None, t.download_file, path, _progress,
+                        )
+                        await ws.send_str(json.dumps({
+                            "type": "download_result", "target": tid,
+                            "_dlId": did,
+                            "path": path, "ok": True,
+                            "size": total,
+                            "data": base64.b64encode(file_bytes).decode("ascii"),
+                        }))
+                        add_event(f"{tid}: download {path} ({len(file_bytes)}B)", "cmd")
+                    except Exception as e:
+                        await ws.send_str(json.dumps({
+                            "type": "download_result", "target": tid,
+                            "_dlId": did,
+                            "path": path,
+                            "ok": False, "error": str(e),
+                        }))
 
-                try:
-                    file_bytes, total = await loop.run_in_executor(
-                        None, target.download_file, remote_path,
-                        _dl_progress,
-                    )
-                    await ws.send_str(json.dumps({
-                        "type": "download_result", "target": target_id,
-                        "_dlId": dl_id,
-                        "path": remote_path, "ok": True,
-                        "size": total,
-                        "data": base64.b64encode(file_bytes).decode("ascii"),
-                    }))
-                    add_event(
-                        f"{target.id}: download {remote_path} ({len(file_bytes)}B)",
-                        "cmd",
-                    )
-                except Exception as e:
-                    await ws.send_str(json.dumps({
-                        "type": "download_result", "target": target_id,
-                        "_dlId": dl_id,
-                        "path": remote_path,
-                        "ok": False, "error": str(e),
-                    }))
+                asyncio.ensure_future(_do_download(target, remote_path, dl_id, target_id))
 
             elif cmd_type == "exec":
                 target_id = data.get("target")
@@ -240,7 +290,6 @@ async def _ws_endpoint(request: web.Request) -> web.WebSocketResponse:
                         "ok": False, "output": "target offline",
                     }))
                     continue
-                loop = asyncio.get_event_loop()
                 try:
                     output = await loop.run_in_executor(
                         None, target.exec_shell, shell_cmd,
@@ -258,6 +307,10 @@ async def _ws_endpoint(request: web.Request) -> web.WebSocketResponse:
                     }))
 
     finally:
+        if watch_cancel:
+            watch_cancel.set()
+        if watch_task:
+            watch_task.cancel()
         _ws_clients.discard(ws)
     return ws
 

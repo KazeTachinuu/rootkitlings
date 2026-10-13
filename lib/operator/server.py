@@ -113,16 +113,21 @@ class Target:
                 total = int(header.split()[1])
                 chunks = []
                 received = 0
+                chunk_num = 0
                 while True:
-                    raw = self.secure.open_reply(receive_frame(self.peer))
+                    frame = receive_frame(self.peer)
+                    raw = self.secure.open_reply(frame)
                     if raw == b"EOF":
                         break
+                    chunk_num += 1
                     chunks.append(raw)
                     received += len(raw)
                     if on_progress:
                         on_progress(received, total)
                 return b"".join(chunks), total
-            except Exception:
+            except Exception as e:
+                import sys
+                print(f"[download] FAIL chunk={chunk_num} received={received}/{total} err={e}", file=sys.stderr)
                 self.online = False
                 raise
 
@@ -138,6 +143,8 @@ class Target:
             except Exception:
                 self.online = False
                 raise
+            if reply.startswith("ERR"):
+                raise OperatorError(f"shell request failed: {reply}")
             request_id, cookie = parse_shell_ticket(reply)
             return accept_shell_while_running(
                 self.operator.shell_listener,
