@@ -190,11 +190,19 @@ class Target:
         return shell
 
     def exec_shell(self, command: str, timeout: float = 5) -> str:
-        start_marker = "__RK_START__"
-        end_marker = "__RK_EOF__"
+        nonce = f"_RK{id(command) & 0xFFFF:04X}_"
+        start_marker = f"__START{nonce}__"
+        end_marker = f"__EOF{nonce}__"
         with self._exec_lock:
             shell = self._ensure_exec_shell(timeout)
             try:
+                # drain any leftover data from previous commands
+                shell.settimeout(0.05)
+                try:
+                    while shell.recv(4096):
+                        pass
+                except (socket.timeout, BlockingIOError, OSError):
+                    pass
                 shell.settimeout(timeout)
                 wire = f"echo {start_marker}\n{command}\necho {end_marker}\n"
                 shell.sendall(wire.encode())
