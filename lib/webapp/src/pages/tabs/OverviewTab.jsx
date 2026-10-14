@@ -80,6 +80,7 @@ export function OverviewTab({ target: t, cmd, busy }) {
             {t.build_id && <InfoRow label="Build" value={t.build_id} />}
             {t.peer && <InfoRow label="Peer" value={t.peer} />}
             <InfoRow label="Module" value={t.module_hidden ? 'Hidden' : 'Visible'} color={t.module_hidden ? 'text-green' : 'text-amber'} />
+            <InfoRow label="Persist" value={t.persisted ? 'Active' : 'Off'} color={t.persisted ? 'text-green' : 'text-fg-3'} />
             <InfoRow label="Status" value={t.online ? 'Online' : 'Offline'} color={t.online ? 'text-green' : 'text-red'} />
             <InfoRow label="Hidden" value={`${total} items`} />
           </div>

@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Activity, Eye, EyeOff, Zap } from 'lucide-react'
 import { Th } from '../../components/Th'
-import { useSnapshot, SnapshotBar, EmptySnapshotCta, HiddenSummary } from '../Target'
+import { useSnapshot, SnapshotBar, HiddenSummary } from '../Target'
 
 const PS_CMD = "for d in /proc/[0-9]*; do u=$(stat -c %u \"$d\" 2>/dev/null); cat \"$d/stat\" 2>/dev/null | sed \"s/^/$u /\"; done"
 
@@ -38,15 +38,14 @@ export function ProcsTab({ target: t, cmd, query, execCmd, busy }) {
     })
   }, [query, t.id, capture])
 
+  useEffect(() => {
+    if (t.online && !busy && !snap.time && !snap.loading) capture()
+  }, [t.online])
+
   const procs = snap.data || []
   const filtered = filter
     ? procs.filter(p => p.comm.includes(filter) || p.pid === filter || p.ppid === filter || p.uid === filter)
     : procs
-
-  if (!snap.time && !snap.loading)
-    return <EmptySnapshotCta icon={Activity} title="Processes"
-      subtitle="Scan /proc for running processes on the target"
-      onCapture={capture} online={t.online && !busy} loading={snap.loading} />
 
   return (
     <div className="flex flex-col h-full">
