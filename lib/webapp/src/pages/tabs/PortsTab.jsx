@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { Network, Eye, EyeOff, Radio } from 'lucide-react'
+import { Network, Eye, EyeOff } from 'lucide-react'
 import { Th } from '../../components/Th'
 import { useSnapshot, SnapshotBar, EmptySnapshotCta, HiddenSummary } from '../Target'
 

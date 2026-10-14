@@ -635,16 +635,18 @@ export function DownloadOverlay({ downloads, setDownloads, targetId, targets }) 
                     </div>
                   )}
                   {dl.state === 'done' && (
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-[10px] text-fg-3 font-mono">{formatSize(dl.size)}</span>
-                      <button className="nb-btn px-1.5 py-0 text-[9px] flex items-center gap-1 ml-auto"
-                        onClick={() => setDownloads(s => ({ ...s, [key]: { ...s[key], showPreview: true } }))}
-                      >
-                        <Eye size={9} /> Preview
-                      </button>
-                      <button className="nb-btn px-1.5 py-0 text-[9px] flex items-center gap-1" onClick={() => save(key, dl)}>
-                        <Download size={9} /> Save
-                      </button>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[11px] text-fg-3 font-mono">{formatSize(dl.size)}</span>
+                      <div className="flex items-center gap-2 ml-auto">
+                        <button className="nb-btn px-3 py-1 text-xs flex items-center gap-1.5"
+                          onClick={() => setDownloads(s => ({ ...s, [key]: { ...s[key], showPreview: true } }))}
+                        >
+                          <Eye size={12} /> Preview
+                        </button>
+                        <button className="nb-btn px-3 py-1 text-xs flex items-center gap-1.5" onClick={() => save(key, dl)}>
+                          <Download size={12} /> Save
+                        </button>
+                      </div>
                     </div>
                   )}
                   {dl.state === 'error' && (

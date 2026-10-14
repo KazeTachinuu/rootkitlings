@@ -1,4 +1,4 @@
-import { Monitor, ChevronRight, Shield, Network, Radio, SquareTerminal, FolderOpen, Activity, Wifi, Eye } from 'lucide-react'
+import { Monitor, ChevronRight, Network, Radio, SquareTerminal, FolderOpen, Activity, Wifi, Eye } from 'lucide-react'
 import { API_HOST } from '../api'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'

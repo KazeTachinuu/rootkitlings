@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { Activity, Eye, EyeOff, Loader, Zap, Radio } from 'lucide-react'
+import { Activity, Eye, EyeOff, Zap } from 'lucide-react'
 import { Th } from '../../components/Th'
 import { useSnapshot, SnapshotBar, EmptySnapshotCta, HiddenSummary } from '../Target'
 
