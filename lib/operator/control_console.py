@@ -166,7 +166,7 @@ class OperatorConsole:
         self._receive_reply = receive_reply
         self._target = target
         self._input_stream = input_stream
-        self._rc = RichConsole(highlight=False)
+        self._rc = None
         completions = dict(_OPERATOR_COMPLETIONS)
         if target is not None:
             completions["back"] = None
@@ -368,6 +368,7 @@ class OperatorConsole:
     def run(self) -> None:
         ctx = patch_stdout() if self._session else _nullctx()
         with ctx:
+            self._rc = RichConsole(highlight=False)
             while True:
                 line = self._read_line()
                 if line is None:
