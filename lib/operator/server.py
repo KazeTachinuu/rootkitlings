@@ -70,6 +70,8 @@ class Target:
         self.online = True
         self._generation = 0
         self._lock = threading.Lock()
+        self._exec_shell = None
+        self._exec_lock = threading.Lock()
 
     def reconnect(self, peer, secure, session=None, operator=None, process=None):
         with self._lock:
@@ -87,6 +89,7 @@ class Target:
                 self.process = process
             self._generation += 1
             self.online = True
+            self._close_exec_shell()
 
     def exchange(self, command: str) -> str:
         with self._lock:
@@ -172,31 +175,42 @@ class Target:
     def open_exec_shell(self, timeout: float = 10) -> socket.socket:
         return self._request_shell("EXEC_SHELL", timeout)
 
+    def _ensure_exec_shell(self, timeout: float = 10) -> socket.socket:
+        """Return a persistent exec shell, opening one if needed."""
+        if self._exec_shell is not None:
+            try:
+                self._exec_shell.sendall(b"")
+                return self._exec_shell
+            except OSError:
+                self._exec_shell = None
+        shell = self.open_exec_shell(timeout)
+        shell.settimeout(timeout)
+        shell.recv(4096)
+        self._exec_shell = shell
+        return shell
+
     def exec_shell(self, command: str, timeout: float = 5) -> str:
         start_marker = "__RK_START__"
         end_marker = "__RK_EOF__"
-        shell = self.open_exec_shell(timeout)
-        try:
-            shell.settimeout(timeout)
-            shell.recv(4096)
-            wire = f"echo {start_marker}\n{command}\necho {end_marker}\n"
-            shell.sendall(wire.encode())
-            chunks = []
-            marker = end_marker.encode()
-            while True:
-                chunk = shell.recv(4096)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-                if marker in chunk:
-                    break
-            shell.sendall(b"exit\n")
-        finally:
+        with self._exec_lock:
+            shell = self._ensure_exec_shell(timeout)
             try:
-                shell.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-            shell.close()
+                shell.settimeout(timeout)
+                wire = f"echo {start_marker}\n{command}\necho {end_marker}\n"
+                shell.sendall(wire.encode())
+                chunks = []
+                marker = end_marker.encode()
+                while True:
+                    chunk = shell.recv(4096)
+                    if not chunk:
+                        self._exec_shell = None
+                        break
+                    chunks.append(chunk)
+                    if marker in chunk:
+                        break
+            except Exception:
+                self._exec_shell = None
+                raise
         text = b"".join(chunks).decode("utf-8", errors="replace")
         start = text.find(start_marker)
         if start >= 0:
@@ -206,8 +220,21 @@ class Target:
             text = text[:end]
         return text.strip()
 
+    def _close_exec_shell(self):
+        if self._exec_shell is not None:
+            try:
+                self._exec_shell.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                self._exec_shell.close()
+            except OSError:
+                pass
+            self._exec_shell = None
+
     def close(self) -> None:
         self.online = False
+        self._close_exec_shell()
         for resource in (self.peer, self.secure, self.operator):
             try:
                 resource.close()

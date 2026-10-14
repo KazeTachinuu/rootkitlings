@@ -289,20 +289,8 @@ async def _ws_handle_exec(ws, data, loop, state):
         }))
         return
 
-    def _exec_with_retry():
-        last_err = None
-        for attempt in range(3):
-            try:
-                return target.exec_shell(shell_cmd)
-            except Exception as e:
-                last_err = e
-                if "busy" not in str(e).lower():
-                    raise
-                time.sleep(0.5)
-        raise last_err
-
     try:
-        output = await loop.run_in_executor(None, _exec_with_retry)
+        output = await loop.run_in_executor(None, target.exec_shell, shell_cmd)
         await ws.send_str(json.dumps({
             "type": "exec_result", "target": target_id,
             "_execId": exec_id, "ok": True, "output": output,
