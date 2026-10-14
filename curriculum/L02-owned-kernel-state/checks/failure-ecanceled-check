@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
 begin "Preflight rejection"
 
@@ -16,7 +16,7 @@ assert_not_loaded()
 
 assert_not_loaded
 for attempt in 1 2; do
-	if module_load_test /rklings/rklings.ko 125; then
+	if module_load_test ${RKLINGS_DIR:-/rklings}/rklings.ko 125; then
 		_ok "attempt $attempt returned numeric ECANCELED"
 	else
 		_fail "attempt $attempt did not return ECANCELED"

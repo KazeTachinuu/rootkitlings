@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
 expected_errno=${1:-@EXPECTED_ERRNO@}
 label=${2:-@LABEL@}
@@ -29,7 +29,7 @@ filldir_before=$(probe_count k filldir64)
 
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	if module_load_test /rklings/rklings.ko "$expected_errno"; then
+	if module_load_test ${RKLINGS_DIR:-/rklings}/rklings.ko "$expected_errno"; then
 		_ok "attempt $attempt returned errno $expected_errno"
 	else
 		_fail "attempt $attempt returned the wrong error"

@@ -1,12 +1,12 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 expected=${1:-@ERRNO@}
 label=${2:-@LABEL@}
 begin "$label"
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	if module_load_test /rklings/rklings.ko "$expected"; then _ok "attempt $attempt returned $expected"; else _fail "wrong load result"; fi
+	if module_load_test ${RKLINGS_DIR:-/rklings}/rklings.ko "$expected"; then _ok "attempt $attempt returned $expected"; else _fail "wrong load result"; fi
 	assert_absent /sys/module/rklings
 	attempt=$((attempt+1))
 done

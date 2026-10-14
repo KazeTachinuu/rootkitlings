@@ -3,7 +3,7 @@
 # Assertion library sourced by exercise checks inside the BusyBox guest.
 
 # shellcheck source=scripts/lib/ui.sh
-. /vm/ui.sh
+. "${RKLINGS_UI:-/vm/ui.sh}"
 
 # -- marker output ----------------------------------------------------------
 
@@ -203,8 +203,9 @@ _show_command() {
 
 load() {
     local mod="$1"; shift
-    _show_command insmod "/rklings/$mod" "$@"
-    if insmod "/rklings/$mod" "$@"; then
+    local dir="${RKLINGS_DIR:-/rklings}"
+    _show_command insmod "$dir/$mod" "$@"
+    if insmod "$dir/$mod" "$@"; then
         _ok "loaded $mod"
     else
         _fail "failed to load $mod"
@@ -224,8 +225,9 @@ unload() {
 
 load_fail() {
     local mod="$1"; shift
-    _show_command insmod "/rklings/$mod" "$@"
-    if insmod "/rklings/$mod" "$@"; then
+    local dir="${RKLINGS_DIR:-/rklings}"
+    _show_command insmod "$dir/$mod" "$@"
+    if insmod "$dir/$mod" "$@"; then
         _fail "expected $mod to be rejected, but it loaded"
     else
         _ok "$mod correctly rejected"

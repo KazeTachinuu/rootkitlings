@@ -1,7 +1,7 @@
 #!/bin/sh
 # shellcheck source=/dev/null
 # shellcheck disable=SC2015
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
 begin "Packed directory filtering"
 

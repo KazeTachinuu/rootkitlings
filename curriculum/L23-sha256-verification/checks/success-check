@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
 begin "SHA-256 verification"
 

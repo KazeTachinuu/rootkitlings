@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
 begin "Missing retained target"
 
@@ -18,7 +18,7 @@ probe_count()
 before=$(probe_count)
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	if module_load_test /rklings/rklings.ko 2; then
+	if module_load_test ${RKLINGS_DIR:-/rklings}/rklings.ko 2; then
 		_ok "attempt $attempt returned ENOENT"
 	else
 		_fail "attempt $attempt returned the wrong error"

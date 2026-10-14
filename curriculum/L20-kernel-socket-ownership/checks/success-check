@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
 begin "Kernel TCP socket ownership"
 
@@ -88,7 +88,7 @@ peer_port=$(cat "$fixtures/first/primary_port")
 if busybox unshare -n sh -c '
 	ifconfig lo 127.0.0.1 up || exit 20
 	peer_port=$1
-	insmod /rklings/rklings.ko peer_port="$peer_port" || exit 21
+	insmod ${RKLINGS_DIR:-/rklings}/rklings.ko peer_port="$peer_port" || exit 21
 	local_port=$(sed -n "s/^local_port=//p" /proc/rklings)
 	local_hex=$(printf "%04X" "$local_port")
 	peer_hex=$(printf "%04X" "$peer_port")

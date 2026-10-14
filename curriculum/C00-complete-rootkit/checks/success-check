@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
 begin "Complete rootkit"
 
@@ -84,17 +84,17 @@ else
 	_fail "/proc/rklings_status not found"
 fi
 
-if ! grep -q rklings /proc/modules; then
+if ! grep -q '^rklings ' /proc/modules; then
 	_ok "module hidden from lsmod on load"
 else
 	_fail "module visible in lsmod after load"
 fi
 
-# Wait for the fixture to uncloak the module before rmmod
-if wait_marker uncloaked; then
-	_ok "fixture uncloaked module"
+# Wait for the fixture to unhide the module before rmmod
+if wait_marker unhidden; then
+	_ok "fixture unhid module"
 else
-	_fail "fixture did not uncloak module"
+	_fail "fixture did not unhide module"
 fi
 
 # Wait for the fixture to reach the final expect_eof point

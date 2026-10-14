@@ -1,9 +1,9 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
 begin "Authentication context allocation failure"
-if module_load_test /rklings/rklings.ko 12; then
+if module_load_test ${RKLINGS_DIR:-/rklings}/rklings.ko 12; then
 	_ok "allocation failure is propagated as ENOMEM"
 else
 	_fail "allocation failure returned the wrong error"

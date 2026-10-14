@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
 begin "Kernel socket configuration and connect errors"
 
@@ -11,14 +11,14 @@ ifconfig lo 127.0.0.1 up
 
 attempt=1
 while [ "$attempt" -le 2 ]; do
-	if module_load_test /rklings/rklings.ko 22; then
+	if module_load_test ${RKLINGS_DIR:-/rklings}/rklings.ko 22; then
 		_ok "zero-port attempt $attempt returned EINVAL"
 	else
 		_fail "zero-port attempt $attempt returned the wrong error"
 	fi
 	socket_owner_fixture unused "$fixtures/unused-$attempt"
 	port=$(cat "$fixtures/unused-$attempt")
-	if load_errno /rklings/rklings.ko 111 \
+	if load_errno ${RKLINGS_DIR:-/rklings}/rklings.ko 111 \
 			"peer_port=$port"; then
 		_ok "refused-connect attempt $attempt returned ECONNREFUSED"
 	else

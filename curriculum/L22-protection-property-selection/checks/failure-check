@@ -1,11 +1,11 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
 begin "Rejected unfinished protection selector"
 
 assert_absent /sys/module/rklings
-if module_load_test /rklings/rklings.ko 22; then
+if module_load_test ${RKLINGS_DIR:-/rklings}/rklings.ko 22; then
 	_ok "kernel self-test rejected the unfinished implementation"
 else
 	_fail "module load did not return EINVAL"

@@ -1,9 +1,9 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
 begin "Rejected unfinished authenticated receiver"
-if module_load_test /rklings/rklings.ko 22; then
+if module_load_test ${RKLINGS_DIR:-/rklings}/rklings.ko 22; then
 	_ok "unfinished receiver is rejected with EINVAL"
 else
 	_fail "unfinished receiver returned the wrong error"

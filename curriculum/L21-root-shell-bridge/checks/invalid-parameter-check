@@ -1,10 +1,10 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
 begin "Root shell configuration"
 
-module=/rklings/rklings.ko
+module=${RKLINGS_DIR:-/rklings}/rklings.ko
 
 expect_einval()
 {

@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
 begin "Publication rollback"
 
@@ -21,7 +21,7 @@ check_attempt()
 	attempt=$1
 	kmem_trace_start
 
-	if module_load_test /rklings/rklings.ko 12; then
+	if module_load_test ${RKLINGS_DIR:-/rklings}/rklings.ko 12; then
 		_ok "attempt $attempt returned numeric ENOMEM"
 	else
 		_fail "attempt $attempt did not return ENOMEM"

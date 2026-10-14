@@ -1,9 +1,9 @@
 #!/bin/sh
 # shellcheck source=/dev/null
-. /vm/checks/lib.sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
 begin "HMAC calculation failure"
-if module_load_test /rklings/rklings.ko 5; then
+if module_load_test ${RKLINGS_DIR:-/rklings}/rklings.ko 5; then
 	_ok "digest failure is propagated as EIO"
 else
 	_fail "digest failure returned the wrong error"
