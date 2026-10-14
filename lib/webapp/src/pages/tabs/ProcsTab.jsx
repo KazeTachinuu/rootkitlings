@@ -70,9 +70,7 @@ export function ProcsTab({ target: t, cmd, query, execCmd, busy }) {
           {snap.error && (
             <div className="p-6 text-center">
               <div className="text-red font-bold mb-1">Scan failed</div>
-              <div className="text-sm text-fg-3">{snap.error.includes('ticket') || snap.error.includes('busy')
-                ? 'Close the active shell session first, then retry.'
-                : snap.error}</div>
+              <div className="text-sm text-fg-3">{snap.error}</div>
             </div>
           )}
           {!snap.error && !filtered.length && !snap.loading ? (

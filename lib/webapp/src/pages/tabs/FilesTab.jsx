@@ -203,19 +203,14 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
       if (cached?.data) return
     }
     snap.setLoading(true)
-    const attempt = (retries) => {
-      execCmd(`ls -la --color=never ${path}`, t.id).then(result => {
-        if (path !== cwdRef.current) return
-        if (result.ok) {
-          snap.set(parseShellLs(result.output))
-        } else if (retries > 0 && /busy/i.test(result.output || '')) {
-          setTimeout(() => attempt(retries - 1), 500)
-        } else {
-          snap.fail(result.output || 'failed')
-        }
-      })
-    }
-    attempt(3)
+    execCmd(`ls -la --color=never ${path}`, t.id).then(result => {
+      if (path !== cwdRef.current) return
+      if (result.ok) {
+        snap.set(parseShellLs(result.output))
+      } else {
+        snap.fail(result.output || 'failed')
+      }
+    })
   }, [execCmd, t.id, snap])
 
   useEffect(() => { pendingNav.current = null; fetchDir(cwd) }, [cwd, fetchDir])
