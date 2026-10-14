@@ -366,7 +366,7 @@ class OperatorConsole:
             return ""
 
     def run(self) -> None:
-        ctx = patch_stdout() if self._session else _nullctx()
+        ctx = patch_stdout(raw=True) if self._session else _nullctx()
         with ctx:
             self._rc = RichConsole(highlight=False)
             while True:

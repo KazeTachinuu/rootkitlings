@@ -373,7 +373,7 @@ class ServerConsole:
         )
 
     def run(self) -> None:
-        with patch_stdout():
+        with patch_stdout(raw=True):
             self._rc = RichConsole(highlight=False)
             while True:
                 try:
