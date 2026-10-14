@@ -171,7 +171,13 @@ group   = "operate"
 [commands.SHELL]
 wire    = "SHELL <port>"
 reply   = "OPEN <request_id> <cookie> | ERR 4 | ERR 5"
-help    = "open root shell on the target"
+help    = "open interactive root shell"
+group   = "operate"
+
+[commands.EXEC_SHELL]
+wire    = "EXEC_SHELL <port>"
+reply   = "OPEN <request_id> <cookie> | ERR 4 | ERR 5"
+help    = "open non-interactive exec shell"
 group   = "operate"
 
 [commands.SHELL_STATUS]
@@ -179,3 +185,17 @@ wire    = "SHELL STATUS"
 reply   = "STATE <request_id> <state> <result>"
 help    = "check shell state"
 group   = "operate"
+
+# --- Recon ------------------------------------------------------------
+
+[commands.PS]
+wire    = "PS [index]"
+reply   = "PS <count> | ENTRY <index> <fields> | ERR 2"
+help    = "list processes on target"
+group   = "recon"
+
+[commands.PORTS]
+wire    = "PORTS [index]"
+reply   = "PORTS <count> | ENTRY <index> <fields> | ERR 2"
+help    = "list listening ports on target"
+group   = "recon"

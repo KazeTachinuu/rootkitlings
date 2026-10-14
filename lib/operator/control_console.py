@@ -72,7 +72,7 @@ def _build_help(proto: dict) -> str:
         groups[g].append(f"  {name:<22}{cmd['help']}")
     groups.setdefault("session", [])
     groups["session"].append(f"  {'help':<22}show this reference")
-    order = ["hide", "unhide", "operate", "view", "list", "session"]
+    order = ["hide", "unhide", "operate", "recon", "view", "list", "session"]
     lines = []
     for g in order:
         if g not in groups:
@@ -274,6 +274,14 @@ class OperatorConsole:
 
     def do_unpersist(self, arg: str) -> None:
         self._send("UNPERSIST")
+
+    def do_ps(self, arg: str) -> None:
+        idx = arg.strip()
+        self._send(f"PS {idx}" if idx else "PS")
+
+    def do_ports(self, arg: str) -> None:
+        idx = arg.strip()
+        self._send(f"PORTS {idx}" if idx else "PORTS")
 
     def do_download(self, arg: str) -> None:
         remote_path = arg.strip()
