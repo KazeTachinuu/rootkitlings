@@ -88,26 +88,6 @@ static int rk_agent_list(struct rk_agent *agent, struct socket *socket,
 	return rk_agent_reply(agent, socket, reply, reply_length);
 }
 
-static int rk_agent_ps(struct rk_agent *agent, struct socket *socket,
-		       const struct rk_command *command)
-{
-	if (!command->enum_has_index)
-		return rk_agent_reply(agent, socket,
-				      (const unsigned char *)"PS 0", 4);
-	return rk_agent_reply(agent, socket,
-			      (const unsigned char *)"ERR 2", 5);
-}
-
-static int rk_agent_ports(struct rk_agent *agent, struct socket *socket,
-			  const struct rk_command *command)
-{
-	if (!command->enum_has_index)
-		return rk_agent_reply(agent, socket,
-				      (const unsigned char *)"PORTS 0", 7);
-	return rk_agent_reply(agent, socket,
-			      (const unsigned char *)"ERR 2", 5);
-}
-
 static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 			    const unsigned char *payload, size_t payload_length,
 			    bool *close_session)
@@ -281,10 +261,6 @@ download_close:
 		fput(f);
 		return error;
 	}
-	case RK_COMMAND_PS:
-		return rk_agent_ps(agent, socket, &command);
-	case RK_COMMAND_PORTS:
-		return rk_agent_ports(agent, socket, &command);
 	case RK_COMMAND_INVALID:
 	default:
 		return -EPROTO;

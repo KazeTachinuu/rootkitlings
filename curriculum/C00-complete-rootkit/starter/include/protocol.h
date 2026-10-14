@@ -33,8 +33,6 @@ enum rk_command_kind {
 	RK_COMMAND_UNHIDE_MODULE,
 	RK_COMMAND_ESCALATE,
 	RK_COMMAND_DOWNLOAD,
-	RK_COMMAND_PS,
-	RK_COMMAND_PORTS,
 };
 
 struct rk_command {

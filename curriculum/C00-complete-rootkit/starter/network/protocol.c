@@ -216,28 +216,6 @@ int rk_command_parse(const unsigned char *bytes, size_t length,
 	} else if (length >= 5 && !memcmp(bytes, "LIST ", 5)) {
 		if (rk_try_list(bytes, length, &parsed))
 			return -EINVAL;
-	} else if (length >= 2 && !memcmp(bytes, "PS", 2)) {
-		parsed.kind = RK_COMMAND_PS;
-		if (length == 2) {
-			parsed.enum_has_index = 0;
-		} else if (length > 3 && bytes[2] == ' ') {
-			parsed.enum_has_index = 1;
-			if (rk_parse_uint(bytes + 3, length - 3,
-					  &parsed.enum_index))
-				return -EINVAL;
-		} else
-			return -EINVAL;
-	} else if (length >= 5 && !memcmp(bytes, "PORTS", 5)) {
-		parsed.kind = RK_COMMAND_PORTS;
-		if (length == 5) {
-			parsed.enum_has_index = 0;
-		} else if (length > 6 && bytes[5] == ' ') {
-			parsed.enum_has_index = 1;
-			if (rk_parse_uint(bytes + 6, length - 6,
-					  &parsed.enum_index))
-				return -EINVAL;
-		} else
-			return -EINVAL;
 	} else
 		return -EINVAL;
 
