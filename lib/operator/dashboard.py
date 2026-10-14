@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Callable
 import logging
 from aiohttp import web
 
-from lib.operator.control_console import protocol_error
+from lib.operator.control_console import protocol_error, _load_protocol
 
 if TYPE_CHECKING:
     from lib.operator.server import Target, TargetManager
@@ -30,6 +30,10 @@ _ws_clients: set[web.WebSocketResponse] = set()
 _event_log: deque[dict] = deque(maxlen=50)
 _loop: asyncio.AbstractEventLoop | None = None
 _static_root: Path | None = None
+
+_proto = _load_protocol()
+_COMMANDS = [{"cmd": c["wire"], "desc": c["help"]} for c in _proto["commands"].values()]
+del _proto
 
 
 def _enum_indexed(t: Target, cmd: str, prefix: str,
@@ -120,6 +124,7 @@ def _snapshot() -> dict:
         "type": "state",
         "targets": [_target_summary(t) for t in targets],
         "events": list(_event_log),
+        "commands": _COMMANDS,
     }
 
 
@@ -128,6 +133,8 @@ def add_event(msg: str, kind: str = "sys") -> None:
     entry = {"time": time.strftime("%H:%M:%S"), "type": kind, "msg": msg}
     _event_log.append(entry)
     _broadcast(json.dumps({"type": "event", "event": entry}))
+    if kind in ("connect", "disconnect", "reconnect"):
+        _broadcast(json.dumps(_snapshot()))
 
 
 def _broadcast(data: str) -> None:
@@ -354,7 +361,9 @@ async def _shell_endpoint(request: web.Request) -> web.WebSocketResponse:
     try:
         shell = await loop.run_in_executor(None, target.open_shell)
     except Exception as e:
-        await ws.send_str(json.dumps({"type": "error", "msg": str(e)}))
+        msg = str(e)
+        code = "busy" if "busy" in msg else "failed"
+        await ws.send_str(json.dumps({"type": "error", "code": code, "msg": msg}))
         await ws.close()
         return ws
 

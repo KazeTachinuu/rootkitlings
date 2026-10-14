@@ -1,36 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Terminal, ChevronUp, ChevronDown, X, CheckCircle, XCircle, Loader } from 'lucide-react'
 
-const COMMANDS = [
-  { cmd: 'INFO', desc: 'Target hostname, kernel, arch' },
-  { cmd: 'STATUS', desc: 'Module state and hide list counts' },
-  { cmd: 'HIDE FILE <name>', desc: 'Hide entries matching NAME from getdents64' },
-  { cmd: 'HIDE PID <pid>', desc: 'Hide process from /proc' },
-  { cmd: 'HIDE CONTENT <string>', desc: 'Hide lines containing STRING from read()' },
-  { cmd: 'HIDE PORT <port>', desc: 'Hide local port from /proc/net/tcp' },
-  { cmd: 'HIDE MODULE', desc: 'Remove module from /proc/modules' },
-  { cmd: 'UNHIDE FILE <index>', desc: 'Unhide file entry by index' },
-  { cmd: 'UNHIDE PID <index>', desc: 'Unhide pid entry by index' },
-  { cmd: 'UNHIDE CONTENT <index>', desc: 'Unhide content entry by index' },
-  { cmd: 'UNHIDE PORT <index>', desc: 'Unhide port entry by index' },
-  { cmd: 'UNHIDE MODULE', desc: 'Restore module to /proc/modules' },
-  { cmd: 'UNHIDE ALL', desc: 'Clear all hide lists' },
-  { cmd: 'LIST FILE', desc: 'List hidden files (or show one by index)' },
-  { cmd: 'LIST PID', desc: 'List hidden pids (or show one by index)' },
-  { cmd: 'LIST CONTENT', desc: 'List hidden content strings (or show one by index)' },
-  { cmd: 'LIST PORT', desc: 'List hidden ports (or show one by index)' },
-  { cmd: 'PERSIST', desc: 'Request boot persistence' },
-  { cmd: 'UNPERSIST', desc: 'Remove boot persistence' },
-  { cmd: 'ESCALATE <pid>', desc: 'Grant root credentials to PID' },
-  { cmd: 'DOWNLOAD <path>', desc: 'Exfiltrate file from target' },
-  { cmd: 'SHELL <port>', desc: 'Open interactive root shell' },
-  { cmd: 'SHELL STATUS', desc: 'Check shell state' },
-  { cmd: 'QUIT', desc: 'Disconnect from target' },
-]
-
 const _history = []
 
-export function CmdBar({ onSend, query, targetId, busy }) {
+export function CmdBar({ onSend, query, targetId, busy, commands = [] }) {
   const [value, setValue] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [results, setResults] = useState([])
@@ -56,7 +29,7 @@ export function CmdBar({ onSend, query, targetId, busy }) {
 
     if (upper === 'HELP') {
       entry.status = 'ok'
-      entry.reply = COMMANDS.map(c => `${c.cmd.padEnd(26)} ${c.desc}`).join('\n')
+      entry.reply = commands.map(c => `${c.cmd.padEnd(26)} ${c.desc}`).join('\n')
       setResults(prev => [...prev])
       return
     }
@@ -75,14 +48,14 @@ export function CmdBar({ onSend, query, targetId, busy }) {
     } else {
       onSend(raw)
     }
-  }, [value, onSend, query, targetId])
+  }, [value, onSend, query, targetId, commands])
 
   const onInput = (v) => {
     setValue(v)
     setHistIdx(-1)
     const upper = v.toUpperCase().trim()
     if (!upper) { setSuggestions([]); return }
-    const matches = COMMANDS.filter(c => c.cmd.startsWith(upper) || c.cmd.includes(upper))
+    const matches = commands.filter(c => c.cmd.startsWith(upper) || c.cmd.includes(upper))
     setSuggestions(matches.slice(0, 6))
     setSelSug(0)
   }

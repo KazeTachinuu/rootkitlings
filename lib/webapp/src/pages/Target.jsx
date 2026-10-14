@@ -144,7 +144,7 @@ const TABS = [
 
 /* -- Main Target page ----------------------------------------- */
 
-export function Target({ target: t, initialTab, log, events, sendCmd, query, execCmd, startDownload, downloads, onBack, renameTarget, refresh }) {
+export function Target({ target: t, initialTab, log, events, commands, sendCmd, query, execCmd, startDownload, downloads, onBack, renameTarget, refresh }) {
   const [tab, setTab] = useState(initialTab || 'overview')
   const [persistPending, setPersistPending] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -303,7 +303,7 @@ export function Target({ target: t, initialTab, log, events, sendCmd, query, exe
         )}
       </div>
 
-      <CmdBar onSend={cmd} query={query} targetId={t.id} busy={targetBusy} />
+      <CmdBar onSend={cmd} query={query} targetId={t.id} busy={targetBusy} commands={commands} />
     </div>
   )
 }
