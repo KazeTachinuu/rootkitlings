@@ -550,10 +550,11 @@ class _SessionHandler(socketserver.BaseRequestHandler):
             "reconnect" if is_reconnect else "connect",
         )
 
+        peer.settimeout(None)
         peer.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 5)
-        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 2)
-        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
+        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 6)
 
         my_gen = target._generation
         import select
