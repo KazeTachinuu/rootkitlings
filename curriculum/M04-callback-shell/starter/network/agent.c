@@ -74,7 +74,6 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 
 	// TODO: Handle each command.kind with a switch statement.
 	//
-	// RK_COMMAND_PING: reply "PONG"
 	// RK_COMMAND_INFO: reply "INFO rklings"
 	// RK_COMMAND_STATUS: reply "STATUS connected=true/false attempts=N"
 	//   (read connected and connections under agent->lock)

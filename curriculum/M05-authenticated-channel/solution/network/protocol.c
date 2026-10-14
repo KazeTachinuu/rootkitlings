@@ -35,24 +35,10 @@ int rk_command_parse(const unsigned char *bytes, size_t length,
 
 	if (!bytes || !command)
 		return -EINVAL;
-	if (rk_bytes_equal(bytes, length, "PING", 4))
-		parsed.kind = RK_COMMAND_PING;
-	else if (rk_bytes_equal(bytes, length, "INFO", 4))
+	if (rk_bytes_equal(bytes, length, "INFO", 4))
 		parsed.kind = RK_COMMAND_INFO;
 	else if (rk_bytes_equal(bytes, length, "STATUS", 6))
 		parsed.kind = RK_COMMAND_STATUS;
-	else if (length > 5 && length < 5 + RK_MARK_MAX &&
-		 !memcmp(bytes, "MARK ", 5)) {
-		parsed.kind = RK_COMMAND_MARK;
-		memcpy(parsed.mark, bytes + 5, length - 5);
-		parsed.mark[length - 5] = '\0';
-	}
-	else if (rk_bytes_equal(bytes, length, "ENABLE", 6))
-		parsed.kind = RK_COMMAND_ENABLE;
-	else if (rk_bytes_equal(bytes, length, "DISABLE", 7))
-		parsed.kind = RK_COMMAND_DISABLE;
-	else if (rk_bytes_equal(bytes, length, "RUN", 3))
-		parsed.kind = RK_COMMAND_RUN;
 	else if (rk_bytes_equal(bytes, length, "SHELL STATUS", 12))
 		parsed.kind = RK_COMMAND_SHELL_STATUS;
 	else if (length > 6 && length <= 11 &&

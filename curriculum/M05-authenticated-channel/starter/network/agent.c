@@ -63,7 +63,6 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 			    bool *close_session)
 {
 	// TODO: Parse the command from payload, then handle each kind:
-	// PING -> reply "PONG"
 	// INFO -> reply "INFO rklings"
 	// STATUS -> reply "STATUS connected=... attempts=..."
 	// SHELL port -> rk_root_shell_request(), reply "OPEN ..." or "ERR busy"

@@ -35,9 +35,7 @@ int rk_command_parse(const unsigned char *bytes, size_t length,
 
 	if (!bytes || !command)
 		return -EINVAL;
-	if (rk_bytes_equal(bytes, length, "PING", 4))
-		parsed.kind = RK_COMMAND_PING;
-	else if (rk_bytes_equal(bytes, length, "INFO", 4))
+	if (rk_bytes_equal(bytes, length, "INFO", 4))
 		parsed.kind = RK_COMMAND_INFO;
 	else if (rk_bytes_equal(bytes, length, "STATUS", 6))
 		parsed.kind = RK_COMMAND_STATUS;

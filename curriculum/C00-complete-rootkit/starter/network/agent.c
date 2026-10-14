@@ -106,9 +106,6 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 				      sizeof(error_reply) - 1);
 
 	switch (command.kind) {
-	case RK_COMMAND_PING:
-		return rk_agent_reply(agent, socket,
-				      (const unsigned char *)"PONG", 4);
 	case RK_COMMAND_INFO: {
 		struct new_utsname *uts = utsname();
 

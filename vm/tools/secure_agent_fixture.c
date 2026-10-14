@@ -887,9 +887,7 @@ static int serve(const char *directory, const char *port_text,
 
 		peer = accept_peer(server);
 		previous = receive_hello(peer, previous, &channel);
-		expect_reply(peer, &channel, "PING", "PONG");
 		expect_prefix(peer, &channel, "INFO", "INFO ");
-		expect_reply(peer, &channel, "MARK alpha_7", "MARKED alpha_7");
 		verify_enumeration(peer, &channel, "PS", "PROC ");
 		verify_enumeration(peer, &channel, "PORTS", "PORT ");
 		expect_reply(peer, &channel, "UNKNOWN", "ERR");
@@ -916,7 +914,7 @@ static int serve(const char *directory, const char *port_text,
 			fail("status reply");
 		}
 		length = seal_envelope(REQUEST, channel.session,
-				       channel.request_sequence, "PING", tampered);
+				       channel.request_sequence, "INFO", tampered);
 		tampered[length - 1] ^= 1;
 		send_frame(peer, tampered, length);
 		expect_eof(peer);
@@ -933,9 +931,6 @@ static int serve(const char *directory, const char *port_text,
 
 		peer = accept_peer(server);
 		previous = receive_hello(peer, previous, &channel);
-		expect_reply(peer, &channel, "SHELL 47024", "ERR disabled");
-		expect_no_peer(shell_server);
-		expect_reply(peer, &channel, "ENABLE", "ENABLED");
 		saved_shell_length = seal_envelope(
 			REQUEST, channel.session, channel.request_sequence,
 			"SHELL 47024", saved_shell);
@@ -947,13 +942,6 @@ static int serve(const char *directory, const char *port_text,
 		run_shell(shell_peer);
 		wait_shell_state(peer, &channel, request_id, "exited", 0);
 		marker(directory, "root_shell_complete");
-		command(peer, &channel, "RUN", reply);
-		if (strcmp(reply, "QUEUED") && strcmp(reply, "ERR busy")) {
-			errno = EPROTO;
-			fail("RUN reply");
-		}
-		expect_reply(peer, &channel, "DISABLE", "DISABLED");
-		expect_reply(peer, &channel, "SHELL 47024", "ERR disabled");
 		marker(directory, "control_complete");
 		quit_session(peer, &channel);
 		marker(directory, "quit_complete");
@@ -997,7 +985,6 @@ static int serve(const char *directory, const char *port_text,
 
 		peer = accept_peer(server);
 		previous = receive_hello(peer, previous, &channel);
-		expect_reply(peer, &channel, "ENABLE", "ENABLED");
 		command(peer, &channel, "SHELL 47025", reply);
 		parse_ticket(reply, &request_id, &cookie);
 		wait_shell_state(peer, &channel, request_id, "refused", -111);

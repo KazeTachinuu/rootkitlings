@@ -137,6 +137,26 @@ static void expect_frame(int fd, const char *expected)
 	}
 }
 
+static void expect_prefix(int fd, const char *prefix)
+{
+	unsigned char payload[256];
+	unsigned char header[2];
+	size_t declared;
+	size_t prefix_len = strlen(prefix);
+
+	read_all(fd, header, sizeof(header));
+	declared = ((size_t)header[0] << 8) | header[1];
+	if (declared < prefix_len || declared > sizeof(payload)) {
+		errno = EPROTO;
+		fail("reply prefix length");
+	}
+	read_all(fd, payload, declared);
+	if (memcmp(payload, prefix, prefix_len)) {
+		errno = EPROTO;
+		fail("reply prefix");
+	}
+}
+
 static void expect_eof(int fd)
 {
 	unsigned char byte;
@@ -192,8 +212,6 @@ static int serve(const char *directory, const char *port_text)
 	if (setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, &timeout,
 		       sizeof(timeout)) < 0)
 		fail("first timeout");
-	send_frame(peer, "PING");
-	expect_frame(peer, "PONG");
 	send_frame(peer, "INFO");
 	expect_frame(peer, "INFO rklings");
 	send_frame(peer, "UNKNOWN");
@@ -211,8 +229,8 @@ static int serve(const char *directory, const char *port_text)
 	if (setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, &timeout,
 		       sizeof(timeout)) < 0)
 		fail("second timeout");
-	send_frame(peer, "PING");
-	expect_frame(peer, "PONG");
+	send_frame(peer, "INFO");
+	expect_prefix(peer, "INFO ");
 	write_marker(directory, "second_connected");
 	expect_eof(peer);
 	write_marker(directory, "eof");

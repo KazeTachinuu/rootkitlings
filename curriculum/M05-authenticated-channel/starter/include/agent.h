@@ -28,7 +28,6 @@ struct rk_agent {
 	bool stopping;
 	bool connected;
 	bool shutdown_started;
-	bool shell_enabled;
 	unsigned int retry_base_ms;
 	unsigned int retry_max_ms;
 	unsigned int retry_delay_ms;

@@ -17,7 +17,6 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 {
 	static const unsigned char error_reply[] = "ERR";
 	static const unsigned char info_reply[] = "INFO rklings";
-	static const unsigned char pong_reply[] = "PONG";
 	unsigned char reply[RK_FRAME_MAX];
 	struct rk_command command;
 	size_t reply_length;
@@ -30,9 +29,6 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 				     sizeof(error_reply) - 1);
 
 	switch (command.kind) {
-	case RK_COMMAND_PING:
-		return rk_send_frame(socket, pong_reply,
-				     sizeof(pong_reply) - 1);
 	case RK_COMMAND_INFO:
 		return rk_send_frame(socket, info_reply,
 				     sizeof(info_reply) - 1);
