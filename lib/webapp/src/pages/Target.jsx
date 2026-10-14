@@ -147,7 +147,6 @@ const TABS = [
 export function Target({ target: t, initialTab, log, events, sendCmd, query, execCmd, startDownload, downloads, onBack, renameTarget, refresh }) {
   const [tab, setTab] = useState(initialTab || 'overview')
   const [persistPending, setPersistPending] = useState(false)
-  const [pingResult, setPingResult] = useState(null)
   const [editing, setEditing] = useState(false)
   const [editVal, setEditVal] = useState('')
   const [shellStatus, setShellStatus] = useState('idle')
@@ -155,7 +154,6 @@ export function Target({ target: t, initialTab, log, events, sendCmd, query, exe
 
   useEffect(() => {
     setTab(initialTab || 'overview')
-    setPingResult(null)
     setEditing(false)
   }, [t?.id])
 
@@ -238,21 +236,6 @@ export function Target({ target: t, initialTab, log, events, sendCmd, query, exe
           >
             {persistPending ? <Loader size={14} className="animate-spin" /> : <Shield size={14} />}
             {t.persisted ? 'Persist On' : 'Persist Off'}
-          </button>
-          <button className={`nb-btn px-3 py-1.5 text-sm flex items-center gap-1.5
-            ${pingResult && pingResult !== '...' && pingResult !== 'FAIL' ? 'nb-btn-main' : pingResult === 'FAIL' ? '!bg-red !text-white !border-border' : ''}`}
-            disabled={targetBusy}
-            onClick={() => {
-              setPingResult('...')
-              const t0 = performance.now()
-              query('PING', t.id).then(r => {
-                const ms = Math.round(performance.now() - t0)
-                setPingResult(r?.ok ? `${ms}ms` : 'FAIL')
-                setTimeout(() => setPingResult(null), 3000)
-              })
-            }}>
-            <RefreshCw size={14} className={pingResult === '...' ? 'animate-spin' : ''} />
-            {pingResult === '...' ? 'Pinging...' : pingResult === 'FAIL' ? 'Failed' : pingResult ? `Pong ${pingResult}` : 'Ping'}
           </button>
         </div>
       </div>
