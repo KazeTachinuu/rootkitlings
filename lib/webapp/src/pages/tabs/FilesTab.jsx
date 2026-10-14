@@ -208,8 +208,8 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
         if (path !== cwdRef.current) return
         if (result.ok) {
           snap.set(parseShellLs(result.output))
-        } else if (retries > 0 && (result.output || '').includes('busy')) {
-          setTimeout(() => attempt(retries - 1), 300)
+        } else if (retries > 0 && /busy/i.test(result.output || '')) {
+          setTimeout(() => attempt(retries - 1), 500)
         } else {
           snap.fail(result.output || 'failed')
         }

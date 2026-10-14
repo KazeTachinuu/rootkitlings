@@ -32,6 +32,7 @@ from lib.operator.control_console import (
     encode_control_command,
     mark_operator_ready,
     parse_shell_ticket,
+    protocol_error,
     read_target_session,
     receive_frame,
     send_frame,
@@ -153,7 +154,8 @@ class Target:
                 self.online = False
                 raise
             if reply.startswith("ERR"):
-                raise OperatorError(f"shell request failed: {reply}")
+                msg = protocol_error(reply) or reply
+                raise OperatorError(f"shell failed: {msg}")
             request_id, cookie = parse_shell_ticket(reply)
             return accept_shell_while_running(
                 self.operator.shell_listener,

@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Callable
 import logging
 from aiohttp import web
 
+from lib.operator.control_console import protocol_error
+
 if TYPE_CHECKING:
     from lib.operator.server import Target, TargetManager
 
@@ -215,9 +217,10 @@ async def _ws_handle_command(ws, data, loop, state):
         return
     try:
         reply = await loop.run_in_executor(None, target.exchange, command)
+        err = protocol_error(reply)
         await ws.send_str(json.dumps({
             "type": "result", "target": target_id,
-            "command": command, "ok": True, "reply": reply,
+            "command": command, "ok": err is None, "reply": err or reply,
         }))
         add_event(f"{target.id}: {command}", "cmd")
     except Exception as e:
@@ -294,9 +297,12 @@ async def _ws_handle_exec(ws, data, loop, state):
             "_execId": exec_id, "ok": True, "output": output,
         }))
     except Exception as e:
+        msg = str(e)
+        if "busy" in msg.lower():
+            msg = "shell busy (another shell session is active)"
         await ws.send_str(json.dumps({
             "type": "exec_result", "target": target_id,
-            "_execId": exec_id, "ok": False, "output": str(e),
+            "_execId": exec_id, "ok": False, "output": msg,
         }))
 
 
