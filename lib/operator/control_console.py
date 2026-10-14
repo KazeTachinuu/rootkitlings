@@ -70,11 +70,11 @@ def _build_help(proto: dict) -> str:
             return t.lower()
         name = " ".join(_fmt_token(t) for t in wire.split())
         groups[g].append(f"  {name:<22}{cmd['help']}")
-    groups.setdefault("recon", [])
-    groups["recon"].append(f"  {'exec COMMAND':<22}run command on target via exec shell")
+    groups.setdefault("operate", [])
+    groups["operate"].append(f"  {'exec COMMAND':<22}run command on target")
     groups.setdefault("session", [])
     groups["session"].append(f"  {'help':<22}show this reference")
-    order = ["hide", "unhide", "operate", "recon", "view", "list", "session"]
+    order = ["session", "view", "operate", "hide", "unhide", "list"]
     lines = []
     for g in order:
         if g not in groups:
