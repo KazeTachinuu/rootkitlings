@@ -603,6 +603,7 @@ static int __init rk_init(void)
 	}
 
 	rk_target_add(&file_targets, "rklings");
+	rk_target_add(&content_targets, "rklings");
 	{
 		char pid_str[12];
 
