@@ -353,7 +353,7 @@ async def _shell_endpoint(request: web.Request) -> web.WebSocketResponse:
     ws = web.WebSocketResponse()
     await ws.prepare(request)
     if not target or not target.online:
-        await ws.send_str(json.dumps({"type": "error", "msg": "target offline"}))
+        await ws.send_str(json.dumps({"type": "error", "code": "offline", "msg": "target offline"}))
         await ws.close()
         return ws
 

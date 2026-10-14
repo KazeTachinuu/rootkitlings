@@ -195,23 +195,26 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
 
   const cwdRef = useRef(cwd)
   cwdRef.current = cwd
+  const snapRef = useRef(snap)
+  snapRef.current = snap
   const pendingNav = useRef(null)
   const fetchDir = useCallback((path, force) => {
     const key = `files:${t.id}:${path}`
     if (!force) {
       const cached = _cache.get(key)
-      if (cached?.data) return
+      if (cached?.data?.length) return
     }
-    snap.setLoading(true)
+    snapRef.current.setLoading(true)
     execCmd(`ls -la --color=never ${path}`, t.id).then(result => {
       if (path !== cwdRef.current) return
+      const s = snapRef.current
       if (result.ok) {
-        snap.set(parseShellLs(result.output))
+        s.set(parseShellLs(result.output))
       } else {
-        snap.fail(result.output || 'failed')
+        s.fail(result.output || 'failed')
       }
     })
-  }, [execCmd, t.id, snap])
+  }, [execCmd, t.id])
 
   useEffect(() => { pendingNav.current = null; fetchDir(cwd) }, [cwd, fetchDir])
 

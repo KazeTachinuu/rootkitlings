@@ -198,20 +198,18 @@ class Target:
                 shell.settimeout(timeout)
                 wire = f"echo {start_marker}\n{command}\necho {end_marker}\n"
                 shell.sendall(wire.encode())
-                chunks = []
-                marker = end_marker.encode()
-                while True:
+                buf = b""
+                end_bytes = end_marker.encode()
+                while end_bytes not in buf:
                     chunk = shell.recv(4096)
                     if not chunk:
                         self._exec_shell = None
                         break
-                    chunks.append(chunk)
-                    if marker in chunk:
-                        break
+                    buf += chunk
             except Exception:
                 self._exec_shell = None
                 raise
-        text = b"".join(chunks).decode("utf-8", errors="replace")
+        text = buf.decode("utf-8", errors="replace")
         start = text.find(start_marker)
         if start >= 0:
             text = text[start + len(start_marker):]
