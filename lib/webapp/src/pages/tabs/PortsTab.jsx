@@ -111,8 +111,10 @@ export function PortsTab({ target: t, cmd, execCmd, busy }) {
             </div>
           )}
           {!snap.error && !ports.length && !snap.loading ? (
-            <div className="flex-1 flex items-center justify-center text-fg-3 text-sm">
-              No listening ports found. Hit Scan to refresh.
+            <div className="flex-1 flex flex-col items-center justify-center gap-2 text-fg-3 p-12">
+              <Network size={24} />
+              <span className="text-sm font-bold">No listening ports detected</span>
+              <span className="text-xs">The target has no open TCP listeners right now.</span>
             </div>
           ) : !snap.error && ports.length > 0 && (
           <div className="flex-1 overflow-auto">

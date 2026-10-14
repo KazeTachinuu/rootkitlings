@@ -74,8 +74,10 @@ export function ProcsTab({ target: t, cmd, query, execCmd, busy }) {
             </div>
           )}
           {!snap.error && !filtered.length && !snap.loading ? (
-            <div className="flex-1 flex items-center justify-center text-fg-3 text-sm">
-              {procs.length ? 'No matches' : 'No processes found'}
+            <div className="flex-1 flex flex-col items-center justify-center gap-2 text-fg-3 p-12">
+              <Activity size={24} />
+              <span className="text-sm font-bold">{procs.length ? 'No matches' : 'No processes detected'}</span>
+              {!procs.length && <span className="text-xs">The scan returned no process entries.</span>}
             </div>
           ) : !snap.error && filtered.length > 0 && (
           <div className="flex-1 overflow-auto">
