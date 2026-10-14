@@ -93,9 +93,15 @@ function parseShellLs(output) {
     if (!/^[dlcbsp-]/.test(perms)) return null
     const size = parseInt(parts[4], 10) || 0
     const nameIdx = parts.findIndex((p, i) => i >= 5 && /^\d{1,2}:\d{2}$/.test(p))
-    const name = (nameIdx >= 0 ? parts.slice(nameIdx + 1) : parts.slice(8)).join(' ').trim()
-    if (!name || name === '.' || name === '..') return null
-    return { name, type: perms[0] === 'd' ? 'd' : perms[0] === 'l' ? 'l' : 'f', size, perms }
+    let raw = (nameIdx >= 0 ? parts.slice(nameIdx + 1) : parts.slice(8)).join(' ').trim()
+    if (!raw || raw === '.' || raw === '..') return null
+    const isLink = perms[0] === 'l'
+    let name = raw, linkTarget = null
+    if (isLink) {
+      const arrow = raw.indexOf(' -> ')
+      if (arrow >= 0) { name = raw.slice(0, arrow); linkTarget = raw.slice(arrow + 4) }
+    }
+    return { name, type: isLink ? 'l' : perms[0] === 'd' ? 'd' : 'f', size, perms, linkTarget }
   }).filter(Boolean)
 }
 
@@ -182,10 +188,13 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
 
   const doPreview = useCallback((path) => {
     if (!startDownload) return
+    setSelected(path.split('/').pop())
     startDownload(path, t.id).then(r => {
       if (r.ok) {
         const { type, content } = formatPreview(r.raw, path)
         setPreview({ path, content, type, size: r.size, raw: r.raw })
+      } else {
+        setPreview({ path, content: r.error || 'Could not read file', type: 'error', size: 0 })
       }
     })
   }, [startDownload])
@@ -378,6 +387,12 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
                           ${h ? 'opacity-30' : ''}`}
                         onClick={() => {
                           if (isDir) { navigateTo(entry.name) }
+                          else if (isLink && entry.linkTarget) {
+                            const resolved = entry.linkTarget.startsWith('/')
+                              ? entry.linkTarget
+                              : resolvePath(entry.linkTarget, cwd)
+                            navigateTo(resolved, true)
+                          }
                           else if (sel) { setSelected(null); setPreview(null) }
                           else { setSelected(entry.name); doPreview(fullPath) }
                         }}
@@ -390,6 +405,7 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
                               : <FileText size={16} className="text-fg-3 shrink-0" />}
                           <span className={`font-mono text-sm truncate ${isDir ? 'font-bold' : ''} ${isLink ? 'italic text-fg-2' : ''}`}>
                             {entry.name}
+                            {isLink && entry.linkTarget && <span className="text-fg-3 font-normal"> -&gt; {entry.linkTarget}</span>}
                           </span>
                           {h && <span className="nb-badge bg-red text-white text-[9px] py-0 px-1.5 shrink-0">hidden</span>}
                         </div>
@@ -449,6 +465,12 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
                               ${h ? 'opacity-30' : ''}`}
                             onClick={() => {
                               if (isDir) { navigateTo(entry.name) }
+                              else if (isLink && entry.linkTarget) {
+                                const resolved = entry.linkTarget.startsWith('/')
+                                  ? entry.linkTarget
+                                  : resolvePath(entry.linkTarget, cwd)
+                                navigateTo(resolved, true)
+                              }
                               else if (sel) { setSelected(null); setPreview(null) }
                               else { setSelected(entry.name); doPreview(fullPath) }
                             }}
