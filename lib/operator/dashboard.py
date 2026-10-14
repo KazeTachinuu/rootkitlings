@@ -149,8 +149,10 @@ async def _watch_target(ws: web.WebSocketResponse, target_id: str,
             if payload != prev:
                 await ws.send_str(payload)
                 prev = payload
-        except Exception:
+        except (ConnectionResetError, ConnectionAbortedError):
             return
+        except Exception:
+            pass
 
 
 # -- WS message handlers --
