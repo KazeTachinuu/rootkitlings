@@ -75,9 +75,10 @@ function Shell() {
   }, [page.view, targets, selectedTarget])
 
   useEffect(() => {
+    if (!connected) return
     watchTarget(page.targetId)
     return () => watchTarget(null)
-  }, [page.targetId, watchTarget])
+  }, [page.targetId, connected, watchTarget])
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
