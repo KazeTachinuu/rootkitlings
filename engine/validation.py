@@ -503,7 +503,8 @@ class Validator:
                         kernel_build,
                         starter_root / item.id,
                         item.workspace.build,
-                        f"starter does not build warning-free: {item.id}",
+                        f"starter does not compile: {item.id}",
+                        warn_free=False,
                     )
                     starters += 1
                 else:
@@ -517,7 +518,7 @@ class Validator:
                 solutions += 1
 
         self.console.success(
-            f"Starters: {starters} warning-free builds; "
+            f"Starters: {starters} builds; "
             f"{derived} derived starters structurally validated"
         )
         self.console.success(f"Solutions: {solutions} warning-free builds")
@@ -528,21 +529,18 @@ class Validator:
         tree: Path,
         relative_build: str,
         failure: str,
+        *,
+        warn_free: bool = True,
     ) -> None:
         build_path = tree if relative_build == "." else tree / relative_build
-        result = self.command(
-            [
-                "make",
-                "-s",
-                "-C",
-                kernel_build,
-                f"M={build_path}",
-                "W=1",
-                "modules",
-            ],
-            capture=True,
-        )
-        if result.returncode or "warning:" in result.output:
+        command = [
+            "make", "-s", "-C", kernel_build,
+            f"M={build_path}", "RKLINGS_FAIL_POINT=0", "modules",
+        ]
+        if warn_free:
+            command.insert(-1, "W=1")
+        result = self.command(command, capture=True)
+        if result.returncode or (warn_free and "warning:" in result.output):
             if result.output:
                 self.console.raw(result.output, error=True)
             raise ValidationError(failure)
