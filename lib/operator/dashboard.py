@@ -127,14 +127,17 @@ def _broadcast(data: str) -> None:
 
 async def _watch_target(ws: web.WebSocketResponse, target_id: str,
                         cancel: asyncio.Event, loop) -> None:
-    """Poll one target every 5s and push updates until cancelled."""
+    """Poll one target and push updates until cancelled."""
     prev = None
+    first = True
     while not cancel.is_set():
-        try:
-            await asyncio.wait_for(cancel.wait(), timeout=5.0)
-            return
-        except asyncio.TimeoutError:
-            pass
+        if not first:
+            try:
+                await asyncio.wait_for(cancel.wait(), timeout=5.0)
+                return
+            except asyncio.TimeoutError:
+                pass
+        first = False
         if not _manager:
             continue
         target = _manager.get(target_id)
