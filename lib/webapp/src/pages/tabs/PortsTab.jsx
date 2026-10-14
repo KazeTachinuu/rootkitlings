@@ -1,7 +1,7 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { Network, Eye, EyeOff } from 'lucide-react'
 import { Th } from '../../components/Th'
-import { useSnapshot, SnapshotBar, HiddenSummary } from '../Target'
+import { useSnapshot, SnapshotBar, EmptySnapshotCta, HiddenSummary } from '../Target'
 
 const PORTS_CMD = "ss -tulnp 2>/dev/null || netstat -tulnp 2>/dev/null || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null"
 
@@ -79,12 +79,13 @@ export function PortsTab({ target: t, cmd, execCmd, busy }) {
     })
   }, [execCmd, t.id, snap])
 
-  useEffect(() => {
-    if (t.online && !busy && !snap.time && !snap.loading) capture()
-  }, [t.online])
-
   const [panel, setPanel] = useState('scan')
   const ports = snap.data || []
+
+  if (!snap.time && !snap.loading)
+    return <EmptySnapshotCta icon={Network} title="TCP Connections"
+      subtitle="Scan for TCP connections and listeners on the target"
+      onCapture={capture} online={t.online && !busy} loading={snap.loading} />
 
   return (
     <div className="flex flex-col h-full">

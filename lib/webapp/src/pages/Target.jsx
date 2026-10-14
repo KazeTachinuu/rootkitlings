@@ -56,6 +56,12 @@ function timeAgo(date) {
 }
 
 export function SnapshotBar({ title, icon: Icon, count, hiddenCount, time, loading, onSnapshot, online, children }) {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (!time) return
+    const id = setInterval(() => tick(n => n + 1), 5000)
+    return () => clearInterval(id)
+  }, [time])
   const ago = time ? timeAgo(time) : null
   return (
     <div className="flex items-center gap-2 px-4 py-2 border-b-2 border-border bg-bg-2">
