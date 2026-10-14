@@ -813,20 +813,22 @@ static int crypto_selftest(void)
 
 /* Send a count-then-index enumeration command and verify every entry. */
 static void verify_enumeration(int peer, struct channel *channel,
-			       const char *cmd, const char *entry_prefix)
+			       const char *cmd, const char *count_prefix,
+			       const char *entry_prefix)
 {
 	char reply[FRAME_MAX];
 	char request[FRAME_MAX];
-	size_t cmd_length = strlen(cmd);
+	size_t prefix_len = strlen(count_prefix);
 	unsigned int count, index;
 
 	/* bare command returns the count */
 	command(peer, channel, cmd, reply);
-	if (strncmp(reply, cmd, cmd_length) || reply[cmd_length] != ' ') {
+	if (strncmp(reply, count_prefix, prefix_len) ||
+	    reply[prefix_len] != ' ') {
 		errno = EPROTO;
 		fail("enumeration count prefix");
 	}
-	count = (unsigned int)strtoul(reply + cmd_length + 1, NULL, 10);
+	count = (unsigned int)strtoul(reply + prefix_len + 1, NULL, 10);
 
 	/* fetch each entry and check the entry prefix */
 	for (index = 0; index < count && index < 200; index++) {
@@ -888,8 +890,10 @@ static int serve(const char *directory, const char *port_text,
 		peer = accept_peer(server);
 		previous = receive_hello(peer, previous, &channel);
 		expect_prefix(peer, &channel, "INFO", "INFO ");
-		verify_enumeration(peer, &channel, "PS", "PROC ");
-		verify_enumeration(peer, &channel, "PORTS", "PORT ");
+		verify_enumeration(peer, &channel, "LIST FILE", "LIST", "ENTRY ");
+		verify_enumeration(peer, &channel, "LIST PID", "LIST", "ENTRY ");
+		verify_enumeration(peer, &channel, "LIST CONTENT", "LIST", "ENTRY ");
+		verify_enumeration(peer, &channel, "LIST PORT", "LIST", "ENTRY ");
 		expect_reply(peer, &channel, "UNKNOWN", "ERR");
 		replay_length = seal_envelope(
 			REQUEST, channel.session, channel.request_sequence - 1,
