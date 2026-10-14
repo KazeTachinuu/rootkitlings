@@ -1,13 +1,14 @@
 import { useState, useCallback } from 'react'
-import { Network, Eye, EyeOff } from 'lucide-react'
+import { Network, Eye, EyeOff, Plus } from 'lucide-react'
 import { Th } from '../../components/Th'
-import { useSnapshot, SnapshotBar, EmptySnapshotCta, HiddenSummary } from '../Target'
+import { useSnapshot, SnapshotBar, EmptySnapshotCta } from '../Target'
 
 const PORTS_CMD = "ss -tulnp 2>/dev/null || netstat -tulnp 2>/dev/null || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null"
 
 export function PortsTab({ target: t, cmd, execCmd, busy }) {
   const snap = useSnapshot(`ports:${t.id}`)
   const hiddenPorts = t.hidden?.port || []
+  const [hideVal, setHideVal] = useState('')
 
   const capture = useCallback(() => {
     snap.setLoading(true)
@@ -79,8 +80,11 @@ export function PortsTab({ target: t, cmd, execCmd, busy }) {
     })
   }, [execCmd, t.id, snap])
 
-  const [panel, setPanel] = useState('scan')
   const ports = snap.data || []
+
+  // merge: scanned ports + hidden ports not in scan
+  const scannedPorts = new Set(ports.map(p => p.port))
+  const extraHidden = hiddenPorts.filter(p => !scannedPorts.has(p))
 
   if (!snap.time && !snap.loading)
     return <EmptySnapshotCta icon={Network} title="TCP Connections"
@@ -90,83 +94,92 @@ export function PortsTab({ target: t, cmd, execCmd, busy }) {
   return (
     <div className="flex flex-col h-full">
       <SnapshotBar title="Listening Ports" icon={Network} count={ports.length} hiddenCount={hiddenPorts.length}
-        time={snap.time} loading={snap.loading} onSnapshot={capture} online={t.online && !busy}>
-        <div className="flex border-2 border-border rounded-[var(--radius)] overflow-hidden shrink-0 ml-2">
-          <button
-            className={`px-3 py-1 text-sm font-bold ${panel === 'scan' ? 'bg-main text-main-fg' : 'hover:bg-bg'}`}
-            onClick={() => setPanel('scan')}
-          >Scan</button>
-          <button
-            className={`px-3 py-1 text-sm font-bold border-l-2 border-border ${panel === 'hidden' ? 'bg-main text-main-fg' : 'hover:bg-bg'}`}
-            onClick={() => setPanel('hidden')}
-          >Hidden {hiddenPorts.length}</button>
-        </div>
-      </SnapshotBar>
-      {panel === 'scan' ? (
-        <>
-          {snap.error && (
-            <div className="p-6 text-center">
-              <div className="text-red font-bold mb-1">Scan failed</div>
-              <div className="text-sm text-fg-3">{snap.error}</div>
-            </div>
-          )}
-          {!snap.error && !ports.length && !snap.loading ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-2 text-fg-3 p-12">
-              <Network size={24} />
-              <span className="text-sm font-bold">No listening ports detected</span>
-              <span className="text-xs">The target has no open TCP listeners right now.</span>
-            </div>
-          ) : !snap.error && ports.length > 0 && (
-          <div className="flex-1 overflow-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-secondary border-b-2 border-border">
-                <tr><Th>Proto</Th><Th>Local Address</Th><Th>Foreign Address</Th><Th>Port</Th><Th>State</Th><Th>Process</Th><Th></Th></tr>
-              </thead>
-              <tbody>
-                {ports.map((p, i) => {
-                  const isHidden = hiddenPorts.includes(p.port)
-                  return (
-                    <tr key={i} className={`border-b border-border hover:bg-bg-2 group ${isHidden ? 'opacity-40' : ''}`}>
-                      <td className="px-4 py-2 font-mono text-fg-3">{p.proto}</td>
-                      <td className="px-4 py-2 font-mono">{p.local}</td>
-                      <td className="px-4 py-2 font-mono text-fg-3">{p.foreign || '-'}</td>
-                      <td className="px-4 py-2 font-mono font-bold">{p.port}</td>
-                      <td className="px-4 py-2">
-                        <span className={`nb-badge text-[9px] py-0 ${p.state === 'LISTEN' ? 'bg-green text-white' : p.state === 'ESTABLISHED' ? 'bg-blue text-white' : 'bg-bg-2'}`}>
-                          {p.state}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 font-mono text-xs text-fg-3">{p.proc || '-'}</td>
-                      <td className="px-4 py-2 text-right">
-                        <button
-                          className={`p-1 transition-opacity ${isHidden ? 'text-green opacity-100' : 'text-fg-3 hover:text-red opacity-0 group-hover:opacity-100'}`}
-                          title={isHidden ? 'Unhide port' : 'Hide port'}
-                          onClick={() => {
-                            if (isHidden) {
-                              const idx = hiddenPorts.indexOf(p.port)
-                              if (idx >= 0) cmd(`UNHIDE PORT ${idx}`)
-                            } else {
-                              cmd(`HIDE PORT ${p.port}`)
-                            }
-                          }}
-                        >
-                          {isHidden ? <Eye size={14} /> : <EyeOff size={14} />}
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-          )}
-        </>
-      ) : (
-        <div className="flex-1 overflow-auto">
-          <HiddenSummary title="Hidden Ports" icon={Network} items={hiddenPorts}
-            onRemove={i => cmd(`UNHIDE PORT ${i}`)} onAdd={v => cmd(`HIDE PORT ${v}`)} placeholder="4444" />
+        time={snap.time} loading={snap.loading} onSnapshot={capture} online={t.online && !busy} />
+      {snap.error && (
+        <div className="p-6 text-center">
+          <div className="text-red font-bold mb-1">Scan failed</div>
+          <div className="text-sm text-fg-3">{snap.error}</div>
         </div>
       )}
+      {!snap.error && !ports.length && !extraHidden.length && !snap.loading ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-2 text-fg-3 p-12">
+          <Network size={24} />
+          <span className="text-sm font-bold">No listening ports detected</span>
+          <span className="text-xs">The target has no open TCP listeners right now.</span>
+        </div>
+      ) : !snap.error && (ports.length > 0 || extraHidden.length > 0) && (
+        <div className="flex-1 overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-secondary border-b-2 border-border">
+              <tr><Th>Proto</Th><Th>Local Address</Th><Th>Foreign Address</Th><Th>Port</Th><Th>State</Th><Th>Process</Th><Th></Th></tr>
+            </thead>
+            <tbody>
+              {ports.map((p, i) => {
+                const isHidden = hiddenPorts.includes(p.port)
+                return (
+                  <tr key={i} className={`border-b border-border hover:bg-bg-2 group ${isHidden ? 'opacity-40' : ''}`}>
+                    <td className="px-4 py-2 font-mono text-fg-3">{p.proto}</td>
+                    <td className="px-4 py-2 font-mono">{p.local}</td>
+                    <td className="px-4 py-2 font-mono text-fg-3">{p.foreign || '-'}</td>
+                    <td className="px-4 py-2 font-mono font-bold">{p.port}</td>
+                    <td className="px-4 py-2">
+                      <span className={`nb-badge text-[9px] py-0 ${p.state === 'LISTEN' ? 'bg-green text-white' : p.state === 'ESTABLISHED' ? 'bg-blue text-white' : 'bg-bg-2'}`}>
+                        {p.state}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 font-mono text-xs text-fg-3">{p.proc || '-'}</td>
+                    <td className="px-4 py-2 text-right">
+                      <button
+                        className={`p-1 transition-opacity ${isHidden ? 'text-green opacity-100' : 'text-fg-3 hover:text-red opacity-0 group-hover:opacity-100'}`}
+                        title={isHidden ? 'Unhide port' : 'Hide port'}
+                        onClick={() => {
+                          if (isHidden) {
+                            const idx = hiddenPorts.indexOf(p.port)
+                            if (idx >= 0) cmd(`UNHIDE PORT ${idx}`)
+                          } else {
+                            cmd(`HIDE PORT ${p.port}`)
+                          }
+                        }}
+                      >
+                        {isHidden ? <Eye size={14} /> : <EyeOff size={14} />}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+              {extraHidden.map((port, i) => (
+                <tr key={`h-${i}`} className="border-b border-border hover:bg-bg-2 group opacity-40">
+                  <td className="px-4 py-2 font-mono text-fg-3">-</td>
+                  <td className="px-4 py-2 font-mono text-fg-3" colSpan={2}>not in scan</td>
+                  <td className="px-4 py-2 font-mono font-bold">{port}</td>
+                  <td className="px-4 py-2">
+                    <span className="nb-badge text-[9px] py-0 bg-bg-2">HIDDEN</span>
+                  </td>
+                  <td className="px-4 py-2 font-mono text-xs text-fg-3">-</td>
+                  <td className="px-4 py-2 text-right">
+                    <button className="p-1 text-green opacity-100" title="Unhide port"
+                      onClick={() => { const idx = hiddenPorts.indexOf(port); if (idx >= 0) cmd(`UNHIDE PORT ${idx}`) }}>
+                      <Eye size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="flex items-center gap-2 px-4 py-2 border-t-2 border-border bg-bg-2">
+        <EyeOff size={14} className="text-fg-3 shrink-0" />
+        <span className="text-xs font-bold uppercase tracking-wide text-fg-3">Hide port</span>
+        <input className="nb-input px-3 py-1.5 text-sm w-28 font-mono" placeholder="4444"
+          value={hideVal} onChange={e => setHideVal(e.target.value.replace(/\D/g, ''))}
+          onKeyDown={e => e.key === 'Enter' && hideVal && (cmd(`HIDE PORT ${hideVal}`), setHideVal(''))} />
+        <button className="nb-btn px-3 py-1.5 text-sm font-bold flex items-center gap-1"
+          disabled={!hideVal || !t.online || busy}
+          onClick={() => { cmd(`HIDE PORT ${hideVal}`); setHideVal('') }}>
+          <Plus size={12} /> Add
+        </button>
+      </div>
     </div>
   )
 }
