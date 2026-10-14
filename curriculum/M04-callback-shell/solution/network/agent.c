@@ -15,7 +15,7 @@
 static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 			    const struct rk_frame *frame, bool *close_session)
 {
-	static const unsigned char error_reply[] = "ERR";
+	static const unsigned char error_reply[] = "ERR 6";
 	static const unsigned char info_reply[] = "INFO rklings";
 	unsigned char reply[RK_FRAME_MAX];
 	struct rk_command command;
@@ -52,9 +52,9 @@ static int rk_agent_command(struct rk_agent *agent, struct socket *socket,
 		}
 		if (error == -EBUSY)
 			return rk_send_frame(socket,
-					     (const unsigned char *)"ERR busy", 8);
+					     (const unsigned char *)"ERR 4", 5);
 		return rk_send_frame(socket,
-				     (const unsigned char *)"ERR shell", 9);
+				     (const unsigned char *)"ERR 5", 5);
 	}
 	case RK_COMMAND_SHELL_STATUS: {
 		struct rk_root_shell_status shell_status;

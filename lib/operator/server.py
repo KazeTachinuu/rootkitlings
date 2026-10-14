@@ -1,8 +1,8 @@
-"""Multi-target operator server with multiplexed TUI."""
+"""Multi-target operator server."""
 
 from __future__ import annotations
 
-import cmd
+import logging
 import os
 import socket
 import socketserver
@@ -10,31 +10,36 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Callable, TextIO
+from typing import Callable
+
+from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import NestedCompleter, Completer, Completion
+from prompt_toolkit.patch_stdout import patch_stdout
+from rich.console import Console as RichConsole
+from rich.table import Table
 
 import lib.operator as _config
 from lib.operator.control_console import (
-    COMMAND_HELP,
-
     HostOperator,
+    OperatorConsole,
     OpenSslAead,
     OperatorError,
     SecureControl,
-    TargetConsole,
     TargetProcess,
     TargetSession,
     accept_shell_while_running,
     build_crypto_helper,
     encode_control_command,
     mark_operator_ready,
-    poll_shell_status,
-    relay_shell,
     parse_shell_ticket,
     read_target_session,
     receive_frame,
     send_frame,
+    setup_logging as _setup_logging,
 )
 from lib.operator.dashboard import add_event
+
+log = logging.getLogger("operator")
 
 
 class Target:
@@ -261,132 +266,144 @@ class TargetManager:
             self._targets.clear()
 
 
-class ServerConsole(cmd.Cmd):
-    """Multiplexed TUI for managing multiple targets."""
+class _TargetCompleter(Completer):
+    """Dynamic completer that lists live target IDs."""
 
-    prompt = "server> "
-    intro = None
+    def __init__(self, manager: TargetManager, online_only: bool = False):
+        self._manager = manager
+        self._online_only = online_only
 
-    def __init__(
-        self,
-        manager: TargetManager,
-        root: Path,
-        output: Callable[[str], None],
-        warning: Callable[[str], None],
-        success: Callable[[str], None],
-    ):
-        super().__init__()
-        self.manager = manager
-        self.root = root
-        self._output = output
-        self._warning = warning
-        self._success = success
+    def get_completions(self, document, complete_event):
+        word = document.get_word_before_cursor()
+        for t in self._manager.list_all():
+            if self._online_only and not t.online:
+                continue
+            if t.id.startswith(word):
+                yield Completion(t.id, start_position=-len(word))
+
+
+class ServerConsole:
+    """Multiplexed server console backed by prompt_toolkit + rich."""
+
+    def __init__(self, manager: TargetManager, root: Path):
+        self._manager = manager
+        self._root = root
+        self._rc = None
+        self._session = PromptSession(
+            completer=NestedCompleter.from_nested_dict({
+                "targets": None,
+                "use": _TargetCompleter(manager, online_only=True),
+                "kick": _TargetCompleter(manager),
+                "info": None,
+                "help": None,
+                "quit": None,
+            }),
+        )
 
     def do_targets(self, arg: str) -> None:
-        """List all connected targets."""
-        targets = self.manager.list_all()
+        targets = self._manager.list_all()
         if not targets:
-            self._output("  (no targets connected)\n")
+            log.info("  (no targets connected)")
             return
+        table = Table(show_header=True, padding=(0, 1))
+        table.add_column("ID", style="cyan bold")
+        table.add_column("Label", style="bold")
+        table.add_column("Status")
+        table.add_column("Peer", style="dim")
+        table.add_column("Info", style="dim")
         for t in targets:
-            status = "online" if t.online else "offline"
-            info = ""
-            if t.hostname:
-                info = f"  {t.hostname} {t.kernel} {t.arch}"
-            peer_addr = ""
+            status = "[green]online[/green]" if t.online else "[red]offline[/red]"
+            peer = ""
             try:
                 addr, port = t.peer.getpeername()
-                peer_addr = f"  {addr}:{port}"
+                peer = f"{addr}:{port}"
             except Exception:
                 pass
-            self._output(
-                f"  {t.id:<12} {t.label:<6} {status:<8}{peer_addr}{info}\n"
-            )
+            info = f"{t.hostname} {t.kernel} {t.arch}" if t.hostname else ""
+            table.add_row(t.id, t.label, status, peer, info)
+        self._rc.print(table)
 
     def do_use(self, arg: str) -> None:
-        """Switch to a target's operator console."""
         target_id = arg.strip()
         if not target_id:
-            self._warning("usage: use <target-id>\n")
+            log.warning("usage: use <target-id>")
             return
         if target_id.isdigit():
             target_id = f"target-{target_id}"
-        target = self.manager.get(target_id)
+        target = self._manager.get(target_id)
         if not target:
-            self._warning(f"unknown target: {target_id}\n")
+            log.warning("unknown target: %s", target_id)
             return
         if not target.online:
-            self._warning(f"{target_id} is offline\n")
+            log.warning("%s is offline", target_id)
             return
-        self._success(f"switched to {target_id}")
-        _run_target_console(target, self._output, self._warning, self._success)
-        self._output(f"back to server view\n")
-
-    def complete_use(self, text: str, line: str, begidx: int, endidx: int):
-        targets = self.manager.list_all()
-        ids = [t.id for t in targets if t.online]
-        return [i for i in ids if i.startswith(text)]
+        log.info("switched to %s", target_id)
+        _run_target_console(target)
+        log.info("back to server view")
 
     def do_kick(self, arg: str) -> None:
-        """Disconnect and remove a target."""
         target_id = arg.strip()
         if not target_id:
-            self._warning("usage: kick <target-id>\n")
+            log.warning("usage: kick <target-id>")
             return
         if target_id.isdigit():
             target_id = f"target-{target_id}"
-        target = self.manager.remove(target_id)
+        target = self._manager.remove(target_id)
         if target:
-            self._success(f"removed {target_id}")
+            log.info("removed %s", target_id)
         else:
-            self._warning(f"unknown target: {target_id}\n")
-
-    def complete_kick(self, text: str, line: str, begidx: int, endidx: int):
-        targets = self.manager.list_all()
-        ids = [t.id for t in targets]
-        return [i for i in ids if i.startswith(text)]
+            log.warning("unknown target: %s", target_id)
 
     def do_info(self, arg: str) -> None:
-        """Server summary."""
-        targets = self.manager.list_all()
+        targets = self._manager.list_all()
         online = sum(1 for t in targets if t.online)
-        self._output(f"  targets: {len(targets)} ({online} online)\n")
+        log.info("  targets: %d (%d online)", len(targets), online)
 
     def do_quit(self, arg: str) -> bool:
         return True
 
-    do_EOF = do_quit
-
     def do_help(self, arg: str) -> None:
-        self._output(
+        log.info(
             "Server\n"
             "  targets             list connected targets\n"
             "  use ID              switch to target (use 1 or use target-1)\n"
             "  kick ID             disconnect and remove a target\n"
             "  info                target count and status\n"
-            "  quit                stop the server\n"
+            "  quit                stop the server"
         )
 
-    def default(self, line: str) -> None:
-        self._warning(f"unknown command: {line}; type help\n")
+    def run(self) -> None:
+        with patch_stdout():
+            self._rc = RichConsole(highlight=False)
+            while True:
+                try:
+                    line = self._session.prompt("server> ")
+                except EOFError:
+                    break
+                except KeyboardInterrupt:
+                    continue
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split(None, 1)
+                cmd_name = parts[0].lower()
+                arg = parts[1] if len(parts) > 1 else ""
+                handler = getattr(self, f"do_{cmd_name}", None)
+                if handler:
+                    if handler(arg):
+                        break
+                else:
+                    log.warning("unknown command: %s; type help", line)
 
-    def emptyline(self) -> None:
-        pass
 
-
-def _run_target_console(
-    target: Target,
-    output: Callable[[str], None],
-    warning: Callable[[str], None],
-    success: Callable[[str], None],
-) -> None:
+def _run_target_console(target: Target) -> None:
     """Run an operator console for a single target."""
 
     def exchange(command: str) -> str:
-        output(f"send    {command}\n")
+        log.info("send    %s", command)
         reply = exchange_quiet(command)
         if reply:
-            output(f"recv    {reply}\n")
+            log.info("recv    %s", reply)
         return reply
 
     def exchange_quiet(command: str) -> str:
@@ -394,45 +411,43 @@ def _run_target_console(
             return target.exchange(command)
         except (OSError, OperatorError) as error:
             target.online = False
-            warning(f"  {target.id} disconnected: {error}\n")
+            log.warning("%s disconnected: %s", target.id, error)
             return ""
 
     def handle_shell(reply: str) -> None:
         request_id, cookie = parse_shell_ticket(reply)
-        output("  waiting for shell callback...\n")
+        log.info("  waiting for shell callback...")
         shell = accept_shell_while_running(
             target.operator.shell_listener,
             target.process,
             request_id,
             cookie,
             30,
-            lambda msg: warning(f"  {msg}\n"),
+            lambda msg: log.warning("%s", msg),
         )
-        success("shell connected")
-        output("  Remote root Bash. Type exit to return.\n")
+        log.info("shell connected")
+        log.info("  Remote root Bash. Type exit to return.")
         with shell:
-            relay_shell(shell, sys.stdin, output)
-        output("\n  Remote Bash closed.\n")
-        poll_shell_status(request_id, exchange_quiet)
+            from lib.operator.control_console import relay_shell
+            relay_shell(shell, sys.stdin, lambda msg: sys.stdout.write(msg))
+        log.info("Remote Bash closed.")
 
-    console = TargetConsole(
-        exchange, exchange_quiet, output, warning, success, handle_shell,
-        target.operator.shell_port, target=target,
+    console = OperatorConsole(
+        exchange, exchange_quiet, handle_shell,
+        shell_port=target.operator.shell_port,
+        target=target,
     )
     console.prompt = f"{target.id}> "
     try:
-        console.cmdloop()
+        console.run()
     except KeyboardInterrupt:
-        output("\n")
+        print()
 
 
 def _watcher_loop(
     root: Path,
     manager: TargetManager,
     helper: Path,
-    output: Callable[[str], None],
-    success: Callable[[str], None],
-    warning: Callable[[str], None],
 ) -> None:
     """Watch for new target sessions and accept connections."""
     run_dir = root / _config.state_dir / "run"
@@ -467,28 +482,21 @@ def _watcher_loop(
                 known[entry.name] = mtime
                 threading.Thread(
                     target=_handle_session,
-                    args=(
-                        root, entry.name, manager, helper,
-                        output, success, warning,
-                    ),
+                    args=(root, entry.name, manager, helper),
                     daemon=True,
                 ).start()
 
-            # Detect dead target processes
             for target in manager.list_all():
                 if target.online and target.process.poll() is not None:
                     target.online = False
-                    sys.stdout.write(f"\r\033[K")
-                    warning(
-                        f"{target.id} ({target.label}):"
-                        " target process stopped\n"
+                    log.warning(
+                        "%s (%s): target process stopped",
+                        target.id, target.label,
                     )
                     add_event(
                         f"offline {target.id} ({target.label})",
                         "disconnect",
                     )
-                    sys.stdout.write(ServerConsole.prompt)
-                    sys.stdout.flush()
 
             time.sleep(0.5)
         except Exception:
@@ -506,14 +514,14 @@ class _SessionHandler(socketserver.BaseRequestHandler):
         try:
             secure = SecureControl(
                 ctx["key"],
-                lambda key: OpenSslAead(key, ctx["helper"], ctx["output"]),
+                lambda key: OpenSslAead(
+                    key, ctx["helper"],
+                    lambda msg: log.debug("%s", msg.rstrip()),
+                ),
             )
             session_id = secure.accept_hello(receive_frame(peer))
         except Exception as e:
-            _server_print(
-                ctx["warning"],
-                f"reject   {ctx['label']}: {e}\n",
-            )
+            log.warning("reject   %s: %s", ctx["label"], e)
             return
 
         target, is_reconnect = ctx["manager"].add(
@@ -533,25 +541,21 @@ class _SessionHandler(socketserver.BaseRequestHandler):
 
         info = f" [{target.hostname}]" if target.hostname else ""
         verb = "reconn" if is_reconnect else "connect"
-        _server_print(
-            ctx["success"],
-            f"{verb}  {target.id}  {ctx['label']}{info}"
-            f"  session={session_id:016x}",
+        log.info(
+            "%s  %s  %s%s  session=%016x",
+            verb, target.id, ctx["label"], info, session_id,
         )
         add_event(
             f"{verb} {target.id} {ctx['label']}{info}",
             "reconnect" if is_reconnect else "connect",
         )
 
-        # TCP keepalive so the OS detects dead connections
         peer.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 5)
         peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 2)
         peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
 
         my_gen = target._generation
-        # Wait until the connection drops or a newer handler supersedes us.
-        # Use select() so TCP keepalive failures are detected promptly.
         import select
         while target.online and target._generation == my_gen \
                 and ctx["process"].poll() is None:
@@ -566,10 +570,9 @@ class _SessionHandler(socketserver.BaseRequestHandler):
         if target._generation != my_gen:
             return
         target.online = False
-        _server_print(
-            ctx["warning"],
-            f"lost     {target.id} ({ctx['label']}):"
-            " agent disconnected, waiting for reconnect",
+        log.warning(
+            "lost     %s (%s): agent disconnected, waiting for reconnect",
+            target.id, ctx["label"],
         )
         add_event(
             f"offline {target.id} ({ctx['label']})", "disconnect",
@@ -590,21 +593,11 @@ class _SessionServer(socketserver.ThreadingTCPServer):
         self.socket = existing_socket
 
 
-def _server_print(fn, msg):
-    sys.stdout.write(f"\r\033[K")
-    fn(msg)
-    sys.stdout.write(ServerConsole.prompt)
-    sys.stdout.flush()
-
-
 def _handle_session(
     root: Path,
     label: str,
     manager: TargetManager,
     helper: Path,
-    output: Callable[[str], None],
-    success: Callable[[str], None],
-    warning: Callable[[str], None],
 ) -> None:
     """Run a ThreadingTCPServer on the session's control port.
 
@@ -615,15 +608,13 @@ def _handle_session(
         session = read_target_session(root, label)
         operator = HostOperator.from_session(session)
     except OperatorError as error:
-        warning(f"skip     {label}: {error}\n")
+        log.warning("skip     %s: %s", label, error)
         return
 
     mark_operator_ready(session)
-    _server_print(
-        output,
-        f"  session  {label}"
-        f"  control=:{operator.control_port}"
-        f"  shell=:{operator.shell_port}\n",
+    log.info(
+        "  session  %s  control=:%d  shell=:%d",
+        label, operator.control_port, operator.shell_port,
     )
 
     process = TargetProcess(session)
@@ -635,9 +626,6 @@ def _handle_session(
         "process": process,
         "manager": manager,
         "helper": helper,
-        "output": output,
-        "success": success,
-        "warning": warning,
         "key": operator.key,
     }
 
@@ -671,21 +659,22 @@ def run_server(
     root: Path,
     *,
     transcript: Callable[[list[object]], None],
-    output: Callable[[str], None],
-    success: Callable[[str], None],
-    warning: Callable[[str], None],
     banner: str = "",
     webapp_dist: Path | None = None,
+    **_kwargs,
 ) -> int:
     """Start the multi-target operator server."""
     if server_running(root):
         raise OperatorError("another server is already running")
 
+    _setup_logging()
+
     if banner:
-        output(banner)
+        log.info("%s", banner.rstrip())
 
     helper = build_crypto_helper(
-        root, root / _config.state_dir / "tools", transcript, output,
+        root, root / _config.state_dir / "tools", transcript,
+        lambda msg: log.debug("%s", msg.rstrip()),
     )
 
     manager = TargetManager()
@@ -696,7 +685,7 @@ def run_server(
     try:
         threading.Thread(
             target=_watcher_loop,
-            args=(root, manager, helper, output, success, warning),
+            args=(root, manager, helper),
             daemon=True,
         ).start()
 
@@ -704,15 +693,17 @@ def run_server(
         if webapp_dist is None:
             webapp_dist = root / "webapp" / "dist"
         if webapp_dist.is_dir():
-            start_dashboard(manager, webapp_dist / "index.html", output)
+            start_dashboard(
+                manager, webapp_dist / "index.html",
+                lambda msg: log.info("%s", msg.rstrip()),
+            )
 
-        console = ServerConsole(manager, root, output, warning, success)
-        console.cmdloop()
+        console = ServerConsole(manager, root)
+        console.run()
         return 0
     except KeyboardInterrupt:
-        output("\n")
         return 0
     finally:
         manager.close_all()
         pid_file.unlink(missing_ok=True)
-        output("Server stopped.\n")
+        log.info("Server stopped.")

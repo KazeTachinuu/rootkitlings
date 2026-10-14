@@ -128,7 +128,7 @@ class SecureControlTests(unittest.TestCase):
 
     def test_authenticated_hello_sequences_commands(self) -> None:
         session = 0x0102030405060708
-        hello = envelope(self.aead, REPLY, session, 1, b"HELLO")
+        hello = envelope(self.aead, REPLY, session, 1, b"HELLO 1")
         self.assertEqual(self.control.accept_hello(hello), session)
 
         request = self.control.seal_request(b"STATUS")
@@ -141,7 +141,7 @@ class SecureControlTests(unittest.TestCase):
 
     def test_unverified_hello_never_publishes_its_session(self) -> None:
         candidate = bytearray(
-            envelope(self.aead, REPLY, 42, 1, b"HELLO")
+            envelope(self.aead, REPLY, 42, 1, b"HELLO 1")
         )
         candidate[-1] ^= 1
         with self.assertRaisesRegex(OperatorError, "bad tag"):
@@ -150,8 +150,8 @@ class SecureControlTests(unittest.TestCase):
 
     def test_hello_requires_reply_one_and_exact_text(self) -> None:
         cases = (
-            envelope(self.aead, REQUEST, 7, 1, b"HELLO"),
-            envelope(self.aead, REPLY, 7, 2, b"HELLO"),
+            envelope(self.aead, REQUEST, 7, 1, b"HELLO 1"),
+            envelope(self.aead, REPLY, 7, 2, b"HELLO 1"),
             envelope(self.aead, REPLY, 7, 1, b"NOT HELLO"),
         )
         for candidate in cases:
@@ -162,7 +162,7 @@ class SecureControlTests(unittest.TestCase):
 
     def test_reply_rejects_old_session_and_sequence_gap(self) -> None:
         self.control.accept_hello(
-            envelope(self.aead, REPLY, 9, 1, b"HELLO")
+            envelope(self.aead, REPLY, 9, 1, b"HELLO 1")
         )
         for candidate in (
             envelope(self.aead, REPLY, 8, 2, b"PONG"),
@@ -512,7 +512,7 @@ class ControlConsoleTests(unittest.TestCase):
                             REPLY,
                             session,
                             1,
-                            b"HELLO",
+                            b"HELLO 1",
                         ),
                     )
                     for sequence, expected in enumerate(

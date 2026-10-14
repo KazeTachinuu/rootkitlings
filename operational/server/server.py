@@ -22,20 +22,16 @@ def run_server(
     root: Path,
     *,
     transcript: Callable[[list[object]], None],
-    output: Callable[[str], None],
-    success: Callable[[str], None],
-    warning: Callable[[str], None],
+    **kwargs,
 ) -> int:
     return _run_server(
         root,
         transcript=transcript,
-        output=output,
-        success=success,
-        warning=warning,
         banner=(
             "Rootkitlings operator server\n"
             "Watching for targets. Start one with:\n"
             "  make vm\n\n"
         ),
         webapp_dist=root / "webapp" / "dist",
+        **kwargs,
     )
