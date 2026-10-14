@@ -1,8 +1,8 @@
 # Publish a procfs status file
 
 Private state is invisible to an operator in userspace.
-Open `/proc/rklings` as a local exchange point only after the module is
-ready, then remove it before its state disappears.
+Open `/proc/rklings` as a local exchange point only after the module is ready,
+then remove it before its state disappears.
 Success proves that a failed start leaves neither the channel nor its state
 behind.
 
@@ -37,7 +37,8 @@ This lesson owns publication and cleanup.
 State snapshots are outside this exercise.
 
 Failure point 3 simulates `proc_create_single()` returning `NULL` after state
-already exists. The init callback must return `-ENOMEM` and roll back state.
+already exists.
+The init callback must return `-ENOMEM` and roll back state.
 
 ## Your task
 
@@ -71,8 +72,8 @@ unknown value.
 A host fixture injects independent state and procfs operations to verify
 acquisition order, reverse-order cleanup, exact error propagation, and the
 publication API contract.
-A disposable guest verifies that `/proc/rklings` exists with mode `0444`
-and content `active` only while the module is loaded.
+A disposable guest verifies that `/proc/rklings` exists with mode `0444` and
+content `active` only while the module is loaded.
 It also checks the exact errors for all three rejected loads.
 
 For failure point 3, kernel allocation trace events must show that a module

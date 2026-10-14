@@ -1,12 +1,13 @@
 # Hide one name from a directory listing
 
 When a program calls `ls` or `readdir()`, the kernel fills a buffer with
-directory entries via the `getdents64` syscall. Each entry is a variable-length
-record containing a filename, inode number, and a resume position.
+directory entries via the `getdents64` syscall.
+Each entry is a variable-length record containing a filename, inode number, and
+a resume position.
 
-By removing one entry from this buffer before it reaches userspace, the
-filename disappears from every directory listing, but the file itself remains
-accessible by its full path.
+By removing one entry from this buffer before it reaches userspace, the filename
+disappears from every directory listing, but the file itself remains accessible
+by its full path.
 
 The supplied module creates `/proc/rklings_hidden`.
 A direct read still returns:
@@ -58,8 +59,8 @@ Compare filename length and bytes exactly.
 After validation, compact retained records with `memmove()`.
 
 `d_off` is an opaque position the kernel uses to resume reading.
-For each removed record after a retained record, copy its `d_off` into
-that retained record so the resumed position stays correct.
+For each removed record after a retained record, copy its `d_off` into that
+retained record so the resumed position stays correct.
 
 If every record matches, return unchanged (returning zero would signal EOF).
 

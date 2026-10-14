@@ -5,6 +5,7 @@ TOOL_OUT ?= .rklings/build/tools
 RKLINGS_FAIL_POINT ?= 0
 GUEST_TOOL_NAMES := \
 	agent_fixture \
+	cat \
 	cred_trigger_test \
 	credential_snapshot_test \
 	getdents64_test \
@@ -68,6 +69,9 @@ tool-output-directory:
 
 $(TOOL_OUT)/agent_fixture: vm/tools/agent_fixture.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
+
+$(TOOL_OUT)/cat: vm/tools/cat.c | tool-output-directory
+	$(CC) -static -o $@ $<
 
 $(TOOL_OUT)/cred_trigger_test: vm/tools/cred_trigger_test.c | tool-output-directory
 	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<

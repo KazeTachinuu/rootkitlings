@@ -58,8 +58,7 @@ Start this lesson to copy your passed module forward, then edit its two existing
 files.
 Do not add files.
 
-- In `Kbuild`, define `RKLINGS_FAIL_POINT` with default `0` and pass it to
-  C.
+- In `Kbuild`, define `RKLINGS_FAIL_POINT` with default `0` and pass it to C.
 - In `core/main.c`, define `RK_FAIL_NONE` as `0` and `RK_FAIL_PREFLIGHT` as `1`.
 - Reject unknown build-time values with a compile-time error.
 - Return `-ECANCELED` from init when the selected value is `RK_FAIL_PREFLIGHT`.
@@ -81,8 +80,8 @@ Run:
 The checker builds value `1`, boots a disposable guest, and calls
 `finit_module()` through a small verifier.
 It requires the numeric error to be `ECANCELED`, then repeats the rejected load.
-Before and after both attempts, it verifies that `rklings` is absent from
-both `/proc/modules` and `/sys/module/rklings`.
+Before and after both attempts, it verifies that `rklings` is absent from both
+`/proc/modules` and `/sys/module/rklings`.
 
 The checker then rebuilds value `0` in a clean directory and uses a fresh guest
 to load, unload, and immediately reload the module.

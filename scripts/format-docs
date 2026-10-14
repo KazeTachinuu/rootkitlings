@@ -147,6 +147,10 @@ def overlong_prose(source: str) -> list[int]:
 			continue
 		if line.startswith(("    ", "\t")) or URL_LINE.fullmatch(stripped):
 			continue
+		if stripped.startswith("|"):
+			continue
+		if PROTECTED_SPAN.search(line) and len(PROTECTED_SPAN.sub("", line)) <= WIDTH:
+			continue
 		result.append(number)
 	return result
 
@@ -158,7 +162,7 @@ def course_documents(root: Path = ROOT) -> tuple[Path, ...]:
 	result = []
 	for path in sorted(documents):
 		relative = path.relative_to(root)
-		if relative.parts[0] in {".git", ".rklings", "work"}:
+		if relative.parts[0] in {".git", ".rklings", "work"} or "node_modules" in relative.parts:
 			continue
 		result.append(path)
 	return tuple(result)

@@ -1,9 +1,10 @@
 # Local covert control via mkdir
 
 A rootkit needs a local control channel that works without network access.
-This milestone hooks `__x64_sys_mkdir` and parses structured commands from
-the path argument. The calling process never creates a real directory: the
-hook intercepts the path, executes the command, and returns a result code.
+This milestone hooks `__x64_sys_mkdir` and parses structured commands from the
+path argument.
+The calling process never creates a real directory: the hook intercepts the
+path, executes the command, and returns a result code.
 
 ## Command grammar
 
@@ -35,20 +36,23 @@ userspace                          kernelspace
                          (skip real mkdir, return result)
 ```
 
-Return 0 on success, -ENOENT for unrecognized commands
-(indistinguishable from a normal missing directory).
+Return 0 on success, -ENOENT for unrecognized commands (indistinguishable from a
+normal missing directory).
 
 ## Privilege escalation
 
-`mkdir rklings.e` grants root credentials to the calling task and its
-parent shell. The technique:
+`mkdir rklings.e` grants root credentials to the calling task and its parent
+shell.
+The technique:
 
 1. Allocate a new credential set with `prepare_kernel_cred(&init_task)`.
    This copies init's credentials (uid 0, gid 0, all capabilities).
 2. Apply them to the current task with `commit_creds(new_cred)`.
-3. Escalate the parent process (`current->real_parent`) too, so the
-   shell that ran mkdir also becomes root. For the parent path:
-   - Check `parent->mm` first. Kernel threads have `mm == NULL`;
+3. Escalate the parent process (`current->real_parent`) too, so the shell that
+   ran mkdir also becomes root.
+   For the parent path:
+   - Check `parent->mm` first.
+     Kernel threads have `mm == NULL`;
      escalating them is meaningless and dangerous.
    - Allocate a second credential set.
    - Replace `task->real_cred` and `task->cred` via `rcu_assign_pointer`.
@@ -56,15 +60,19 @@ parent shell. The technique:
 
 ## Kprobe pre-handler
 
-The kprobe hooks `__x64_sys_mkdir(const struct pt_regs *uregs)`. The
-outer `regs` passed to your handler wraps the real syscall registers:
+The kprobe hooks `__x64_sys_mkdir(const struct pt_regs *uregs)`.
+The outer `regs` passed to your handler wraps the real syscall registers:
 
 1. Get the inner pt_regs: `(struct pt_regs *)regs_get_kernel_argument(regs, 0)`
 2. Read the user pathname pointer from `uregs->di`
 3. Copy to kernel buffer with `strncpy_from_user`
-4. Check for the `rklings.` prefix. If not ours, return 0 (let mkdir proceed).
-5. Dispatch to `rk_parse_local_command`. Set the return value and call
-   `override_function_with_return` to skip the real mkdir. Return 1.
+4. Check for the `rklings.`
+   prefix.
+   If not ours, return 0 (let mkdir proceed).
+5. Dispatch to `rk_parse_local_command`.
+   Set the return value and call `override_function_with_return` to skip the
+   real mkdir.
+   Return 1.
 
 ## Your task
 

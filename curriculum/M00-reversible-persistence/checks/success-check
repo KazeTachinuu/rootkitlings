@@ -1,5 +1,6 @@
 #!/bin/sh
 # shellcheck source=/dev/null
+# shellcheck disable=SC2154
 . /vm/checks/lib.sh
 
 endpoint=/proc/rklings

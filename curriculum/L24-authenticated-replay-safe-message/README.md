@@ -24,8 +24,8 @@ Each message is exactly 36 bytes:
 
 Plain SHA-256 cannot authenticate a command because anyone can compute
 `SHA-256(altered message)`.
-HMAC adds a secret key: only someone who knows the key can produce a
-valid tag, and the receiver can verify it.
+HMAC adds a secret key: only someone who knows the key can produce a valid tag,
+and the receiver can verify it.
 If the tag matches, the message came from a key holder and was not altered.
 
 Use the supplied `hmac(sha256)` context, which installs the key with

@@ -21,8 +21,8 @@ structure layout to the procfs component.
 Change `rk_proc_publish()` to receive the live state pointer.
 Pass that pointer to `proc_create_single_data()`, which works like
 `proc_create_single()` but adds one extra argument: a `void *` that the kernel
-stores and passes to the show callback as `output->private`, where `output` is
-a `struct seq_file *`.
+stores and passes to the show callback as `output->private`, where `output` is a
+`struct seq_file *`.
 
 The show function reads `output->private` once, copies the accessor result into
 one local `bool`, and emits one line with `seq_printf()`.

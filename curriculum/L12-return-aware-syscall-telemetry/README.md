@@ -27,8 +27,9 @@ The `seen` fields reset on load and are flags, not counters.
 ## One invocation, two handlers
 
 A **kretprobe** fires twice: once when the function is entered, once when it
-returns. This lets you carry data from entry to return, so you can correlate
-arguments with results.
+returns.
+This lets you carry data from entry to return, so you can correlate arguments
+with results.
 
 This lesson probes the native x86-64 wrapper `__x64_sys_rmdir`.
 Concurrent calls forbid a global scratch variable.

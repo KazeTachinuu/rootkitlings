@@ -1,11 +1,14 @@
 For the command handler: use rk_send_frame(&rk_transport, NULL, socket, ...)
-to send replies. For SHELL, call rk_root_shell_request(agent->shell, ...)
-with the operator's address from agent->peer.sin_addr.s_addr. Format the
-OPEN reply with scnprintf using %08x for request_id and %016llx for cookie.
+to send replies.
+For SHELL, call rk_root_shell_request(agent->shell, ...)
+with the operator's address from agent->peer.sin_addr.s_addr.
+Format the OPEN reply with scnprintf using %08x for request_id and %016llx for
+cookie.
 
-For jitter: after reading delay under the lock, add jitter OUTSIDE the
-lock: delay += get_random_u32_below(delay / 4 + 1). The +1 prevents
-calling get_random_u32_below(0).
+For jitter: after reading delay under the lock, add jitter OUTSIDE the lock:
+delay += get_random_u32_below(delay / 4 + 1).
+The +1 prevents calling get_random_u32_below(0).
 
-For main.c: init order is shell then agent. Exit order is agent then
-shell. If agent_start fails, call rk_root_shell_stop before returning.
+For main.c: init order is shell then agent.
+Exit order is agent then shell.
+If agent_start fails, call rk_root_shell_stop before returning.

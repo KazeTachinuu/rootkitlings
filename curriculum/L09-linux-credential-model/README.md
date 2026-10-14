@@ -67,9 +67,11 @@ Kernel UIDs (`kuid_t`) are internal, namespace-independent values.
 To print the number a userspace reader expects, translate each ID through the
 namespace of the process that opened the file:
 
-1. `seq_user_ns(output)` returns the opener's namespace (from `output->file->f_cred`).
+1. `seq_user_ns(output)` returns the opener's namespace (from
+   `output->file->f_cred`).
 2. `from_kuid_munged(ns, kuid)` converts a kernel UID to a numeric UID in that
-   namespace. If the ID has no mapping there, it returns the overflow ID.
+   namespace.
+   If the ID has no mapping there, it returns the overflow ID.
 
 This matches how `/proc/<pid>/status` prints UIDs.
 The identity comes from `current_cred()`; the numeric format comes from the

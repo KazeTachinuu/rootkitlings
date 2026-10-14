@@ -122,7 +122,7 @@ class CompileDatabaseTests(unittest.TestCase):
     def test_cumulative_source_includes_provider_headers(self) -> None:
         root = Path(__file__).resolve().parent.parent
         catalog = Catalog(root)
-        exercise = catalog.resolve("C00")
+        exercise = catalog.resolve("L03")
         provider = catalog.solution_provider(exercise)
         self.assertIsNotNone(provider)
         source = next((root / exercise.resources.solution).rglob("*.c"))

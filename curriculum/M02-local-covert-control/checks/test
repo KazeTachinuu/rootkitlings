@@ -1,0 +1,38 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$here/../../../scripts/lesson-env"
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-local-covert-control-test.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+for script in test success-check escalation-check; do bash -n "$here/$script"; done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$here/test"
+	shellcheck -x -s sh "$here/success-check" "$here/escalation-check"
+fi
+
+cp -a "$here/../solution" "$scratch/solution"
+if ! make -s -C "$KDIR" M="$scratch/solution" W=1 modules \
+		>"$scratch/build.log" 2>&1; then
+	cat "$scratch/build.log" >&2
+	printf '[x] solution build failed\n' >&2
+	exit 1
+fi
+
+guest()
+{
+	local check=$1 label=$2 output
+	shift 2
+	if ! output=$("$here/../../../vm/boot" --check "$check" \
+		"$@" "$scratch/solution/rklings.ko" 2>&1); then
+		printf '%s\n[x] guest rejected %s\n' "$output" "$label" >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+}
+
+guest "$here/success-check" control
+guest "$here/escalation-check" escalation --tool vm/tools/mkdir_escalation_test
+
+printf '[+] local-covert-control checker regression passed\n'

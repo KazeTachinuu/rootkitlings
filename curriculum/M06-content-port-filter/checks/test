@@ -1,0 +1,42 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$here/../../../scripts/lesson-env"
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-content-port-filter-test.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+for script in test success-check content-check enumerate-check port-check; do
+	bash -n "$here/$script" 2>/dev/null || true
+done
+if command -v shellcheck >/dev/null; then
+	shellcheck -x -s bash "$here/test"
+	shellcheck -x -s sh "$here/content-check" "$here/enumerate-check" \
+		"$here/port-check"
+fi
+
+cp -a "$here/../solution" "$scratch/solution"
+if ! make -s -C "$KDIR" M="$scratch/solution" W=1 modules \
+		>"$scratch/build.log" 2>&1; then
+	cat "$scratch/build.log" >&2
+	printf '[x] solution build failed\n' >&2
+	exit 1
+fi
+
+guest()
+{
+	local check=$1 label=$2 output
+	shift 2
+	if ! output=$("$here/../../../vm/boot" --check "$check" \
+		"$@" "$scratch/solution/rklings.ko" 2>&1); then
+		printf '%s\n[x] guest rejected %s\n' "$output" "$label" >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+}
+
+guest "$here/content-check" content --tool vm/tools/cat
+guest "$here/enumerate-check" enumerate --tool vm/tools/cat
+guest "$here/port-check" port
+
+printf '[+] content-port-filter checker regression passed\n'

@@ -76,8 +76,8 @@ The counter measures hook traversals, not sends, deliveries, or wire packets.
 
 ## Status is not execution evidence
 
-`/proc/rklings` renders the snapshot supplied by your observer as exactly
-seven lines:
+`/proc/rklings` renders the snapshot supplied by your observer as exactly seven
+lines:
 
 ```text
 state=registered

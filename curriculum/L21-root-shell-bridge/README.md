@@ -1,7 +1,8 @@
 # Hand a TCP socket to a root shell
 
 A kernel thread runs inside the kernel: it has no userspace memory, no program
-image, no file descriptors. It cannot become an interactive shell.
+image, no file descriptors.
+It cannot become an interactive shell.
 
 The solution is a **bridge**: the kernel creates a TCP socket and hands it to a
 userspace process that runs a real shell.

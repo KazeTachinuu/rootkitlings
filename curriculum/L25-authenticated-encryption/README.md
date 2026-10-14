@@ -42,8 +42,8 @@ Keep every request object and buffer alive until completion.
 
 Always pass the result to `wait_request` (maps to `crypto_wait_req()`), which
 handles immediate success, `-EINPROGRESS`, and `-EBUSY` completion.
-Set `RK_AEAD_MAY_BACKLOG | RK_AEAD_MAY_SLEEP` (the operation may sleep and
-queue behind other requests).
+Set `RK_AEAD_MAY_BACKLOG | RK_AEAD_MAY_SLEEP` (the operation may sleep and queue
+behind other requests).
 
 ## Transaction rule
 

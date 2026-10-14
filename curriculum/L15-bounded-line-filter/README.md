@@ -7,8 +7,7 @@ read length.
 Success proves that a kretprobe (a probe that fires after a function returns)
 can select one file by identity and edit a bounded read result without treating
 arbitrary bytes as a C string.
-At load, the module retains the inode opened from
-`/tmp/rklings-read-target`.
+At load, the module retains the inode opened from `/tmp/rklings-read-target`.
 It handles results of at most 512 bytes and replaces complete, non-overlapping
 matches only.
 

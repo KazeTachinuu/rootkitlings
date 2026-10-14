@@ -1,7 +1,7 @@
 # Course design
 
-Rklings teaches Linux kernel development by building a rootkit one
-observable mechanism at a time.
+Rklings teaches Linux kernel development by building a rootkit one observable
+mechanism at a time.
 The required route contains 26 lessons, nine milestones, and one final project.
 
 ## Dependency spine
@@ -65,8 +65,7 @@ Every required concept must be entry knowledge or taught by a prerequisite.
 ## Workspace composition
 
 A learner edits an isolated tree under `work/<serial>/`.
-Build outputs, internal state, snapshots, and backups stay under
-`.rklings/`.
+Build outputs, internal state, snapshots, and backups stay under `.rklings/`.
 Bundles contain:
 
 ```text

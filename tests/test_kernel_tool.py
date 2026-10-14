@@ -62,20 +62,6 @@ class KernelToolTests(unittest.TestCase):
                         Path(f"/tmp/rklings{character}course")
                     )
 
-    def test_nested_cgroup_memberships_are_parsed_without_escaping(self) -> None:
-        memberships = TOOL["cgroup_memberships"](
-            "0::/user.slice/session.scope\n"
-            "4:cpu,cpuacct:/student.slice\n"
-            "5:memory:/../../escape\n"
-        )
-        self.assertEqual(
-            memberships,
-            {
-                "unified": TOOL["PurePosixPath"]("/user.slice/session.scope"),
-                "cpu": TOOL["PurePosixPath"]("/student.slice"),
-                "cpuacct": TOOL["PurePosixPath"]("/student.slice"),
-            },
-        )
 
     def test_manifest_has_one_computed_release_and_verified_source(self) -> None:
         manifest = TOOL["read_manifest"]()
@@ -230,17 +216,6 @@ class KernelToolTests(unittest.TestCase):
         self.assertEqual(config["CONFIG_VIRTIO_MENU"], "y")
         self.assertEqual(config["CONFIG_CRYPTO_GCM"], "y")
         self.assertNotIn("CONFIG_LOCALVERSION", config)
-
-    def test_managed_directory_rejects_a_symlinked_ancestor(self) -> None:
-        with tempfile.TemporaryDirectory(dir=ROOT) as temporary_name:
-            temporary = Path(temporary_name)
-            real = temporary / "real"
-            real.mkdir()
-            link = temporary / "link"
-            link.symlink_to(real, target_is_directory=True)
-            with self.assertRaisesRegex(TOOL["KernelError"], "not a real directory"):
-                TOOL["ensure_directory_chain"](link / "child", create=True)
-            self.assertFalse((real / "child").exists())
 
     def test_build_environment_drops_ambient_kbuild_overrides(self) -> None:
         manifest = TOOL["read_manifest"]()

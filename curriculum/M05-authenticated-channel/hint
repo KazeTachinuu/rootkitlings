@@ -1,24 +1,26 @@
-For control.c nonce construction: put session as big-endian u64 in bytes
-0-7, then (sequence << 1 | (kind == REPLY ? 1 : 0)) as big-endian u32
-in bytes 8-11. Use cpu_to_be64/cpu_to_be32 (kernel) or manual byte
-packing (userspace).
+For control.c nonce construction: put session as big-endian u64 in bytes 0-7,
+then (sequence << 1 | (kind == REPLY ?
+1 : 0)) as big-endian u32 in bytes 8-11.
+Use cpu_to_be64/cpu_to_be32 (kernel) or manual byte packing (userspace).
 
 For open_request: parse the 18-byte header first (version, kind, session,
-sequence). Verify version == RK_SECURE_VERSION, kind == REQUEST, session
-matches channel->session, and sequence == channel->next_request. Build
-the nonce from session + sequence + REQUEST, then call rk_aead_open()
-with the header as AAD. On success, increment next_request.
+sequence).
+Verify version == RK_SECURE_VERSION, kind == REQUEST, session matches
+channel->session, and sequence == channel->next_request.
+Build the nonce from session + sequence + REQUEST, then call rk_aead_open() with
+the header as AAD.
+On success, increment next_request.
 
-For seal_reply: build the header with version, REPLY, session,
-next_reply. Build the nonce from session + next_reply + REPLY. Call
-rk_aead_seal() with header as AAD and plaintext as message. On success,
-increment next_reply.
+For seal_reply: build the header with version, REPLY, session, next_reply.
+Build the nonce from session + next_reply + REPLY.
+Call rk_aead_seal() with header as AAD and plaintext as message.
+On success, increment next_reply.
 
-For agent.c rk_agent_reply: seal plaintext with rk_secure_seal_reply()
-into an envelope buffer, then rk_send_frame() the envelope. Always
-memzero_explicit() the envelope after sending.
+For agent.c rk_agent_reply: seal plaintext with rk_secure_seal_reply() into an
+envelope buffer, then rk_send_frame() the envelope.
+Always memzero_explicit() the envelope after sending.
 
-For rk_agent_serve: generate a non-zero session with get_random_u64(),
-start the secure channel, send sealed HELLO, then loop: receive frame,
+For rk_agent_serve: generate a non-zero session with get_random_u64(), start the
+secure channel, send sealed HELLO, then loop: receive frame,
 rk_secure_open_request() to get plaintext, pass to rk_agent_command().
 Stop channel on exit.

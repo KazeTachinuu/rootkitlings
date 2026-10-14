@@ -28,8 +28,8 @@ worker_runs=3
 ## Wait queue and atomic counter
 
 A **wait queue** lets a thread sleep until a condition becomes true.
-It does not remember past wake-ups, so store the pending count in an
-`atomic_t` (an integer safe for concurrent read-modify-write).
+It does not remember past wake-ups, so store the pending count in an `atomic_t`
+(an integer safe for concurrent read-modify-write).
 
 ```text
 proc write "run"                 kernel thread
@@ -44,10 +44,13 @@ proc write "run"                 kernel thread
 
 - `atomic_add_unless(..., INT_MAX)`: increment pending unless already at max
   (return `-EOVERFLOW` if false).
-- `wait_event_interruptible()`: sleep until `pending > 0 || kthread_should_stop()`.
-- `atomic_dec_if_positive()`: consume one unit (returns negative if already zero).
+- `wait_event_interruptible()`: sleep until
+  `pending > 0 || kthread_should_stop()`.
+- `atomic_dec_if_positive()`: consume one unit (returns negative if already
+  zero).
 
-Each `run` samples the action switch once. Disabled rejects the write.
+Each `run` samples the action switch once.
+Disabled rejects the write.
 Concurrent writes must not merge: 100 successes produce exactly 100 runs.
 
 ## Lifecycle

@@ -66,8 +66,10 @@ The IPv4 adapter requests exactly the first 20 bytes.
 
 Apply checks in this order:
 
-1. Invalid arguments: NULL pointers, empty or oversized request, offset > `S64_MAX`.
-2. Base geometry: `skb_network_offset()` as signed value. Reject `INT_MIN`.
+1. Invalid arguments: NULL pointers, empty or oversized request, offset >
+   `S64_MAX`.
+2. Base geometry: `skb_network_offset()` as signed value.
+   Reject `INT_MIN`.
    For negative offset, prove it fits in `skb_headroom()`.
    For nonnegative, prove it does not exceed `skb->len`.
 3. Unreadable fragments: `data_len > len` or lengths beyond signed helper range.

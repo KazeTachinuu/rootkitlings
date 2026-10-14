@@ -43,9 +43,9 @@ static int open_listener(unsigned short requested, unsigned short *actual,
 			 bool listen_now)
 {
 	struct sockaddr_in address = {
-		.sin_family = AF_INET,
-		.sin_addr.s_addr = htonl(INADDR_LOOPBACK),
-		.sin_port = htons(requested),
+	    .sin_family = AF_INET,
+	    .sin_addr.s_addr = htonl(INADDR_LOOPBACK),
+	    .sin_port = htons(requested),
 	};
 	socklen_t length = sizeof(address);
 	int reuse = 1;
@@ -53,7 +53,8 @@ static int open_listener(unsigned short requested, unsigned short *actual,
 
 	if (fd < 0)
 		fail("socket");
-	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0 ||
+	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) <
+		0 ||
 	    bind(fd, (struct sockaddr *)&address, sizeof(address)) < 0 ||
 	    getsockname(fd, (struct sockaddr *)&address, &length) < 0)
 		fail("listener setup");
@@ -99,7 +100,7 @@ static void read_all(int fd, unsigned char *bytes, size_t length)
 static void send_frame(int fd, const char *payload)
 {
 	size_t length = strlen(payload);
-	unsigned char header[2] = { length >> 8, length };
+	unsigned char header[2] = {length >> 8, length};
 	size_t index;
 
 	write_all(fd, header, 1);
@@ -110,7 +111,7 @@ static void send_frame(int fd, const char *payload)
 
 static void send_oversized(int fd)
 {
-	unsigned char bytes[67] = { 0, 65 };
+	unsigned char bytes[67] = {0, 65};
 
 	memset(bytes + 2, 'x', 65);
 	write_all(fd, bytes, sizeof(bytes));
@@ -168,7 +169,7 @@ static int reserve(const char *path)
 
 static int serve(const char *directory, const char *port_text)
 {
-	struct timeval timeout = { .tv_sec = 10 };
+	struct timeval timeout = {.tv_sec = 10};
 	unsigned long parsed = strtoul(port_text, NULL, 10);
 	unsigned short port;
 	int listener;
@@ -226,6 +227,7 @@ int main(int argc, char **argv)
 		return reserve(argv[2]);
 	if (argc == 4 && !strcmp(argv[1], "serve"))
 		return serve(argv[2], argv[3]);
-	fprintf(stderr, "usage: %s reserve FILE | serve DIRECTORY PORT\n", argv[0]);
+	fprintf(stderr, "usage: %s reserve FILE | serve DIRECTORY PORT\n",
+		argv[0]);
 	return 2;
 }

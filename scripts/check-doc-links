@@ -50,6 +50,8 @@ for document in documents:
     )
     for command, selector in examples:
         selector = selector.rstrip("`.,;:")
+        if selector.startswith("-"):
+            continue
         if selector and selector != serial:
             failures.append(
                 f"{shown}: {command} example targets {selector}, expected {serial}"

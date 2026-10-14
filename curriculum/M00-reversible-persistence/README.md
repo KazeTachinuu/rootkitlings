@@ -1,29 +1,32 @@
 # Stage a reversible boot-load request
 
-A rootkit that disappears on reboot is no rootkit at all. This milestone
-teaches the standard Linux persistence mechanism: writing a
+A rootkit that disappears on reboot is no rootkit at all.
+This milestone teaches the standard Linux persistence mechanism: writing a
 `modules-load.d` configuration file so the module reloads at every boot.
 
 ## How persistence works
 
-Linux reads `/etc/modules-load.d/*.conf` at boot. Each line names a
-module to load. Writing `rklings` to
-`/etc/modules-load.d/rklings.conf` makes the module survive
+Linux reads `/etc/modules-load.d/*.conf` at boot.
+Each line names a module to load.
+Writing `rklings` to `/etc/modules-load.d/rklings.conf` makes the module survive
 reboots.
 
-In the rklings VM, init reads these files and loads the modules
-before dropping you into a shell. Test with bare mode (root shell) so
-you can `insmod` and `rmmod` manually:
+In the rklings VM, init reads these files and loads the modules before dropping
+you into a shell.
+Test with bare mode (root shell) so you can `insmod` and `rmmod` manually:
 
     ./rklings run --bare
 
-1. Boot the VM. No module is loaded.
+1. Boot the VM.
+   No module is loaded.
 2. Load the module: `insmod rklings.ko`
 3. Persist it: `echo persist > /proc/rklings`
 4. Reboot: `reboot`
-5. The module loads automatically. You see `Persisted module loaded`.
-6. Unload the module with `rmmod`: the transaction is reversed and the
-   conf file is cleaned up. Next reboot starts fresh again.
+5. The module loads automatically.
+   You see `Persisted module loaded`.
+6. Unload the module with `rmmod`: the transaction is reversed and the conf file
+   is cleaned up.
+   Next reboot starts fresh again.
 
 ## The transaction pattern
 
@@ -61,25 +64,25 @@ unload:
 4. fsync the directory.
 5. On unload, reverse the exchange and unlink the staging file.
 
-`RENAME_EXCHANGE` is an atomic swap: the target gets the new content and
-the staging file gets the old content in a single syscall. No window
-where either file is missing or half-written.
+`RENAME_EXCHANGE` is an atomic swap: the target gets the new content and the
+staging file gets the old content in a single syscall.
+No window where either file is missing or half-written.
 
-The `rk_transaction_apply()` and `rk_transaction_restore()` functions
-implement this. The platform layer handles the filesystem operations.
+The `rk_transaction_apply()` and `rk_transaction_restore()` functions implement
+this.
+The platform layer handles the filesystem operations.
 
 ## The rollback guarantee
 
-On module unload, the exit function calls `rk_transaction_restore()`,
-which verifies both files still match their snapshots before exchanging
-them back. If someone modified either file while the module was loaded,
-the restore detects the stale state and preserves both files unchanged,
-logging a warning. This prevents silent data loss.
+On module unload, the exit function calls `rk_transaction_restore()`, which
+verifies both files still match their snapshots before exchanging them back.
+If someone modified either file while the module was loaded, the restore detects
+the stale state and preserves both files unchanged, logging a warning.
+This prevents silent data loss.
 
 ## Control interface
 
-The proc interface creates `/proc/rklings` (world-readable and
-writable):
+The proc interface creates `/proc/rklings` (world-readable and writable):
 
 | Command | Effect |
 |---------|--------|
@@ -90,13 +93,13 @@ On `rmmod`, the exit path reverses the transaction automatically.
 
 ## Your task
 
-Wire `rk_transaction_apply()` into the worker thread so it runs when
-the `persist` command is received via the proc interface. Wire
-`rk_transaction_restore()` into the module exit path so persistence is
+Wire `rk_transaction_apply()` into the worker thread so it runs when the
+`persist` command is received via the proc interface.
+Wire `rk_transaction_restore()` into the module exit path so persistence is
 rolled back on unload.
 
-The staging, transaction, worker, and proc files are provided. Your job
-is `core/main.c`: the init and exit functions that connect everything.
+The staging, transaction, worker, and proc files are provided.
+Your job is `core/main.c`: the init and exit functions that connect everything.
 
 Run:
 

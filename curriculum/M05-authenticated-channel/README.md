@@ -1,9 +1,9 @@
 # Authenticated control channel
 
-M04's callback agent talks in plaintext: anyone who can see the traffic
-can read commands and inject their own. This milestone wraps the wire
-protocol in AES-256-GCM authenticated encryption, so only the operator
-who holds the pre-shared key can issue commands.
+M04's callback agent talks in plaintext: anyone who can see the traffic can read
+commands and inject their own.
+This milestone wraps the wire protocol in AES-256-GCM authenticated encryption,
+so only the operator who holds the pre-shared key can issue commands.
 
 ## The secure envelope
 
@@ -14,9 +14,9 @@ Every frame between the agent and operator is now an AEAD envelope:
 [ciphertext + 16-byte GCM tag]              <-- sealed payload
 ```
 
-The header is authenticated but not encrypted (the operator needs to
-read it to find the right key and nonce). The payload is both encrypted
-and authenticated.
+The header is authenticated but not encrypted (the operator needs to read it to
+find the right key and nonce).
+The payload is both encrypted and authenticated.
 
 ## Session and replay defense
 
@@ -37,11 +37,11 @@ and authenticated.
     |<----- REQUEST [session, seq=1] -----|  REJECTED (replay)
 ```
 
-On each new TCP connection, the agent generates a random 64-bit session
-ID and sends a sealed HELLO. The operator records this session and
-starts sequence counters at 1. Each side tracks the next expected
-sequence number for the other direction: if a frame arrives with the
-wrong sequence, it is rejected.
+On each new TCP connection, the agent generates a random 64-bit session ID and
+sends a sealed HELLO.
+The operator records this session and starts sequence counters at 1.
+Each side tracks the next expected sequence number for the other direction: if a
+frame arrives with the wrong sequence, it is rejected.
 
 ## Nonce construction
 
@@ -52,25 +52,28 @@ bytes 0-7:  session ID (big-endian u64)
 bytes 8-11: (sequence << 1 | direction) (big-endian u32)
 ```
 
-Direction is 0 for requests (operator to agent) and 1 for replies
-(agent to operator). This guarantees nonce uniqueness across directions
-and across frames within a session. A new session gets a new random
-session ID, so nonces never repeat across sessions.
+Direction is 0 for requests (operator to agent) and 1 for replies (agent to
+operator).
+This guarantees nonce uniqueness across directions and across frames within a
+session.
+A new session gets a new random session ID, so nonces never repeat across
+sessions.
 
 ## Sensitive state zeroization
 
-The control key is wiped from the module parameter buffer after init
-with `memzero_explicit()`. The secure channel struct is zeroed on stop.
+The control key is wiped from the module parameter buffer after init with
+`memzero_explicit()`.
+The secure channel struct is zeroed on stop.
 Key material should never persist in memory longer than necessary.
 
 ## Your task
 
-1. In `security/control.c`: implement the secure channel (nonce
-   construction, channel start/stop, open_request with replay defense,
-   seal_reply with sequence tracking)
+1. In `security/control.c`: implement the secure channel (nonce construction,
+   channel start/stop, open_request with replay defense, seal_reply with
+   sequence tracking)
 2. In `network/agent.c`: implement the authenticated serve loop (HELLO
-   handshake, open incoming frames before parsing, seal outgoing replies)
-   and the command handler
+   handshake, open incoming frames before parsing, seal outgoing replies) and
+   the command handler
 
 Run:
 
