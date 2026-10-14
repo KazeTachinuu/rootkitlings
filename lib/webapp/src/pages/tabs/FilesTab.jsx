@@ -184,6 +184,7 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
   const [selected, setSelected] = useState(null)
   const [panel, setPanel] = useState('explorer')
   const [view, setView] = useState('list')
+  const [fileFilter, setFileFilter] = useState('')
   const [preview, setPreview] = useState(null)
 
   const doPreview = useCallback((path) => {
@@ -233,6 +234,7 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
     if (resolved === base && !force) return
     setSelected(null)
     setPreview(null)
+    setFileFilter('')
     if (resolved === cwd && force) {
       fetchDir(cwd, true)
       return
@@ -263,7 +265,7 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
     if (a.type === 'd' && b.type !== 'd') return -1
     if (a.type !== 'd' && b.type === 'd') return 1
     return a.name.localeCompare(b.name)
-  })
+  }).filter(e => !fileFilter || e.name.toLowerCase().includes(fileFilter.toLowerCase()))
 
   return (
     <div className="flex flex-col h-full">
@@ -316,6 +318,13 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
               })}
             </div>
           )}
+        </div>
+
+        {/* Filter */}
+        <div className="relative shrink-0">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-3 pointer-events-none" />
+          <input className="nb-input pl-7 pr-3 py-1.5 text-sm w-36" placeholder="filter..."
+            value={fileFilter} onChange={e => setFileFilter(e.target.value)} />
         </div>
 
         {/* View toggle */}
@@ -533,7 +542,7 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
           {/* Status bar */}
           <div className="flex items-center justify-between px-4 py-2 border-t-2 border-border bg-bg-2">
             <span className="font-mono text-[11px] text-fg-3 tabular-nums font-bold">
-              {sorted.length} item{sorted.length !== 1 ? 's' : ''}
+              {sorted.length}{fileFilter ? `/${(snap.data || []).length}` : ''} item{sorted.length !== 1 ? 's' : ''}
               {selected && <> &middot; <span className="text-fg-2">{selected}</span></>}
               {snap.loading && <> &middot; <span className="text-main">loading</span></>}
             </span>
