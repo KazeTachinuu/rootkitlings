@@ -516,9 +516,21 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
                     </div>
                   )
                 ) : (
-                  <div className="flex flex-col items-center justify-center gap-2 p-12 text-fg-3">
-                    <Folder size={24} />
-                    <span className="text-sm font-bold">Empty directory</span>
+                  <div className="flex flex-col items-center justify-center gap-3 p-12 text-fg-3">
+                    <Folder size={28} />
+                    <span className="text-sm font-bold">{fileFilter ? 'No matches' : 'Empty directory'}</span>
+                    {!fileFilter && (
+                      <>
+                        <span className="text-xs text-center max-w-xs">
+                          No entries found. The listing may not have loaded yet, or the directory is empty.
+                        </span>
+                        <button className="nb-btn px-4 py-1.5 text-xs font-bold flex items-center gap-1.5 mt-1"
+                          onClick={() => fetchDir(cwd, true)} disabled={snap.loading}>
+                          <RefreshCw size={12} className={snap.loading ? 'animate-spin' : ''} />
+                          Refresh
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
