@@ -205,7 +205,7 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
       if (cached?.data?.length) return
     }
     snapRef.current.setLoading(true)
-    execCmd(`ls -la --color=never ${path}`, t.id).then(result => {
+    execCmd(`ls -la ${path} 2>&1`, t.id).then(result => {
       if (path !== cwdRef.current) return
       const s = snapRef.current
       if (result.ok) {
