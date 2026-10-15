@@ -315,13 +315,13 @@ class Validator:
             for path in sorted((self.root / "scripts").rglob("*"))
             if path.is_file() and "__pycache__" not in path.parts
         )
+        for vm_path in ("vm/boot", "vm/init"):
+            candidates.append(self.root / vm_path)
         candidates.extend(
-            self.root / relative
-            for relative in (
-                "vm/boot",
-                "vm/init",
-                "vm/checks/containment",
-                "vm/checks/lib.sh",
+            sorted(
+                path
+                for path in (self.root / "vm/checks").iterdir()
+                if path.is_file()
             )
         )
         return tuple(dict.fromkeys(candidates))
@@ -343,6 +343,7 @@ class Validator:
             raise ValidationError(f"Python syntax failed for {path}: {error}") from error
 
     def validate_sources(self) -> None:
+        self.console.progress("Checking source syntax")
         shell_sources: list[tuple[Path, str]] = []
         python_sources: list[Path] = []
         for path in self._source_files():
@@ -384,19 +385,27 @@ class Validator:
                 f"shell syntax failed for {path.relative_to(self.root)}",
                 capture=True,
             )
+        self.console.success(
+            f"Syntax: {len(python_sources)} Python, "
+            f"{len(shell_sources) + len(check_sources)} shell"
+        )
 
+        self.console.progress("Checking documentation")
         self.require_command(
             [sys.executable, "scripts/format-docs", "--check"],
             "documentation formatting validation failed",
+            capture=True,
         )
         self.require_command(
             [sys.executable, "scripts/check-doc-links"],
             "documentation link validation failed",
+            capture=True,
         )
 
         shellcheck = shutil.which("shellcheck")
         if shellcheck is None:
             return
+        self.console.progress("Running shellcheck")
         for path, shell in shell_sources:
             dialect = (
                 "busybox"

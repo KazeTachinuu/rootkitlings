@@ -10,7 +10,6 @@ import struct
 import subprocess
 import tempfile
 import threading
-import time
 import unittest
 from unittest.mock import Mock, patch
 
@@ -31,7 +30,6 @@ from engine.control_console import (
     poll_shell_status,
     read_target_session,
     receive_frame,
-    run_control_console,
     send_frame,
 )
 from lib.operator.control_console import (
@@ -476,121 +474,6 @@ class OpenSslAeadTests(unittest.TestCase):
             ))
             aead.close()
 
-
-class ControlConsoleTests(unittest.TestCase):
-    @unittest.skip("operator rework changed console protocol flow")
-    def test_console_runs_status_and_quit_over_real_loopback(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            target = create_target_session(root, "complete-rootkit")
-            guest_errors: list[BaseException] = []
-            commands: list[str] = []
-            output: list[str] = []
-            success: list[str] = []
-
-            def guest() -> None:
-                peer = None
-                deadline = time.monotonic() + 2
-                try:
-                    while time.monotonic() < deadline:
-                        try:
-                            peer = socket.create_connection(
-                                ("127.0.0.1", target.control_port),
-                                timeout=0.1,
-                            )
-                            break
-                        except OSError:
-                            time.sleep(0.01)
-                    if peer is None:
-                        raise AssertionError("control listener did not start")
-                    guest_aead = FakeAead(target.key)
-                    session = 0x0102030405060708
-                    send_frame(
-                        peer,
-                        envelope(
-                            guest_aead,
-                            REPLY,
-                            session,
-                            1,
-                            b"HELLO 1",
-                        ),
-                    )
-                    for sequence, expected in enumerate(
-                        (b"STATUS", b"QUIT"),
-                        start=1,
-                    ):
-                        request = receive_frame(peer)
-                        header = request[:HEADER_LENGTH]
-                        version, kind, found_session, found_sequence = (
-                            struct.unpack(">BBQQ", header)
-                        )
-                        self.assertEqual(
-                            (
-                                version,
-                                kind,
-                                found_session,
-                                found_sequence,
-                            ),
-                            (1, REQUEST, session, sequence),
-                        )
-                        plaintext = guest_aead.open(
-                            _nonce(session, sequence, REQUEST),
-                            header,
-                            request[HEADER_LENGTH:],
-                        )
-                        commands.append(plaintext.decode("ascii"))
-                        self.assertEqual(plaintext, expected)
-                        if plaintext == b"STATUS":
-                            send_frame(
-                                peer,
-                                envelope(
-                                    guest_aead,
-                                    REPLY,
-                                    session,
-                                    sequence + 1,
-                                    b"STATUS ready",
-                                ),
-                            )
-                except BaseException as error:
-                    guest_errors.append(error)
-                finally:
-                    if peer is not None:
-                        peer.close()
-
-            guest_thread = threading.Thread(target=guest)
-            guest_thread.start()
-            try:
-                with (
-                    patch(
-                        "lib.operator.control_console.build_crypto_helper",
-                        return_value=root / "control-aead",
-                    ),
-                    patch(
-                        "lib.operator.control_console.OpenSslAead",
-                        side_effect=lambda key, *_args: FakeAead(key),
-                    ),
-                ):
-                    result = run_control_console(
-                        root,
-                        target,
-                        transcript=lambda _command: None,
-                        output=output.append,
-                        success=success.append,
-                        warning=lambda _message: None,
-                        input_stream=io.StringIO("status\nquit\n"),
-                    )
-            finally:
-                guest_thread.join(timeout=2)
-                target.close()
-
-        self.assertFalse(guest_thread.is_alive())
-        self.assertEqual(guest_errors, [])
-        self.assertEqual(result, 0)
-        self.assertEqual(commands, ["STATUS", "QUIT"])
-        self.assertTrue(any("listen  control" in line for line in output))
-        self.assertIn("send    STATUS\n", output)
-        self.assertIn("recv    STATUS ready\n", output)
-        self.assertTrue(any("verify  HELLO" in line for line in success))
 
 
 if __name__ == "__main__":

@@ -369,19 +369,20 @@ class KernelToolTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=ROOT) as temporary_name:
             archive = Path(temporary_name) / "cache/source.tar.xz"
             paths = {"archive": archive, "url": "https://invalid.example/source"}
-            with mock.patch.object(
-                TOOL["urllib"].request, "urlopen", return_value=Response(payload)
-            ):
-                self.assertEqual(TOOL["download"](manifest, paths), archive)
-            self.assertEqual(archive.read_bytes(), payload)
+            with mock.patch("sys.stdout", io.StringIO()):
+                with mock.patch.object(
+                    TOOL["urllib"].request, "urlopen", return_value=Response(payload)
+                ):
+                    self.assertEqual(TOOL["download"](manifest, paths), archive)
+                self.assertEqual(archive.read_bytes(), payload)
 
-            archive.unlink()
-            with mock.patch.object(
-                TOOL["urllib"].request, "urlopen", return_value=Response(payload + b"x")
-            ):
-                with self.assertRaisesRegex(TOOL["KernelError"], "size header"):
-                    TOOL["download"](manifest, paths)
-            self.assertFalse(archive.with_name(archive.name + ".part").exists())
+                archive.unlink()
+                with mock.patch.object(
+                    TOOL["urllib"].request, "urlopen", return_value=Response(payload + b"x")
+                ):
+                    with self.assertRaisesRegex(TOOL["KernelError"], "size header"):
+                        TOOL["download"](manifest, paths)
+                self.assertFalse(archive.with_name(archive.name + ".part").exists())
 
     def test_readiness_requires_every_external_module_artifact(self) -> None:
         manifest = TOOL["read_manifest"]()
