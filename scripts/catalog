@@ -128,8 +128,6 @@ def main() -> int:
                         "files": list(item.workspace.files),
                         "editable": list(item.workspace.editable), "build": item.workspace.build,
                         "baseline": item.workspace.baseline,
-                        "parent": item.workspace.parent or None,
-                        "additions": item.workspace.additions or None,
                         "module_artifact": catalog.module_artifact(item),
                         "module_artifact_override": item.workspace.module_artifact or None,
                     },

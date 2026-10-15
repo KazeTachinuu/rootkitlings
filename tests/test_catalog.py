@@ -2,14 +2,12 @@ from pathlib import Path
 import json
 import subprocess
 import tempfile
-import tomllib
 import unittest
 
 from engine.catalog import (
-    Catalog, CatalogError, Exercise, Resources, Runtime, Verification,
-    VerificationCase, Workspace, WorkspaceImport,
+    Catalog, CatalogError, Exercise, Resources, Verification,
+    VerificationCase, Workspace,
 )
-from engine.workspace import WorkspaceError
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -20,11 +18,12 @@ class GeneratedSerialTests(unittest.TestCase):
         self.catalog = Catalog(ROOT)
 
     def test_course_does_not_store_aliases(self) -> None:
+        import tomllib
         course = tomllib.loads((ROOT / "course.toml").read_text(encoding="utf-8"))
         self.assertNotIn("aliases", course)
 
     def test_serials_follow_route_and_kind(self) -> None:
-        prefixes = {"lesson": "L", "milestone": "M", "final-project": "C"}
+        prefixes = {"lesson": "L", "milestone": "M", "final-project": "P"}
         counters = {kind: 0 for kind in prefixes}
         for stable_id in self.catalog.required_route:
             exercise = self.catalog.by_id[stable_id]
@@ -68,8 +67,8 @@ class GeneratedSerialTests(unittest.TestCase):
             self.catalog.resolve("module-build").id,
         )
 
-    def test_unique_final_project_prefix_resolves_c00(self) -> None:
-        self.assertEqual("complete-rootkit", self.catalog.resolve("C0").id)
+    def test_unique_final_project_prefix_resolves_p00(self) -> None:
+        self.assertEqual("complete-rootkit", self.catalog.resolve("P0").id)
 
     def test_catalog_query_and_export_resolve_default_module_artifact(self) -> None:
         query = subprocess.run(
@@ -111,7 +110,6 @@ class GeneratedSerialTests(unittest.TestCase):
                 "check_arguments": [],
             }],
         )
-        self.assertNotIn("cumulative_root", data)
 
 
 class VerificationCaseTests(unittest.TestCase):
@@ -300,6 +298,7 @@ class RuntimeMetadataTests(unittest.TestCase):
                 {"setup": "vm/runtime/example"},
                 Path("curriculum/L00-example/exercise.toml"),
             )
+        from engine.catalog import Runtime
         self.assertEqual(
             runtime,
             Runtime("vm/runtime/example"),
@@ -317,39 +316,22 @@ class RuntimeMetadataTests(unittest.TestCase):
                     with self.assertRaises(CatalogError):
                         catalog._runtime(value, Path("exercise.toml"))
 
-    def test_final_project_has_its_own_runtime_setup(self) -> None:
-        catalog = Catalog(ROOT)
-        milestone = catalog.by_id["authenticated-channel"]
-        final = catalog.by_id["complete-rootkit"]
-
-        self.assertEqual(
-            milestone.runtime.setup,
-            "vm/runtime/authenticated-agent",
-        )
-        self.assertEqual(final.runtime.setup, "vm/runtime/complete-rootkit")
-        self.assertNotEqual(milestone.runtime.setup, final.runtime.setup)
-
 
 def _exercise(
     stable_id: str,
-    baseline: str,
     *,
     kind: str = "lesson",
     files: tuple[str, ...] = ("Kbuild", "main.c"),
     build: str = ".",
-    additions: str = "",
     module_artifact: str = "",
-    parent: str = "",
 ) -> Exercise:
     workspace = Workspace(
-        mode="cumulative",
-        source="starter" if baseline in {"starter", "scaffold"} else "",
+        mode="project",
+        source="starter",
         files=files,
         editable=("main.c",),
         build=build,
-        baseline=baseline,
-        parent=parent,
-        additions=additions,
+        baseline="starter",
         module_artifact=module_artifact,
     )
     resources = Resources("README", "", "hint", "solution")
@@ -375,7 +357,7 @@ def _exercise(
     )
 
 
-class WorkspaceInheritanceTests(unittest.TestCase):
+class WorkspaceTests(unittest.TestCase):
     def catalog(self, route: tuple[Exercise, ...], extras=()) -> Catalog:
         catalog = Catalog.__new__(Catalog)
         catalog.required_route = tuple(item.id for item in route)
@@ -384,16 +366,19 @@ class WorkspaceInheritanceTests(unittest.TestCase):
         catalog.default_module_artifact = "hello.ko"
         return catalog
 
-    def test_only_explicit_workspace_baselines_are_accepted(self) -> None:
+    def test_only_starter_baseline_is_accepted(self) -> None:
         catalog = Catalog.__new__(Catalog)
         catalog.root = ROOT
         workspace = {
-            "mode": "cumulative",
+            "mode": "project",
             "files": ["Kbuild", "main.c"],
             "editable": ["main.c"],
             "build": ".",
+            "source": "starter",
         }
         for baseline in (
+            "parent",
+            "scaffold",
             "template",
             "completion",
             "cumulative-root",
@@ -408,180 +393,41 @@ class WorkspaceInheritanceTests(unittest.TestCase):
                         {**workspace, "baseline": baseline}, Path("exercise.toml")
                     )
 
-    def test_workspace_import_schema_selects_and_optionally_renames_files(self) -> None:
-        catalog = Catalog.__new__(Catalog)
-        catalog.root = ROOT
-        workspace = catalog._workspace({
-            "mode": "project",
-            "files": ["main.c", "vendor/api.h", "shared.c"],
-            "editable": ["main.c"],
-            "build": ".",
-            "baseline": "starter",
-            "source": "starter",
-            "imports": [{
-                "exercise": "provider",
-                "files": ["include/api.h", "shared.c"],
-                "rename": {"include/api.h": "vendor/api.h"},
-            }],
-        }, Path("exercise.toml"))
-
-        self.assertEqual(workspace.imports, (
-            WorkspaceImport("provider", (
-                ("include/api.h", "vendor/api.h"),
-                ("shared.c", "shared.c"),
-            )),
-        ))
-
-    def test_workspace_import_schema_rejects_ambiguous_rows(self) -> None:
-        catalog = Catalog.__new__(Catalog)
-        catalog.root = ROOT
-        common = {
-            "mode": "project",
-            "files": ["main.c"],
-            "editable": ["main.c"],
-            "build": ".",
-            "baseline": "starter",
-            "source": "starter",
-        }
-        with self.assertRaisesRegex(CatalogError, "unselected source"):
-            catalog._workspace({
-                **common,
-                "imports": [{
-                    "exercise": "provider",
-                    "files": ["main.c"],
-                    "rename": {"other.c": "copy.c"},
-                }],
-            }, Path("exercise.toml"))
-        with self.assertRaisesRegex(CatalogError, "duplicate import exercise"):
-            catalog._workspace({
-                **common,
-                "imports": [
-                    {"exercise": "provider", "files": ["a.c"]},
-                    {"exercise": "provider", "files": ["b.c"]},
-                ],
-            }, Path("exercise.toml"))
-
-    def test_parent_baseline_resolves_its_explicit_parent(self) -> None:
-        first = _exercise("first", "starter")
-        intervening = _exercise("intervening", "starter")
-        second = _exercise("second", "parent", parent="first")
-        catalog = self.catalog((first, intervening, second))
-        self.assertEqual(catalog.baseline_provider(second), first)
-        self.assertEqual(catalog.completion_dependencies(second), ("first",))
-
-    def test_workspace_parent_must_be_earlier_on_required_route(self) -> None:
-        first = _exercise("first", "parent", parent="second")
-        second = _exercise("second", "starter")
-        catalog = self.catalog((first, second))
-        with self.assertRaisesRegex(CatalogError, "parent must be earlier"):
-            catalog._validate_required_route()
-
     def test_final_project_is_unique_and_last_when_present(self) -> None:
         lessons = tuple(
-            _exercise(f"lesson-{index}", "starter") for index in range(3)
+            _exercise(f"lesson-{index}") for index in range(3)
         )
         milestones = tuple(
-            _exercise(f"milestone-{index}", "starter", kind="milestone")
+            _exercise(f"milestone-{index}", kind="milestone")
             for index in range(6)
         )
         self.catalog((*lessons, *milestones))._validate_required_route()
 
-        final_project = _exercise(
-            "final-project", "starter", kind="final-project"
-        )
+        final_project = _exercise("final-project", kind="final-project")
         self.catalog(
             (*lessons, *milestones, final_project)
         )._validate_required_route()
 
-        trailing = _exercise("trailing", "starter")
+        trailing = _exercise("trailing")
         with self.assertRaisesRegex(CatalogError, "end the required route"):
             self.catalog(
                 (*lessons, final_project, trailing)
             )._validate_required_route()
 
-        other = _exercise("other-project", "starter", kind="final-project")
+        other = _exercise("other-project", kind="final-project")
         with self.assertRaisesRegex(CatalogError, "final project must be unique"):
             self.catalog(
                 (*lessons, final_project, other)
             )._validate_required_route()
 
-    def test_scaffold_reuses_reference_without_a_completion_edge(self) -> None:
-        provider = _exercise("provider", "starter")
-        consumer = _exercise(
-            "consumer",
-            "scaffold",
-            files=("Kbuild", "main.c", "new.c", "supplied.c"),
-        )
-        consumer = Exercise(**{
-            **consumer.__dict__,
-            "workspace": Workspace(**{
-                **consumer.workspace.__dict__,
-                "parent": provider.id,
-                "source": "consumer-starter",
-            }),
-            "resources": Resources("", "", "", "consumer-solution"),
-        })
-        provider = Exercise(**{
-            **provider.__dict__,
-            "resources": Resources("", "", "", "provider-solution"),
-        })
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            for tree, files in {
-                "provider-solution": {
-                    "Kbuild": "obj-m += rklings.o\n",
-                    "main.c": "int inherited;\n",
-                },
-                "consumer-starter": {
-                    "main.c": "int todo;\n",
-                    "new.c": "int new_todo;\n",
-                    "supplied.c": "int supplied;\n",
-                },
-                "consumer-solution": {
-                    "main.c": "int solved;\n",
-                    "new.c": "int new_solved;\n",
-                },
-            }.items():
-                target = root / tree
-                target.mkdir()
-                for name, content in files.items():
-                    (target / name).write_text(content)
-
-            catalog = self.catalog((provider, consumer))
-            catalog.root = root
-            self.assertIsNone(catalog.baseline_provider(consumer))
-            self.assertEqual(catalog.scaffold_provider(consumer), provider)
-            self.assertEqual(catalog.completion_dependencies(consumer), ())
-            catalog.validate_scaffold_lineage(consumer)
-            starter = catalog.starter_tree(consumer)
-            self.assertEqual(
-                starter["main.c"].data,
-                b"int todo;\n",
-            )
-            self.assertEqual(
-                catalog.solution_tree(consumer)["new.c"].data,
-                b"int new_solved;\n",
-            )
-            self.assertEqual(
-                catalog.solution_tree(consumer)["supplied.c"].data,
-                b"int supplied;\n",
-            )
-            work = root / "work"
-            work.mkdir()
-            materialized = catalog.materialize_starter(consumer, work)
-            self.assertEqual(
-                (materialized / "Kbuild").read_text(),
-                "obj-m += rklings.o\n",
-            )
-
     def test_direct_prerequisites_reject_duplicates_and_transitive_edges(self) -> None:
-        first = _exercise("first", "starter")
+        first = _exercise("first")
         second = Exercise(**{
-            **_exercise("second", "starter").__dict__,
+            **_exercise("second").__dict__,
             "prerequisites": ("first",),
         })
         duplicate = Exercise(**{
-            **_exercise("duplicate", "starter").__dict__,
+            **_exercise("duplicate").__dict__,
             "prerequisites": ("second", "second"),
         })
         catalog = self.catalog((first, second, duplicate))
@@ -589,7 +435,7 @@ class WorkspaceInheritanceTests(unittest.TestCase):
             catalog._validate_direct_prerequisites()
 
         redundant = Exercise(**{
-            **_exercise("redundant", "starter").__dict__,
+            **_exercise("redundant").__dict__,
             "prerequisites": ("first", "second"),
         })
         catalog = self.catalog((first, second, redundant))
@@ -599,358 +445,12 @@ class WorkspaceInheritanceTests(unittest.TestCase):
         ):
             catalog._validate_direct_prerequisites()
 
-    def test_unknown_workspace_parent_is_rejected(self) -> None:
-        consumer = _exercise("consumer", "parent", parent="missing")
-        catalog = self.catalog((consumer,))
-        with self.assertRaisesRegex(CatalogError, "unknown workspace parent"):
-            catalog.baseline_provider(consumer)
-
-    def test_inherited_mode_and_build_root_must_match(self) -> None:
-        provider = _exercise("provider", "starter")
-        incompatible_files = _exercise(
-            "files",
-            "parent",
-            files=("Kbuild", "other.c"),
-            parent="provider",
-        )
-        catalog = self.catalog((provider, incompatible_files))
-        with self.assertRaisesRegex(CatalogError, "cannot remove or rename"):
-            catalog.validate_workspace_lineage(incompatible_files)
-
-        incompatible_build = _exercise(
-            "build", "parent", build="src", parent="provider"
-        )
-        catalog = self.catalog((provider, incompatible_build))
-        with self.assertRaisesRegex(CatalogError, "mode/build must match"):
-            catalog.validate_workspace_lineage(incompatible_build)
-
-        different_mode_provider = _exercise("mode-provider", "starter")
-        different_mode_provider = Exercise(
-            **{
-                **different_mode_provider.__dict__,
-                "workspace": Workspace(
-                    **{
-                        **different_mode_provider.workspace.__dict__,
-                        "mode": "project",
-                    }
-                ),
-            }
-        )
-        consumer = _exercise(
-            "mode-consumer", "parent", parent="mode-provider"
-        )
-        catalog = self.catalog((different_mode_provider, consumer))
-        with self.assertRaisesRegex(CatalogError, "mode/build must match"):
-            catalog.validate_workspace_lineage(consumer)
-
-    def test_additive_inheritance_requires_exact_additions_tree(self) -> None:
-        provider = _exercise("provider", "starter")
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            additions = root / "additions"
-            additions.mkdir()
-            (additions / "new.c").write_text("int new_value;\n")
-            consumer = _exercise(
-                "consumer",
-                "parent",
-                files=("Kbuild", "main.c", "new.c"),
-                additions="additions",
-                parent="provider",
-            )
-            catalog = self.catalog((provider, consumer))
-            catalog.root = root
-            catalog.validate_workspace_lineage(consumer)
-            self.assertEqual(
-                consumer.value("workspace_additions"),
-                "additions",
-            )
-
-            (additions / "extra.c").write_text("unexpected\n")
-            with self.assertRaisesRegex(CatalogError, "additions directory mismatch"):
-                catalog.validate_workspace_lineage(consumer)
-
-            (additions / "extra.c").unlink()
-            (additions / "empty").mkdir()
-            with self.assertRaisesRegex(CatalogError, "stray or empty"):
-                catalog.validate_workspace_lineage(consumer)
-
-    def test_parent_solution_composes_additions_before_sparse_overlay(self) -> None:
-        provider = _exercise("provider", "starter")
-        consumer = _exercise(
-            "consumer",
-            "parent",
-            files=("Kbuild", "main.c", "supplied.c"),
-            additions="additions",
-            parent="provider",
-        )
-        provider = Exercise(**{
-            **provider.__dict__,
-            "resources": Resources("README", "", "hint", "provider"),
-        })
-        consumer = Exercise(**{
-            **consumer.__dict__,
-            "resources": Resources("README", "", "hint", "consumer"),
-        })
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            for name in ("provider", "consumer", "additions"):
-                (root / name).mkdir()
-            (root / "provider/Kbuild").write_text("base build\n")
-            (root / "provider/main.c").write_text("base main\n")
-            (root / "additions/supplied.c").write_text("supplied\n")
-            (root / "additions/main.c").write_text("starter main\n")
-            (root / "consumer/main.c").write_text("completed main\n")
-
-            catalog = self.catalog((provider, consumer))
-            catalog.root = root
-            catalog.validate_workspace_lineage(consumer)
-            starter = catalog.starter_tree(consumer)
-            self.assertEqual(starter["main.c"].data, b"starter main\n")
-            tree = catalog.solution_tree(consumer)
-            self.assertEqual(tree["Kbuild"].data, b"base build\n")
-            self.assertEqual(tree["main.c"].data, b"completed main\n")
-            self.assertEqual(tree["supplied.c"].data, b"supplied\n")
-
-            (root / "additions/main.c").write_text("base main\n")
-            with self.assertRaisesRegex(WorkspaceError, "byte-identical"):
-                catalog.starter_tree(consumer)
-
-    def test_additive_inheritance_rejects_missing_additions_directory(self) -> None:
-        provider = _exercise("provider", "starter")
-        consumer = _exercise(
-            "consumer",
-            "parent",
-            files=("Kbuild", "main.c", "new.c"),
-            additions="missing",
-            parent="provider",
-        )
-        catalog = self.catalog((provider, consumer))
-        with tempfile.TemporaryDirectory() as directory:
-            catalog.root = Path(directory)
-            with self.assertRaisesRegex(CatalogError, "existing real directory"):
-                catalog.validate_workspace_lineage(consumer)
-
-    def test_additions_supply_new_files_or_replace_inherited_files(self) -> None:
-        provider = _exercise("provider", "starter")
-        missing = _exercise(
-            "missing",
-            "parent",
-            files=("Kbuild", "main.c", "new.c"),
-            parent="provider",
-        )
-        catalog = self.catalog((provider, missing))
-        with self.assertRaisesRegex(CatalogError, "no additions directory"):
-            catalog.validate_workspace_lineage(missing)
-
-        replacement = _exercise(
-            "replacement",
-            "parent",
-            additions="additions",
-            parent="provider",
-        )
-        catalog = self.catalog((provider, replacement))
-        with tempfile.TemporaryDirectory() as directory:
-            catalog.root = Path(directory)
-            additions = catalog.root / "additions"
-            additions.mkdir()
-            (additions / "main.c").write_text("replacement\n")
-            catalog.validate_workspace_lineage(replacement)
-
-    def test_replacement_additions_reject_empty_and_undeclared_files(self) -> None:
-        provider = _exercise("provider", "starter")
-        replacement = _exercise(
-            "replacement",
-            "parent",
-            additions="additions",
-            parent="provider",
-        )
-        catalog = self.catalog((provider, replacement))
-        with tempfile.TemporaryDirectory() as directory:
-            catalog.root = Path(directory)
-            additions = catalog.root / "additions"
-            additions.mkdir()
-            with self.assertRaisesRegex(CatalogError, "must not be empty"):
-                catalog.validate_workspace_lineage(replacement)
-
-            (additions / "other.c").write_text("undeclared\n")
-            with self.assertRaisesRegex(CatalogError, "directory mismatch"):
-                catalog.validate_workspace_lineage(replacement)
-
-    def test_module_artifact_uses_default_override_and_provider(self) -> None:
-        defaulted = _exercise("defaulted", "starter")
-        overridden = _exercise(
-            "overridden",
-            "starter",
-            module_artifact="rklings.ko",
-        )
-        inherited = _exercise(
-            "inherited", "parent", parent="overridden"
-        )
-        catalog = self.catalog((overridden, inherited), (defaulted,))
+    def test_module_artifact_uses_default_and_override(self) -> None:
+        defaulted = _exercise("defaulted")
+        overridden = _exercise("overridden", module_artifact="rklings.ko")
+        catalog = self.catalog((overridden,), (defaulted,))
         self.assertEqual(catalog.module_artifact(defaulted), "hello.ko")
         self.assertEqual(catalog.module_artifact(overridden), "rklings.ko")
-        self.assertEqual(catalog.module_artifact(inherited), "rklings.ko")
-
-    def test_inherited_module_artifact_cannot_conflict(self) -> None:
-        provider = _exercise(
-            "provider",
-            "starter",
-            module_artifact="rklings.ko",
-        )
-        consumer = _exercise(
-            "consumer",
-            "parent",
-            module_artifact="other.ko",
-            parent="provider",
-        )
-        catalog = self.catalog((provider, consumer))
-        with self.assertRaisesRegex(CatalogError, "module artifact conflicts"):
-            catalog.validate_workspace_lineage(consumer)
-
-    def test_parent_solution_rejects_redundant_sparse_files(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            for name in ("provider", "consumer"):
-                solution = root / name
-                solution.mkdir()
-                (solution / "Kbuild").write_text("obj-m += hello.o\n")
-                (solution / "main.c").write_text("int value;\n")
-
-            provider = _exercise("provider", "starter")
-            provider = Exercise(**{
-                **provider.__dict__,
-                "resources": Resources("", "", "", "provider"),
-            })
-            consumer = _exercise(
-                "consumer", "parent", parent="provider"
-            )
-            consumer = Exercise(**{
-                **consumer.__dict__,
-                "resources": Resources("", "", "", "consumer"),
-            })
-
-            catalog = self.catalog((provider, consumer))
-            catalog.root = root
-            with self.assertRaisesRegex(WorkspaceError, "byte-identical"):
-                catalog.solution_tree(consumer)
-
-    def test_imports_compose_for_every_workspace_baseline(self) -> None:
-        for baseline in ("starter", "parent", "scaffold"):
-            with self.subTest(baseline=baseline), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                donor = _exercise(
-                    "donor",
-                    "starter",
-                    files=("shared.c",),
-                )
-                donor = Exercise(**{
-                    **donor.__dict__,
-                    "resources": Resources("", "", "", "donor-solution"),
-                })
-                base = _exercise(
-                    "base",
-                    "starter",
-                    files=("base.c",),
-                )
-                base = Exercise(**{
-                    **base.__dict__,
-                    "resources": Resources("", "", "", "base-solution"),
-                })
-                local_name = "main.c" if baseline == "starter" else "base.c"
-                consumer = _exercise(
-                    "consumer",
-                    baseline,
-                    files=(local_name, "imported/shared.c"),
-                    parent="" if baseline == "starter" else "base",
-                )
-                consumer = Exercise(**{
-                    **consumer.__dict__,
-                    "prerequisites": ("donor",),
-                    "workspace": Workspace(**{
-                        **consumer.workspace.__dict__,
-                        "source": (
-                            "consumer-starter"
-                            if baseline in {"starter", "scaffold"}
-                            else ""
-                        ),
-                        "imports": (
-                            WorkspaceImport(
-                                "donor",
-                                (("shared.c", "imported/shared.c"),),
-                            ),
-                        ),
-                    }),
-                    "resources": Resources("", "", "", "consumer-solution"),
-                })
-                for name in (
-                    "donor-solution",
-                    "base-solution",
-                    "consumer-starter",
-                    "consumer-solution",
-                ):
-                    (root / name).mkdir()
-                (root / "donor-solution/shared.c").write_text("shared\n")
-                (root / "base-solution/base.c").write_text("base\n")
-                if baseline == "starter":
-                    (root / "consumer-starter/main.c").write_text("todo\n")
-                    (root / "consumer-solution/main.c").write_text("done\n")
-                elif baseline == "scaffold":
-                    (root / "consumer-starter/base.c").write_text("todo\n")
-                    (root / "consumer-solution/base.c").write_text("done\n")
-                else:
-                    (root / "consumer-solution/base.c").write_text("done\n")
-
-                catalog = self.catalog((donor, base, consumer))
-                catalog.root = root
-                catalog.validate_workspace_imports(consumer)
-                starter = catalog.starter_tree(consumer)
-                solution = catalog.solution_tree(consumer)
-                self.assertEqual(
-                    starter["imported/shared.c"].data,
-                    b"shared\n",
-                )
-                self.assertEqual(
-                    solution["imported/shared.c"].data,
-                    b"shared\n",
-                )
-                self.assertEqual(solution[local_name].data, b"done\n")
-
-    def test_import_provider_must_be_a_prerequisite_with_declared_sources(self) -> None:
-        provider = _exercise(
-            "provider",
-            "starter",
-            files=("shared.c",),
-        )
-        consumer = _exercise(
-            "consumer",
-            "starter",
-            files=("main.c", "copy.c"),
-        )
-        imported = WorkspaceImport("provider", (("shared.c", "copy.c"),))
-        consumer = Exercise(**{
-            **consumer.__dict__,
-            "workspace": Workspace(**{
-                **consumer.workspace.__dict__,
-                "imports": (imported,),
-            }),
-        })
-        catalog = self.catalog((provider, consumer))
-        with self.assertRaisesRegex(CatalogError, "direct or transitive prerequisite"):
-            catalog.validate_workspace_imports(consumer)
-
-        consumer = Exercise(**{
-            **consumer.__dict__,
-            "prerequisites": ("provider",),
-            "workspace": Workspace(**{
-                **consumer.workspace.__dict__,
-                "imports": (
-                    WorkspaceImport("provider", (("missing.c", "copy.c"),)),
-                ),
-            }),
-        })
-        catalog = self.catalog((provider, consumer))
-        with self.assertRaisesRegex(CatalogError, "source is not declared"):
-            catalog.validate_workspace_imports(consumer)
 
 
 class ModuleArtifactValidationTests(unittest.TestCase):

@@ -23,8 +23,6 @@ from engine.workspace import (
     clean_paths,
     create_snapshot,
     materialize,
-    materialize_imported,
-    materialize_inherited,
     restore_workspace,
     verify_snapshot,
 )
@@ -36,17 +34,10 @@ PREREQUISITES = {
     "module-core": frozenset(),
     "proc-status": frozenset({"module-core"}),
 }
-BASELINE_PROVIDERS = {
-    "module-core": None,
-    "proc-status": "module-core",
-}
 
 
 def _increment_attempts(state_path: str, count: int) -> None:
-    store = StateStore(
-        Path(state_path), ROUTE, REVISION, PREREQUISITES,
-        BASELINE_PROVIDERS,
-    )
+    store = StateStore(Path(state_path), ROUTE, REVISION, PREREQUISITES)
     for _ in range(count):
         with store.locked() as state:
             state.exercise("module-core").attempts += 1
@@ -54,7 +45,7 @@ def _increment_attempts(state_path: str, count: int) -> None:
 
 class StateTests(unittest.TestCase):
     def test_new_state_derives_current(self) -> None:
-        state = new_state(ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS)
+        state = new_state(ROUTE, REVISION, PREREQUISITES)
         self.assertEqual(state.current, "module-core")
         state.completed.add("module-core")
         self.assertEqual(state.current, "proc-status")
@@ -64,18 +55,12 @@ class StateTests(unittest.TestCase):
     def test_round_trip_is_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "state.toml"
-            store = StateStore(
-                path, ROUTE, REVISION, PREREQUISITES,
-                BASELINE_PROVIDERS,
-            )
+            store = StateStore(path, ROUTE, REVISION, PREREQUISITES)
             with store.locked() as state:
                 state.completed.add("module-core")
                 state.exercises["proc-status"] = ExerciseState(attempts=2)
             first = path.read_bytes()
-            loaded = load_state(
-                path, ROUTE, REVISION, PREREQUISITES,
-                BASELINE_PROVIDERS,
-            )
+            loaded = load_state(path, ROUTE, REVISION, PREREQUISITES)
             self.assertEqual(loaded.current, "proc-status")
             self.assertEqual(loaded.exercises["proc-status"].attempts, 2)
             with store.locked():
@@ -86,10 +71,7 @@ class StateTests(unittest.TestCase):
     def test_failed_locked_update_is_not_written(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "state.toml"
-            store = StateStore(
-                path, ROUTE, REVISION, PREREQUISITES,
-                BASELINE_PROVIDERS,
-            )
+            store = StateStore(path, ROUTE, REVISION, PREREQUISITES)
             with self.assertRaisesRegex(RuntimeError, "stop"):
                 with store.locked() as state:
                     state.completed.add("module-core")
@@ -97,20 +79,17 @@ class StateTests(unittest.TestCase):
             self.assertFalse(path.exists())
 
     def test_revision_route_and_unknown_id_are_rejected(self) -> None:
-        state = new_state(ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS)
+        state = new_state(ROUTE, REVISION, PREREQUISITES)
         with self.assertRaisesRegex(StateError, "revision mismatch"):
-            state.validate(ROUTE, "other", PREREQUISITES, BASELINE_PROVIDERS)
+            state.validate(ROUTE, "other", PREREQUISITES)
         with self.assertRaisesRegex(StateError, "not earlier"):
-            state.validate(
-                tuple(reversed(ROUTE)), REVISION, PREREQUISITES,
-                BASELINE_PROVIDERS,
-            )
+            state.validate(tuple(reversed(ROUTE)), REVISION, PREREQUISITES)
         state.exercises["unknown"] = ExerciseState()
         with self.assertRaisesRegex(StateError, "unknown stable IDs"):
-            state.validate(ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS)
+            state.validate(ROUTE, REVISION, PREREQUISITES)
 
     def test_clear_progress_removes_only_selected_state(self) -> None:
-        state = new_state(ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS)
+        state = new_state(ROUTE, REVISION, PREREQUISITES)
         state.completed.update(ROUTE)
         for stable_id in ROUTE:
             state.exercise(stable_id).attempts = 1
@@ -119,51 +98,15 @@ class StateTests(unittest.TestCase):
         self.assertEqual(set(state.exercises), {"module-core"})
 
     def test_required_completion_must_be_prerequisite_closed(self) -> None:
-        state = new_state(ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS)
+        state = new_state(ROUTE, REVISION, PREREQUISITES)
         state.completed.add("proc-status")
         with self.assertRaisesRegex(StateError, "lacks prerequisites"):
-            state.validate(ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS)
-
-    def test_baseline_provider_is_authoritative_and_completion_available(self) -> None:
-        state = new_state(ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS)
-        state.completed.add("module-core")
-        record = state.exercise("proc-status")
-        record.baseline_hash = "a" * 64
-        with self.assertRaisesRegex(StateError, "provider mismatch"):
-            state.validate(
-                ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS
-            )
-        record.baseline_provider = "proc-status"
-        with self.assertRaisesRegex(StateError, "provider mismatch"):
-            state.validate(
-                ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS
-            )
-        record.baseline_provider = "module-core"
-        state.validate(ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS)
-        state.completed.clear()
-        with self.assertRaisesRegex(StateError, "not completion-available"):
-            state.validate(
-                ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS
-            )
-
-    def test_starter_baseline_records_no_provider(self) -> None:
-        state = new_state(ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS)
-        record = state.exercise("module-core")
-        record.baseline_hash = "a" * 64
-        state.validate(ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS)
-        record.baseline_provider = "proc-status"
-        with self.assertRaisesRegex(StateError, "provider mismatch"):
-            state.validate(
-                ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS
-            )
+            state.validate(ROUTE, REVISION, PREREQUISITES)
 
     def test_read_locked_does_not_create_or_rewrite_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "state.toml"
-            store = StateStore(
-                path, ROUTE, REVISION, PREREQUISITES,
-                BASELINE_PROVIDERS,
-            )
+            store = StateStore(path, ROUTE, REVISION, PREREQUISITES)
             with store.read_locked() as state:
                 self.assertEqual(state.current, "module-core")
             self.assertFalse(path.exists())
@@ -175,21 +118,16 @@ class StateTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), before)
 
     def test_invalid_hash_and_unknown_toml_field_are_rejected(self) -> None:
-        state = new_state(ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS)
+        state = new_state(ROUTE, REVISION, PREREQUISITES)
         state.exercise("module-core").workspace_hash = "bad"
         with self.assertRaisesRegex(StateError, "invalid content hash"):
-            state.validate(ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS)
+            state.validate(ROUTE, REVISION, PREREQUISITES)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "state.toml"
-            content = dump_state(new_state(
-                ROUTE, REVISION, PREREQUISITES, BASELINE_PROVIDERS
-            ))
+            content = dump_state(new_state(ROUTE, REVISION, PREREQUISITES))
             path.write_text(content.replace("\n[exercises]\n", "\nextra = 1\n\n[exercises]\n"))
             with self.assertRaisesRegex(StateError, "top-level fields"):
-                load_state(
-                    path, ROUTE, REVISION, PREREQUISITES,
-                    BASELINE_PROVIDERS,
-                )
+                load_state(path, ROUTE, REVISION, PREREQUISITES)
 
     def test_lock_serializes_concurrent_updates(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -203,10 +141,7 @@ class StateTests(unittest.TestCase):
                 ]
                 for future in futures:
                     future.result(timeout=10)
-            state = load_state(
-                path, ROUTE, REVISION, PREREQUISITES,
-                BASELINE_PROVIDERS,
-            )
+            state = load_state(path, ROUTE, REVISION, PREREQUISITES)
             self.assertEqual(
                 state.exercise("module-core").attempts,
                 workers * increments,
@@ -278,107 +213,6 @@ class WorkspaceTests(unittest.TestCase):
             stat.S_IMODE((workspace / "src/main.c").stat().st_mode),
             0o755,
         )
-
-    def test_inherited_materialization_combines_verified_snapshot_and_additions(self) -> None:
-        provider = materialize(self.starter, self.work, "module-core", self.files)
-        _, snapshot = create_snapshot(provider, self.passed, self.files)
-        additions = self.root / "additions"
-        (additions / "status").mkdir(parents=True)
-        (additions / "status/status.c").write_text("int status;\n")
-        (additions / "status/status.c").chmod(0o555)
-        workspace = materialize_inherited(
-            snapshot,
-            additions,
-            self.work,
-            "proc-status",
-            self.files,
-            (*self.files, "status/status.c"),
-        )
-        self.assertEqual((workspace / "src/main.c").read_text(), "int value = 1;\n")
-        self.assertEqual((workspace / "status/status.c").read_text(), "int status;\n")
-        self.assertEqual(
-            stat.S_IMODE((workspace / "src/main.c").stat().st_mode),
-            0o644,
-        )
-        self.assertEqual(
-            stat.S_IMODE((workspace / "status/status.c").stat().st_mode),
-            0o755,
-        )
-
-    def test_inherited_imports_preserve_the_learners_passed_files(self) -> None:
-        provider = materialize(self.starter, self.work, "module-core", self.files)
-        (provider / "src/main.c").write_text("learner solution\n")
-        _, snapshot = create_snapshot(provider, self.passed, self.files)
-        additions = self.root / "additions"
-        additions.mkdir()
-        (additions / "local.c").write_text("local starter\n")
-
-        workspace = materialize_inherited(
-            snapshot,
-            additions,
-            self.work,
-            "proc-status",
-            self.files,
-            (*self.files, "local.c", "network/imported.c"),
-            {"network/imported.c": (b"reference component\n", 0o644)},
-        )
-
-        self.assertEqual(
-            (workspace / "src/main.c").read_text(),
-            "learner solution\n",
-        )
-        self.assertEqual(
-            (workspace / "network/imported.c").read_text(),
-            "reference component\n",
-        )
-        self.assertEqual((workspace / "local.c").read_text(), "local starter\n")
-
-    def test_starter_imports_cover_only_explicit_destinations(self) -> None:
-        workspace = materialize_imported(
-            self.starter,
-            self.work,
-            "module-core",
-            self.files,
-            (*self.files, "include/imported.h"),
-            {"include/imported.h": (b"#define IMPORTED 1\n", 0o644)},
-        )
-        self.assertEqual(
-            (workspace / "include/imported.h").read_text(),
-            "#define IMPORTED 1\n",
-        )
-
-    def test_inherited_materialization_rejects_missing_or_extra_additions(self) -> None:
-        provider = materialize(self.starter, self.work, "module-core", self.files)
-        _, snapshot = create_snapshot(provider, self.passed, self.files)
-        additions = self.root / "bad-additions"
-        additions.mkdir()
-        (additions / "wrong.c").write_text("wrong\n")
-        with self.assertRaisesRegex(WorkspaceError, "contain exactly"):
-            materialize_inherited(
-                snapshot,
-                additions,
-                self.work,
-                "proc-status",
-                self.files,
-                (*self.files, "new.c"),
-            )
-
-    def test_inherited_materialization_rejects_empty_directory(self) -> None:
-        provider = materialize(self.starter, self.work, "module-core", self.files)
-        _, snapshot = create_snapshot(provider, self.passed, self.files)
-        additions = self.root / "additions-with-empty"
-        additions.mkdir()
-        (additions / "new.c").write_text("new\n")
-        (additions / "empty").mkdir()
-        with self.assertRaisesRegex(WorkspaceError, "parent directories"):
-            materialize_inherited(
-                snapshot,
-                additions,
-                self.work,
-                "proc-status",
-                self.files,
-                (*self.files, "new.c"),
-            )
 
     def test_paths_symlinks_and_special_files_are_rejected(self) -> None:
         with self.assertRaisesRegex(WorkspaceError, "unsafe relative"):

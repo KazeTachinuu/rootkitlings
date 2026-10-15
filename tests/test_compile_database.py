@@ -119,36 +119,6 @@ class CompileDatabaseTests(unittest.TestCase):
             self.assertIn('-DKBUILD_BASENAME="main"', arguments)
             self.assertEqual(arguments[-2:], ["-c", str(source.resolve())])
 
-    def test_cumulative_source_includes_provider_headers(self) -> None:
-        root = Path(__file__).resolve().parent.parent
-        catalog = Catalog(root)
-        exercise = catalog.resolve("L03")
-        provider = catalog.solution_provider(exercise)
-        self.assertIsNotNone(provider)
-        source = next((root / exercise.resources.solution).rglob("*.c"))
-        provider_roots = (
-            root / provider.resources.solution,
-            *(
-                (root / provider.workspace.additions,)
-                if provider.workspace.additions
-                else ()
-            ),
-            *(
-                (root / provider.workspace.source,)
-                if provider.workspace.source
-                else ()
-            ),
-        )
-        expected = next(
-            path / "include"
-            for path in provider_roots
-            if (path / "include").is_dir()
-        )
-
-        includes = source_include_directories(source, root, catalog)
-
-        self.assertIn(expected.resolve(), includes)
-
     def test_learner_source_uses_its_workspace_include_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
