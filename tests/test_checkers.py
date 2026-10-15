@@ -19,7 +19,7 @@ RUNNER = runpy.run_path(str(ROOT / "scripts/test-checkers"))
 class CheckerRunnerTests(unittest.TestCase):
     def test_selectors_run_catalog_checkers_in_course_order(self) -> None:
         catalog = Catalog(ROOT)
-        selectors = ("M00", "L00")
+        selectors = ("L01", "L00")
         selected = {catalog.resolve(value).id for value in selectors}
         expected = [
             ROOT / item.path / "checks/test"
