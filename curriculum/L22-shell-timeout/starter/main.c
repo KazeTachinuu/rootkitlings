@@ -3,6 +3,7 @@
 #include <linux/err.h>
 #include <linux/file.h>
 #include <linux/in.h>
+#include <linux/inet.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -72,7 +73,7 @@ static struct socket *rk_connect(void)
 	if (error)
 		return ERR_PTR(error);
 
-	error = kernel_connect(sock, (struct sockaddr *)&peer,
+	error = kernel_connect(sock, (struct sockaddr_unsized *)&peer,
 			       sizeof(peer), 0);
 	if (error) {
 		sock_release(sock);

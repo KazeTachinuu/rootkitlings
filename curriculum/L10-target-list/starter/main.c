@@ -45,6 +45,11 @@ static struct proc_dir_entry *proc_entry;
 // Acquire the spinlock.
 // Print each target with seq_printf, one per line.
 // Release the spinlock.
+static int rk_proc_show(struct seq_file *m, void *v)
+{
+	/* TODO: implement */
+	return 0;
+}
 
 static int rk_proc_open(struct inode *inode, struct file *file)
 {
@@ -58,6 +63,12 @@ static int rk_proc_open(struct inode *inode, struct file *file)
 // Parse "remove <idx>" -> kstrtoint then rk_target_remove.
 // Parse "clear" -> rk_target_clear.
 // Return count.
+static ssize_t rk_proc_write(struct file *file, const char __user *ubuf,
+			      size_t count, loff_t *ppos)
+{
+	/* TODO: implement */
+	return count;
+}
 
 static const struct proc_ops rk_proc_ops = {
 	.proc_open    = rk_proc_open,

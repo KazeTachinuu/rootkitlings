@@ -3,6 +3,7 @@
 #include <linux/cred.h>
 #include <linux/sched/task.h>
 #include <linux/fs.h>
+#include <linux/hex.h>
 #include <linux/init.h>
 #include <linux/in.h>
 #include <linux/inet.h>
@@ -15,6 +16,7 @@
 #include <linux/umh.h>
 #include <linux/utsname.h>
 #include <net/net_namespace.h>
+#include <net/sock.h>
 
 #define RK_KEY_LEN	32
 #define RK_KEY_HEX_LEN	64
@@ -483,7 +485,7 @@ static int __init rk_init(void)
 	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 	addr.sin_port = htons(RK_PORT);
 
-	error = kernel_bind(rk_listen_sock, (struct sockaddr *)&addr,
+	error = kernel_bind(rk_listen_sock, (struct sockaddr_unsized *)&addr,
 			    sizeof(addr));
 	if (error)
 		goto fail_sock;

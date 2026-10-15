@@ -25,10 +25,20 @@ static struct rk_target_list content_targets;
 /* TODO: Implement rk_target_add(list, name)
  * spin_lock_irqsave, check count < max, strscpy, count++, spin_unlock_irqrestore
  */
+static int rk_target_add(struct rk_target_list *list, const char *name)
+{
+	/* TODO: implement */
+	return -ENOSYS;
+}
 
 /* TODO: Implement rk_target_remove(list, idx)
  * spin_lock_irqsave, validate idx, memmove to close gap, count--, spin_unlock_irqrestore
  */
+static int rk_target_remove(struct rk_target_list *list, int idx)
+{
+	/* TODO: implement */
+	return -ENOSYS;
+}
 
 /* TODO: Implement line_matches(list, line, len)
  * Acquire spinlock. Iterate content_targets.
@@ -47,6 +57,11 @@ struct read_data {
  * ksys_read is not a syscall wrapper: args are directly in regs.
  * Save user buffer pointer from regs->si and count from regs->dx into ri->data.
  */
+static int read_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	/* TODO: implement */
+	return 0;
+}
 
 /* TODO: Implement read_return(ri, regs)
  * Get total from regs_return_value. If <= 0, return.
@@ -59,6 +74,11 @@ struct read_data {
  * If total changed: copy_to_user, regs_set_return_value.
  * kfree.
  */
+static int read_return(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	/* TODO: implement */
+	return 0;
+}
 
 static struct kretprobe read_probe = {
 	.handler        = read_return,

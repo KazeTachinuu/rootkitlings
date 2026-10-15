@@ -473,6 +473,10 @@ class Validator:
             starter_root.mkdir()
             solution_root.mkdir()
 
+            shared_include = catalog.root / "curriculum" / "include"
+            if shared_include.is_dir():
+                (temporary_root / "include").symlink_to(shared_include)
+
             for item in catalog.exercises:
                 starter = full_solution_tree(
                     catalog.root / item.workspace.source,

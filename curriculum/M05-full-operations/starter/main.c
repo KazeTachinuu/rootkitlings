@@ -66,6 +66,17 @@ static struct socket *rk_listen_sock;
  * 9. Exit with reverse teardown and key zeroization
  */
 
+static int __init rk_init(void)
+{
+	/* TODO: implement */
+	return 0;
+}
+
+static void __exit rk_exit(void)
+{
+	/* TODO: implement */
+}
+
 module_init(rk_init);
 module_exit(rk_exit);
 MODULE_LICENSE("GPL");

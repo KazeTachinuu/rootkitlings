@@ -16,6 +16,7 @@ RK_ON_MKDIR(name) {
 	 * If it matches, print the part after the prefix to dmesg
 	 * using pr_info, then return -ENOENT.
 	 */
+	return -ENOENT;
 }
 
 static int __init rk_init(void)
