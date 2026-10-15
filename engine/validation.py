@@ -509,7 +509,7 @@ class Validator:
             return test_id, result
 
         self.console.progress(
-            f"  VM tests: {total} cases, {workers} workers"
+            f"  VM tests: {total} cases, {workers} parallel"
         )
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {
@@ -524,13 +524,13 @@ class Validator:
                     short = test_id.rsplit(".", 1)[-1]
                     if result.returncode:
                         self.console.error(
-                            f"  FAIL {short:<30} {completed:>{width}}/{total}"
+                            f"  FAIL {short}"
                         )
                         self.console.raw(result.output, error=True)
                         failed.append(test_id)
                     else:
                         self.console.progress(
-                            f"  pass {short:<30} {completed:>{width}}/{total}"
+                            f"  {completed:>{width}}/{total} passed"
                         )
 
     def run_checker_tests(self) -> None:
