@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L09-command-dispatcher/starter"
@@ -30,22 +31,22 @@ tools = ["module-load-test"]
 id = "ping"
 label = "mkdir rklings.ping logs to dmesg"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "status"
 label = "mkdir rklings.status prints state"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "escalation"
 label = "rklings.e still grants root"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "return-value"
 label = "Intercepted mkdir returns 0, not ENOENT"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

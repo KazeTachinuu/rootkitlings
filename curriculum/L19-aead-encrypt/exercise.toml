@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L19-aead-encrypt/starter"
@@ -30,4 +31,4 @@ tools = ["module-load-test"]
 id = "aead-seal-open"
 label = "AEAD seal and open round-trip"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

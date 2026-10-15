@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L13-port-filter/starter"
@@ -30,16 +31,16 @@ tools = ["module-load-test"]
 id = "hide-port"
 label = "Hidden port vanishes from ss output"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "unhide-port"
 label = "Unhidden port reappears in ss output"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "other-ports-visible"
 label = "Non-targeted ports remain visible"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

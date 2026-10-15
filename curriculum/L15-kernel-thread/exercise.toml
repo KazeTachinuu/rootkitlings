@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L15-kernel-thread/starter"
@@ -30,4 +31,4 @@ tools = ["module-load-test"]
 id = "thread-runs"
 label = "Kernel thread starts and stops cleanly"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

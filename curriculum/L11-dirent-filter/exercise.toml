@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L11-dirent-filter/starter"
@@ -30,22 +31,22 @@ tools = ["module-load-test"]
 id = "hide-file"
 label = "Hidden file vanishes from ls"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "unhide-file"
 label = "Unhidden file reappears"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "hide-pid"
 label = "Hidden PID vanishes from ps"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "unhide-pid"
 label = "Unhidden PID reappears"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

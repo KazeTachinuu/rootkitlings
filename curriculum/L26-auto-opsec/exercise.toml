@@ -31,4 +31,4 @@ tools = ["module-load-test"]
 id = "auto-opsec"
 label = "Agent auto-hides PID and port on connect"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

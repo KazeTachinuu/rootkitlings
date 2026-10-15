@@ -5,7 +5,7 @@ stage = "operations"
 kind = "lesson"
 tradecraft = ["control"]
 difficulty = "standard"
-prerequisites = ["remote-hide-commands", "management-commands"]
+prerequisites = ["command-parser"]
 teaches = ["full-command-wiring", "protocol-parity"]
 requires = []
 
@@ -31,4 +31,4 @@ tools = ["module-load-test"]
 id = "full-protocol"
 label = "All commands wired to encrypted protocol"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

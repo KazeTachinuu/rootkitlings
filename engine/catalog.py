@@ -19,7 +19,7 @@ from .workspace import WorkspaceError
 
 
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
-SERIAL_RE = re.compile(r"(?:L|M|C)[0-9]{2}\Z")
+SERIAL_RE = re.compile(r"(?:L|M|P)[0-9]{2}\Z")
 TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 MODULE_ARTIFACT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.ko\Z")
 MAKE_VARIABLE_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
@@ -240,7 +240,7 @@ class Catalog:
                 tools, assumptions, sections, concepts)
 
     def _generate_aliases(self) -> dict[str, str]:
-        prefixes = {"lesson": "L", "milestone": "M", "final-project": "C"}
+        prefixes = {"lesson": "L", "milestone": "M", "final-project": "P"}
         counters = {kind: 0 for kind in prefixes}
         aliases = {}
         for exercise_id in self.required_route:
@@ -522,7 +522,7 @@ class Catalog:
                 raise CatalogError(f"{item.path}: invalid stage or kind")
             if item.serial.startswith("L") and item.kind != "lesson":
                 raise CatalogError(f"{item.path}: L alias requires kind='lesson'")
-            if item.serial.startswith("C") and item.kind != "final-project":
+            if item.serial.startswith("P") and item.kind != "final-project":
                 raise CatalogError(
                     f"{item.path}: C alias requires kind='final-project'"
                 )

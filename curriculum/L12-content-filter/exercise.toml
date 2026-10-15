@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L12-content-filter/starter"
@@ -30,16 +31,16 @@ tools = ["module-load-test"]
 id = "hide-line"
 label = "Matching line removed from read output"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "unhide-line"
 label = "Unhidden string reappears in output"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "no-match-unchanged"
 label = "Non-matching reads pass through unchanged"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

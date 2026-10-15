@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L14-kernel-socket/starter"
@@ -30,4 +31,4 @@ tools = ["module-load-test"]
 id = "socket-connect-send"
 label = "Kernel socket connects and sends data"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

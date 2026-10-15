@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L05-mkdir-reaction/starter"
@@ -30,10 +31,10 @@ tools = ["module-load-test"]
 id = "intercept-matching"
 label = "mkdir rklings.hello prints intercepted message"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "ignore-non-matching"
 label = "Non-matching mkdir is ignored"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

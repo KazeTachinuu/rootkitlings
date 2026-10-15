@@ -10,12 +10,12 @@ teaches = ["init-failure", "errno-propagation", "build-time-failure-injection"]
 requires = ["module-lifecycle", "c-preprocessor"]
 
 [workspace]
-mode = "cumulative"
+mode = "project"
 files = ["Kbuild", "core/main.c"]
-editable = ["Kbuild", "core/main.c"]
+editable = ["core/main.c"]
 build = "."
-baseline = "parent"
-parent = "module-build-lifecycle"
+baseline = "starter"
+source = "curriculum/L01-precise-init-failure/starter"
 
 [resources]
 readme = "curriculum/L01-precise-init-failure/README.md"

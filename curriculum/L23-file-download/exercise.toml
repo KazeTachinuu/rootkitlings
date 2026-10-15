@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L23-file-download/starter"
@@ -30,10 +31,10 @@ tools = ["module-load-test"]
 id = "download-file"
 label = "File downloaded in encrypted chunks"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "missing-file"
 label = "Error frame sent for nonexistent file"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

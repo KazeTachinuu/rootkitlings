@@ -10,13 +10,12 @@ teaches = ["proc-read", "bounded-read-contract"]
 requires = ["proc-entry", "component-ownership", "proc-publication-lifetime"]
 
 [workspace]
-mode = "cumulative"
+mode = "project"
 files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interface/proc.c"]
 editable = ["core/main.c", "core/state.c", "include/rootkit.h", "interface/proc.c"]
 build = "."
-baseline = "scaffold"
+baseline = "starter"
 source = "curriculum/L04-proc-read-contract/starter"
-parent = "proc-publication"
 
 [resources]
 readme = "curriculum/L04-proc-read-contract/README.md"

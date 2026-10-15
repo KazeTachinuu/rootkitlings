@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L07-pid-escalation/starter"
@@ -30,16 +31,16 @@ tools = ["module-load-test"]
 id = "self-escalation"
 label = "mkdir rklings.e grants root to calling process"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "pid-targeting"
 label = "mkdir rklings.e.PID sets deferred target"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "deferred-delivery"
 label = "Target PID gets root on /proc/rklings read"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

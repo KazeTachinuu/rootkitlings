@@ -5,13 +5,14 @@ stage = "network"
 kind = "lesson"
 tradecraft = ["network"]
 difficulty = "standard"
-prerequisites = ["root-shell-spawn", "kernel-socket"]
+prerequisites = ["root-shell-spawn"]
 teaches = ["fd-redirection", "socket-to-file", "shell-slot"]
 requires = []
 
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L17-shell-redirect/starter"
@@ -30,4 +31,4 @@ tools = ["module-load-test"]
 id = "shell-redirect"
 label = "Shell I/O redirected to TCP socket"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

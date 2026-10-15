@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L08-kprobe-revealed/starter"
@@ -30,16 +31,16 @@ tools = ["module-load-test"]
 id = "escalation"
 label = "mkdir rklings.e grants root"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "pid-escalation"
 label = "mkdir rklings.e.PID escalates target"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "no-header"
 label = "Code does not include rklings_hook.h"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

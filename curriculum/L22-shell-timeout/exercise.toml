@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L22-shell-timeout/starter"
@@ -30,10 +31,10 @@ tools = ["module-load-test"]
 id = "timeout-fires"
 label = "Shell auto-killed after inactivity timeout"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "exec-slot"
 label = "Exec slot runs one-shot command and releases"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

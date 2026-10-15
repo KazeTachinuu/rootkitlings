@@ -5,13 +5,14 @@ stage = "reflection"
 kind = "milestone"
 tradecraft = ["control", "network", "crypto"]
 difficulty = "advanced"
-prerequisites = ["shell-timeout", "file-download", "command-parser", "secure-channel", "local-control"]
+prerequisites = ["shell-timeout", "file-download", "command-parser", "local-control"]
 teaches = ["remote-protocol-integration"]
 requires = []
 
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/M04-remote-control/starter"
@@ -30,16 +31,16 @@ tools = ["module-load-test"]
 id = "remote-hide"
 label = "HIDE FILE command hides a file over encrypted channel"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "remote-shell"
 label = "SHELL command opens interactive shell via protocol"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "remote-download"
 label = "DOWNLOAD command exfiltrates file encrypted"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

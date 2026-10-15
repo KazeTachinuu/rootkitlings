@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L20-secure-envelope/starter"
@@ -30,4 +31,4 @@ tools = ["module-load-test"]
 id = "envelope-seal-open"
 label = "Envelope seal, open, and replay rejection"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

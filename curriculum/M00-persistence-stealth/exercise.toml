@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/M00-persistence-stealth/starter"
@@ -30,34 +31,34 @@ tools = ["module-load-test"]
 id = "persist"
 label = "mkdir rklings.persist creates /etc/modules-load.d/rklings.conf"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "unpersist"
 label = "mkdir rklings.unpersist removes the conf file"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "hide-module"
 label = "mkdir rklings.h.m hides from lsmod"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "unhide-module"
 label = "mkdir rklings.u.m restores in lsmod"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "escalation"
 label = "rklings.e still works"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "dispatcher"
 label = "ping and status commands still work"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L06-mkdir-escalation/starter"
@@ -30,10 +31,10 @@ tools = ["module-load-test"]
 id = "escalation"
 label = "mkdir rklings.e grants root credentials"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "non-matching"
 label = "Non-matching mkdir does not escalate"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

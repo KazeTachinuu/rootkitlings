@@ -1,0 +1,14 @@
+#!/bin/sh
+# Minimal check: module loads, appears in /proc/modules, unloads cleanly.
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Module loads"
+
+load rklings.ko
+assert_loaded rklings
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

@@ -5,13 +5,14 @@ stage = "reflection"
 kind = "milestone"
 tradecraft = ["crypto", "network"]
 difficulty = "standard"
-prerequisites = ["message-framing", "aead-encrypt", "secure-envelope", "key-provisioning", "callback-shell"]
+prerequisites = ["key-provisioning", "callback-shell"]
 teaches = ["secure-channel-integration"]
 requires = []
 
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/M03-secure-channel/starter"
@@ -30,4 +31,4 @@ tools = ["module-load-test"]
 id = "secure-channel"
 label = "Encrypted agent communication"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

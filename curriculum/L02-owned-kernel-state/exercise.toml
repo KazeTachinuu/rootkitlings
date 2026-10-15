@@ -10,13 +10,12 @@ teaches = ["multi-file-modules", "component-ownership", "kernel-allocation", "er
 requires = ["module-build", "init-failure", "errno-propagation", "build-time-failure-injection", "c-pointers-and-structs"]
 
 [workspace]
-mode = "cumulative"
+mode = "project"
 files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h"]
-editable = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h"]
+editable = ["core/main.c", "core/state.c", "include/rootkit.h"]
 build = "."
-baseline = "parent"
-parent = "precise-init-failure"
-additions = "curriculum/L02-owned-kernel-state/starter"
+baseline = "starter"
+source = "curriculum/L02-owned-kernel-state/starter"
 
 [resources]
 readme = "curriculum/L02-owned-kernel-state/README.md"

@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L18-message-framing/starter"
@@ -30,4 +31,4 @@ tools = ["module-load-test"]
 id = "framed-send-recv"
 label = "Framed send and receive over TCP"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

@@ -5,13 +5,14 @@ stage = "crypto"
 kind = "lesson"
 tradecraft = ["crypto"]
 difficulty = "standard"
-prerequisites = ["aead-encrypt", "secure-envelope"]
+prerequisites = ["secure-envelope"]
 teaches = ["key-provisioning", "key-rotation", "key-zeroization"]
 requires = []
 
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L21-key-provisioning/starter"
@@ -30,4 +31,4 @@ tools = ["module-load-test"]
 id = "key-load-rotate"
 label = "Key loading, rotation, and zeroization"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

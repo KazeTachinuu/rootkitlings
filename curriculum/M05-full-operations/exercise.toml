@@ -5,13 +5,14 @@ stage = "reflection"
 kind = "milestone"
 tradecraft = ["control", "network", "crypto", "concealment", "persistence"]
 difficulty = "advanced"
-prerequisites = ["full-protocol", "auto-opsec", "remote-hide-commands", "management-commands"]
+prerequisites = ["auto-opsec", "remote-control"]
 teaches = ["full-integration", "operational-security"]
 requires = []
 
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/M05-full-operations/starter"
@@ -30,4 +31,4 @@ tools = ["module-load-test"]
 id = "full-operations"
 label = "Complete rootkit with all commands and auto-OPSEC"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

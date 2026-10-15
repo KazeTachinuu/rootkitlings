@@ -12,6 +12,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L16-root-shell-spawn/starter"
@@ -30,4 +31,4 @@ tools = ["module-load-test"]
 id = "root-spawn"
 label = "Spawned process runs as root"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

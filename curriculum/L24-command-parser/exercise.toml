@@ -6,12 +6,13 @@ kind = "lesson"
 tradecraft = ["control"]
 difficulty = "standard"
 prerequisites = ["secure-channel"]
-teaches = ["command-protocol", "text-parsing", "command-dispatch"]
+teaches = ["command-protocol", "text-parsing", "remote-command-dispatch"]
 requires = []
 
 [workspace]
 mode = "project"
 files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L24-command-parser/starter"
@@ -30,10 +31,10 @@ tools = ["module-load-test"]
 id = "parse-commands"
 label = "All command strings parsed to correct kind"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"
 
 [[verification.cases]]
 id = "dispatch-ping"
 label = "PING dispatches and returns PONG"
 expect_build = "pass"
-check = ""
+check = "vm/checks/module-loads"

@@ -10,13 +10,12 @@ teaches = ["initialization-rollback", "resource-ownership", "proc-entry", "proc-
 requires = ["init-failure", "errno-propagation", "component-ownership", "kernel-allocation", "error-pointers", "pointer-invalidation", "build-time-failure-injection"]
 
 [workspace]
-mode = "cumulative"
+mode = "project"
 files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interface/proc.c"]
-editable = ["Kbuild", "core/main.c", "include/rootkit.h", "interface/proc.c"]
+editable = ["core/main.c", "include/rootkit.h", "interface/proc.c"]
 build = "."
-baseline = "parent"
-parent = "owned-kernel-state"
-additions = "curriculum/L03-proc-publication/starter"
+baseline = "starter"
+source = "curriculum/L03-proc-publication/starter"
 
 [resources]
 readme = "curriculum/L03-proc-publication/README.md"
