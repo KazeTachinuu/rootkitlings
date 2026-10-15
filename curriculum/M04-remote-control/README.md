@@ -2,9 +2,10 @@
 
 This milestone wires together the command parser (L24), shell timeouts (L22),
 file download (L23), the M03 secure channel, and M01 local commands into a
-single agent loop. Every operation the rootkit supports, from hiding files to
-escalating privileges, now has a wire equivalent. No command ever touches the
-network in plaintext.
+single agent loop.
+Every operation the rootkit supports, from hiding files to escalating
+privileges, now has a wire equivalent.
+No command ever touches the network in plaintext.
 
 ## Architecture
 
@@ -58,8 +59,8 @@ Every M01 local command now works remotely:
 
 ## Integration pattern
 
-The solution does not reimplement any of the component lessons. It calls into
-them:
+The solution does not reimplement any of the component lessons.
+It calls into them:
 
 - `rk_command_parse` from L24 converts bytes to structured commands.
 - `rk_command_dispatch` from L24 routes to handlers.
@@ -70,9 +71,10 @@ them:
 
 ## Error handling
 
-Unknown commands get an `ERR unknown command` response. Handler failures
-return an error frame with the kernel error code. The agent loop continues
-after any error; only a socket failure or module unload stops it.
+Unknown commands get an `ERR unknown command` response.
+Handler failures return an error frame with the kernel error code.
+The agent loop continues after any error; only a socket failure or module unload
+stops it.
 
 ## Your task
 

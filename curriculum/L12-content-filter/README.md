@@ -1,9 +1,10 @@
 # Remove matching lines from file reads
 
 Tools like `cat`, `grep`, and `ss` all read files through the `read` syscall.
-Intercept read, scan the returned text buffer for lines that
-contain a target string, and remove those lines in place. The result: any
-line mentioning a hidden string vanishes from every text-reading tool.
+Intercept read, scan the returned text buffer for lines that contain a target
+string, and remove those lines in place.
+The result: any line mentioning a hidden string vanishes from every text-reading
+tool.
 
 ## The interception pattern
 
@@ -14,8 +15,9 @@ Same approach as the dirent filter, applied to text:
 2. **entry_handler**: save the user-space buffer pointer and requested count
    from the registers.
 
-3. **return_handler**: read the actual byte count from the return value. If
-   zero or negative, skip. Otherwise:
+3. **return_handler**: read the actual byte count from the return value.
+   If zero or negative, skip.
+   Otherwise:
    - `copy_from_user` the buffer into a kernel allocation.
    - Walk the buffer line by line using `memchr` to find newline characters.
    - For each line: check if it contains any string in content_targets
@@ -27,7 +29,8 @@ Same approach as the dirent filter, applied to text:
 
 ## Line walking
 
-Text buffers are not null-terminated. You work with a byte count and `memchr`:
+Text buffers are not null-terminated.
+You work with a byte count and `memchr`:
 
 ```c
 char *pos = kbuf;
@@ -41,8 +44,9 @@ while (pos < end) {
 }
 ```
 
-To check if a line contains a target string, use `strnstr(line, target,
-line_len)`. This is a length-bounded search, safe for non-terminated buffers.
+To check if a line contains a target string, use
+`strnstr(line, target, line_len)`.
+This is a length-bounded search, safe for non-terminated buffers.
 
 ## Command interface
 
@@ -67,5 +71,10 @@ backdoor:x:0:0::/root:/bin/bash
 
 ## Verify
 
+```
+./rklings check
+```
+
 Add a target string, confirm `cat` of a file containing that string no longer
-shows the matching line. Remove the target and confirm the line returns.
+shows the matching line.
+Remove the target and confirm the line returns.

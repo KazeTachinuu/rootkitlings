@@ -1,9 +1,10 @@
 # One .ko with full local rootkit control
 
 This milestone assembles everything from the concealment stage into a single
-kernel module. Five kretprobes, four target lists, credential escalation, PID
-escalation, module cloaking, persistence, and 16 mkdir commands. One .ko that
-does it all.
+kernel module.
+Five kretprobes, four target lists, credential escalation, PID escalation,
+module cloaking, persistence, and 16 mkdir commands.
+One .ko that does it all.
 
 ## What you are building
 
@@ -39,10 +40,12 @@ rklings.u.p.<idx>   - unhide port by index
 
 ## The rollback chain
 
-The critical engineering challenge is the `__init` function. You register five
-kretprobes and a proc entry. Each registration can fail. If probe 4 fails,
-you must unregister probes 1 through 3. If probe 5 fails, unregister 1
-through 4. This is a classic goto rollback:
+The critical engineering challenge is the `__init` function.
+You register five kretprobes and a proc entry.
+Each registration can fail.
+If probe 4 fails, you must unregister probes 1 through 3.
+If probe 5 fails, unregister 1 through 4.
+This is a classic goto rollback:
 
 ```c
 ret = register_kretprobe(&mkdir_probe);
@@ -73,18 +76,24 @@ fail_getdents:
     return ret;
 ```
 
-The `__exit` function unregisters everything in reverse order. No exceptions.
+The `__exit` function unregisters everything in reverse order.
+No exceptions.
 
 ## Your task
 
 The starter gives you all the target list code, the filter logic, and the
-command dispatcher skeleton. You fill in:
+command dispatcher skeleton.
+You fill in:
 
 1. The complete `__init` with goto rollback for all five probes
 2. The complete `__exit` in reverse order
 3. Wire the command dispatcher to handle all 16 commands
 
 ## Verify
+
+```
+./rklings check
+```
 
 Load the module, then test each capability:
 

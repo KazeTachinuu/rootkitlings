@@ -2,8 +2,8 @@
 
 This milestone combines everything from the network phase: the agent kthread
 (L15) connects to the operator over TCP (L14), spawns a root shell (L16) with
-its I/O redirected through the socket (L17), and reconnects with jitter when
-the shell exits.
+its I/O redirected through the socket (L17), and reconnects with jitter when the
+shell exits.
 
 ## Architecture
 
@@ -20,13 +20,16 @@ kthread "rkworker"
     retry
 ```
 
-The operator runs `nc -l 4444` on the host. When the module loads, the agent
-thread connects, and the operator gets a root shell. If the connection drops
-or the shell exits, the agent sleeps with jitter and tries again.
+The operator runs `nc -l 4444` on the host.
+When the module loads, the agent thread connects, and the operator gets a root
+shell.
+If the connection drops or the shell exits, the agent sleeps with jitter and
+tries again.
 
 ## Your task
 
-Edit `main.c`. Combine the patterns from L14 through L17:
+Edit `main.c`.
+Combine the patterns from L14 through L17:
 
 1. A kthread agent loop that runs until `kthread_should_stop`.
 2. Each iteration: create a socket, connect, convert to file, spawn shell.
@@ -61,9 +64,9 @@ uid=0(root) gid=0(root) groups=0(root)
 
 ## Plaintext problem
 
-Run `tcpdump -A -i eth0 port 4444` while using the shell. Every keystroke
-and every line of output crosses the wire in plaintext. Anyone on the network
-can read your commands.
+Run `tcpdump -A -i eth0 port 4444` while using the shell.
+Every keystroke and every line of output crosses the wire in plaintext.
+Anyone on the network can read your commands.
 
 ## Verification
 

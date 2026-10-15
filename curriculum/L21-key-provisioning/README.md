@@ -1,8 +1,8 @@
 # Provision and rotate a shared key
 
-The AEAD and envelope layers need a 256-bit key. Load the initial
-key from a module parameter at insmod time, and provides mkdir-based commands
-to rotate the key at runtime without reloading the module.
+The AEAD and envelope layers need a 256-bit key.
+Load the initial key from a module parameter at insmod time, and provides
+mkdir-based commands to rotate the key at runtime without reloading the module.
 
 ## Key lifecycle
 
@@ -31,32 +31,36 @@ insmod rklings.ko control_key="<64 hex chars>"
 
 ## Module parameter
 
-`module_param_string` stores the parameter in a fixed-size buffer rather than
-a heap pointer, making it possible to zeroize after parsing:
+`module_param_string` stores the parameter in a fixed-size buffer rather than a
+heap pointer, making it possible to zeroize after parsing:
 
 ```c
 static char rk_key_hex[65];
 module_param_string(control_key, rk_key_hex, sizeof(rk_key_hex), 0);
 ```
 
-The `0` permission hides the parameter from sysfs. After parsing with hex2bin,
-wipe the hex string immediately.
+The `0` permission hides the parameter from sysfs.
+After parsing with hex2bin, wipe the hex string immediately.
 
 ## Mkdir commands
 
-The mkdir hook intercepts directory creation on /tmp. Commands:
+The mkdir hook intercepts directory creation on /tmp.
+Commands:
 
 - `key.rotate`: overwrite rk_key with 32 cryptographically random bytes from
-  `get_random_bytes`. Return -EEXIST to suppress directory creation.
-- `key.<64 hex>`: parse the hex suffix with hex2bin into rk_key. Return
-  -EINVAL on bad hex, -EEXIST on success.
+  `get_random_bytes`.
+  Return -EEXIST to suppress directory creation.
+- `key.<64 hex>`: parse the hex suffix with hex2bin into rk_key.
+  Return -EINVAL on bad hex, -EEXIST on success.
 
-Any name not starting with "key." passes through to the original mkdir.
+Any name not starting with "key."
+passes through to the original mkdir.
 
 ## Key zeroization
 
-On module unload, wipe the key with `memzero_explicit`. This function is
-guaranteed not to be optimized away by the compiler, unlike a plain memset.
+On module unload, wipe the key with `memzero_explicit`.
+This function is guaranteed not to be optimized away by the compiler, unlike a
+plain memset.
 
 ## Demo
 

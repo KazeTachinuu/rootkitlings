@@ -1,8 +1,9 @@
 # Persist across reboot and hide from lsmod
 
-This milestone adds two capabilities to your dispatcher: reboot survival
-and module cloaking. Each one is about 10 lines of kernel code, wired
-through the command dispatcher you built in L09.
+This milestone adds two capabilities to your dispatcher: reboot survival and
+module cloaking.
+Each one is about 10 lines of kernel code, wired through the command dispatcher
+you built in L09.
 
 After this milestone, you have 8 commands:
 
@@ -19,8 +20,8 @@ After this milestone, you have 8 commands:
 
 ## Persistence with filp_open and kernel_write
 
-Linux loads modules listed in `/etc/modules-load.d/*.conf` at boot. To
-persist, write the module name into that directory from kernel space:
+Linux loads modules listed in `/etc/modules-load.d/*.conf` at boot.
+To persist, write the module name into that directory from kernel space:
 
 ```c
 struct file *f;
@@ -34,16 +35,17 @@ kernel_write(f, "rklings\n", 8, &pos);
 filp_close(f, NULL);
 ```
 
-`filp_open` opens a file using a kernel file handle. `kernel_write` writes
-data from kernel memory (no userspace copy needed). The `pos` parameter
-tracks the file offset.
+`filp_open` opens a file using a kernel file handle.
+`kernel_write` writes data from kernel memory (no userspace copy needed).
+The `pos` parameter tracks the file offset.
 
 To unpersist, open the same path and write an empty file (or truncate it).
 
 ## Module cloaking with list_del
 
-The kernel tracks loaded modules in a doubly linked list. `lsmod` walks
-this list. Removing your module from it makes you invisible:
+The kernel tracks loaded modules in a doubly linked list.
+`lsmod` walks this list.
+Removing your module from it makes you invisible:
 
 ```c
 static struct list_head *saved_prev;
@@ -59,7 +61,8 @@ list_add(&THIS_MODULE->list, saved_prev);
 Save `list.prev` before deleting so you can restore the module later.
 Without it, you cannot re-insert at the right position.
 
-The module still runs normally while hidden. Only its listing is removed.
+The module still runs normally while hidden.
+Only its listing is removed.
 `rmmod` will not find it either, so always unhide before unloading.
 
 ## Your task

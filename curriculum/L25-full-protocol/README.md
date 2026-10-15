@@ -1,9 +1,9 @@
 # Wire all commands to the encrypted protocol
 
-The individual capabilities (INFO, LIST, HIDE/UNHIDE, PERSIST,
-ESCALATE, SHELL, EXEC, DOWNLOAD) were each tested over plaintext TCP. Now wire
-every remaining command into the encrypted wire protocol, achieving full
-remote parity with the local mkdir-based control channel.
+The individual capabilities (INFO, LIST, HIDE/UNHIDE, PERSIST, ESCALATE, SHELL,
+EXEC, DOWNLOAD) were each tested over plaintext TCP.
+Now wire every remaining command into the encrypted wire protocol, achieving
+full remote parity with the local mkdir-based control channel.
 
 ## Command table
 
@@ -38,7 +38,8 @@ struct new_utsname *uts = utsname();
 ```
 
 Format sysname, nodename, release, version, and machine into a single response
-buffer. Send it as one encrypted frame.
+buffer.
+Send it as one encrypted frame.
 
 ## STATUS handler
 
@@ -57,20 +58,23 @@ Read each count from the target arrays, check boolean state flags, format, send.
 
 ## LIST with subcommands
 
-Parse the word after LIST to select the target array. Iterate and format each
-entry as `[index] value`. Send "empty" if the count is zero.
+Parse the word after LIST to select the target array.
+Iterate and format each entry as `[index] value`.
+Send "empty" if the count is zero.
 
 ## HIDE and UNHIDE variants
 
 HIDE adds an entry to the appropriate target array (check capacity, validate
-input, copy into the array, increment count). UNHIDE finds and removes the
-matching entry (shift remaining entries down, decrement count).
+input, copy into the array, increment count).
+UNHIDE finds and removes the matching entry (shift remaining entries down,
+decrement count).
 
 ## PERSIST and UNPERSIST
 
-PERSIST writes the boot configuration using `call_usermodehelper` or
-`filp_open` plus `kernel_write`. UNPERSIST removes it. Both send a status
-response.
+PERSIST writes the boot configuration using `call_usermodehelper` or `filp_open`
+plus `kernel_write`.
+UNPERSIST removes it.
+Both send a status response.
 
 ## ESCALATE
 
@@ -82,18 +86,21 @@ if (new)
     commit_creds(new);
 ```
 
-This gives the calling context full capabilities. Send confirmation.
+This gives the calling context full capabilities.
+Send confirmation.
 
 ## DOWNLOAD
 
-Open the requested file with `filp_open`, read in `RK_BUF_MAX`-sized chunks
-with `kernel_read`, send each chunk as a separate encrypted frame. Send an
-empty frame to signal end-of-file. Close with `filp_close`.
+Open the requested file with `filp_open`, read in `RK_BUF_MAX`-sized chunks with
+`kernel_read`, send each chunk as a separate encrypted frame.
+Send an empty frame to signal end-of-file.
+Close with `filp_close`.
 
 ## Every response is encrypted
 
 All command responses must go through the encrypted frame sender, not raw
-`kernel_sendmsg`. The protocol flow for every command:
+`kernel_sendmsg`.
+The protocol flow for every command:
 
 ```text
 recv encrypted frame -> decrypt -> parse command -> execute

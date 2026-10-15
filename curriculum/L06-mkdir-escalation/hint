@@ -1,5 +1,5 @@
-You need to compare the full name against "rklings.e" (not just a prefix
-check). When it matches, call prepare_kernel_cred with a pointer to
-init_task, check that it returns non-NULL, then pass the result to
-commit_creds. Both functions are available after including cred.h and
-sched/task.h. Do not forget to return -ENOENT after escalating.
+You need to compare the full name against "rklings.e" (not just a prefix check).
+When it matches, call prepare_kernel_cred with a pointer to init_task, check
+that it returns non-NULL, then pass the result to commit_creds.
+Both functions are available after including cred.h and sched/task.h.
+Do not forget to return -ENOENT after escalating.

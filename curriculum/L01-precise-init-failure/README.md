@@ -54,8 +54,7 @@ This module acquires no resource, so the rejected path has nothing to release.
 
 ## Your task
 
-Copy your passed module forward, then edit its two existing
-files.
+Copy your passed module forward, then edit its two existing files.
 Do not add files.
 
 - In `Kbuild`, define `RKLINGS_FAIL_POINT` with default `0` and pass it to C.

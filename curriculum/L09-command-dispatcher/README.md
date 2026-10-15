@@ -1,11 +1,13 @@
 # Build a command dispatcher with kretprobe
 
-In L08 you used a plain kprobe. It fires before the function runs, so you
-can act on the arguments, but you cannot control the return value. The real
-mkdir still returns an error (ENOENT from the nullified path) and the caller
-sees a failure even though your action succeeded.
+In L08 you used a plain kprobe.
+It fires before the function runs, so you can act on the arguments, but you
+cannot control the return value.
+The real mkdir still returns an error (ENOENT from the nullified path) and the
+caller sees a failure even though your action succeeded.
 
-A **kretprobe** fixes this. It fires two handlers as a matched pair:
+A **kretprobe** fixes this.
+It fires two handlers as a matched pair:
 
 ```
 userspace: mkdir("rklings.ping")
@@ -32,9 +34,10 @@ userspace sees return code 0 (success)
 
 ## Per-instance data
 
-Each kretprobe firing gets its own `kretprobe_instance`. The `data` field
-is a private buffer sized by `.data_size` in the kretprobe struct. Cast it
-to your own type to pass state from entry to return:
+Each kretprobe firing gets its own `kretprobe_instance`.
+The `data` field is a private buffer sized by `.data_size` in the kretprobe
+struct.
+Cast it to your own type to pass state from entry to return:
 
 ```c
 struct rk_mkdir_data {
@@ -45,8 +48,8 @@ struct rk_mkdir_data {
 
 ## Command dispatch
 
-Parse the basename after "rklings." into a command and optional argument,
-separated by a dot:
+Parse the basename after "rklings."
+into a command and optional argument, separated by a dot:
 
 ```
 rklings.ping        -> cmd="ping",   arg=NULL
@@ -55,8 +58,8 @@ rklings.e           -> cmd="e",      arg=NULL
 rklings.e.1234      -> cmd="e",      arg="1234"
 ```
 
-Use `strchr` on the suffix to find the dot. Compare the command length and
-string to dispatch:
+Use `strchr` on the suffix to find the dot.
+Compare the command length and string to dispatch:
 
 | Command | Argument | Action |
 |---------|----------|--------|
@@ -67,8 +70,8 @@ string to dispatch:
 
 ## Overriding the return value
 
-In the return handler, use `regs_set_return_value` to replace the syscall
-return code:
+In the return handler, use `regs_set_return_value` to replace the syscall return
+code:
 
 ```c
 regs_set_return_value(regs, (unsigned long)(long)data->result);

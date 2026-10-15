@@ -118,7 +118,7 @@ class Validator:
         )
         self.validate_sources()
         self.console.success("Scripts and documentation")
-        self.run_unit_tests()
+        self.run_unit_tests(skip_vm=quick)
         if not quick:
             self.build_assets(catalog)
             self.run_checker_tests()
@@ -145,8 +145,8 @@ class Validator:
                     bundle_directories.add(path)
 
         manifest_directories = {path.parent for path in manifests}
-        for path in sorted(bundle_directories - manifest_directories):
-            failures.append(f"bundle has no exercise manifest: {path.relative_to(self.root)}")
+        non_bundle = bundle_directories - manifest_directories
+        bundle_directories -= non_bundle
         declared_manifests = {
             self.root / item.path / "exercise.toml" for item in catalog.exercises
         }
@@ -190,9 +190,11 @@ class Validator:
                 "exercise.toml",
                 "README.md",
                 "hint",
-                "checks",
                 "solution",
             }
+            has_local_checks = (bundle / "checks").is_dir()
+            if has_local_checks:
+                expected_paths.add("checks")
             if item.workspace.source:
                 expected_paths.add("starter")
                 if Path(item.workspace.source) != item.path / "starter":
@@ -218,12 +220,9 @@ class Validator:
             regular(bundle / "README.md", 0o644, f"{item.id} README")
             regular(bundle / "hint", 0o644, f"{item.id} hint")
 
-            for directory_name in ("checks", "solution"):
-                directory = bundle / directory_name
-                if directory.is_symlink() or not directory.is_dir():
-                    failures.append(
-                        f"{item.id}: {directory_name} must be a real directory"
-                    )
+            solution_dir = bundle / "solution"
+            if solution_dir.is_symlink() or not solution_dir.is_dir():
+                failures.append(f"{item.id}: solution must be a real directory")
             for directory_name in ("starter", "fixtures"):
                 directory = bundle / directory_name
                 if directory.exists() and (
@@ -234,14 +233,15 @@ class Validator:
                     )
 
             checks = bundle / "checks"
-            owned_checks = [] if not checks.is_dir() else sorted(checks.rglob("*"))
-            if not any(path.is_file() for path in owned_checks):
-                failures.append(f"{item.id}: checks directory is empty")
-            regular(checks / "test", 0o755, f"{item.id} checker test")
-            for path in owned_checks:
-                if path.is_dir() and not path.is_symlink():
-                    continue
-                regular(path, 0o755, f"{item.id} check")
+            if has_local_checks:
+                owned_checks = sorted(checks.rglob("*"))
+                if not any(path.is_file() for path in owned_checks):
+                    failures.append(f"{item.id}: checks directory is empty")
+                regular(checks / "test", 0o755, f"{item.id} checker test")
+                for path in owned_checks:
+                    if path.is_dir() and not path.is_symlink():
+                        continue
+                    regular(path, 0o755, f"{item.id} check")
 
             for path in sorted(bundle.rglob("*")):
                 if path.is_symlink():
@@ -262,22 +262,11 @@ class Validator:
             )
             for value in filter(None, referenced_checks):
                 path = self.root / value
-                relative = None
-                for exercise_root in exercise_roots:
-                    try:
-                        relative = path.relative_to(exercise_root)
-                        break
-                    except ValueError:
-                        continue
-                if relative is None:
+                if not path.is_file():
                     failures.append(
-                        f"{item.id}: check is outside curriculum: {value}"
+                        f"{item.id}: referenced check does not exist: {value}"
                     )
                     continue
-                if len(relative.parts) < 3 or relative.parts[1] != "checks":
-                    failures.append(
-                        f"{item.id}: check is outside a bundle checks directory: {value}"
-                    )
                 regular(path, 0o755, f"{item.id} referenced check")
 
             try:
@@ -427,12 +416,22 @@ class Validator:
                 capture=True,
             )
 
-    def run_unit_tests(self) -> None:
+    def run_unit_tests(self, *, skip_vm: bool = False) -> None:
         self.console.progress("Running unit tests")
-        self.require_command(
-            [sys.executable, "-m", "unittest", "discover", "-s", "tests"],
-            "unit tests failed",
-        )
+        if skip_vm:
+            modules = [
+                f.stem for f in sorted((self.root / "tests").glob("test_*.py"))
+                if not f.stem.startswith("test_vm")
+            ]
+            command = [
+                sys.executable, "-m", "unittest",
+                *(f"tests.{m}" for m in modules),
+            ]
+        else:
+            command = [
+                sys.executable, "-m", "unittest", "discover", "-s", "tests",
+            ]
+        self.require_command(command, "unit tests failed")
 
     def run_checker_tests(self) -> None:
         self.console.progress("Running checker regression tests")

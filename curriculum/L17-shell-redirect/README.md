@@ -1,8 +1,8 @@
 # Redirect shell I/O to the network
 
-Combine L14 (kernel socket) and L16 (usermodehelper) to build a
-reverse shell. The key trick: convert the kernel socket into a `struct file`,
-then install it as file descriptors 0, 1, and 2 in the spawned shell process.
+Combine L14 (kernel socket) and L16 (usermodehelper) to build a reverse shell.
+The key trick: convert the kernel socket into a `struct file`, then install it
+as file descriptors 0, 1, and 2 in the spawned shell process.
 Everything the shell reads comes from the network; everything it writes goes
 back over the network.
 
@@ -27,10 +27,11 @@ A mutex and busy flag protect the shell slot so only one shell runs at a time.
 
 ## Your task
 
-Edit `main.c`. Complete:
+Edit `main.c`.
+Complete:
 
-1. `rk_umh_init`: escalate to root, then install the socket file as
-   file descriptors 0, 1, and 2 using `get_unused_fd_flags` and `fd_install`.
+1. `rk_umh_init`: escalate to root, then install the socket file as file
+   descriptors 0, 1, and 2 using `get_unused_fd_flags` and `fd_install`.
 2. `rk_init`: create and connect a kernel socket, convert it to a file with
    `sock_alloc_file`, set up the shell with `call_usermodehelper_setup/exec`.
 

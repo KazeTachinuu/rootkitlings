@@ -1,5 +1,7 @@
 sock_create_kern takes the network namespace from current->nsproxy->net_ns.
 Use in_aton() to convert the dotted IP string to a __be32 address and htons()
-for the port. The kvec wraps a pointer and length; the msghdr can be zeroed.
+for the port.
+The kvec wraps a pointer and length; the msghdr can be zeroed.
 kernel_sendmsg takes the socket, the msghdr, the kvec, count of vecs, and total
-length. Check every return value and release the socket on any failure path.
+length.
+Check every return value and release the socket on any failure path.

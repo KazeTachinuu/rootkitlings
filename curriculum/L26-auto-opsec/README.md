@@ -1,10 +1,11 @@
 # Auto-hide the agent's own traces
 
 Every previous hiding operation required an explicit command from the operator.
-A real rootkit cannot wait for someone to type "HIDE PORT 4444" after connecting:
-by then, the port is already visible in `/proc/net/tcp` and the agent kthread
-shows in `ps`. Add automatic OPSEC: on connect, the agent hides its
-own traces; on disconnect, it removes them.
+A real rootkit cannot wait for someone to type "HIDE PORT 4444" after
+connecting: by then, the port is already visible in `/proc/net/tcp` and the
+agent kthread shows in `ps`.
+Add automatic OPSEC: on connect, the agent hides its own traces; on disconnect,
+it removes them.
 
 ## What to hide on connect
 
@@ -19,7 +20,8 @@ before any operator command is processed.
 ## Getting the source port
 
 After `kernel_accept` returns the client socket, the TCP layer has assigned an
-ephemeral source port. Extract it from the inet socket structure:
+ephemeral source port.
+Extract it from the inet socket structure:
 
 ```c
 #include <net/inet_sock.h>
@@ -61,8 +63,8 @@ kernel_accept returns client
 
 ## Removing entries on disconnect
 
-Track the indices at which the auto-added entries were inserted. On disconnect,
-remove them by shifting later entries down:
+Track the indices at which the auto-added entries were inserted.
+On disconnect, remove them by shifting later entries down:
 
 ```c
 for (int j = idx; j < count - 1; j++)
@@ -75,10 +77,10 @@ invalidate the other tracked index.
 
 ## Interaction with manual commands
 
-The operator can still manually HIDE and UNHIDE targets during a session. The
-auto-hide entries coexist in the same arrays. When the operator issues
-UNHIDE ALL, reset the auto-hide indices to -1 so the disconnect cleanup does
-not corrupt an empty array.
+The operator can still manually HIDE and UNHIDE targets during a session.
+The auto-hide entries coexist in the same arrays.
+When the operator issues UNHIDE ALL, reset the auto-hide indices to -1 so the
+disconnect cleanup does not corrupt an empty array.
 
 ## Observing the effect
 
@@ -99,18 +101,18 @@ vm$ ps aux | grep kworker/u8:3         <-- gone
 vm$ ss -tlnp | grep 4444               <-- gone
 ```
 
-On disconnect, the entries are removed and the process/port reappear (unless
-the operator hid them manually).
+On disconnect, the entries are removed and the process/port reappear (unless the
+operator hid them manually).
 
 ## Your task
 
 Edit `main.c`:
 
-1. Add tracking variables for auto-hidden port and PID indices (initialized
-   to -1).
-2. Implement `rk_auto_hide`: after `kernel_accept`, extract the source port
-   with `inet_sk`, get the kthread PID, add both to their target arrays,
-   record the insertion indices.
+1. Add tracking variables for auto-hidden port and PID indices (initialized to
+   -1).
+2. Implement `rk_auto_hide`: after `kernel_accept`, extract the source port with
+   `inet_sk`, get the kthread PID, add both to their target arrays, record the
+   insertion indices.
 3. Implement `rk_auto_unhide`: remove the auto-added entries by index (higher
    index first), reset tracking to -1.
 4. Call `rk_auto_hide` immediately after `kernel_accept` succeeds.

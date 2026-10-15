@@ -1,4 +1,5 @@
 kernel_sendmsg and kernel_recvmsg can return fewer bytes than requested on TCP.
 Wrap each in a loop that tracks how many bytes have been transferred and adjusts
-the buffer pointer and remaining length on each iteration. For the frame header,
-use htons/ntohs to convert the 2-byte length to/from network byte order.
+the buffer pointer and remaining length on each iteration.
+For the frame header, use htons/ntohs to convert the 2-byte length to/from
+network byte order.

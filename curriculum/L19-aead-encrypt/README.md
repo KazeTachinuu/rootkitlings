@@ -1,11 +1,13 @@
 # Encrypt and authenticate with the real kernel AEAD API
 
 The kernel crypto subsystem provides AES-256-GCM through the AEAD (Authenticated
-Encryption with Associated Data) interface. GCM gives you both confidentiality
-(encryption) and integrity (authentication) in a single operation. A tampered
-ciphertext fails decryption with -EBADMSG.
+Encryption with Associated Data) interface.
+GCM gives you both confidentiality (encryption) and integrity (authentication)
+in a single operation.
+A tampered ciphertext fails decryption with -EBADMSG.
 
-Uses the real kernel crypto API directly. No wrappers, no fake headers.
+Uses the real kernel crypto API directly.
+No wrappers, no fake headers.
 
 ## AEAD in one diagram
 
@@ -35,8 +37,9 @@ crypto_aead_setkey(tfm, key, 32);   /* AES-256: 32-byte key */
 
 ## Scatterlist layout
 
-The kernel AEAD API operates on scatterlists. For a single contiguous buffer,
-use `sg_init_one`. The buffer layout for encryption:
+The kernel AEAD API operates on scatterlists.
+For a single contiguous buffer, use `sg_init_one`.
+The buffer layout for encryption:
 
 ```text
 +----------+-----------+-----------+
@@ -48,10 +51,11 @@ sg_init_one(&sg, buf, aad_len + pt_len + 16)
 ```
 
 The `aead_request_set_crypt` call takes the plaintext length (not including the
-tag). The kernel writes the tag into the 16 bytes after the plaintext.
+tag).
+The kernel writes the tag into the 16 bytes after the plaintext.
 
-For decryption, the same layout applies, but the tag is already present. Pass
-the ciphertext length including the tag to `aead_request_set_crypt`.
+For decryption, the same layout applies, but the tag is already present.
+Pass the ciphertext length including the tag to `aead_request_set_crypt`.
 
 ## Encryption
 
@@ -62,23 +66,23 @@ aead_request_set_ad(req, aad_len);
 crypto_aead_encrypt(req);
 ```
 
-After encryption, `buf + aad_len` contains `pt_len` bytes of ciphertext
-followed by 16 bytes of authentication tag.
+After encryption, `buf + aad_len` contains `pt_len` bytes of ciphertext followed
+by 16 bytes of authentication tag.
 
 ## Decryption
 
 Same setup, but pass `ct_len` (which includes the 16-byte tag) to
-`aead_request_set_crypt`, and call `crypto_aead_decrypt`. Returns 0 on success,
--EBADMSG if authentication fails.
+`aead_request_set_crypt`, and call `crypto_aead_decrypt`.
+Returns 0 on success, -EBADMSG if authentication fails.
 
 ## Your task
 
 Edit `main.c`:
 
-1. Implement `rk_aead_seal`: allocate a buffer for AAD + plaintext + tag,
-   set up the scatterlist, encrypt, copy ciphertext + tag to the output.
-2. Implement `rk_aead_open`: similar setup, call decrypt. Returns -EBADMSG
-   on authentication failure.
+1. Implement `rk_aead_seal`: allocate a buffer for AAD + plaintext + tag, set up
+   the scatterlist, encrypt, copy ciphertext + tag to the output.
+2. Implement `rk_aead_open`: similar setup, call decrypt.
+   Returns -EBADMSG on authentication failure.
 3. Complete the self-test in `rk_init`: seal "hello", open it, verify the
    round-trip, then tamper with a byte and confirm -EBADMSG.
 

@@ -1,8 +1,10 @@
 # Assemble and verify the complete rootkit
 
-This is the final project. You have built every subsystem across 27 lessons and
-6 milestones. Now assemble them into one clean, commented kernel module and run
-the complete verification checklist. Every line of code is yours.
+This is the final project.
+You have built every subsystem across 27 lessons and 6 milestones.
+Now assemble them into one clean, commented kernel module and run the complete
+verification checklist.
+Every line of code is yours.
 
 ## Verification checklist
 
@@ -13,7 +15,8 @@ key=$(openssl rand -hex 32)
 echo "$key"
 ```
 
-Save this key. You will use it for both loading and connecting.
+Save this key.
+You will use it for both loading and connecting.
 
 ### 2. Module load
 
@@ -21,8 +24,9 @@ Save this key. You will use it for both loading and connecting.
 insmod rklings.ko control_key="$key"
 ```
 
-Verify: `dmesg | tail` shows nothing from the module. This is OPSEC. A rootkit
-that announces itself in the kernel log is already detected.
+Verify: `dmesg | tail` shows nothing from the module.
+This is OPSEC.
+A rootkit that announces itself in the kernel log is already detected.
 
 ### 3. Operator connection
 
@@ -32,8 +36,9 @@ From the operator machine (or localhost for testing):
 ./operator --key "$key" --host <target> --port 4444
 ```
 
-The connection should succeed. The encrypted handshake validates the key
-fingerprint before any commands are accepted.
+The connection should succeed.
+The encrypted handshake validates the key fingerprint before any commands are
+accepted.
 
 ### 4. Basic commands
 
@@ -184,8 +189,8 @@ ss -tlnp | grep 4444          # port reappears
 tcpdump -i lo port 4444 -X
 ```
 
-All captured data is encrypted (AES-256-GCM). No plaintext commands or
-responses are visible in the packet capture.
+All captured data is encrypted (AES-256-GCM).
+No plaintext commands or responses are visible in the packet capture.
 
 ### 14. Clean unload
 
@@ -240,9 +245,9 @@ rmmod rklings
 
 ## Your task
 
-Write the complete `main.c` from scratch, pulling in every subsystem. Use the
-verification checklist above to validate each capability. When every check
-passes, you have a complete rootkit.
+Write the complete `main.c` from scratch, pulling in every subsystem.
+Use the verification checklist above to validate each capability.
+When every check passes, you have a complete rootkit.
 
 Run:
 

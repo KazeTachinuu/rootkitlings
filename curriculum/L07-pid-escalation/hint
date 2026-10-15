@@ -1,5 +1,7 @@
 After the "rklings.e" prefix, check if there is a dot followed by more
-characters. Use kstrtoint to convert that substring to an integer PID.
-Store it with atomic_set. In your proc_read callback, compare current->pid
-against atomic_read and escalate with prepare_kernel_cred/commit_creds if
-they match. Clear the target with atomic_set to 0 after escalation.
+characters.
+Use kstrtoint to convert that substring to an integer PID.
+Store it with atomic_set.
+In your proc_read callback, compare current->pid against atomic_read and
+escalate with prepare_kernel_cred/commit_creds if they match.
+Clear the target with atomic_set to 0 after escalation.

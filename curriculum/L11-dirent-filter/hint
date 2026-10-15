@@ -1,11 +1,13 @@
-The dirent buffer is variable-length records packed together. Walk it with a
-byte offset, casting to struct linux_dirent64 at each position. Advance by
-d_reclen, not by sizeof.
+The dirent buffer is variable-length records packed together.
+Walk it with a byte offset, casting to struct linux_dirent64 at each position.
+Advance by d_reclen, not by sizeof.
 
 When you remove a record, memmove everything after it backward by d_reclen
-bytes. Subtract d_reclen from your total count but do not advance your offset,
-because the next record is now at the current position.
+bytes.
+Subtract d_reclen from your total count but do not advance your offset, because
+the next record is now at the current position.
 
-For PID hiding, /proc has one directory per PID. The d_name is the PID as a
-decimal string. Compare it against your pid_targets the same way you compare
-file names against file_targets.
+For PID hiding, /proc has one directory per PID.
+The d_name is the PID as a decimal string.
+Compare it against your pid_targets the same way you compare file names against
+file_targets.

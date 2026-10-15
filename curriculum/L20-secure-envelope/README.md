@@ -1,9 +1,9 @@
 # Build the secure envelope with replay protection
 
-Raw AEAD encrypts messages, but says nothing about ordering or freshness. An
-attacker who captures ciphertext can replay it later. Build an
-envelope that binds each message to a session, a direction, and a sequence
-number, making replays detectable.
+Raw AEAD encrypts messages, but says nothing about ordering or freshness.
+An attacker who captures ciphertext can replay it later.
+Build an envelope that binds each message to a session, a direction, and a
+sequence number, making replays detectable.
 
 ## Envelope wire format
 
@@ -17,9 +17,9 @@ V   = version (always 1)
 Dir = 0 (client-to-server) or 1 (server-to-client)
 ```
 
-The 18-byte header is not encrypted. It is passed as AAD (Additional
-Authenticated Data) to the AEAD, so any modification to the header causes
-decryption to fail with -EBADMSG.
+The 18-byte header is not encrypted.
+It is passed as AAD (Additional Authenticated Data) to the AEAD, so any
+modification to the header causes decryption to fail with -EBADMSG.
 
 ## Nonce construction
 
@@ -38,14 +38,15 @@ seq[2:0]   : low 3 bytes of the sequence counter
 ```
 
 This guarantees uniqueness as long as no direction sends more than 2^24 messages
-per session with the same key. For a rootkit C2 channel, that is more than
-sufficient.
+per session with the same key.
+For a rootkit C2 channel, that is more than sufficient.
 
 ## Replay protection
 
-Each direction maintains a sequence counter starting at 0. The sender increments
-after each message. The receiver tracks the next expected sequence number and
-rejects any message with a sequence below the expected value:
+Each direction maintains a sequence counter starting at 0.
+The sender increments after each message.
+The receiver tracks the next expected sequence number and rejects any message
+with a sequence below the expected value:
 
 ```text
 Sender: seq 0 -> seq 1 -> seq 2 -> ...
@@ -81,8 +82,8 @@ Edit `main.c`:
    direction, and sequence.
 2. Implement `rk_envelope_seal`: build header, construct nonce, encrypt with
    header as AAD, output header + ciphertext + tag.
-3. Implement `rk_envelope_open`: parse header, check replay, reconstruct
-   nonce, decrypt with header as AAD.
+3. Implement `rk_envelope_open`: parse header, check replay, reconstruct nonce,
+   decrypt with header as AAD.
 4. Complete the self-test: seal "test", open it, replay it (expect -EPROTO).
 
 Run:

@@ -1,12 +1,14 @@
-The goto rollback chain is the core challenge. Each label undoes exactly one
-registration and falls through to the next. The labels run in reverse order of
-the registrations. Draw the chain on paper first.
+The goto rollback chain is the core challenge.
+Each label undoes exactly one registration and falls through to the next.
+The labels run in reverse order of the registrations.
+Draw the chain on paper first.
 
 The exit function is the mirror image: unregister in exact reverse order of
-init. If you registered mkdir, getdents, read, tcp4, tcp6, then exit
-unregisters tcp6, tcp4, read, getdents, mkdir.
+init.
+If you registered mkdir, getdents, read, tcp4, tcp6, then exit unregisters tcp6,
+tcp4, read, getdents, mkdir.
 
-For the command dispatcher, use a chain of strncmp calls. Handle the exact
-matches first (e, cloak, uncloak, persist, unpersist), then the prefix matches
-(h.f., u.f., h.i., u.i., h.c., u.c., h.p., u.p., p.). Return -ENOENT for
-anything unrecognized.
+For the command dispatcher, use a chain of strncmp calls.
+Handle the exact matches first (e, cloak, uncloak, persist, unpersist), then the
+prefix matches (h.f., u.f., h.i., u.i., h.c., u.c., h.p., u.p., p.).
+Return -ENOENT for anything unrecognized.

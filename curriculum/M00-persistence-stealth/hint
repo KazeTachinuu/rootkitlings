@@ -1,5 +1,7 @@
-For persistence, use filp_open to create /etc/modules-load.d/rklings.conf,
-then kernel_write to write the module name. Remember to filp_close when
-done. For cloaking, save THIS_MODULE->list.prev before calling list_del
-on THIS_MODULE->list. To unhide, list_add with the saved pointer. Wire
-both through the dispatcher: "persist", "unpersist", "h.m", "u.m".
+For persistence, use filp_open to create /etc/modules-load.d/rklings.conf, then
+kernel_write to write the module name.
+Remember to filp_close when done.
+For cloaking, save THIS_MODULE->list.prev before calling list_del on
+THIS_MODULE->list.
+To unhide, list_add with the saved pointer.
+Wire both through the dispatcher: "persist", "unpersist", "h.m", "u.m".

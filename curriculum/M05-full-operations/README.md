@@ -1,9 +1,10 @@
 # Complete remote management with auto-OPSEC
 
 This milestone verifies that every capability built across M00 through L26 works
-together as one integrated system. Every command is available remotely over the
-encrypted channel. The agent self-hides on connect. The operator has full parity
-with the local mkdir control interface.
+together as one integrated system.
+Every command is available remotely over the encrypted channel.
+The agent self-hides on connect.
+The operator has full parity with the local mkdir control interface.
 
 ## What you have built
 
@@ -75,7 +76,8 @@ The test for this milestone exercises the full cycle:
 
 ## Your task
 
-Combine all subsystems into one module. Verify that:
+Combine all subsystems into one module.
+Verify that:
 
 1. The module loads with no dmesg output (OPSEC).
 2. Every command works over the encrypted channel.

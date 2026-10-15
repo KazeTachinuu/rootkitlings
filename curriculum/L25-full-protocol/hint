@@ -1,1 +1,6 @@
-Each command handler follows the same pattern: parse the command string, call the appropriate target list or kernel API, format the result into a buffer, and send it as an encrypted frame. Wire STATUS by iterating each count and state flag. Wire ESCALATE with prepare_kernel_cred(NULL) and commit_creds. Wire DOWNLOAD by reading the file in RK_BUF_MAX chunks with kernel_read.
+Each command handler follows the same pattern: parse the command string, call
+the appropriate target list or kernel API, format the result into a buffer, and
+send it as an encrypted frame.
+Wire STATUS by iterating each count and state flag.
+Wire ESCALATE with prepare_kernel_cred(NULL) and commit_creds.
+Wire DOWNLOAD by reading the file in RK_BUF_MAX chunks with kernel_read.

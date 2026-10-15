@@ -1,5 +1,8 @@
-The agent function is a kthread loop. Each iteration creates a socket, connects,
-converts it to a file, and spawns a shell. Use UMH_WAIT_PROC so the thread
-blocks until the shell exits. After the shell exits, fput the file, sleep with
-jitter using wait_event_interruptible_timeout, and loop back. On kthread_stop,
-the thread must exit cleanly. Protect the shell state with a mutex.
+The agent function is a kthread loop.
+Each iteration creates a socket, connects, converts it to a file, and spawns a
+shell.
+Use UMH_WAIT_PROC so the thread blocks until the shell exits.
+After the shell exits, fput the file, sleep with jitter using
+wait_event_interruptible_timeout, and loop back.
+On kthread_stop, the thread must exit cleanly.
+Protect the shell state with a mutex.

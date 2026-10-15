@@ -38,8 +38,9 @@ make doctor
 - `start` creates the workspace and lists editable files.
 - `check` builds, boots, and runs host and guest checks.
 
-Exercise commands accept a serial (`L19`), a stable ID, or an
-unambiguous prefix. Most default to the current exercise.
+Exercise commands accept a serial (`L19`), a stable ID, or an unambiguous
+prefix.
+Most default to the current exercise.
 Run `./rklings help` for the complete command list.
 
 ## Course
@@ -85,7 +86,8 @@ Use `list` for the full route and `prereq` for direct dependencies.
 - `restore` archives current edits and recreates that exercise's starter.
   Progress is unchanged.
 - `reset` clears progress from the selected exercise onward and archives
-  affected workspaces. Full reset requires `--all --yes`.
+  affected workspaces.
+  Full reset requires `--all --yes`.
 - `clean` removes build outputs but keeps source edits and progress.
 
 ## Repository layout
@@ -100,9 +102,10 @@ work/<serial>/                     your source code
 .rklings/                          builds, state, snapshots, backups
 ```
 
-Edits go in `work/`. Files under `curriculum/` are immutable course bundles.
+Edits go in `work/`.
+Files under `curriculum/` are immutable course bundles.
 
 See [`docs/COURSE.md`](docs/COURSE.md) for course design and
 [`vm/README.md`](vm/README.md) for the guest runtime.
-`make validate` runs the maintainer checks. `make compile-db` creates
-clangd metadata.
+`make validate` runs the maintainer checks.
+`make compile-db` creates clangd metadata.

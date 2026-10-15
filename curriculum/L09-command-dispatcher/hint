@@ -1,6 +1,8 @@
-A kretprobe fires two handlers: entry_handler before the function runs,
-and handler (the return handler) after it returns. Use the per-instance
-data field (inst->data) to pass state between them. In the entry handler,
-set intercepted = true and store the result. In the return handler, call
-regs_set_return_value to override the syscall return code. Parse the
-command by finding the first dot after "rklings." in the basename.
+A kretprobe fires two handlers: entry_handler before the function runs, and
+handler (the return handler) after it returns.
+Use the per-instance data field (inst->data) to pass state between them.
+In the entry handler, set intercepted = true and store the result.
+In the return handler, call regs_set_return_value to override the syscall return
+code.
+Parse the command by finding the first dot after "rklings."
+in the basename.

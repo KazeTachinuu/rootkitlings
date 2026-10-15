@@ -1,15 +1,17 @@
 # Frame messages on a TCP stream
 
-TCP is a byte stream, not a message protocol. Two sends of 100 bytes each may
-arrive as a single 200-byte read, or as three reads of 30, 70, and 100 bytes.
+TCP is a byte stream, not a message protocol.
+Two sends of 100 bytes each may arrive as a single 200-byte read, or as three
+reads of 30, 70, and 100 bytes.
 Before we can encrypt individual messages with AEAD, we need message boundaries.
 
 Implement a 2-byte length-prefix framing protocol in kernel space.
 
 ## Why framing comes first
 
-AEAD encrypts and authenticates discrete messages. Without
-framing, the receiver cannot tell where one ciphertext ends and the next begins.
+AEAD encrypts and authenticates discrete messages.
+Without framing, the receiver cannot tell where one ciphertext ends and the next
+begins.
 The length prefix solves this: every message is preceded by its size, so the
 receiver always knows exactly how many bytes to read.
 
@@ -33,8 +35,10 @@ Maximum frame size: 4096 bytes.
 ## Short writes and short reads
 
 `kernel_sendmsg` and `kernel_recvmsg` are not guaranteed to transfer the full
-requested length on a TCP socket. The kernel may transfer only part of the data,
-returning the number of bytes actually transferred. Your code must loop:
+requested length on a TCP socket.
+The kernel may transfer only part of the data, returning the number of bytes
+actually transferred.
+Your code must loop:
 
 ```c
 while (sent < len) {
@@ -45,8 +49,8 @@ while (sent < len) {
 }
 ```
 
-The same pattern applies to `kernel_recvmsg`. A return of 0 means the peer
-closed the connection.
+The same pattern applies to `kernel_recvmsg`.
+A return of 0 means the peer closed the connection.
 
 ## Functions to implement
 
@@ -63,7 +67,8 @@ Start a listener on the host:
 nc -l 4444 | xxd -l 20
 ```
 
-Load the module. The first bytes on the wire should be:
+Load the module.
+The first bytes on the wire should be:
 
 ```
 00 04 50 49 4e 47

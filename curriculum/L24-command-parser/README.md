@@ -1,23 +1,27 @@
 # Parse and dispatch text commands
 
-A reverse shell lets the operator run userspace commands. But hiding a file,
-hiding a PID, toggling persistence: those are kernel operations. No shell
-command can do them. You need a protocol.
+A reverse shell lets the operator run userspace commands.
+But hiding a file, hiding a PID, toggling persistence: those are kernel
+operations.
+No shell command can do them.
+You need a protocol.
 
-Build a text command parser that converts decrypted byte buffers
-into structured commands, and a dispatcher that routes each command to its
-handler.
+Build a text command parser that converts decrypted byte buffers into structured
+commands, and a dispatcher that routes each command to its handler.
 
 ## Why a protocol
 
-Consider what happens when the operator types `HIDE FILE evidence.log` into
-a reverse shell. The shell runs it as a program name, which fails. File hiding
-is a kernel operation (hooking getdents64). The only way to trigger it remotely
-is to intercept the text before the shell sees it and handle it in kernel space.
+Consider what happens when the operator types `HIDE FILE evidence.log` into a
+reverse shell.
+The shell runs it as a program name, which fails.
+File hiding is a kernel operation (hooking getdents64).
+The only way to trigger it remotely is to intercept the text before the shell
+sees it and handle it in kernel space.
 
-The command parser sits between the decrypted frame and the shell. It inspects
-each incoming message, and if it matches a known command, dispatches it to the
-appropriate kernel handler. Unknown input can be forwarded to the shell.
+The command parser sits between the decrypted frame and the shell.
+It inspects each incoming message, and if it matches a known command, dispatches
+it to the appropriate kernel handler.
+Unknown input can be forwarded to the shell.
 
 ## Command kinds
 
@@ -85,8 +89,9 @@ Strip any trailing newline, then match from most specific to least specific:
 3. Match bare keywords: `PING`, `STATUS`, `SHELL`, etc.
 4. Default to `RK_CMD_UNKNOWN`.
 
-Use `strncmp` for prefix matching. Copy the argument portion into `cmd->arg`
-with a length check to prevent overflow.
+Use `strncmp` for prefix matching.
+Copy the argument portion into `cmd->arg` with a length check to prevent
+overflow.
 
 ## Dispatch
 

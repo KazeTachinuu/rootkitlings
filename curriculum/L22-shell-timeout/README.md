@@ -1,15 +1,16 @@
 # Add shell timeouts and an exec slot
 
-A shell that stays open forever is an OPSEC liability. If the operator
-disconnects or forgets to close the session, the shell process and its socket
-sit there waiting for a defender to notice. Add an inactivity
-timeout using the kernel's delayed work mechanism, and a second
-shell slot for one-shot command execution.
+A shell that stays open forever is an OPSEC liability.
+If the operator disconnects or forgets to close the session, the shell process
+and its socket sit there waiting for a defender to notice.
+Add an inactivity timeout using the kernel's delayed work mechanism, and a
+second shell slot for one-shot command execution.
 
 ## The problem
 
 Without a timeout, a reverse shell opened by the rootkit will persist
-indefinitely. That means:
+indefinitely.
+That means:
 
 - An idle TCP connection visible in `ss` or `netstat` output
 - A `/bin/sh` process consuming a PID slot
@@ -19,8 +20,8 @@ The fix: automatically kill the shell after a period of inactivity.
 
 ## Delayed work
 
-The kernel workqueue subsystem provides delayed work items. A delayed work
-item is scheduled to run after a specified number of jiffies:
+The kernel workqueue subsystem provides delayed work items.
+A delayed work item is scheduled to run after a specified number of jiffies:
 
 ```text
 INIT_DELAYED_WORK(&work, callback_fn)
@@ -45,9 +46,9 @@ mod_delayed_work(system_wq, &dwork, delay);
 cancel_delayed_work_sync(&dwork);
 ```
 
-`mod_delayed_work` resets the timer if the work is already pending. This is
-exactly what you need for an inactivity timeout: every time the shell sends or
-receives data, call `mod_delayed_work` to push the deadline forward.
+`mod_delayed_work` resets the timer if the work is already pending.
+This is exactly what you need for an inactivity timeout: every time the shell
+sends or receives data, call `mod_delayed_work` to push the deadline forward.
 
 ## Shell structure
 
@@ -63,9 +64,9 @@ struct rk_shell {
 };
 ```
 
-Create two instances: `interactive_shell` for a persistent `/bin/sh -i`
-session, and `exec_shell` for one-shot `/bin/sh -c <cmd>` execution. Each has
-its own mutex and timeout.
+Create two instances: `interactive_shell` for a persistent `/bin/sh -i` session,
+and `exec_shell` for one-shot `/bin/sh -c <cmd>` execution.
+Each has its own mutex and timeout.
 
 ## Timeout callback
 
@@ -85,8 +86,8 @@ static void rk_shell_timeout_fn(struct work_struct *work)
 }
 ```
 
-When the timeout fires, shut down the socket with `kernel_sock_shutdown`. This
-causes the shell process's reads and writes to fail, which terminates it.
+When the timeout fires, shut down the socket with `kernel_sock_shutdown`.
+This causes the shell process's reads and writes to fail, which terminates it.
 
 ## Activity reset
 
@@ -102,9 +103,9 @@ This pushes the timeout deadline forward by `timeout_jiffies` from now.
 ## Exec slot
 
 The exec slot works like the interactive slot, but runs a single command and
-auto-closes when the command finishes. It does not need the same timeout
-behavior (the command has a natural end), but should still have a maximum
-execution time to prevent hangs.
+auto-closes when the command finishes.
+It does not need the same timeout behavior (the command has a natural end), but
+should still have a maximum execution time to prevent hangs.
 
 ## Default timeout
 
@@ -114,8 +115,8 @@ Set the default timeout to 60 seconds:
 shell->timeout_jiffies = 60 * HZ;
 ```
 
-`HZ` is the kernel's tick rate (typically 250 or 1000), so `60 * HZ` gives
-60 seconds regardless of the actual tick frequency.
+`HZ` is the kernel's tick rate (typically 250 or 1000), so `60 * HZ` gives 60
+seconds regardless of the actual tick frequency.
 
 ## Cleanup
 

@@ -1,9 +1,10 @@
 # Download a file from the target
 
-The rootkit can open a shell, but sometimes you just need one file. Exfiltrating
-`/etc/shadow` or a database dump does not require an interactive session. This
-Read a file from the kernel using `filp_open` and `kernel_read`, then
-sends it over the encrypted channel in length-prefixed chunks.
+The rootkit can open a shell, but sometimes you just need one file.
+Exfiltrating `/etc/shadow` or a database dump does not require an interactive
+session.
+This Read a file from the kernel using `filp_open` and `kernel_read`, then sends
+it over the encrypted channel in length-prefixed chunks.
 
 ## Reading files from kernel space
 
@@ -20,11 +21,13 @@ filp_close(filp, NULL)
 ```
 
 These are the same functions the kernel uses internally for firmware loading and
-other file I/O. They work on any file the kernel can access.
+other file I/O.
+They work on any file the kernel can access.
 
 ## Chunked transfer
 
-A file may be larger than a single network frame. Send it in chunks:
+A file may be larger than a single network frame.
+Send it in chunks:
 
 1. Open the file with `filp_open`.
 2. Allocate a 4096-byte read buffer.
@@ -48,7 +51,8 @@ keeping each chunk within a single encrypted frame.
 ## Error handling
 
 If the file does not exist or cannot be opened, `filp_open` returns an
-`ERR_PTR`. Send an error frame back to the operator instead of file data:
+`ERR_PTR`.
+Send an error frame back to the operator instead of file data:
 
 ```c
 struct file *f = filp_open(path, O_RDONLY, 0);
@@ -64,8 +68,9 @@ error code.
 ## Complement to M00
 
 In M00 you used `filp_open` with `O_WRONLY | O_CREAT` and `kernel_write` to
-persist data to disk. Here the direction reverses: `O_RDONLY` and
-`kernel_read` to exfiltrate data off the target.
+persist data to disk.
+Here the direction reverses: `O_RDONLY` and `kernel_read` to exfiltrate data off
+the target.
 
 ## Your task
 
