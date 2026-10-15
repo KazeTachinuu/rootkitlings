@@ -50,7 +50,7 @@ static int rk_escalate_pid(int pid)
 	const struct cred *old_cred;
 
 	rcu_read_lock();
-	task = find_task_by_vpid(pid);
+	task = pid_task(find_vpid(pid), PIDTYPE_PID);
 	if (!task) {
 		rcu_read_unlock();
 		return -ESRCH;
