@@ -496,42 +496,95 @@ class Validator:
         failed: list[str],
     ) -> None:
         """Run VM tests in parallel subprocesses."""
-        total = len(tests)
-        width = len(str(total))
-        completed = 0
-        lock = __import__("threading").Lock()
+        import threading
+        import time
 
-        def run_one(index: int, module: str, test_id: str) -> tuple[str, CommandResult]:
-            result = self.command(
-                [sys.executable, "-m", "unittest", test_id],
-                capture=True,
+        total = len(tests)
+        done = 0
+        passing = 0
+        active = 0
+        lock = threading.Lock()
+        t0 = time.monotonic()
+        is_tty = self.console.color_enabled()
+        cols = self.console.terminal_width(default=80, maximum=120)
+        fail_outputs: list[tuple[str, str]] = []
+
+        def draw() -> None:
+            if not is_tty:
+                return
+            elapsed = time.monotonic() - t0
+            pct = done / total if total else 1
+            bar_w = min(30, cols - 50)
+            filled = int(bar_w * pct)
+            bar = "█" * filled + "░" * (bar_w - filled)
+            mem_mb = active * 256
+            if mem_mb >= 1024:
+                mem = f"{mem_mb / 1024:.1f}G"
+            else:
+                mem = f"{mem_mb}M"
+            line = (
+                f"\r\x1b[2K[*]   {bar} "
+                f"{done}/{total}  "
+                f"{active} active  "
+                f"{mem}  "
+                f"{elapsed:.0f}s"
             )
-            return test_id, result
+            sys.stdout.write(line)
+            sys.stdout.flush()
+
+        def run_one(module: str, test_id: str) -> tuple[str, CommandResult]:
+            nonlocal active
+            with lock:
+                active += 1
+                draw()
+            try:
+                result = self.command(
+                    [sys.executable, "-m", "unittest", test_id],
+                    capture=True,
+                )
+                return test_id, result
+            finally:
+                with lock:
+                    active -= 1
 
         self.console.progress(
-            f"  VM tests: {total} cases, {workers} parallel"
+            f"  VM tests: {total} cases, {workers} workers"
         )
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {
-                pool.submit(run_one, i, mod, tid): (i, mod, tid)
-                for i, (mod, tid) in enumerate(tests, 1)
+                pool.submit(run_one, mod, tid): tid
+                for mod, tid in tests
             }
             for future in as_completed(futures):
-                index, module, test_id = futures[future]
-                test_id_result, result = future.result()
+                test_id = futures[future]
+                _, result = future.result()
                 with lock:
-                    completed += 1
+                    done += 1
                     short = test_id.rsplit(".", 1)[-1]
                     if result.returncode:
-                        self.console.error(
-                            f"  FAIL {short}"
-                        )
-                        self.console.raw(result.output, error=True)
                         failed.append(test_id)
+                        fail_outputs.append((short, result.output))
                     else:
-                        self.console.progress(
-                            f"  {completed:>{width}}/{total} passed"
-                        )
+                        passing += 1
+                    draw()
+
+        if is_tty:
+            sys.stdout.write("\r\x1b[2K")
+            sys.stdout.flush()
+
+        elapsed = time.monotonic() - t0
+        if fail_outputs:
+            self.console.success(
+                f"  VM tests: {passing}/{total} passed in {elapsed:.0f}s"
+                f" ({len(fail_outputs)} FAILED)"
+            )
+            for short, output in fail_outputs:
+                self.console.error(f"  FAIL: {short}")
+                self.console.raw(output, error=True)
+        else:
+            self.console.success(
+                f"  VM tests: {total}/{total} passed in {elapsed:.0f}s"
+            )
 
     def run_checker_tests(self) -> None:
         self.console.progress("Running checker regression tests")
