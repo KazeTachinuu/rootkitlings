@@ -107,7 +107,9 @@ def discover_jobs(
                 ))
                 continue
 
-            ko_copy = build_root / f"{item.id}_{case.id}.ko"
+            ko_dir = build_root / "kos" / f"{item.id}_{case.id}"
+            ko_dir.mkdir(parents=True, exist_ok=True)
+            ko_copy = ko_dir / ko.name
             shutil.copy2(ko, ko_copy)
 
             jobs.append(VMJob(
