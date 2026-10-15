@@ -9,25 +9,19 @@
 #define RK_PREFIX_LEN 8
 
 RK_ON_MKDIR(name) {
-	/*
-	 * TODO: Check if "name" starts with RK_PREFIX.
-	 * If it does not match, return -ENOENT.
-	 *
-	 * If it matches, print the part after the prefix to dmesg
-	 * using pr_info, then return -ENOENT.
-	 */
+	/* TODO: If name starts with RK_PREFIX, log the suffix to dmesg.
+	 * Always return -ENOENT. */
 	return -ENOENT;
 }
 
 static int __init rk_init(void)
 {
-	/* TODO: Start the hook and return its result. */
-	return 0;
+	return rk_hook_start();
 }
 
 static void __exit rk_exit(void)
 {
-	/* TODO: Stop the hook. */
+	rk_hook_stop();
 }
 
 module_init(rk_init);

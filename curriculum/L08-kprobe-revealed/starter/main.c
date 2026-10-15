@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 //
 // Your task: write a kprobe from scratch. No rklings_hook.h.
-// Fill in every TODO below. See README for a walkthrough.
+// Hook __x64_sys_mkdir, intercept "rklings." commands, and
+// expose a /proc/rklings status file.
 //
 #include <linux/cred.h>
 #include <linux/errno.h>
@@ -100,34 +101,25 @@ static int rk_handle_mkdir(const char *name)
 	return ret;
 }
 
-// TODO: Write rk_pre_handler(struct kprobe *p, struct pt_regs *regs)
-// - Extract inner pt_regs: regs_get_kernel_argument(regs, 0)
-// - Read pathname from uregs->di with strncpy_from_user
-// - Find basename with strrchr(buf, '/')
-// - Check "rklings." prefix
-// - Call rk_handle_mkdir(base)
-// - put_user('\0', pathname) to suppress the real mkdir
-// - Return 0
+/* TODO: Write rk_pre_handler, a kprobe pre_handler for __x64_sys_mkdir.
+ * Extract the userspace pathname from pt_regs, copy it to a kernel buffer,
+ * find the basename, check the "rklings." prefix, call rk_handle_mkdir,
+ * then nullify the pathname so the real syscall sees an empty string. */
 
-// TODO: Define struct kprobe with:
-// - .symbol_name = "__x64_sys_mkdir"
-// - .pre_handler = rk_pre_handler
+/* TODO: Define a static struct kprobe targeting "__x64_sys_mkdir". */
 
-// TODO: Write rk_proc_show(struct seq_file *m, void *v)
-// - Call rk_try_deferred()
-// - Print deferred PID if set, else "idle"
+/* TODO: Write rk_proc_show for /proc/rklings. Call rk_try_deferred(),
+ * then print "deferred: <pid>" or "idle". */
 
 static int __init rk_init(void)
 {
-	// TODO: register_kprobe
-	// TODO: proc_create_single("rklings", 0444, NULL, rk_proc_show)
+	/* TODO: Register the kprobe and create /proc/rklings. */
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	// TODO: remove_proc_entry("rklings", NULL)
-	// TODO: unregister_kprobe
+	/* TODO: Remove /proc/rklings and unregister the kprobe. */
 }
 
 module_init(rk_init);

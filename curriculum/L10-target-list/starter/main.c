@@ -19,35 +19,16 @@ struct rk_target_list {
 static struct rk_target_list target_list;
 static struct proc_dir_entry *proc_entry;
 
-// TODO: Implement rk_target_add(list, name)
-// Acquire the spinlock with spin_lock_irqsave.
-// Check that count < RK_TARGET_MAX, return -ENOSPC if full.
-// Copy name with strscpy, increment count.
-// Release the spinlock with spin_unlock_irqrestore.
+/* TODO: Implement the target list operations. All must be thread-safe
+ * using spin_lock_irqsave/spin_unlock_irqrestore on list->lock.
+ *   rk_target_add(list, name)    - append a name, return -ENOSPC if full
+ *   rk_target_remove(list, idx)  - remove by index, shift remaining entries
+ *   rk_target_match(list, name)  - return true if name is in the list
+ *   rk_target_clear(list)        - reset count to 0 */
 
-// TODO: Implement rk_target_remove(list, idx)
-// Acquire the spinlock.
-// Validate idx is in range [0, count).
-// Use memmove to shift entries after idx down by one slot.
-// Decrement count.
-// Release the spinlock.
-
-// TODO: Implement rk_target_match(list, name)
-// Acquire the spinlock.
-// Iterate over entries, strcmp each against name.
-// Return true if found, false otherwise.
-// Release the spinlock.
-
-// TODO: Implement rk_target_clear(list)
-// Acquire the spinlock, set count to 0, release.
-
-// TODO: Implement rk_proc_show(m, v)
-// Acquire the spinlock.
-// Print each target with seq_printf, one per line.
-// Release the spinlock.
+/* TODO: Implement rk_proc_show to print each target, one per line. */
 static int rk_proc_show(struct seq_file *m, void *v)
 {
-	/* TODO: implement */
 	return 0;
 }
 
@@ -56,17 +37,11 @@ static int rk_proc_open(struct inode *inode, struct file *file)
 	return single_open(file, rk_proc_show, NULL);
 }
 
-// TODO: Implement rk_proc_write(file, ubuf, count, ppos)
-// Copy user buffer (up to 127 bytes) with copy_from_user.
-// Null-terminate and strip trailing newline.
-// Parse "add <name>" -> call rk_target_add.
-// Parse "remove <idx>" -> kstrtoint then rk_target_remove.
-// Parse "clear" -> rk_target_clear.
-// Return count.
+/* TODO: Implement rk_proc_write to parse commands from userspace.
+ * Accept "add <name>", "remove <idx>", and "clear". */
 static ssize_t rk_proc_write(struct file *file, const char __user *ubuf,
 			      size_t count, loff_t *ppos)
 {
-	/* TODO: implement */
 	return count;
 }
 
@@ -80,16 +55,13 @@ static const struct proc_ops rk_proc_ops = {
 
 static int __init rk_init(void)
 {
-	// TODO: Initialize the spinlock with spin_lock_init.
-	// TODO: Set target_list.count to 0.
-	// TODO: Create /proc/rklings with proc_create.
-	// Return -ENOMEM if proc_create fails.
+	/* TODO: Initialize the spinlock, create /proc/rklings (mode 0666). */
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	// TODO: Remove the proc entry with proc_remove.
+	/* TODO: Remove the proc entry. */
 }
 
 module_init(rk_init);

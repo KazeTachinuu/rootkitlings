@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 //
 // Your task: upgrade from kprobe to kretprobe and build a command
-// dispatcher. Fill in every TODO below. See README for details.
+// dispatcher that routes "rklings.<cmd>[.<arg>]" mkdir names to
+// handler functions (ping, status, escalate).
 //
 #include <linux/cred.h>
 #include <linux/errno.h>
@@ -80,50 +81,24 @@ static int rk_try_deferred(void)
 	return ret;
 }
 
-// TODO: Write rk_cmd_ping(const char *arg)
-// - pr_info("rklings: dispatch: cmd=ping\n")
-// - Return 0
+/* TODO: Implement command handlers: rk_cmd_ping, rk_cmd_status, rk_cmd_escalate.
+ * Each takes (const char *arg) and returns int.
+ * ping: log to dmesg. status: log escalation_count and deferred_pid.
+ * escalate: no arg calls rk_escalate(), otherwise parse PID and escalate it
+ * (defer if the process does not exist yet). */
 
-// TODO: Write rk_cmd_status(const char *arg)
-// - pr_info with escalation_count and deferred_pid
-// - Return 0
+/* TODO: Implement rk_dispatch(const char *name).
+ * Parse the suffix after RK_PREFIX into a command and optional argument
+ * (separated by '.'), then route to the matching handler.
+ * Commands: "e" (escalate), "ping", "status". Return -ENOENT for unknown. */
 
-// TODO: Write rk_cmd_escalate(const char *arg)
-// - If arg is NULL, call rk_escalate()
-// - Otherwise parse arg as PID with kstrtoint
-// - Call rk_escalate_pid, defer if -ESRCH
+/* TODO: Implement the kretprobe entry and return handlers for __x64_sys_mkdir.
+ * Use a per-instance data struct to carry the dispatch result and whether
+ * interception happened. The entry handler extracts and checks the pathname
+ * (same pattern as L08), calls rk_dispatch, and nullifies the pathname.
+ * The return handler overrides the syscall return value if intercepted. */
 
-// TODO: Write rk_dispatch(const char *name)
-// - Skip past RK_PREFIX to get suffix
-// - Find first dot in suffix with strchr
-// - Split into cmd (before dot) and arg (after dot, or NULL)
-// - Compare cmd_len and string to dispatch:
-//   "e" -> rk_cmd_escalate, "ping" -> rk_cmd_ping,
-//   "status" -> rk_cmd_status
-// - Return -ENOENT for unknown commands
-
-// TODO: Define struct rk_mkdir_data { int result; bool intercepted; }
-
-// TODO: Write rk_mkdir_entry(struct kretprobe_instance *inst, struct pt_regs *regs)
-// - Cast inst->data to struct rk_mkdir_data
-// - Set intercepted = false
-// - Extract inner pt_regs: regs_get_kernel_argument(regs, 0)
-// - Read pathname from uregs->di with strncpy_from_user
-// - Find basename with strrchr(buf, '/')
-// - Check "rklings." prefix
-// - Call rk_dispatch(base), store result
-// - put_user('\0', pathname) to suppress the real mkdir
-// - Set intercepted = true
-
-// TODO: Write rk_mkdir_return(struct kretprobe_instance *inst, struct pt_regs *regs)
-// - If intercepted, regs_set_return_value(regs, result)
-
-// TODO: Define struct kretprobe rk_mkdir_probe with:
-// - .kp.symbol_name = "__x64_sys_mkdir"
-// - .entry_handler  = rk_mkdir_entry
-// - .handler        = rk_mkdir_return
-// - .data_size      = sizeof(struct rk_mkdir_data)
-// - .maxactive      = 8
+/* TODO: Define the static struct kretprobe for __x64_sys_mkdir. */
 
 static int rk_proc_show(struct seq_file *m, void *v)
 {
@@ -138,15 +113,13 @@ static int rk_proc_show(struct seq_file *m, void *v)
 
 static int __init rk_init(void)
 {
-	// TODO: register_kretprobe(&rk_mkdir_probe)
-	// TODO: proc_create_single("rklings", 0444, NULL, rk_proc_show)
+	/* TODO: Register the kretprobe and create /proc/rklings. */
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	// TODO: remove_proc_entry("rklings", NULL)
-	// TODO: unregister_kretprobe(&rk_mkdir_probe)
+	/* TODO: Remove /proc/rklings and unregister the kretprobe. */
 }
 
 module_init(rk_init);
