@@ -56,7 +56,7 @@ out:
 	return ret;
 }
 
-static bool rk_target_match(struct rk_target_list *list, const char *name)
+static bool __maybe_unused rk_target_match(struct rk_target_list *list, const char *name)
 {
 	unsigned long flags;
 	bool found = false;
