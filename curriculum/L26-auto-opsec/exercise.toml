@@ -10,7 +10,7 @@ teaches = ["auto-targeting", "opsec-automation"]
 requires = []
 
 [workspace]
-mode = "cumulative"
+mode = "project"
 files = ["Kbuild", "main.c"]
 editable = ["main.c"]
 build = "."

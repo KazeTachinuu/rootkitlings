@@ -14,7 +14,7 @@ import tomllib
 from typing import Iterator, Mapping
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 
 
@@ -28,7 +28,6 @@ class ExerciseState:
     workspace_hash: str = ""
     passed_snapshot: str = ""
     attempts: int = 0
-    baseline_provider: str = ""
 
 
 @dataclass
@@ -62,11 +61,8 @@ class LearnerState:
         route: tuple[str, ...],
         revision: str,
         prerequisites: Mapping[str, frozenset[str]],
-        baseline_providers: Mapping[str, str | None],
     ) -> None:
-        _validate_contract(
-            route, revision, prerequisites, baseline_providers
-        )
+        _validate_contract(route, revision, prerequisites)
         if self.curriculum_revision != revision:
             raise StateError(
                 f"curriculum revision mismatch: state={self.curriculum_revision!r}, active={revision!r}"
@@ -89,31 +85,14 @@ class LearnerState:
             for value in (item.baseline_hash, item.workspace_hash, item.passed_snapshot):
                 if value and not re.fullmatch(r"[0-9a-f]{64}", value):
                     raise StateError(f"invalid content hash for {stable_id}: {value!r}")
-            expected_provider = baseline_providers[stable_id] or ""
-            if item.baseline_hash:
-                if item.baseline_provider != expected_provider:
-                    raise StateError(
-                        f"baseline provider mismatch for {stable_id}: "
-                        f"state={item.baseline_provider!r}, expected={expected_provider!r}"
-                    )
-                if expected_provider and expected_provider not in self.completed:
-                    raise StateError(
-                        f"baseline provider for {stable_id} is not completion-available: "
-                        f"{expected_provider}"
-                    )
-            elif item.baseline_provider:
-                raise StateError(
-                    f"baseline provider without baseline hash for {stable_id}"
-                )
 
 
 def new_state(
     route: tuple[str, ...],
     revision: str,
     prerequisites: Mapping[str, frozenset[str]],
-    baseline_providers: Mapping[str, str | None],
 ) -> LearnerState:
-    _validate_contract(route, revision, prerequisites, baseline_providers)
+    _validate_contract(route, revision, prerequisites)
     return LearnerState(revision, route)
 
 
@@ -121,7 +100,6 @@ def _validate_contract(
     route: tuple[str, ...],
     revision: str,
     prerequisites: Mapping[str, frozenset[str]],
-    baseline_providers: Mapping[str, str | None],
 ) -> None:
     if not revision or "\n" in revision or "\r" in revision:
         raise StateError("curriculum revision must be a non-empty single-line string")
@@ -132,17 +110,6 @@ def _validate_contract(
         raise StateError("stable IDs must be lowercase slug tokens")
     if set(prerequisites) != valid_ids:
         raise StateError("prerequisite map must cover every stable ID exactly")
-    if set(baseline_providers) != valid_ids:
-        raise StateError("baseline provider map must cover every stable ID exactly")
-    for stable_id, provider in baseline_providers.items():
-        if provider is None:
-            continue
-        if provider not in valid_ids or provider == stable_id:
-            raise StateError(f"invalid baseline provider for {stable_id}: {provider!r}")
-        if provider not in prerequisites[stable_id]:
-            raise StateError(
-                f"baseline provider for {stable_id} must be a completion dependency"
-            )
     positions = {stable_id: index for index, stable_id in enumerate(route)}
     visiting: set[str] = set()
     visited: set[str] = set()
@@ -179,7 +146,6 @@ def load_state(
     route: tuple[str, ...],
     revision: str,
     prerequisites: Mapping[str, frozenset[str]],
-    baseline_providers: Mapping[str, str | None],
 ) -> LearnerState:
     """Load and validate state, returning new empty state when the file is absent."""
     path = Path(path)
@@ -188,18 +154,14 @@ def load_state(
     if path.is_symlink():
         raise StateError(f"learner state must not be a symlink: {path}")
     if not path.exists():
-        return new_state(
-            route, revision, prerequisites, baseline_providers
-        )
+        return new_state(route, revision, prerequisites)
     if not path.is_file():
         raise StateError(f"learner state must be a regular file: {path}")
     try:
         state = parse_state(_read_regular_bytes(path).decode("utf-8"))
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
         raise StateError(f"cannot read learner state: {exc}") from exc
-    state.validate(
-        route, revision, prerequisites, baseline_providers
-    )
+    state.validate(route, revision, prerequisites)
     return state
 
 
@@ -223,15 +185,12 @@ def parse_state(content: str) -> LearnerState:
     if not isinstance(raw_exercises, dict):
         raise StateError("exercises must be a table")
     exercises: dict[str, ExerciseState] = {}
-    fields = {
-        "baseline_hash", "baseline_provider", "workspace_hash",
-        "passed_snapshot", "attempts",
-    }
+    fields = {"baseline_hash", "workspace_hash", "passed_snapshot", "attempts"}
     for stable_id, raw in raw_exercises.items():
         if not isinstance(raw, dict) or set(raw) != fields:
             raise StateError(f"exercise state fields mismatch for {stable_id}")
         if any(not isinstance(raw[key], str) for key in (
-            "baseline_hash", "baseline_provider", "workspace_hash", "passed_snapshot"
+            "baseline_hash", "workspace_hash", "passed_snapshot"
         )):
             raise StateError(f"exercise hashes must be strings for {stable_id}")
         attempts = raw["attempts"]
@@ -239,7 +198,6 @@ def parse_state(content: str) -> LearnerState:
             raise StateError(f"attempts must be an integer for {stable_id}")
         exercises[stable_id] = ExerciseState(
             baseline_hash=raw["baseline_hash"],
-            baseline_provider=raw["baseline_provider"],
             workspace_hash=raw["workspace_hash"],
             passed_snapshot=raw["passed_snapshot"],
             attempts=attempts,
@@ -265,10 +223,6 @@ def _validate_structural_state(state: LearnerState) -> None:
         for value in (item.baseline_hash, item.workspace_hash, item.passed_snapshot):
             if value and not re.fullmatch(r"[0-9a-f]{64}", value):
                 raise StateError(f"invalid content hash for {stable_id}: {value!r}")
-        if item.baseline_provider and not ID_RE.fullmatch(item.baseline_provider):
-            raise StateError(
-                f"invalid baseline provider for {stable_id}: {item.baseline_provider!r}"
-            )
 
 
 def _string_array(value: object, name: str) -> tuple[str, ...]:
@@ -295,7 +249,6 @@ def dump_state(state: LearnerState) -> str:
             "",
             f"[exercises.{_quote(stable_id)}]",
             f"baseline_hash = {_quote(item.baseline_hash)}",
-            f"baseline_provider = {_quote(item.baseline_provider)}",
             f"workspace_hash = {_quote(item.workspace_hash)}",
             f"passed_snapshot = {_quote(item.passed_snapshot)}",
             f"attempts = {item.attempts}",
@@ -359,7 +312,6 @@ class StateStore:
         route: tuple[str, ...],
         revision: str,
         prerequisites: Mapping[str, frozenset[str]],
-        baseline_providers: Mapping[str, str | None],
     ):
         self.path = Path(path)
         self.route = tuple(route)
@@ -368,13 +320,7 @@ class StateStore:
             stable_id: frozenset(values)
             for stable_id, values in prerequisites.items()
         }
-        self.baseline_providers = dict(baseline_providers)
-        _validate_contract(
-            self.route,
-            self.revision,
-            self.prerequisites,
-            self.baseline_providers,
-        )
+        _validate_contract(self.route, self.revision, self.prerequisites)
 
     @contextmanager
     def locked(self) -> Iterator[LearnerState]:
@@ -383,23 +329,14 @@ class StateStore:
         with lock_path.open("a+b") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
             state = load_state(
-                self.path,
-                self.route,
-                self.revision,
-                self.prerequisites,
-                self.baseline_providers,
+                self.path, self.route, self.revision, self.prerequisites
             )
             try:
                 yield state
             except Exception:
                 raise
             else:
-                state.validate(
-                    self.route,
-                    self.revision,
-                    self.prerequisites,
-                    self.baseline_providers,
-                )
+                state.validate(self.route, self.revision, self.prerequisites)
                 _atomic_write(self.path, dump_state(state))
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
@@ -413,11 +350,7 @@ class StateStore:
             fcntl.flock(lock.fileno(), fcntl.LOCK_SH)
             try:
                 yield load_state(
-                    self.path,
-                    self.route,
-                    self.revision,
-                    self.prerequisites,
-                    self.baseline_providers,
+                    self.path, self.route, self.revision, self.prerequisites
                 )
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)

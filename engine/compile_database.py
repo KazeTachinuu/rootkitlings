@@ -132,15 +132,6 @@ def source_include_directories(
         )
         if item is None:
             raise CompileDatabaseError(f"source bundle is absent from the catalog: {bundle}")
-        provider = catalog.solution_provider(item)
-        while provider is not None:
-            provider_roots = [catalog.root / provider.resources.solution]
-            if provider.workspace.additions:
-                provider_roots.append(catalog.root / provider.workspace.additions)
-            if provider.workspace.source:
-                provider_roots.append(catalog.root / provider.workspace.source)
-            candidates.extend(path / "include" for path in provider_roots)
-            provider = catalog.solution_provider(provider)
     result: list[Path] = []
     for path in candidates:
         resolved = path.resolve()

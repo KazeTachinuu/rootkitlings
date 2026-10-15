@@ -11,9 +11,7 @@ import tomllib
 from .solutions import (
     SolutionTree,
     full_solution_tree,
-    import_solution_files,
     materialize_solution_tree,
-    overlay_solution_tree,
 )
 from .workspace import WorkspaceError
 
@@ -25,12 +23,8 @@ MODULE_ARTIFACT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.ko\Z")
 MAKE_VARIABLE_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 DIFFICULTIES = {"intro", "standard", "advanced", "challenge"}
 KINDS = {"lesson", "milestone", "final-project"}
-WORKSPACE_MODES = {"cumulative", "single-file", "project"}
-BASELINES = {
-    "starter",
-    "parent",
-    "scaffold",
-}
+WORKSPACE_MODES = {"single-file", "project"}
+BASELINES = {"starter"}
 TOP_FIELDS = {
     "schema_version", "id", "title", "stage", "kind",
     "tradecraft", "difficulty", "prerequisites", "teaches", "requires",
@@ -47,8 +41,7 @@ QUERY_FIELDS = {
     "id", "path", "serial", "sequence", "title", "stage", "kind",
     "tradecraft", "difficulty", "prerequisites", "teaches", "requires",
     "workspace_mode", "workspace_source", "workspace_files", "workspace_editable",
-    "workspace_build", "workspace_baseline", "workspace_parent",
-    "workspace_additions", "workspace_module_artifact",
+    "workspace_build", "workspace_baseline", "workspace_module_artifact",
     "readme", "host_check", "hint", "solution", "verification_timeout",
     "verification_tools", "runtime_setup",
 }
@@ -84,12 +77,6 @@ class Tool:
 
 
 @dataclass(frozen=True)
-class WorkspaceImport:
-    exercise: str
-    files: tuple[tuple[str, str], ...]
-
-
-@dataclass(frozen=True)
 class Workspace:
     mode: str
     source: str
@@ -97,10 +84,7 @@ class Workspace:
     editable: tuple[str, ...]
     build: str
     baseline: str
-    parent: str
-    additions: str = ""
     module_artifact: str = ""
-    imports: tuple[WorkspaceImport, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -170,8 +154,6 @@ class Exercise:
             "workspace_editable": self.workspace.editable,
             "workspace_build": self.workspace.build,
             "workspace_baseline": self.workspace.baseline,
-            "workspace_parent": self.workspace.parent,
-            "workspace_additions": self.workspace.additions,
             "workspace_module_artifact": self.workspace.module_artifact,
             "readme": self.resources.readme,
             "host_check": self.resources.host_check,
@@ -315,50 +297,24 @@ class Catalog:
         baseline = _token(value, "baseline", path)
         if baseline not in BASELINES:
             raise CatalogError(f"{path}: invalid workspace baseline {baseline!r}")
-        common = {"mode", "files", "editable", "build", "baseline"}
+        expected = {"mode", "files", "editable", "build", "baseline", "source"}
         if "module_artifact" in value:
-            common.add("module_artifact")
-        if "imports" in value:
-            common.add("imports")
-        if baseline == "starter":
-            expected = common | {"source"}
-        elif baseline == "scaffold":
-            expected = common | {"source", "parent"}
-        elif baseline == "parent":
-            expected = common | {"parent"} | ({"additions"} if "additions" in value else set())
-        else:
-            expected = common | ({"additions"} if "additions" in value else set())
+            expected.add("module_artifact")
         _exact_fields(value, expected, path / "workspace")
         source = value.get("source", "")
-        parent = value.get("parent", "")
-        additions = value.get("additions", "")
+        if not source:
+            raise CatalogError(f"{path}: starter baseline requires source")
         module_artifact = value.get("module_artifact", "")
-        if baseline == "starter":
-            if not source or parent:
-                raise CatalogError(f"{path}: starter baseline requires source and forbids parent")
-        elif baseline == "scaffold":
-            if not source or not parent:
-                raise CatalogError(
-                    f"{path}: scaffold baseline requires source and parent"
-                )
-            _identifier(parent, path)
-        elif baseline == "parent":
-            if source or not parent:
-                raise CatalogError(f"{path}: parent baseline requires parent and forbids source")
-            _identifier(parent, path)
         return Workspace(
-            mode=_token(value, "mode", path), source=_optional_path(source, path, self.root),
+            mode=_token(value, "mode", path),
+            source=_safe_path(source, path, self.root),
             files=tuple(_relative_list(value, "files", path)),
             editable=tuple(_relative_list(value, "editable", path)),
-            build=_workspace_build(value["build"], path), baseline=baseline, parent=parent,
-            additions=_optional_path(additions, path, self.root),
+            build=_workspace_build(value["build"], path),
+            baseline=baseline,
             module_artifact=(
                 _module_artifact(module_artifact, path / "workspace")
                 if module_artifact else ""
-            ),
-            imports=(
-                _workspace_imports(value["imports"], path)
-                if "imports" in value else ()
             ),
         )
 
@@ -545,30 +501,15 @@ class Catalog:
             for dependency in item.prerequisites:
                 if dependency not in actual:
                     raise CatalogError(f"{item.path}: unknown prerequisite {dependency!r}")
-            provider = self.baseline_provider(item)
-            if provider:
-                self.validate_workspace_lineage(item, provider)
-            scaffold = self.scaffold_provider(item)
-            if scaffold:
-                self.validate_scaffold_lineage(item, scaffold)
             self._validate_paths(item)
         self._validate_dag()
         self._validate_direct_prerequisites()
-        for item in self.exercises:
-            self.validate_workspace_imports(item)
         solution_cache: dict[str, SolutionTree] = {}
         for item in self.exercises:
             try:
                 self.solution_tree(item, solution_cache)
             except WorkspaceError as exc:
                 raise CatalogError(f"{item.path}: invalid solution: {exc}") from exc
-        for item in self.exercises:
-            if not item.workspace.imports:
-                continue
-            try:
-                self.starter_tree(item, solution_cache)
-            except WorkspaceError as exc:
-                raise CatalogError(f"{item.path}: invalid starter: {exc}") from exc
         for item in self.exercises:
             available = baseline | self.prerequisite_concepts(item)
             missing = set(item.requires) - available
@@ -629,19 +570,6 @@ class Catalog:
                             f"{item.path}: prerequisite {dependency!r} is not "
                             "earlier in required_route"
                         )
-            if item.workspace.baseline == "parent" and (
-                item.id not in positions
-                or (
-                    item.workspace.parent in self.by_id
-                    and (
-                        item.workspace.parent not in positions
-                        or positions[item.workspace.parent] >= positions[item.id]
-                    )
-                )
-            ):
-                raise CatalogError(
-                    f"{item.path}: workspace parent must be earlier in required_route"
-                )
 
     def _validate_paths(self, item):
         required_files = [item.resources.readme, item.resources.hint]
@@ -661,22 +589,15 @@ class Catalog:
                 )
         if not item.resources.solution or not (self.root / item.resources.solution).is_dir():
             raise CatalogError(f"{item.path}: solution must be an existing directory")
-        if item.workspace.source and not (self.root / item.workspace.source).is_dir():
+        if not (self.root / item.workspace.source).is_dir():
             raise CatalogError(f"{item.path}: workspace source must be an existing directory")
-        if item.workspace.source and item.workspace.baseline != "scaffold":
-            source = self.root / item.workspace.source
-            for relative in self.local_workspace_files(item):
-                if not (source / relative).is_file():
-                    raise CatalogError(f"{item.path}: workspace file missing from source: {relative}")
-            build = source if item.workspace.build == "." else source / item.workspace.build
-            if not build.is_dir():
-                raise CatalogError(f"{item.path}: workspace build directory is missing")
-        if item.workspace.additions:
-            additions = self.root / item.workspace.additions
-            if additions.is_symlink() or not additions.is_dir():
-                raise CatalogError(
-                    f"{item.path}: workspace additions must be a real directory"
-                )
+        source = self.root / item.workspace.source
+        for relative in item.workspace.files:
+            if not (source / relative).is_file():
+                raise CatalogError(f"{item.path}: workspace file missing from source: {relative}")
+        build = source if item.workspace.build == "." else source / item.workspace.build
+        if not build.is_dir():
+            raise CatalogError(f"{item.path}: workspace build directory is missing")
         if not set(item.workspace.editable) <= set(item.workspace.files):
             raise CatalogError(f"{item.path}: editable paths must be listed in workspace files")
     def _validate_dag(self):
@@ -687,12 +608,7 @@ class Catalog:
             if exercise_id in visited:
                 return
             visiting.add(exercise_id)
-            item = self.by_id[exercise_id]
-            dependencies = list(self.completion_dependencies(item))
-            scaffold = self.scaffold_provider(item)
-            if scaffold is not None:
-                dependencies.append(scaffold.id)
-            for parent in dependencies:
+            for parent in self.by_id[exercise_id].prerequisites:
                 visit(parent)
             visiting.remove(exercise_id); visited.add(exercise_id)
         for exercise_id in self.by_id:
@@ -742,131 +658,28 @@ class Catalog:
         return tuple(self.by_id[value] for value in self.required_route)
 
     def module_artifact(self, item: Exercise) -> str:
-        """Resolve the module output name from its sparse workspace contract."""
-        if item.workspace.module_artifact:
-            return item.workspace.module_artifact
-        provider = self.solution_provider(item)
-        if provider is not None:
-            return self.module_artifact(provider)
-        return self.default_module_artifact
+        return item.workspace.module_artifact or self.default_module_artifact
 
     def solution_tree(
         self,
         item: Exercise,
         cache: dict[str, SolutionTree] | None = None,
     ) -> SolutionTree:
-        """Return the recursively composed, validated reference solution."""
+        """Load the standalone reference solution for an exercise."""
         cache = {} if cache is None else cache
         if item.id in cache:
             return dict(cache[item.id])
-        solution = self.root / item.resources.solution
-        if item.workspace.imports:
-            starter = self.starter_tree(item, cache)
-            result = overlay_solution_tree(
-                starter,
-                solution,
-                item.workspace.files,
-                item.workspace.files,
-            )
-            cache[item.id] = result
-            return dict(result)
-        provider = self.solution_provider(item)
-        if item.workspace.baseline == "scaffold":
-            assert provider is not None
-            provider_tree = self.solution_tree(provider, cache)
-            starter = overlay_solution_tree(
-                provider_tree,
-                self.root / item.workspace.source,
-                provider.workspace.files,
-                item.workspace.files,
-            )
-            result = overlay_solution_tree(
-                starter,
-                solution,
-                item.workspace.files,
-                item.workspace.files,
-            )
-        elif provider is None:
-            result = full_solution_tree(solution, item.workspace.files)
-        else:
-            provider_tree = self.solution_tree(provider, cache)
-            provider_files = provider.workspace.files
-            if item.workspace.additions:
-                provider_tree = overlay_solution_tree(
-                    provider_tree,
-                    self.root / item.workspace.additions,
-                    provider_files,
-                    item.workspace.files,
-                )
-                provider_files = item.workspace.files
-            result = overlay_solution_tree(
-                provider_tree,
-                solution,
-                provider_files,
-                item.workspace.files,
-            )
+        result = full_solution_tree(
+            self.root / item.resources.solution, item.workspace.files
+        )
         cache[item.id] = result
         return dict(result)
 
-    def starter_tree(
-        self,
-        item: Exercise,
-        solution_cache: dict[str, SolutionTree] | None = None,
-    ) -> SolutionTree:
-        """Compose the immutable reference starter, including explicit imports."""
-        cache = {} if solution_cache is None else solution_cache
-        provider = self.solution_provider(item)
-        local_files = self.local_workspace_files(item)
-        if item.workspace.baseline == "starter":
-            base = full_solution_tree(
-                self.root / item.workspace.source,
-                local_files,
-            )
-        else:
-            assert provider is not None
-            base = self.solution_tree(provider, cache)
-            overlay = (
-                item.workspace.source
-                if item.workspace.baseline == "scaffold"
-                else item.workspace.additions
-            )
-            if overlay:
-                base = overlay_solution_tree(
-                    base,
-                    self.root / overlay,
-                    provider.workspace.files,
-                    local_files,
-                )
-            elif set(provider.workspace.files) != set(local_files):
-                raise WorkspaceError(
-                    "local starter files do not cover the declared workspace"
-                )
-
-        imported = (
-            (
-                workspace_import.exercise,
-                self.solution_tree(
-                    self.by_id[workspace_import.exercise],
-                    cache,
-                ),
-                workspace_import.files,
-            )
-            for workspace_import in item.workspace.imports
+    def starter_tree(self, item: Exercise) -> SolutionTree:
+        """Load the standalone starter for an exercise."""
+        return full_solution_tree(
+            self.root / item.workspace.source, item.workspace.files
         )
-        return import_solution_files(
-            base,
-            imported,
-            item.workspace.files,
-        )
-
-    def local_workspace_files(self, item: Exercise) -> tuple[str, ...]:
-        """Return declared paths supplied by the baseline rather than imports."""
-        imported = {
-            destination
-            for workspace_import in item.workspace.imports
-            for _, destination in workspace_import.files
-        }
-        return tuple(path for path in item.workspace.files if path not in imported)
 
     def materialize_starter(
         self,
@@ -874,7 +687,6 @@ class Catalog:
         destination_root: Path,
         stable_id: str | None = None,
     ) -> Path:
-        """Materialize an immutable composed starter as a learner workspace."""
         return materialize_solution_tree(
             self.starter_tree(item),
             destination_root,
@@ -894,188 +706,8 @@ class Catalog:
             stable_id or item.id,
         )
 
-    def baseline_provider(self, item: Exercise) -> Exercise | None:
-        """Derive the sole workspace inheritance provider, if any."""
-        baseline = item.workspace.baseline
-        if baseline == "starter":
-            return None
-        if baseline == "scaffold":
-            return None
-        if baseline == "parent":
-            try:
-                return self.by_id[item.workspace.parent]
-            except KeyError as exc:
-                raise CatalogError(
-                    f"{item.path}: unknown workspace parent {item.workspace.parent!r}"
-                ) from exc
-        raise CatalogError(f"{item.path}: unknown workspace baseline {baseline!r}")
-
-    def scaffold_provider(self, item: Exercise) -> Exercise | None:
-        """Return the static reference reused by a sparse starter, if any."""
-        if item.workspace.baseline != "scaffold":
-            return None
-        try:
-            provider = self.by_id[item.workspace.parent]
-        except KeyError as exc:
-            raise CatalogError(
-                f"{item.path}: unknown scaffold parent {item.workspace.parent!r}"
-            ) from exc
-        if provider.id not in self.required_route:
-            raise CatalogError(
-                f"{item.path}: scaffold parent must be on the required route"
-            )
-        if item.id in self.required_route:
-            if self.required_route.index(provider.id) >= self.required_route.index(item.id):
-                raise CatalogError(
-                    f"{item.path}: scaffold parent must be earlier in required_route"
-                )
-        return provider
-
-    def solution_provider(self, item: Exercise) -> Exercise | None:
-        """Return the reference tree beneath a sparse solution overlay."""
-        return self.scaffold_provider(item) or self.baseline_provider(item)
-
     def completion_dependencies(self, item: Exercise) -> tuple[str, ...]:
-        """Return prerequisites plus lineage needed to credit completion."""
-        result = list(item.prerequisites)
-        provider = self.baseline_provider(item)
-        if provider and provider.id not in result:
-            result.append(provider.id)
-        return tuple(result)
-
-    def validate_workspace_lineage(
-        self,
-        item: Exercise,
-        provider: Exercise | None = None,
-    ) -> None:
-        """Validate inherited workspace shape against its derived provider."""
-        provider = provider or self.baseline_provider(item)
-        if provider is None:
-            return
-        if item.workspace.mode != "cumulative":
-            raise CatalogError(
-                f"{item.path}: inherited baseline requires cumulative workspace mode"
-            )
-        if (
-            item.workspace.mode != provider.workspace.mode
-            or item.workspace.build != provider.workspace.build
-        ):
-            raise CatalogError(
-                f"{item.path}: inherited workspace mode/build must match provider "
-                f"{provider.id!r} exactly"
-            )
-        provider_files = set(provider.workspace.files)
-        consumer_files = set(item.workspace.files)
-        if not provider_files <= consumer_files:
-            removed = sorted(provider_files - consumer_files)
-            raise CatalogError(
-                f"{item.path}: inherited workspace cannot remove or rename provider "
-                f"files: {removed}"
-            )
-        imported_files = set(item.workspace.files) - set(
-            self.local_workspace_files(item)
-        )
-        new_files = consumer_files - provider_files - imported_files
-        additions = item.workspace.additions
-        if (
-            item.workspace.module_artifact
-            and item.workspace.module_artifact != self.module_artifact(provider)
-        ):
-            raise CatalogError(
-                f"{item.path}: inherited workspace module artifact conflicts with "
-                f"provider {provider.id!r}"
-            )
-        if new_files and not additions:
-            raise CatalogError(
-                f"{item.path}: inherited workspace adds files but has no additions directory"
-            )
-        if additions:
-            additions_root = self.root / additions
-            if additions_root.is_symlink() or not additions_root.is_dir():
-                raise CatalogError(
-                    f"{item.path}: workspace additions must be an existing real directory"
-                )
-            actual = _regular_tree(additions_root, item.path)
-            missing = new_files - actual
-            unknown = actual - consumer_files
-            if not actual:
-                raise CatalogError(
-                    f"{item.path}: workspace additions must not be empty"
-                )
-            if missing or unknown:
-                raise CatalogError(
-                    f"{item.path}: additions directory mismatch "
-                    f"(missing={sorted(missing)}, "
-                    f"unknown={sorted(unknown)})"
-                )
-
-    def validate_scaffold_lineage(
-        self,
-        item: Exercise,
-        provider: Exercise | None = None,
-    ) -> None:
-        """Validate static source reuse without creating a completion edge."""
-        provider = provider or self.scaffold_provider(item)
-        if provider is None:
-            return
-        inherited = set(provider.workspace.files)
-        declared = set(item.workspace.files)
-        if not inherited <= declared:
-            raise CatalogError(
-                f"{item.path}: scaffold cannot remove or rename parent files"
-            )
-        if item.workspace.build != provider.workspace.build:
-            raise CatalogError(
-                f"{item.path}: scaffold build root must match parent exactly"
-            )
-        if item.workspace.additions:
-            raise CatalogError(f"{item.path}: scaffold forbids additions")
-        if (
-            item.workspace.module_artifact
-            and item.workspace.module_artifact != self.module_artifact(provider)
-        ):
-            raise CatalogError(
-                f"{item.path}: scaffold module artifact conflicts with parent "
-                f"{provider.id!r}"
-            )
-
-    def validate_workspace_imports(self, item: Exercise) -> None:
-        """Validate import providers and their source/destination contracts."""
-        if not item.workspace.imports:
-            return
-        prerequisite_ids = self.prerequisite_ids(item)
-        destinations: set[str] = set()
-        declared = set(item.workspace.files)
-        for workspace_import in item.workspace.imports:
-            provider = self.by_id.get(workspace_import.exercise)
-            if provider is None:
-                raise CatalogError(
-                    f"{item.path}: unknown workspace import exercise "
-                    f"{workspace_import.exercise!r}"
-                )
-            if provider.id not in prerequisite_ids:
-                raise CatalogError(
-                    f"{item.path}: workspace import {provider.id!r} must be a "
-                    "direct or transitive prerequisite"
-                )
-            provider_files = set(provider.workspace.files)
-            for source, destination in workspace_import.files:
-                if source not in provider_files:
-                    raise CatalogError(
-                        f"{item.path}: workspace import source is not declared by "
-                        f"{provider.id!r}: {source}"
-                    )
-                if destination not in declared:
-                    raise CatalogError(
-                        f"{item.path}: workspace import destination is not declared: "
-                        f"{destination}"
-                    )
-                if destination in destinations:
-                    raise CatalogError(
-                        f"{item.path}: workspace import destination collides: "
-                        f"{destination}"
-                    )
-                destinations.add(destination)
+        return tuple(item.prerequisites)
 
     def prerequisite_exercises(self, item: Exercise) -> tuple[Exercise, ...]:
         ids = self.prerequisite_ids(item)
@@ -1255,50 +887,6 @@ def _relative_path(value, path):
     return candidate.as_posix()
 
 
-def _workspace_imports(value, path) -> tuple[WorkspaceImport, ...]:
-    import_path = path / "workspace" / "imports"
-    if not isinstance(value, list):
-        raise CatalogError(f"{import_path}: imports must be an array of tables")
-    if not value:
-        raise CatalogError(f"{import_path}: imports must not be empty")
-    result = []
-    providers = set()
-    for index, row in enumerate(value):
-        row_path = import_path / str(index)
-        if not isinstance(row, dict):
-            raise CatalogError(f"{row_path}: import must be a table")
-        expected = {"exercise", "files"}
-        if "rename" in row:
-            expected.add("rename")
-        _exact_fields(row, expected, row_path)
-        exercise = _identifier(row["exercise"], row_path)
-        if exercise in providers:
-            raise CatalogError(
-                f"{import_path}: duplicate import exercise {exercise!r}"
-            )
-        providers.add(exercise)
-        files = tuple(_relative_list(row, "files", row_path))
-        raw_rename = row.get("rename", {})
-        if not isinstance(raw_rename, dict):
-            raise CatalogError(f"{row_path}: rename must be a table")
-        rename = {
-            _relative_path(source, row_path): _relative_path(destination, row_path)
-            for source, destination in raw_rename.items()
-        }
-        unknown = set(rename) - set(files)
-        if unknown:
-            raise CatalogError(
-                f"{row_path}: rename contains unselected source paths: "
-                f"{sorted(unknown)}"
-            )
-        mappings = tuple((source, rename.get(source, source)) for source in files)
-        destinations = [destination for _, destination in mappings]
-        if len(destinations) != len(set(destinations)):
-            raise CatalogError(f"{row_path}: duplicate import destinations")
-        result.append(WorkspaceImport(exercise, mappings))
-    return tuple(result)
-
-
 def _workspace_build(value, path):
     if value == ".":
         return value
@@ -1320,42 +908,6 @@ def _module_artifact(value, path):
             f"{path}: module artifact must be a portable .ko basename"
         )
     return value
-
-
-def _regular_tree(
-    root: Path,
-    owner: Path,
-) -> set[str]:
-    """Return an additions tree's files, rejecting links and special entries."""
-    files: set[str] = set()
-    directories: set[str] = set()
-    for directory, names, filenames in os.walk(root, followlinks=False):
-        directory_path = Path(directory)
-        for name in names:
-            path = directory_path / name
-            if path.is_symlink() or not path.is_dir():
-                raise CatalogError(
-                    f"{owner}: workspace additions contain a symlink or special directory"
-                )
-            directories.add(path.relative_to(root).as_posix())
-        for name in filenames:
-            path = directory_path / name
-            if path.is_symlink() or not path.is_file():
-                raise CatalogError(
-                    f"{owner}: workspace additions contain a symlink or special file"
-                )
-            files.add(path.relative_to(root).as_posix())
-    expected_directories = {
-        parent.as_posix()
-        for value in files
-        for parent in PurePosixPath(value).parents
-        if parent != PurePosixPath(".")
-    }
-    if directories != expected_directories:
-        raise CatalogError(
-            f"{owner}: additions directory contains stray or empty directories"
-        )
-    return files
 
 
 def _unique(items, field):

@@ -15,7 +15,7 @@ from typing import Iterable, Sequence
 
 from .catalog import Catalog, CatalogError
 from .console import Console
-from .solutions import full_solution_tree, materialize_solution_tree, overlay_solution_tree
+from .solutions import full_solution_tree, materialize_solution_tree
 from .workspace import WorkspaceError
 
 
@@ -193,10 +193,9 @@ class Validator:
                 "checks",
                 "solution",
             }
-            starter_declared = item.workspace.source or item.workspace.additions
-            if starter_declared:
+            if item.workspace.source:
                 expected_paths.add("starter")
-                if Path(starter_declared) != item.path / "starter":
+                if Path(item.workspace.source) != item.path / "starter":
                     failures.append(f"{item.id}: starter must be owned by its bundle")
             if (bundle / "fixtures").exists():
                 expected_paths.add("fixtures")
@@ -291,28 +290,10 @@ class Validator:
                     failures.append(
                         f"{item.id}: composed solution contains executable source"
                     )
-
-                if item.workspace.imports:
-                    starter = catalog.starter_tree(item, solution_cache)
-                elif item.workspace.baseline == "starter":
-                    starter = full_solution_tree(
-                        self.root / item.workspace.source,
-                        item.workspace.files,
-                    )
-                elif item.workspace.baseline == "scaffold":
-                    starter = catalog.starter_tree(item, solution_cache)
-                else:
-                    provider = catalog.baseline_provider(item)
-                    if provider is None:
-                        raise ValidationError("derived starter has no baseline provider")
-                    starter = catalog.solution_tree(provider, solution_cache)
-                    if item.workspace.additions:
-                        starter = overlay_solution_tree(
-                            starter,
-                            self.root / item.workspace.additions,
-                            provider.workspace.files,
-                            item.workspace.files,
-                        )
+                starter = full_solution_tree(
+                    self.root / item.workspace.source,
+                    item.workspace.files,
+                )
                 if set(starter) != set(item.workspace.files):
                     failures.append(
                         f"{item.id}: composed starter paths differ from workspace files"
@@ -485,30 +466,22 @@ class Validator:
             solution_root.mkdir()
 
             for item in catalog.exercises:
-                if item.workspace.baseline == "starter":
-                    starter = (
-                        catalog.starter_tree(item)
-                        if item.workspace.imports
-                        else full_solution_tree(
-                            catalog.root / item.workspace.source,
-                            item.workspace.files,
-                        )
-                    )
-                    materialize_solution_tree(starter, starter_root, item.id)
+                starter = full_solution_tree(
+                    catalog.root / item.workspace.source,
+                    item.workspace.files,
+                )
+                materialize_solution_tree(starter, starter_root, item.id)
                 catalog.materialize_solution(item, solution_root, item.id)
 
             for item in catalog.required():
-                if item.workspace.baseline == "starter":
-                    self._build_module(
-                        kernel_build,
-                        starter_root / item.id,
-                        item.workspace.build,
-                        f"starter does not compile: {item.id}",
-                        warn_free=False,
-                    )
-                    starters += 1
-                else:
-                    derived += 1
+                self._build_module(
+                    kernel_build,
+                    starter_root / item.id,
+                    item.workspace.build,
+                    f"starter does not compile: {item.id}",
+                    warn_free=False,
+                )
+                starters += 1
                 self._build_module(
                     kernel_build,
                     solution_root / item.id,
@@ -517,10 +490,7 @@ class Validator:
                 )
                 solutions += 1
 
-        self.console.success(
-            f"Starters: {starters} builds; "
-            f"{derived} derived starters structurally validated"
-        )
+        self.console.success(f"Starters: {starters} builds")
         self.console.success(f"Solutions: {solutions} warning-free builds")
 
     def _build_module(

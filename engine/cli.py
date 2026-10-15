@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import difflib
 import os
 import shutil
 import sys
@@ -31,8 +30,6 @@ from engine.workspace import (
     clean_paths,
     create_snapshot,
     materialize,
-    materialize_imported,
-    materialize_inherited,
     restore_workspace,
     verify_snapshot,
 )
@@ -73,19 +70,7 @@ COMPLETION_DEPENDENCIES = {
     exercise.id: frozenset(CAT.completion_dependencies(exercise))
     for exercise in CAT.exercises
 }
-BASELINE_PROVIDERS = {
-    exercise.id: (
-        provider.id if (provider := CAT.baseline_provider(exercise)) else None
-    )
-    for exercise in CAT.exercises
-}
-STORE = StateStore(
-    STATE,
-    ROUTE,
-    CAT.revision,
-    COMPLETION_DEPENDENCIES,
-    BASELINE_PROVIDERS,
-)
+STORE = StateStore(STATE, ROUTE, CAT.revision, COMPLETION_DEPENDENCIES)
 
 
 def initialize_runtime():
@@ -263,49 +248,8 @@ def snap(content_hash):
     return SNAPSHOTS / content_hash
 
 
-def baseline(x, state):
-    provider = CAT.baseline_provider(x)
-    if provider is None:
-        return ROOT / x.workspace.source
-    r = state.exercises.get(provider.id)
-    if not r or not r.passed_snapshot:
-        die(f'{label(x)} needs a passed snapshot from {label(provider)}')
-    return snap(r.passed_snapshot)
-
-
 def materialize_workspace(x, state):
-    if x.workspace.baseline == 'scaffold':
-        return CAT.materialize_starter(x, WORK, workspace_name(x))
-    source = baseline(x, state)
-    provider = CAT.baseline_provider(x)
-    imported = {}
-    for workspace_import in x.workspace.imports:
-        tree = CAT.solution_tree(CAT.by_id[workspace_import.exercise])
-        for source_path, destination_path in workspace_import.files:
-            solution_file = tree[source_path]
-            imported[destination_path] = (
-                solution_file.data,
-                solution_file.mode,
-            )
-    if provider is not None and (x.workspace.additions or imported):
-        return materialize_inherited(
-            source,
-            ROOT / x.workspace.additions if x.workspace.additions else None,
-            WORK,
-            workspace_name(x),
-            provider.workspace.files,
-            x.workspace.files,
-            imported,
-        )
-    if imported:
-        return materialize_imported(
-            source,
-            WORK,
-            workspace_name(x),
-            CAT.local_workspace_files(x),
-            x.workspace.files,
-            imported,
-        )
+    source = ROOT / x.workspace.source
     return materialize(source, WORK, workspace_name(x), x.workspace.files)
 
 
@@ -375,8 +319,6 @@ def cmd_start(a):
                 SNAPSHOTS,
                 x.workspace.files,
             )
-            provider = CAT.baseline_provider(x)
-            r.baseline_provider = provider.id if provider else ''
             r.workspace_hash = canonical_tree_hash(p, x.workspace.files)
         UI.heading(f'{label(x)}: {x.title}')
         state = 'created' if created else 'already exists'
@@ -441,8 +383,7 @@ def cmd_solution(a):
     # Self-study references remain intentionally available out of route order.
     with STORE.read_locked() as s:
         x = resolve(one(a, 'solution'), s)
-        completed = set(s.completed)
-    output = solution_output(x, completed)
+    output = solution_output(x)
     UI.raw(output)
     workspace = wp(x)
     if workspace.is_dir() and not workspace.is_symlink():
@@ -462,56 +403,15 @@ def solution_text(data, relative):
         die(f'Reference solution is not UTF-8 text: {relative}')
 
 
-def solution_output(x, completed):
+def solution_output(x):
     tree = CAT.solution_tree(x)
-    provider = CAT.solution_provider(x)
-    derived = provider is not None
-    lines = []
-    if not derived:
-        lines.append(
-            f'Complete reference files for {label(x)}: {x.title}\n'
-        )
-        for relative, solution_file in sorted(tree.items()):
-            text = solution_text(solution_file.data, relative)
-            lines.append(f'\n--- {relative} ---\n')
-            lines.append(text)
-            if text and not text.endswith('\n'):
-                lines.append('\n')
-        return ''.join(lines)
-
-    provider_tree = CAT.solution_tree(provider)
-    lines.append(
-        f'Reference changes for {label(x)}: {x.title}\n'
-    )
-    lines.append(f'Compared with {label(provider)}: {provider.title}\n')
-    if provider.id not in completed:
-        lines.append(
-            f'Note: {label(provider)} is not complete; these changes compare '
-            'with its reference files, not your workspace.\n'
-        )
-    changed = False
+    lines = [f'Complete reference files for {label(x)}: {x.title}\n']
     for relative, solution_file in sorted(tree.items()):
-        before = provider_tree.get(relative)
-        if before is not None and before.data == solution_file.data:
-            continue
-        changed = True
-        before_text = (
-            '' if before is None else solution_text(before.data, relative)
-        )
-        after_text = solution_text(solution_file.data, relative)
-        diff = list(difflib.unified_diff(
-            before_text.splitlines(keepends=True),
-            after_text.splitlines(keepends=True),
-            fromfile='/dev/null' if before is None else f'a/{relative}',
-            tofile=f'b/{relative}',
-            lineterm='\n',
-        ))
-        if not diff and before is None:
-            diff = ['--- /dev/null\n', f'+++ b/{relative}\n']
-        lines.append('\n')
-        lines.extend(diff)
-    if not changed:
-        die(f'Reference files for {label(x)} introduce no changes')
+        text = solution_text(solution_file.data, relative)
+        lines.append(f'\n--- {relative} ---\n')
+        lines.append(text)
+        if text and not text.endswith('\n'):
+            lines.append('\n')
     return ''.join(lines)
 
 

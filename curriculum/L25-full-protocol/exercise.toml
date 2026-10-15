@@ -10,7 +10,7 @@ teaches = ["full-command-wiring", "protocol-parity"]
 requires = []
 
 [workspace]
-mode = "cumulative"
+mode = "project"
 files = ["Kbuild", "main.c"]
 editable = ["main.c"]
 build = "."
