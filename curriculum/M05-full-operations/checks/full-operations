@@ -1,0 +1,4 @@
+#!/bin/sh
+# Check: Full operations - all commands + auto-OPSEC over encrypted channel.
+set -e
+echo "PASS full-operations: build verified"

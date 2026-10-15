@@ -5,7 +5,7 @@ stage = "project"
 kind = "final-project"
 tradecraft = ["control", "network", "crypto", "concealment", "persistence", "privilege"]
 difficulty = "advanced"
-prerequisites = ["auto-opsec"]
+prerequisites = ["full-operations"]
 teaches = ["full-system-integration", "verification-methodology"]
 requires = []
 

@@ -5,7 +5,7 @@ stage = "operations"
 kind = "lesson"
 tradecraft = ["control"]
 difficulty = "standard"
-prerequisites = ["secure-channel"]
+prerequisites = ["remote-control"]
 teaches = ["full-command-wiring", "protocol-parity"]
 requires = []
 

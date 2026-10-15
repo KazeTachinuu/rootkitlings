@@ -48,15 +48,20 @@ required_route = [
   # M03: encrypted channel
   "secure-channel",
 
-  # Operations (L22-L26)
+  # Operations (L22-L24)
   "shell-timeout",
   "file-download",
   "command-parser",
-  "full-protocol",
-  "auto-opsec",
 
   # M04: remote control
   "remote-control",
+
+  # Protocol & OPSEC (L25-L26)
+  "full-protocol",
+  "auto-opsec",
+
+  # M05: full operations
+  "full-operations",
 
   # Final project
   "complete-rootkit",
@@ -299,6 +304,10 @@ label = "Fixed Array Storage"
 [[concepts]]
 id = "full-command-wiring"
 label = "Full Command Wiring"
+
+[[concepts]]
+id = "full-operations-integration"
+label = "Full Operations Integration"
 
 [[concepts]]
 id = "full-system-integration"

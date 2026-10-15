@@ -1,0 +1,2 @@
+All M01 commands need wire equivalents in the dispatch table.
+Auto-hide calls go in the agent loop, after handshake succeeds.

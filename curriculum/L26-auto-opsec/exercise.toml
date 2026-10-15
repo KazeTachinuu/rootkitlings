@@ -5,7 +5,7 @@ stage = "operations"
 kind = "lesson"
 tradecraft = ["concealment"]
 difficulty = "standard"
-prerequisites = ["full-protocol", "dirent-filter", "port-filter"]
+prerequisites = ["full-protocol"]
 teaches = ["auto-targeting", "opsec-automation"]
 requires = []
 
@@ -25,7 +25,7 @@ files = [
     "execution/commands.c",
     "execution/shell.c",
 ]
-editable = ["core/opsec.c", "network/agent.c"]
+editable = ["core/opsec.c", "network/agent.c", "include/rootkit.h"]
 build = "."
 baseline = "starter"
 source = "curriculum/L26-auto-opsec/starter"

