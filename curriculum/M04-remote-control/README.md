@@ -78,18 +78,19 @@ stops it.
 
 ## Your task
 
-Edit `main.c`:
+Edit `execution/commands.c`:
 
-1. Set up the agent kthread with the secure channel context.
-2. In the agent loop, receive and decrypt frames.
-3. Parse each decrypted frame with `rk_command_parse`.
-4. Dispatch with `rk_command_dispatch`, which calls:
-   - Shell/exec handlers (L22 shell slots with timeouts)
-   - Download handler (L23 chunked file read)
-   - All hide/unhide/persist/escalate handlers (M01)
-5. Send responses as encrypted frames.
-6. Handle errors gracefully: send error response, continue loop.
-7. Clean shutdown: cancel delayed works, stop kthread, release socket.
+1. Implement all 8 command handlers (ping, status, info, shell, exec, download,
+   cloak, uncloak).
+   Each receives the session and an argument string.
+
+Edit `execution/dispatch.c`:
+
+2. Build the dispatch table mapping command prefixes to handlers.
+3. Implement `rk_send_response` and `rk_dispatch`.
+
+The remaining files (agent, protocol, envelope, init, target, filter, opsec,
+shell) are provided complete from prior exercises.
 
 Run:
 

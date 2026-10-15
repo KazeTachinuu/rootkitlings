@@ -132,16 +132,21 @@ preventing use-after-free.
 
 ## Your task
 
-Edit `main.c`:
+Edit `execution/shell.c`:
 
 1. Define `struct rk_shell` with lock, busy flag, socket, delayed_work, and
    timeout_jiffies.
 2. Create two static instances: `interactive_shell` and `exec_shell`.
-3. Initialize both with `INIT_DELAYED_WORK` in `rk_init`.
-4. Implement `rk_shell_timeout_fn` to kill the shell on timeout.
-5. Call `mod_delayed_work` on every shell activity to reset the timer.
-6. Implement the exec slot for one-shot command execution.
-7. Call `cancel_delayed_work_sync` for both shells in `rk_exit`.
+3. Implement `rk_shell_timeout_fn` to kill the shell on timeout.
+4. Call `mod_delayed_work` on every shell activity to reset the timer.
+5. Implement the exec slot for one-shot command execution.
+6. In `rk_shells_init`, initialize both with `INIT_DELAYED_WORK`.
+7. In `rk_shells_cleanup`, call `cancel_delayed_work_sync` for both shells.
+
+Edit `core/init.c` to call `rk_shells_init` and `rk_shells_cleanup` during
+module lifecycle.
+
+Edit `network/agent.c` to wire shell dispatch into the session loop.
 
 Run:
 

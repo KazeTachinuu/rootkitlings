@@ -73,16 +73,25 @@ tcpdump -A -i lo port 4444
 
 ## Your task
 
-Edit `main.c`:
+Edit `crypto/envelope.c`:
 
-1. Implement `rk_aead_seal` and `rk_aead_open` (same as L19).
-2. Implement `rk_send_sealed`: build envelope header, seal with AEAD, send as a
-   frame.
-3. Implement `rk_recv_sealed`: receive frame, check replay, open with AEAD.
+1. Implement `rk_send_sealed`: build envelope header, seal with AEAD, send as a
+   framed message.
+2. Implement `rk_recv_sealed`: receive frame, check replay, open with AEAD.
+
+Edit `network/protocol.c`:
+
+3. Implement framed send/receive with 2-byte length prefix.
+
+Edit `network/agent.c`:
+
 4. Implement `rk_handshake`: exchange encrypted HELLO messages.
 5. Implement `rk_handle_session`: receive/send loop with encrypted frames.
 6. Implement `rk_agent_thread`: connect, handshake, handle session, retry.
-7. Complete `rk_init` and `rk_exit`: parse key, start thread, clean up.
+
+Edit `core/init.c`:
+
+7. Parse key from module parameter, start agent thread, clean up on exit.
 
 Run:
 

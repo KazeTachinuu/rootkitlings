@@ -22,19 +22,12 @@ static struct file *rk_sock_file;
 static DEFINE_MUTEX(rk_shell_lock);
 static bool rk_shell_busy;
 
-// Install the socket as stdin, stdout, stderr and escalate to root
 static int rk_umh_init(struct subprocess_info *info, struct cred *new)
 {
 	int fd;
 	int i;
 
-	// TODO: Escalate to root with commit_creds(prepare_kernel_cred(&init_task)).
-
-	// TODO: Loop i from 0 to 2:
-	//   fd = get_unused_fd_flags(0);
-	//   fd_install(fd, get_file(rk_sock_file));
-	// This gives the shell stdin, stdout, stderr on the socket.
-	// pr_info("rklings: install fds here\n");
+	// Escalate to root, then install the socket file as fd 0, 1, 2.
 
 	return 0;
 }
@@ -53,22 +46,7 @@ static int __init rk_init(void)
 		NULL
 	};
 
-	// TODO: Lock rk_shell_lock. If rk_shell_busy, unlock and return -EBUSY.
-	// Set rk_shell_busy = true, then unlock.
-
-	// TODO: Create a kernel TCP socket with sock_create_kern (same as L14).
-	// On error, go to out_clear.
-
-	// TODO: Fill addr and kernel_connect (same as L14).
-	// On error, go to out_sock.
-
-	// TODO: Convert socket to file: rk_sock_file = sock_alloc_file(sock, 0, NULL).
-	// Check IS_ERR. On error, go to out_sock.
-
-	// TODO: Set up usermodehelper with rk_umh_init callback.
-	// On NULL, error = -ENOMEM, go to out_file.
-
-	// TODO: call_usermodehelper_exec(info, UMH_WAIT_EXEC).
+	// Connect to host:port, convert socket to file, spawn shell.
 
 	return 0;
 

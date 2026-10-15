@@ -22,18 +22,7 @@ static int __init rk_init(void)
 	char payload[] = "hello\n";
 	int error;
 
-	// TODO: Create a kernel TCP socket with sock_create_kern.
-	// Use current->nsproxy->net_ns for the network namespace.
-	// pr_info("rklings: create the socket here\n");
-
-	// TODO: Fill addr with AF_INET, in_aton(host), htons(port).
-
-	// TODO: Connect with kernel_connect. Go to out_release on error.
-
-	// TODO: Zero msg, set vec.iov_base to payload, vec.iov_len to its length.
-	// Send with kernel_sendmsg.
-
-	// TODO: Release the socket and return 0.
+	// Create a kernel TCP socket, connect to host:port, send payload.
 
 	return 0;
 

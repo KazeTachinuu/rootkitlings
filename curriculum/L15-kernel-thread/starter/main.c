@@ -9,7 +9,6 @@
 static struct task_struct *rk_thread;
 static DECLARE_WAIT_QUEUE_HEAD(rk_wq);
 
-// Base delay 5 seconds, jitter up to 3 seconds
 static unsigned long base_delay_ms = 5000;
 static unsigned long jitter_ms = 3000;
 
@@ -18,34 +17,20 @@ static int rk_agent_fn(void *data)
 	unsigned long counter = 0;
 	unsigned long delay;
 
-	// TODO: Loop while the thread has not been asked to stop.
-	// pr_info("rklings: implement the agent loop\n");
-
-	// TODO: Inside the loop, increment counter.
-
-	// TODO: Compute a jittered delay in jiffies:
-	//   base_delay_ms + get_random_u32() % jitter_ms
-	//   Convert to jiffies with msecs_to_jiffies().
-
-	// TODO: Sleep with wait_event_interruptible_timeout.
-	//   Use rk_wq as the wait queue.
-	//   Use kthread_should_stop() as the wake condition.
+	// Loop until stopped. Each iteration: increment counter, sleep with jitter.
 
 	return 0;
 }
 
 static int __init rk_init(void)
 {
-	// TODO: Start the thread with kthread_run.
-	// Name it "rkworker". Check for IS_ERR.
-	// pr_info("rklings: start the kernel thread\n");
-
+	// Start the agent thread.
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	// TODO: Stop the thread with kthread_stop.
+	// Stop the agent thread.
 }
 
 module_init(rk_init);

@@ -26,16 +26,8 @@ files = [
     "execution/shell.c",
 ]
 editable = [
-    "core/init.c",
-    "core/target.c",
-    "core/filter.c",
-    "core/opsec.c",
-    "crypto/envelope.c",
-    "network/protocol.c",
-    "network/agent.c",
     "execution/dispatch.c",
     "execution/commands.c",
-    "execution/shell.c",
 ]
 build = "."
 baseline = "starter"

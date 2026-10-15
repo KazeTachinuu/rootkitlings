@@ -6,11 +6,9 @@
 #include <linux/sched/task.h>
 #include <linux/slab.h>
 
-// Escalate the spawned process to root
 static int rk_umh_init(struct subprocess_info *info, struct cred *new)
 {
-	// TODO: Set root credentials with commit_creds(prepare_kernel_cred(&init_task)).
-	// pr_info("rklings: escalate to root here\n");
+	// Escalate to root before exec.
 	return 0;
 }
 
@@ -18,15 +16,7 @@ static int __init rk_init(void)
 {
 	struct subprocess_info *info;
 
-	// TODO: Define argv: { "/bin/sh", "-c", "id > /tmp/rklings_shell_test", NULL }
-	// TODO: Define envp: { "HOME=/", "PATH=/sbin:/bin:/usr/sbin:/usr/bin", NULL }
-
-	// TODO: Call call_usermodehelper_setup with argv[0], argv, envp,
-	//   GFP_KERNEL, rk_umh_init as the init callback, NULL for cleanup
-	//   and data. Check for NULL return.
-	// pr_info("rklings: set up usermodehelper here\n");
-
-	// TODO: Call call_usermodehelper_exec(info, UMH_WAIT_EXEC).
+	// Spawn "/bin/sh -c 'id > /tmp/rklings_shell_test'" as root.
 
 	return 0;
 }

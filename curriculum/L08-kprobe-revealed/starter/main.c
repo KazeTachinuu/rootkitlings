@@ -101,33 +101,22 @@ static int rk_handle_mkdir(const char *name)
 	return ret;
 }
 
-/* TODO: Write a shared helper rk_do_intercept(const char __user *pathname)
- * that copies the pathname to a kernel buffer, finds the basename, checks
- * the "rklings." prefix, calls rk_handle_mkdir, and nullifies the pathname.
- *
- * Then write two kprobe pre_handlers:
- *   rk_pre_mkdir  - for __x64_sys_mkdir:  pathname is in uregs->di
- *   rk_pre_mkdirat - for __x64_sys_mkdirat: pathname is in uregs->si
- * Both extract uregs via regs_get_kernel_argument(regs, 0), then call
- * the shared helper with the pathname from the correct register. */
+/* Shared intercept helper + two kprobe pre_handlers (mkdir and mkdirat).
+ * Copy pathname, check prefix, dispatch, suppress the real syscall. */
 
-/* TODO: Define two static struct kprobes:
- *   rk_kprobe_mkdir   targeting "__x64_sys_mkdir"
- *   rk_kprobe_mkdirat targeting "__x64_sys_mkdirat" */
+/* Two kprobes: one for mkdir, one for mkdirat. */
 
-/* TODO: Write rk_proc_show for /proc/rklings. Call rk_try_deferred(),
- * then print "deferred: <pid>" or "idle". */
+/* /proc/rklings: attempt deferred delivery, then print status. */
 
 static int __init rk_init(void)
 {
-	/* TODO: Register both kprobes and create /proc/rklings.
-	 * If the second register fails, unregister the first. */
+	/* Register both kprobes, create /proc/rklings. Roll back on failure. */
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/* TODO: Remove /proc/rklings and unregister both kprobes. */
+	/* Tear down proc entry and both kprobes. */
 }
 
 module_init(rk_init);

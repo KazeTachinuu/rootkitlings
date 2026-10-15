@@ -109,15 +109,19 @@ recv encrypted frame -> decrypt -> parse command -> execute
 
 ## Your task
 
-Edit `main.c`:
+Edit `execution/commands.c`:
 
-1. Add STATUS handler: format all state counts and boolean flags.
-2. Add LIST PID subcommand alongside existing FILE, CONTENT, PORT.
-3. Add UNHIDE FILE/PID/CONTENT/PORT handlers (find and remove by value).
-4. Add ESCALATE handler using prepare_kernel_cred and commit_creds.
-5. Add DOWNLOAD handler with chunked kernel_read.
-6. Wire every handler into the dispatcher.
-7. Ensure all responses go through the encrypted frame path.
+1. Add the 12 remaining command handlers (status, info, hide/unhide variants,
+   list, persist, unpersist, escalate, download).
+
+Edit `execution/dispatch.c`:
+
+2. Expand the dispatch table to all 20 commands.
+   Longest prefixes first.
+
+Edit `include/rootkit.h`:
+
+3. Add prototypes for all new command handlers.
 
 Run:
 
@@ -127,6 +131,10 @@ Run:
 
 ## References
 
-- [`prepare_kernel_cred` and `commit_creds`](https://github.com/torvalds/linux/blob/v7.2/kernel/cred.c)
-- [`filp_open`, `kernel_read`, `filp_close`](https://github.com/torvalds/linux/blob/v7.2/include/linux/fs.h)
-- [`utsname()`](https://github.com/torvalds/linux/blob/v7.2/include/linux/utsname.h)
+- [`prepare_kernel_cred` and `commit_creds`][cred]
+- [`filp_open`, `kernel_read`, `filp_close`][fs]
+- [`utsname()`][utsname]
+
+[cred]: https://github.com/torvalds/linux/blob/v7.2/kernel/cred.c
+[fs]: https://github.com/torvalds/linux/blob/v7.2/include/linux/fs.h
+[utsname]: https://github.com/torvalds/linux/blob/v7.2/include/linux/utsname.h

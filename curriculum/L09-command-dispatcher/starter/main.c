@@ -82,34 +82,15 @@ static int rk_try_deferred(void)
 	return ret;
 }
 
-/* TODO: Implement command handlers: rk_cmd_ping, rk_cmd_status, rk_cmd_escalate.
- * Each takes (const char *arg) and returns int.
- * ping: log to dmesg. status: log escalation_count and deferred_pid.
- * escalate: no arg calls rk_escalate(), otherwise parse PID and escalate it
- * (defer if the process does not exist yet). */
+/* Command handlers: ping, status, escalate.
+ * Each takes (const char *arg) and returns int. */
 
-/* TODO: Implement rk_dispatch(const char *name).
- * Parse the suffix after RK_PREFIX into a command and optional argument
- * (separated by '.'), then route to the matching handler.
- * Commands: "e" (escalate), "ping", "status". Return -ENOENT for unknown. */
+/* Dispatcher: parse "rklings.<cmd>[.<arg>]" and route to the handler. */
 
-/* TODO: Implement the kretprobe handlers for mkdir interception.
- * Use a per-instance data struct to carry the dispatch result and whether
- * interception happened.
- *
- * Write a shared helper rk_do_entry(inst, pathname) that copies the
- * pathname, finds the basename, checks the prefix, calls rk_dispatch,
- * and nullifies the pathname.
- *
- * Then write two entry handlers:
- *   rk_mkdir_entry   - for __x64_sys_mkdir:  pathname in uregs->di
- *   rk_mkdirat_entry - for __x64_sys_mkdirat: pathname in uregs->si
- *
- * The return handler overrides the syscall return value if intercepted. */
+/* kretprobe entry/return handlers for mkdir and mkdirat.
+ * Entry: intercept, dispatch, suppress. Return: override the result. */
 
-/* TODO: Define two static struct kretprobes:
- *   rk_mkdir_probe   targeting "__x64_sys_mkdir"
- *   rk_mkdirat_probe targeting "__x64_sys_mkdirat" */
+/* Two kretprobes: one for mkdir, one for mkdirat. */
 
 static int rk_proc_show(struct seq_file *m, void *v)
 {
@@ -124,14 +105,13 @@ static int rk_proc_show(struct seq_file *m, void *v)
 
 static int __init rk_init(void)
 {
-	/* TODO: Register both kretprobes and create /proc/rklings.
-	 * If the second register fails, unregister the first. */
+	/* Register both kretprobes, create /proc/rklings. Roll back on failure. */
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/* TODO: Remove /proc/rklings and unregister both kretprobes. */
+	/* Tear down proc entry and both kretprobes. */
 }
 
 module_init(rk_init);

@@ -19,16 +19,12 @@ struct rk_target_list {
 static struct rk_target_list target_list;
 static struct proc_dir_entry *proc_entry;
 
-/* TODO: Implement the target list operations. All must be thread-safe
- * using spin_lock_irqsave/spin_unlock_irqrestore on list->lock.
- *   rk_target_add(list, name)    - append a name, return -ENOSPC if full
- *   rk_target_remove(list, idx)  - remove by index, shift remaining entries
- *   rk_target_match(list, name)  - return true if name is in the list
- *   rk_target_clear(list)        - reset count to 0 */
+// Implement the four target list operations: add, remove, match, clear.
+// All must be IRQ-safe.
 
-/* TODO: Implement rk_proc_show to print each target, one per line. */
 static int rk_proc_show(struct seq_file *m, void *v)
 {
+	// Print each target, one per line.
 	return 0;
 }
 
@@ -37,11 +33,10 @@ static int rk_proc_open(struct inode *inode, struct file *file)
 	return single_open(file, rk_proc_show, NULL);
 }
 
-/* TODO: Implement rk_proc_write to parse commands from userspace.
- * Accept "add <name>", "remove <idx>", and "clear". */
 static ssize_t rk_proc_write(struct file *file, const char __user *ubuf,
 			      size_t count, loff_t *ppos)
 {
+	// Parse "add <name>", "remove <idx>", and "clear".
 	return count;
 }
 
@@ -55,13 +50,13 @@ static const struct proc_ops rk_proc_ops = {
 
 static int __init rk_init(void)
 {
-	/* TODO: Initialize the spinlock, create /proc/rklings (mode 0666). */
+	// Initialize the spinlock and create /proc/rklings.
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/* TODO: Remove the proc entry. */
+	// Remove the proc entry.
 }
 
 module_init(rk_init);

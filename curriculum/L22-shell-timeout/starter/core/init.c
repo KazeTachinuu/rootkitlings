@@ -23,17 +23,13 @@ module_param_string(peer_address, peer_addr_str, sizeof(peer_addr_str), 0);
 
 static int __init rk_init(void)
 {
-	/*
-	 * TODO: Call rk_shell_init for both shell instances.
-	 */
+	// Initialize both shell instances.
 	return -ENOSYS;
 }
 
 static void __exit rk_exit(void)
 {
-	/*
-	 * TODO: Call rk_shell_stop for both shell instances.
-	 */
+	// Stop both shell instances.
 }
 
 module_init(rk_init);

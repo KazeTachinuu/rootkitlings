@@ -24,27 +24,17 @@ struct rk_target_list {
 
 static struct rk_target_list port_targets;
 
-/* TODO: Implement rk_target_add(list, name)
- * spin_lock_irqsave, check count < max, strscpy, count++, spin_unlock_irqrestore
- */
+// Implement add, remove, and match for the target list.
+
 static int rk_target_add(struct rk_target_list *list, const char *name)
 {
-	/* TODO: implement */
 	return -ENOSYS;
 }
 
-/* TODO: Implement rk_target_remove(list, idx)
- * spin_lock_irqsave, validate idx, memmove to close gap, count--, spin_unlock_irqrestore
- */
 static int rk_target_remove(struct rk_target_list *list, int idx)
 {
-	/* TODO: implement */
 	return -ENOSYS;
 }
-
-/* TODO: Implement rk_target_match(list, name)
- * spin_lock_irqsave, iterate and strcmp, return true/false, spin_unlock_irqrestore
- */
 
 /* ---- tcp seq_show interception ---- */
 
@@ -54,27 +44,15 @@ struct tcp_show_data {
 	struct sock *sk;
 };
 
-/* TODO: Implement tcp_show_entry(ri, regs)
- * tcp4_seq_show is a regular function, not a syscall wrapper.
- * Get seq_file pointer from regs->di, save seq->count.
- * Get sock pointer from regs->si, save it.
- */
 static int tcp_show_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-	/* TODO: implement */
+	// Save seq->count and the sock pointer.
 	return 0;
 }
 
-/* TODO: Implement tcp_show_return(ri, regs)
- * If sk == SEQ_START_TOKEN, skip (this is the header row).
- * Get inet_sock with inet_sk(sk).
- * Extract source port: ntohs(inet->inet_sport).
- * Convert port to string with snprintf.
- * If rk_target_match finds the port: restore seq->count to saved value.
- */
 static int tcp_show_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-	/* TODO: implement */
+	// If the port matches a target, rewind seq->count to hide the line.
 	return 0;
 }
 
@@ -201,16 +179,14 @@ static int __init rk_init(void)
 
 	spin_lock_init(&port_targets.lock);
 
-	/* TODO: Register tcp4_probe. */
-	/* TODO: Register tcp6_probe. On failure, unregister tcp4_probe. */
-	/* TODO: Register mkdir probe. On failure, unregister both tcp probes. */
+	// Register tcp4, tcp6, and mkdir probes with goto rollback.
 
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/* TODO: Unregister mkdir, tcp6, then tcp4 probes (reverse order). */
+	// Unregister probes in reverse order.
 }
 
 module_init(rk_init);

@@ -3,27 +3,16 @@
 #include <linux/module.h>
 #include "rootkit.h"
 
-// TODO: Implement rk_init
-// 1. Initialize all four target lists with rk_target_init.
-// 2. Create /proc/rklings with rk_proc_init.
-// 3. Register all six kretprobes with goto rollback:
-//    rk_mkdir_probe -> rk_mkdirat_probe -> rk_getdents_probe
-//    -> rk_read_probe -> rk_tcp4_probe -> rk_tcp6_probe
-//    Each failure label unregisters the previous probe and falls through.
-//    The last failure label calls rk_proc_exit.
 static int __init rk_init(void)
 {
-	/* TODO: implement */
+	// Initialize target lists, create proc entry, register all six kretprobes.
+	// Use goto rollback: each failure unregisters the previous probes.
 	return 0;
 }
 
-// TODO: Implement rk_exit
-// 1. rk_uncloak() (in case module was cloaked).
-// 2. Unregister all six probes in reverse order.
-// 3. rk_proc_exit().
 static void __exit rk_exit(void)
 {
-	/* TODO: implement */
+	// Uncloak, unregister all probes in reverse order, remove proc entry.
 }
 
 module_init(rk_init);

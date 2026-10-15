@@ -8,16 +8,8 @@
 #include "rklings_hook.h"
 
 RK_ON_MKDIR(name) {
-	/*
-	 * TODO: Compare "name" against "rklings.e".
-	 * If it does not match, return -ENOENT.
-	 *
-	 * If it matches:
-	 * 1. Call prepare_kernel_cred(&init_task) to get root credentials.
-	 * 2. Check the return value is not NULL.
-	 * 3. Call commit_creds with the new credentials.
-	 * 4. Return -ENOENT to prevent the directory from being created.
-	 */
+	/* If name matches the trigger, replace the caller's credentials
+	 * with root credentials. Always return -ENOENT. */
 	return -ENOENT;
 }
 

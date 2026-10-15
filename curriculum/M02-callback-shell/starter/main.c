@@ -29,21 +29,16 @@ static DEFINE_MUTEX(rk_shell_lock);
 static bool rk_shell_busy;
 static struct file *rk_sock_file;
 
-// Escalate to root and redirect fds to the socket
 static int rk_umh_init(struct subprocess_info *info, struct cred *new)
 {
 	int fd;
 	int i;
 
-	// TODO: Escalate to root (same as L16).
-
-	// TODO: Loop i from 0 to 2, install rk_sock_file as fd (same as L17).
-	// pr_info("rklings: redirect fds here\n");
+	// Escalate to root and redirect fd 0, 1, 2 to the socket.
 
 	return 0;
 }
 
-// One connection attempt: connect, spawn shell, wait for exit
 static int rk_try_connect(void)
 {
 	struct socket *sock;
@@ -58,22 +53,7 @@ static int rk_try_connect(void)
 		NULL
 	};
 
-	// TODO: Lock rk_shell_lock. If rk_shell_busy, return -EBUSY.
-	// Set rk_shell_busy = true.
-
-	// TODO: Create kernel socket (same as L14). On error, goto out_clear.
-
-	// TODO: Fill addr, kernel_connect. On error, goto out_sock.
-
-	// TODO: sock_alloc_file. On error, goto out_sock.
-
-	// TODO: call_usermodehelper_setup with rk_umh_init.
-	// On NULL, error = -ENOMEM, goto out_file.
-
-	// TODO: call_usermodehelper_exec with UMH_WAIT_PROC.
-	// UMH_WAIT_PROC blocks until the shell exits, so the agent
-	// knows when to reconnect.
-	// pr_info("rklings: spawn shell here\n");
+	// Connect, convert socket to file, spawn shell, wait for it to exit.
 
 	return 0;
 
@@ -97,26 +77,20 @@ static int rk_agent_fn(void *data)
 	unsigned long delay;
 	unsigned long jitter_ms = 3000;
 
-	// TODO: Loop while !kthread_should_stop().
-	//   Call rk_try_connect().
-	//   If kthread_should_stop(), break.
-	//   Sleep with jittered delay (same as L15).
-	// pr_info("rklings: implement agent loop\n");
+	// Loop: try_connect, sleep with jitter on failure, repeat.
 
 	return 0;
 }
 
 static int __init rk_init(void)
 {
-	// TODO: kthread_run(rk_agent_fn, NULL, "rkworker").
-	// Check IS_ERR.
-
+	// Start the agent thread.
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	// TODO: kthread_stop, clean up rk_sock_file, clear shell state.
+	// Stop the thread and clean up.
 }
 
 module_init(rk_init);

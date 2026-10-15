@@ -74,53 +74,19 @@ static int rk_send_all(struct socket *sock, const void *buf, size_t len)
 	return 0;
 }
 
-/*
- * TODO: Implement rk_send_frame.
- *
- * Send a length-prefixed frame: a 4-byte big-endian length header
- * followed by the data. Use htonl to convert the length. If len is 0,
- * send only the header (this is the EOF marker).
- */
+// Send a length-prefixed frame. Zero-length frame = EOF marker.
 
 /* ------------------------------------------------------------------ */
 /* File download: read and send in chunks                              */
 /* ------------------------------------------------------------------ */
 
-/*
- * TODO: Implement rk_download_file(struct socket *sock,
- *                                   const char *filepath).
- *
- * 1. Open the file with filp_open(filepath, O_RDONLY, 0).
- *    If it fails (IS_ERR), send an error frame containing the error
- *    code as a big-endian 4-byte value, then return the error.
- *
- * 2. Allocate a RK_CHUNK_SIZE buffer with kmalloc(RK_CHUNK_SIZE,
- *    GFP_KERNEL). If allocation fails, close the file and return
- *    -ENOMEM.
- *
- * 3. Loop:
- *    a. kernel_read(filp, buf, RK_CHUNK_SIZE, &pos) into the buffer.
- *    b. If bytes_read < 0, store the error and break.
- *    c. If bytes_read == 0, EOF reached, break.
- *    d. Send the chunk as a framed message with rk_send_frame.
- *
- * 4. After the loop, if no error, send a zero-length frame (EOF).
- *
- * 5. kfree the buffer and filp_close the file.
- */
+// Read a file in chunks, send each chunk as a frame, end with EOF frame.
 
 /* ------------------------------------------------------------------ */
 /* Demo entry point                                                    */
 /* ------------------------------------------------------------------ */
 
-/*
- * TODO: Implement rk_do_download(const char *path).
- *
- * 1. Connect with rk_connect().
- * 2. Call rk_download_file.
- * 3. kernel_sock_shutdown + sock_release.
- * 4. Return the error from rk_download_file.
- */
+// Connect, download the file, tear down the socket.
 
 /* ------------------------------------------------------------------ */
 /* Module lifecycle                                                    */
@@ -131,10 +97,7 @@ module_param(target_file, charp, 0);
 
 static int __init rk_init(void)
 {
-	/*
-	 * TODO: If target_file is non-NULL and non-empty,
-	 * call rk_do_download(target_file) and return its result.
-	 */
+	// Download target_file if provided.
 	return -ENOSYS;
 }
 
