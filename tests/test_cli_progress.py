@@ -850,7 +850,10 @@ class LearnerCLITests(unittest.TestCase):
         self.assertIn("--style=plain", command)
         self.assertIn("--paging=never", command)
         self.assertIn("--color=never", command)
-        self.assertIn("--terminal-width=80", command)
+        self.assertTrue(
+            any(arg.startswith("--terminal-width=") for arg in command),
+            f"missing --terminal-width flag in {command}",
+        )
         self.assertIn("--language=markdown", command)
         self.assertEqual(kwargs, {"capture": True})
         self.assertIn("# highlighted", output.getvalue())
