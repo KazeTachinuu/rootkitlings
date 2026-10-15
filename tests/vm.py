@@ -1,14 +1,23 @@
-"""Thin wrapper around virtme-ng for kernel module integration tests."""
+"""VM integration test helpers using the course kernel."""
 
 from __future__ import annotations
 
-import os
 import subprocess
 from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parent.parent
-KDIR = Path(f"/lib/modules/{os.uname().release}/build")
+
+
+def _course_kernel(subcommand: str) -> Path:
+    result = subprocess.run(
+        [REPO / "scripts/kernel", subcommand],
+        capture_output=True, text=True, check=True,
+    )
+    return Path(result.stdout.strip())
+
+
+KDIR = _course_kernel("build-dir")
 
 
 class VMError(RuntimeError):
@@ -26,26 +35,18 @@ class VMResult:
 
 
 class VM:
-    """Boot the host kernel in a disposable VM via virtme-ng."""
-
-    def __init__(self) -> None:
-        self._tools = REPO / ".rklings/build/tools"
-        self._lib = REPO / "vm/checks/lib.sh"
-        self._ui = REPO / "scripts/lib/ui.sh"
+    """Run a guest check via vm/boot with the course kernel."""
 
     def run_check(self, check: str | Path, ko: str | Path,
                   timeout: int = 60,
                   check_args: tuple[str, ...] = ()) -> VMResult:
-        ko = Path(ko)
-        args_str = " ".join(f"'{a}'" for a in check_args)
         cmd = [
-            "vng", "--run", "--rw", "--user", "root", "--exec",
-            f"export RKLINGS_LIB={self._lib}"
-            f" RKLINGS_UI={self._ui}"
-            f" RKLINGS_DIR={ko.parent}"
-            f" PATH={self._tools}:$PATH"
-            f" && {check} {args_str}",
+            str(REPO / "vm/boot"),
+            "--check", str(check),
         ]
+        for arg in check_args:
+            cmd += ["--check-arg", arg]
+        cmd.append(str(ko))
         try:
             result = subprocess.run(
                 cmd, capture_output=True, text=True,
@@ -57,7 +58,7 @@ class VM:
 
 
 def build_module(src: Path, variables: dict[str, str] | None = None) -> Path:
-    """Build a kernel module against the host kernel."""
+    """Build a kernel module against the course kernel."""
     var_args = [f"{k}={v}" for k, v in (variables or {}).items()]
     subprocess.run(
         ["make", "-s", "-C", str(KDIR), f"M={src}", "modules", *var_args],
