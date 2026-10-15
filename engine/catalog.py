@@ -36,6 +36,7 @@ VERIFICATION_FIELDS = {"timeout_seconds", "tools", "cases"}
 VERIFICATION_CASE_REQUIRED_FIELDS = {"id", "label", "expect_build"}
 VERIFICATION_CASE_OPTIONAL_FIELDS = {
     "build_variables", "check", "build_output_contains", "check_arguments",
+    "network",
 }
 QUERY_FIELDS = {
     "id", "path", "serial", "sequence", "title", "stage", "kind",

@@ -257,7 +257,8 @@ class Validator:
                 owned_checks = sorted(checks.rglob("*"))
                 if not any(path.is_file() for path in owned_checks):
                     failures.append(f"{item.id}: checks directory is empty")
-                regular(checks / "test", 0o755, f"{item.id} checker test")
+                if (checks / "test").is_file():
+                    regular(checks / "test", 0o755, f"{item.id} checker test")
                 for path in owned_checks:
                     if path.is_dir() and not path.is_symlink():
                         continue
