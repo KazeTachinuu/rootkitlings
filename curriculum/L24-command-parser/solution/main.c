@@ -80,7 +80,7 @@ static bool rk_exact(const char *buf, size_t len, const char *word)
 /* ------------------------------------------------------------------ */
 
 /* Parse a text command from a decrypted buffer into a structured command. */
-int rk_command_parse(const char *buf, size_t len, struct rk_command *cmd)
+static int __maybe_unused rk_command_parse(const char *buf, size_t len, struct rk_command *cmd)
 {
 	cmd->kind = RK_CMD_UNKNOWN;
 	cmd->arg[0] = '\0';
@@ -193,7 +193,7 @@ static int rk_send_response(const char *resp)
 	return 0;
 }
 
-int rk_command_dispatch(struct rk_command *cmd)
+static int __maybe_unused rk_command_dispatch(struct rk_command *cmd)
 {
 	switch (cmd->kind) {
 	case RK_CMD_PING:

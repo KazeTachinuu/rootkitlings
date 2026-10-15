@@ -283,26 +283,34 @@ static int rk_send_sealed(struct rk_session *s, const u8 *data, size_t len)
 static int rk_recv_sealed(struct rk_session *s, u8 *out, size_t max_len,
 			  size_t *out_len)
 {
-	u8 frame[RK_FRAME_MAX];
+	u8 *frame;
 	size_t frame_len;
 	struct rk_envelope_hdr hdr;
 	u8 nonce[RK_NONCE_LEN];
 	u64 seq;
 	int error;
 
-	error = recv_frame(s->sock, frame, sizeof(frame), &frame_len);
-	if (error)
-		return error;
+	frame = kmalloc(RK_FRAME_MAX, GFP_KERNEL);
+	if (!frame)
+		return -ENOMEM;
 
-	if (frame_len < RK_HDR_LEN + RK_TAG_LEN)
-		return -EINVAL;
+	error = recv_frame(s->sock, frame, RK_FRAME_MAX, &frame_len);
+	if (error)
+		goto out;
+
+	if (frame_len < RK_HDR_LEN + RK_TAG_LEN) {
+		error = -EINVAL;
+		goto out;
+	}
 
 	memcpy(&hdr, frame, RK_HDR_LEN);
 
 	/* Replay check */
 	seq = be64_to_cpu(hdr.sequence);
-	if (seq < s->rx_seq_expected)
-		return -EPROTO;
+	if (seq < s->rx_seq_expected) {
+		error = -EPROTO;
+		goto out;
+	}
 
 	rk_build_nonce(nonce, be64_to_cpu(hdr.session_id),
 		       hdr.direction, seq);
@@ -310,13 +318,17 @@ static int rk_recv_sealed(struct rk_session *s, u8 *out, size_t max_len,
 	error = rk_aead_open(s->tfm, nonce, (u8 *)&hdr, RK_HDR_LEN,
 			     frame, frame_len, out, out_len);
 	if (error)
-		return error;
+		goto out;
 
-	if (*out_len > max_len)
-		return -EMSGSIZE;
+	if (*out_len > max_len) {
+		error = -EMSGSIZE;
+		goto out;
+	}
 
 	s->rx_seq_expected = seq + 1;
-	return 0;
+out:
+	kfree(frame);
+	return error;
 }
 
 /* ---- Agent loop ---- */
@@ -345,12 +357,16 @@ static int rk_handshake(struct rk_session *s)
 
 static void rk_handle_session(struct rk_session *s)
 {
-	u8 cmd[RK_FRAME_MAX];
+	u8 *cmd;
 	size_t cmd_len;
 	int error;
 
+	cmd = kmalloc(RK_FRAME_MAX, GFP_KERNEL);
+	if (!cmd)
+		return;
+
 	while (!kthread_should_stop()) {
-		error = rk_recv_sealed(s, cmd, sizeof(cmd), &cmd_len);
+		error = rk_recv_sealed(s, cmd, RK_FRAME_MAX, &cmd_len);
 		if (error)
 			break;
 
@@ -359,6 +375,8 @@ static void rk_handle_session(struct rk_session *s)
 		if (error)
 			break;
 	}
+
+	kfree(cmd);
 }
 
 static int rk_agent_thread(void *data)

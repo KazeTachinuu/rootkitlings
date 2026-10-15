@@ -142,7 +142,8 @@ static int read_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 	}
 
 	if (new_total != total) {
-		copy_to_user(data->ubuf, kbuf, new_total);
+		if (copy_to_user(data->ubuf, kbuf, new_total))
+			new_total = -EFAULT;
 		regs_set_return_value(regs, new_total);
 	}
 

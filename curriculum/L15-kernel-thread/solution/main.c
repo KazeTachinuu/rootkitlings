@@ -15,11 +15,9 @@ static unsigned long jitter_ms = 3000;
 
 static int rk_agent_fn(void *data)
 {
-	unsigned long counter = 0;
 	unsigned long delay;
 
 	while (!kthread_should_stop()) {
-		counter++;
 
 		delay = msecs_to_jiffies(base_delay_ms +
 					 get_random_u32() % jitter_ms);

@@ -117,7 +117,7 @@ static int rk_compute_fingerprint(const u8 *key, size_t key_len,
 }
 
 /* Verify an incoming fingerprint against the stored one */
-static bool rk_key_verify(const u8 *incoming, size_t len)
+static bool __maybe_unused rk_key_verify(const u8 *incoming, size_t len)
 {
 	if (!incoming || len != RK_FP_LEN)
 		return false;

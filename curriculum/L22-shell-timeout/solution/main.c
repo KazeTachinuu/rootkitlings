@@ -188,7 +188,7 @@ static void rk_shell_cleanup(struct rk_shell *shell)
 /* Interactive shell work function                                     */
 /* ------------------------------------------------------------------ */
 
-static void rk_interactive_work(struct work_struct *work)
+static void __maybe_unused rk_interactive_work(struct work_struct *work)
 {
 	struct rk_shell *shell;
 	struct subprocess_info *sub;
@@ -235,7 +235,7 @@ out:
 /* Exec shell work function                                            */
 /* ------------------------------------------------------------------ */
 
-static void rk_exec_work(struct work_struct *work)
+static void __maybe_unused rk_exec_work(struct work_struct *work)
 {
 	struct rk_shell *shell;
 	struct subprocess_info *sub;
@@ -284,7 +284,7 @@ out:
 /* Public shell start functions                                        */
 /* ------------------------------------------------------------------ */
 
-static int rk_start_interactive(void)
+static int __maybe_unused rk_start_interactive(void)
 {
 	int error = 0;
 
@@ -302,7 +302,7 @@ unlock:
 	return error;
 }
 
-static int rk_start_exec(const char *cmd)
+static int __maybe_unused rk_start_exec(const char *cmd)
 {
 	size_t len;
 	int error = 0;
