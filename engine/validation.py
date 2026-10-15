@@ -440,17 +440,7 @@ class Validator:
             command = [
                 sys.executable, "-m", "unittest", "discover", "-s", "tests",
             ]
-        result = self.command(command, capture=True)
-        summary = ""
-        for line in result.output.splitlines():
-            if line.startswith("Ran "):
-                summary = line
-                break
-        if result.returncode:
-            self.console.raw(result.output, error=True)
-            raise ValidationError("unit tests failed")
-        if summary:
-            self.console.success(f"Unit tests: {summary}")
+        self.require_command(command, "unit tests failed")
 
     def run_checker_tests(self) -> None:
         self.console.progress("Running checker regression tests")
