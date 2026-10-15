@@ -34,9 +34,13 @@ def main(arguments: list[str]) -> int:
 
     passed = 0
     failed = 0
+    skipped = 0
     for item in items:
         label = item.serial or item.id
         check = ROOT / item.path / "checks/test"
+        if not check.is_file():
+            skipped += 1
+            continue
         UI.section(f"{label}  {item.title}")
         UI.transcript([check.relative_to(ROOT)])
         try:
@@ -60,6 +64,8 @@ def main(arguments: list[str]) -> int:
     UI.section("Checker tests")
     UI.field("Passed", str(passed), value_style="success")
     UI.field("Failed", str(failed), value_style="error" if failed else None)
+    if skipped:
+        UI.field("Skipped", f"{skipped} (no local checker)", value_style="dim")
     return int(failed != 0)
 
 

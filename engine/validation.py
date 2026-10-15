@@ -650,43 +650,121 @@ class Validator:
                 catalog.materialize_solution(item, solution_root, item.id)
 
             required = list(catalog.required())
-            total = len(required)
-            width = len(str(total))
-            label_width = max(len(item.id) for item in required)
-            build_failures: list[str] = []
-            for index, item in enumerate(required, 1):
-                self.console.progress(
-                    f"  {item.id:<{label_width}}  {index:>{width}}/{total}"
-                )
-                try:
-                    self._build_module(
-                        kernel_build,
-                        starter_root / item.id,
-                        item.workspace.build,
-                        f"starter does not compile: {item.id}",
-                        warn_free=False,
-                    )
-                    starters += 1
-                except ValidationError as exc:
-                    build_failures.append(str(exc))
-                try:
-                    self._build_module(
-                        kernel_build,
-                        solution_root / item.id,
-                        item.workspace.build,
-                        f"solution does not build warning-free: {item.id}",
-                    )
-                    solutions += 1
-                except ValidationError as exc:
-                    build_failures.append(str(exc))
+            build_jobs: list[tuple[str, Path, str, str, bool]] = []
+            for item in required:
+                build_jobs.append((
+                    item.id, starter_root / item.id,
+                    item.workspace.build,
+                    f"starter does not compile: {item.id}",
+                    False,
+                ))
+                build_jobs.append((
+                    item.id, solution_root / item.id,
+                    item.workspace.build,
+                    f"solution does not build warning-free: {item.id}",
+                    True,
+                ))
 
-        self.console.success(f"Starters: {starters} builds")
-        self.console.success(f"Solutions: {solutions} warning-free builds")
+            build_failures = self._build_parallel(
+                kernel_build, build_jobs,
+            )
+            starters = sum(
+                1 for _, _, _, msg, _ in build_jobs
+                if msg.startswith("starter") and msg not in build_failures
+            )
+            solutions = sum(
+                1 for _, _, _, msg, _ in build_jobs
+                if msg.startswith("solution") and msg not in build_failures
+            )
+
+        self.console.success(
+            f"Builds: {starters} starters, {solutions} solutions (warning-free)"
+        )
         if build_failures:
             raise ValidationError(
                 f"{len(build_failures)} build failures:\n  "
                 + "\n  ".join(build_failures)
             )
+
+    def _build_parallel(
+        self,
+        kernel_build: Path,
+        jobs: list[tuple[str, Path, str, str, bool]],
+    ) -> list[str]:
+        """Build modules in parallel with a live progress bar."""
+        import threading
+        import time
+
+        total = len(jobs)
+        done = 0
+        active = 0
+        lock = threading.Lock()
+        t0 = time.monotonic()
+        is_tty = self.console.color_enabled()
+        cols = self.console.terminal_width(default=80, maximum=120)
+        failures: list[str] = []
+        workers = max(2, (os.cpu_count() or 2) - 1)
+
+        def draw() -> None:
+            if not is_tty:
+                return
+            elapsed = time.monotonic() - t0
+            pct = done / total if total else 1
+            bar_w = min(30, cols - 45)
+            filled = int(bar_w * pct)
+            bar = "█" * filled + "░" * (bar_w - filled)
+            line = (
+                f"\r\x1b[2K[*]   {bar} "
+                f"{done}/{total}  "
+                f"{active} building  "
+                f"{elapsed:.0f}s"
+            )
+            sys.stdout.write(line)
+            sys.stdout.flush()
+
+        def build_one(
+            eid: str, tree: Path, rel: str, failure: str, warn_free: bool,
+        ) -> str | None:
+            nonlocal active
+            with lock:
+                active += 1
+                draw()
+            try:
+                self._build_module(
+                    kernel_build, tree, rel, failure, warn_free=warn_free,
+                )
+                return None
+            except ValidationError as exc:
+                return str(exc)
+            finally:
+                with lock:
+                    active -= 1
+
+        self.console.progress(
+            f"  Building {total} modules, {workers} parallel"
+        )
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(build_one, *job): job[3]
+                for job in jobs
+            }
+            for future in as_completed(futures):
+                result = future.result()
+                with lock:
+                    done += 1
+                    if result:
+                        failures.append(result)
+                    draw()
+
+        if is_tty:
+            sys.stdout.write("\r\x1b[2K")
+            sys.stdout.flush()
+
+        elapsed = time.monotonic() - t0
+        self.console.success(
+            f"  Built {total - len(failures)}/{total} in {elapsed:.0f}s"
+        )
+        return failures
 
     def _build_module(
         self,
