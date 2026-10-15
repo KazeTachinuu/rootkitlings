@@ -482,9 +482,7 @@ class Validator:
                     self.console.raw(result.output, error=True)
 
         if vm_modules:
-            vm_tests = self._discover_vm_tests(vm_modules)
-            workers = _vm_worker_count()
-            self._run_vm_tests_parallel(vm_tests, workers, failed)
+            self._run_vm_tests(failed)
 
         if failed:
             raise ValidationError(
@@ -493,40 +491,35 @@ class Validator:
         total = len(host_modules) + len(vm_modules)
         self.console.success(f"Unit tests: {total} modules")
 
-    def _discover_vm_tests(
-        self, vm_modules: list[str],
-    ) -> list[tuple[str, str]]:
-        """Return (module, test_id) pairs for all VM test methods."""
-        import unittest
-        loader = unittest.TestLoader()
-        tests: list[tuple[str, str]] = []
-        for module in vm_modules:
-            qualified = f"tests.{module}"
-            suite = loader.loadTestsFromName(qualified)
-            for group in suite:
-                for test in group:
-                    tests.append((module, str(test).split()[-1].strip("()")))
-        return tests
-
-    def _run_vm_tests_parallel(
-        self,
-        tests: list[tuple[str, str]],
-        workers: int,
-        failed: list[str],
-    ) -> None:
-        """Run VM tests in parallel subprocesses."""
+    def _run_vm_tests(self, failed: list[str]) -> None:
+        """Pre-build solutions once, then fan out QEMU checks in parallel."""
         import threading
         import time
+        from tests.run_vm_tests import (
+            _LaxCatalog, discover_jobs, run_job, VMJobResult, REPO,
+        )
 
-        total = len(tests)
-        done = 0
-        passing = 0
-        active = 0
-        lock = threading.Lock()
-        t0 = time.monotonic()
+        workers = _vm_worker_count()
         is_tty = self.console.color_enabled()
         cols = self.console.terminal_width(default=80, maximum=120)
-        fail_outputs: list[tuple[str, str]] = []
+
+        self.console.progress("  VM tests: building solutions")
+        t_build = time.monotonic()
+        catalog = _LaxCatalog(REPO)
+        build_root = Path(tempfile.mkdtemp(prefix="rklings-vm-"))
+        jobs = discover_jobs(catalog, build_root)
+        build_time = time.monotonic() - t_build
+        self.console.progress(
+            f"  VM tests: {len(jobs)} cases built in {build_time:.0f}s"
+        )
+
+        total = len(jobs)
+        done = 0
+        active = 0
+        passing = 0
+        lock = threading.Lock()
+        t0 = time.monotonic()
+        fail_results: list[VMJobResult] = []
 
         def draw() -> None:
             if not is_tty:
@@ -537,10 +530,7 @@ class Validator:
             filled = int(bar_w * pct)
             bar = "█" * filled + "░" * (bar_w - filled)
             mem_mb = active * _VM_RAM_MB
-            if mem_mb >= 1024:
-                mem = f"{mem_mb / 1024:.1f}G"
-            else:
-                mem = f"{mem_mb}M"
+            mem = f"{mem_mb / 1024:.1f}G" if mem_mb >= 1024 else f"{mem_mb}M"
             line = (
                 f"\r\x1b[2K[*]   {bar} "
                 f"{done}/{total}  "
@@ -551,40 +541,30 @@ class Validator:
             sys.stdout.write(line)
             sys.stdout.flush()
 
-        def run_one(module: str, test_id: str) -> tuple[str, CommandResult]:
+        def tracked_run(job):
             nonlocal active
             with lock:
                 active += 1
                 draw()
             try:
-                result = self.command(
-                    [sys.executable, "-m", "unittest", test_id],
-                    capture=True,
-                )
-                return test_id, result
+                return run_job(job)
             finally:
                 with lock:
                     active -= 1
 
         self.console.progress(
-            f"  VM tests: {total} cases, {workers} workers"
+            f"  VM tests: {total} checks, {workers} workers"
         )
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {
-                pool.submit(run_one, mod, tid): tid
-                for mod, tid in tests
-            }
+            futures = {pool.submit(tracked_run, j): j for j in jobs}
             for future in as_completed(futures):
-                test_id = futures[future]
-                _, result = future.result()
+                result = future.result()
                 with lock:
                     done += 1
-                    short = test_id.rsplit(".", 1)[-1]
-                    if result.returncode:
-                        failed.append(test_id)
-                        fail_outputs.append((short, result.output))
-                    else:
+                    if result.passed:
                         passing += 1
+                    else:
+                        fail_results.append(result)
                     draw()
 
         if is_tty:
@@ -592,17 +572,22 @@ class Validator:
             sys.stdout.flush()
 
         elapsed = time.monotonic() - t0
-        if fail_outputs:
-            self.console.success(
+        if fail_results:
+            self.console.error(
                 f"  VM tests: {passing}/{total} passed in {elapsed:.0f}s"
-                f" ({len(fail_outputs)} FAILED)"
+                f" ({len(fail_results)} FAILED)"
             )
-            for short, output in fail_outputs:
-                self.console.error(f"  FAIL: {short}")
-                self.console.raw(output, error=True)
+            for r in fail_results:
+                self.console.error(
+                    f"  FAIL: {r.job.exercise_id}::{r.job.case_id}"
+                )
+                if r.output:
+                    self.console.raw(r.output[-500:], error=True)
+            failed.append("vm_tests")
         else:
             self.console.success(
-                f"  VM tests: {total}/{total} passed in {elapsed:.0f}s"
+                f"  VM tests: {total}/{total} passed"
+                f" ({workers}w, {elapsed:.0f}s)"
             )
 
     def run_checker_tests(self) -> None:
