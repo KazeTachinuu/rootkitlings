@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -106,9 +107,12 @@ def discover_jobs(
                 ))
                 continue
 
+            ko_copy = build_root / f"{item.id}_{case.id}.ko"
+            shutil.copy2(ko, ko_copy)
+
             jobs.append(VMJob(
                 exercise_id=item.id, case_id=case.id,
-                ko=ko, check=REPO / case.check,
+                ko=ko_copy, check=REPO / case.check,
                 check_args=case.check_arguments,
                 tools=tuple(tool_binaries), timeout=timeout,
                 bare=bare, network=needs_network,
