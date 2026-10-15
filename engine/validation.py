@@ -51,6 +51,25 @@ _SUPPORTED_CHECK_INTERPRETERS = {
     "#!/usr/bin/bash": "bash",
 }
 
+_VM_RAM_MB = 256
+_VM_RAM_BUDGET_CAP_MB = 4096
+_VM_MIN_WORKERS = 2
+
+
+def _vm_worker_count() -> int:
+    """Auto-scale VM workers to 25% of physical RAM, capped at 4 GiB."""
+    explicit = os.environ.get("RKLINGS_VM_JOBS", "")
+    if explicit.isdigit() and int(explicit) > 0:
+        return int(explicit)
+    try:
+        total_mb = (
+            os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+        ) // (1024 * 1024)
+        budget_mb = min(total_mb // 4, _VM_RAM_BUDGET_CAP_MB)
+        return max(_VM_MIN_WORKERS, budget_mb // _VM_RAM_MB)
+    except (ValueError, OSError):
+        return _VM_MIN_WORKERS
+
 
 def _environment() -> dict[str, str]:
     result = dict(os.environ)
@@ -464,7 +483,7 @@ class Validator:
 
         if vm_modules:
             vm_tests = self._discover_vm_tests(vm_modules)
-            workers = int(os.environ.get("RKLINGS_VM_JOBS", "8"))
+            workers = _vm_worker_count()
             self._run_vm_tests_parallel(vm_tests, workers, failed)
 
         if failed:
@@ -517,7 +536,7 @@ class Validator:
             bar_w = min(30, cols - 50)
             filled = int(bar_w * pct)
             bar = "█" * filled + "░" * (bar_w - filled)
-            mem_mb = active * 256
+            mem_mb = active * _VM_RAM_MB
             if mem_mb >= 1024:
                 mem = f"{mem_mb / 1024:.1f}G"
             else:
