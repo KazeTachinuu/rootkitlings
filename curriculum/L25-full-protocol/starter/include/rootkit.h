@@ -132,7 +132,7 @@ int rk_agent_thread(void *data);
 int rk_dispatch(struct rk_session *s, const u8 *buf, size_t len);
 int rk_send_response(struct rk_session *s, const char *resp);
 
-/* ---- execution/commands.c ---- */
+/* ---- execution/commands.c (M04's 8) ---- */
 
 int cmd_ping(struct rk_session *s, const char *arg);
 int cmd_status(struct rk_session *s, const char *arg);
@@ -142,6 +142,8 @@ int cmd_exec(struct rk_session *s, const char *arg);
 int cmd_download(struct rk_session *s, const char *arg);
 int cmd_cloak(struct rk_session *s, const char *arg);
 int cmd_uncloak(struct rk_session *s, const char *arg);
+
+// Add prototypes for your 12 new command handlers here.
 
 /* ---- execution/shell.c ---- */
 

