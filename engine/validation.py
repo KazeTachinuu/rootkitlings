@@ -427,20 +427,33 @@ class Validator:
 
     def run_unit_tests(self, *, skip_vm: bool = False) -> None:
         self.console.progress("Running unit tests")
+        test_dir = self.root / "tests"
         if skip_vm:
             modules = [
-                f.stem for f in sorted((self.root / "tests").glob("test_*.py"))
+                f.stem for f in sorted(test_dir.glob("test_*.py"))
                 if not f.stem.startswith("test_vm")
             ]
-            command = [
-                sys.executable, "-m", "unittest",
-                *(f"tests.{m}" for m in modules),
-            ]
         else:
-            command = [
-                sys.executable, "-m", "unittest", "discover", "-s", "tests",
+            modules = [
+                f.stem for f in sorted(test_dir.glob("test_*.py"))
             ]
-        self.require_command(command, "unit tests failed")
+        total = len(modules)
+        failed: list[str] = []
+        for index, module in enumerate(modules, 1):
+            label = module.removeprefix("test_")
+            self.console.progress(f"  {label} ({index}/{total})")
+            result = self.command(
+                [sys.executable, "-m", "unittest", f"tests.{module}"],
+                capture=True,
+            )
+            if result.returncode:
+                failed.append(module)
+                self.console.raw(result.output, error=True)
+        if failed:
+            raise ValidationError(
+                f"unit tests failed: {', '.join(failed)}"
+            )
+        self.console.success(f"Unit tests: {total} modules")
 
     def run_checker_tests(self) -> None:
         self.console.progress("Running checker regression tests")
