@@ -1,0 +1,71 @@
+schema_version = 2
+id = "aead-encryption"
+title = "Seal and open an encrypted envelope"
+stage = "authenticated-operations"
+kind = "lesson"
+tradecraft = ["cryptography"]
+difficulty = "advanced"
+prerequisites = ["sha256-verification"]
+teaches = ["authenticated-encryption", "aead-plaintext-gating"]
+requires = ["kernel-allocation", "kernel-crypto-api"]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "core/main.c", "crypto/aead.c", "crypto/aead_platform.c", "include/aead.h", "include/aead_platform.h", "include/selftest.h", "tests/selftest.c"]
+editable = ["crypto/aead.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L21-aead-encryption/starter"
+
+[resources]
+readme = "curriculum/L21-aead-encryption/README.md"
+host_check = "curriculum/L21-aead-encryption/checks/host-check"
+hint = "curriculum/L21-aead-encryption/hint"
+solution = "curriculum/L21-aead-encryption/solution"
+
+[verification]
+timeout_seconds = 360
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "aead-publication"
+label = "AEAD encryption and authenticated publication"
+expect_build = "pass"
+check = "curriculum/L21-aead-encryption/checks/success-check"
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "transform-allocation-failure"
+label = "AEAD transform allocation failure"
+expect_build = "pass"
+check = "curriculum/L21-aead-encryption/checks/failure-check.in"
+check_arguments = ["12", "AEAD transform allocation failure"]
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "1"
+
+[[verification.cases]]
+id = "key-setup-failure"
+label = "AEAD key setup failure"
+expect_build = "pass"
+check = "curriculum/L21-aead-encryption/checks/failure-check.in"
+check_arguments = ["129", "AEAD key setup failure"]
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "2"
+
+[[verification.cases]]
+id = "encryption-failure"
+label = "AEAD encryption failure"
+expect_build = "pass"
+check = "curriculum/L21-aead-encryption/checks/failure-check.in"
+check_arguments = ["5", "AEAD encryption failure"]
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "3"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+build_output_contains = "unknown RKLINGS_FAIL_POINT"
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "99"

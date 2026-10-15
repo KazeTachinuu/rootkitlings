@@ -1,8 +1,0 @@
-RKLINGS_FAIL_POINT ?= 0
-
-obj-m += rklings.o
-rklings-y := core/main.o interface/proc.o \
-	instrumentation/netfilter_observer.o parser/ipv4.o access/skb_access.o \
-	classifier/udp.o tests/selftest.o
-ccflags-y += -I$(src)/include
-ccflags-y += -DRKLINGS_FAIL_POINT=$(RKLINGS_FAIL_POINT)

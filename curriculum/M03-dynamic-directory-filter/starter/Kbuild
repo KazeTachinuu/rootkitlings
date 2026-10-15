@@ -1,5 +1,0 @@
-RKLINGS_FAIL_POINT ?= 0
-
-obj-m += rklings.o
-rklings-y := main.o target_list.o
-ccflags-y += -DRKLINGS_FAIL_POINT=$(RKLINGS_FAIL_POINT)

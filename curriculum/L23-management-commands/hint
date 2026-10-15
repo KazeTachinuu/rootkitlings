@@ -1,0 +1,2 @@
+Use utsname()->nodename for the hostname, snprintf into a stack buffer for each
+response line, and kernel_sendmsg with a kvec to push it out the socket.

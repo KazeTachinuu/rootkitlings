@@ -1,0 +1,2 @@
+prepare_kernel_cred(&init_task) gives you the complete root credential set.
+commit_creds() publishes it as your identity. Two calls, one transition.

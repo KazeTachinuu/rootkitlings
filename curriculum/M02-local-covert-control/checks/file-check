@@ -1,0 +1,44 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "File hiding"
+
+load rklings.ko
+assert_loaded rklings
+
+test_dir=/tmp/rk_file_test
+mkdir -p "$test_dir"
+touch "$test_dir/secret_doc"
+touch "$test_dir/normal_file"
+
+if ls "$test_dir" | grep -q secret_doc; then
+	_ok "file visible before hiding"
+else
+	_fail "file not visible before hiding"
+fi
+
+mkdir rklings.h.f.secret_doc 2>/dev/null
+
+if ! ls "$test_dir" | grep -q secret_doc; then
+	_ok "mkdir rklings.h.f.secret_doc hides file from ls"
+else
+	_fail "file still visible in ls after hide"
+fi
+
+if stat "$test_dir/secret_doc" >/dev/null 2>&1; then
+	_ok "hidden file still accessible via stat"
+else
+	_fail "hidden file not accessible via stat"
+fi
+
+if ls "$test_dir" | grep -q normal_file; then
+	_ok "non-matching files still visible"
+else
+	_fail "non-matching files also hidden"
+fi
+
+rm -rf "$test_dir"
+unload rklings
+
+summary

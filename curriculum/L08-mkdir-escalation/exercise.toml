@@ -1,0 +1,42 @@
+schema_version = 2
+id = "mkdir-escalation"
+title = "Become root with a single mkdir"
+stage = "privilege-escalation"
+kind = "lesson"
+tradecraft = ["privilege", "control"]
+difficulty = "standard"
+prerequisites = ["event-driven-kernel-thread"]
+teaches = ["credential-replacement", "mkdir-control-channel"]
+requires = ["kretprobes", "credential-replacement"]
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L08-mkdir-escalation/starter"
+parent = "event-driven-kernel-thread"
+
+[resources]
+readme = "curriculum/L08-mkdir-escalation/README.md"
+hint = "curriculum/L08-mkdir-escalation/hint"
+solution = "curriculum/L08-mkdir-escalation/solution"
+
+[verification]
+timeout_seconds = 120
+
+[[verification.cases]]
+id = "escalation"
+label = "mkdir rklings.e grants root"
+expect_build = "pass"
+
+[[verification.cases]]
+id = "non-matching"
+label = "Non-matching paths pass through"
+expect_build = "pass"
+
+[[verification.cases]]
+id = "unknown-command"
+label = "Unknown rklings commands return ENOENT"
+expect_build = "pass"

@@ -1,0 +1,23 @@
+schema_version = 2
+id = "management-commands"
+title = "Management commands: INFO, LIST, UNHIDE ALL"
+stage = "operator-interface"
+kind = "lesson"
+tradecraft = ["command-control", "introspection"]
+difficulty = "standard"
+prerequisites = ["key-provisioning"]
+teaches = ["utsname-introspection", "target-list-enumeration", "bulk-state-reset"]
+requires = ["kernel-sockets", "command-dispatch"]
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L23-management-commands/starter"
+
+[resources]
+readme = "curriculum/L23-management-commands/README.md"
+hint = "curriculum/L23-management-commands/hint"
+solution = "curriculum/L23-management-commands/solution"

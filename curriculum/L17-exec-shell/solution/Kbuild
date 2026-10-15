@@ -1,0 +1,3 @@
+obj-m := rklings.o
+rklings-y := main.o
+ccflags-y := -I$(src)/../include

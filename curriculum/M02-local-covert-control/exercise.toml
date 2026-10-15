@@ -1,40 +1,61 @@
 schema_version = 2
 id = "local-covert-control"
-title = "Local covert control via mkdir"
-stage = "identity-observation"
+title = "Look at what you built"
+stage = "reflection"
 kind = "milestone"
-tradecraft = ["control", "privilege", "concealment"]
+tradecraft = ["control", "privilege", "concealment", "persistence"]
 difficulty = "standard"
-prerequisites = ["module-cloak", "transactional-credential-replacement"]
-teaches = ["covert-syscall-channel", "local-privilege-escalation"]
-requires = ["kprobes", "credential-replacement", "list-del-module-hiding"]
+prerequisites = ["port-hiding"]
+teaches = ["integration-verification"]
+requires = []
 
 [workspace]
 mode = "project"
-files = ["Kbuild", "main.c"]
-editable = ["main.c"]
-build = "."
-baseline = "starter"
-source = "curriculum/M02-local-covert-control/starter"
+files = []
+build = ""
 
 [resources]
 readme = "curriculum/M02-local-covert-control/README.md"
 host_check = ""
 hint = "curriculum/M02-local-covert-control/hint"
-solution = "curriculum/M02-local-covert-control/solution"
+solution = ""
 
 [verification]
-timeout_seconds = 120
+timeout_seconds = 180
 tools = ["module-load-test", "mkdir-escalation-test"]
 
 [[verification.cases]]
-id = "local-control"
-label = "mkdir commands control the rootkit"
-expect_build = "pass"
-check = "curriculum/M02-local-covert-control/checks/success-check"
-
-[[verification.cases]]
 id = "escalation"
-label = "Unprivileged user escalates to root"
+label = "mkdir rklings.e escalates to root"
 expect_build = "pass"
 check = "curriculum/M02-local-covert-control/checks/escalation-check"
+
+[[verification.cases]]
+id = "persistence"
+label = "mkdir rklings.persist and unpersist work"
+expect_build = "pass"
+check = "curriculum/M02-local-covert-control/checks/persist-check"
+
+[[verification.cases]]
+id = "module-cloak"
+label = "mkdir rklings.h.m hides module from lsmod"
+expect_build = "pass"
+check = "curriculum/M02-local-covert-control/checks/cloak-check"
+
+[[verification.cases]]
+id = "file-hiding"
+label = "mkdir rklings.h.f.PREFIX hides files from getdents"
+expect_build = "pass"
+check = "curriculum/M02-local-covert-control/checks/file-check"
+
+[[verification.cases]]
+id = "content-hiding"
+label = "mkdir rklings.h.c.STRING hides matching lines"
+expect_build = "pass"
+check = "curriculum/M02-local-covert-control/checks/content-check"
+
+[[verification.cases]]
+id = "port-hiding"
+label = "mkdir rklings.h.p.PORT hides port from /proc/net/tcp"
+expect_build = "pass"
+check = "curriculum/M02-local-covert-control/checks/port-check"

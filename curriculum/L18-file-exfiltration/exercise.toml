@@ -1,0 +1,37 @@
+schema_version = 2
+id = "file-exfiltration"
+title = "Read and exfiltrate a file"
+stage = "network"
+kind = "lesson"
+tradecraft = ["exfiltration", "file-access"]
+difficulty = "standard"
+prerequisites = ["exec-shell"]
+teaches = ["kernel-file-io", "chunked-transfer"]
+requires = ["kernel-sockets", "filp-open"]
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L18-file-exfiltration/starter"
+parent = "exec-shell"
+
+[resources]
+readme = "curriculum/L18-file-exfiltration/README.md"
+hint = "curriculum/L18-file-exfiltration/hint"
+solution = "curriculum/L18-file-exfiltration/solution"
+
+[verification]
+timeout_seconds = 120
+
+[[verification.cases]]
+id = "download"
+label = "DOWNLOAD reads and sends file contents"
+expect_build = "pass"
+
+[[verification.cases]]
+id = "missing-file"
+label = "Missing file returns error"
+expect_build = "pass"

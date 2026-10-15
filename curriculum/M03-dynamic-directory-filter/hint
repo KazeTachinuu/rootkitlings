@@ -1,9 +1,0 @@
-For target_list.c: every function that touches list->entries or list->count must
-be wrapped in spin_lock_irqsave/spin_unlock_irqrestore.
-The add function copies the string with strscpy and returns the index.
-The remove function compacts by shifting entries down with memcpy.
-
-For the matcher in main.c: call rk_target_prefix_match for file names.
-For PID hiding, parse the dirent name with kstrtouint and check
-rk_target_number_match.
-Return true from either path to hide the entry.

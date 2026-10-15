@@ -1,0 +1,1 @@
+Use call_usermodehelper with UMH_WAIT_PROC for one-shot execution. Build argv as /bin/sh, -c, command. The socket carries both stdin and stdout.

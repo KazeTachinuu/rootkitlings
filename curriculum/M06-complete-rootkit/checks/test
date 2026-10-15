@@ -1,0 +1,14 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+checks=(local-check remote-check encryption-check shutdown-check)
+
+for script in "${checks[@]}"; do bash -n "$here/$script"; done
+if command -v shellcheck >/dev/null; then
+	for script in "${checks[@]}"; do
+		shellcheck -x -s sh "$here/$script"
+	done
+fi
+
+printf '[+] complete-rootkit check scripts are syntactically valid\n'

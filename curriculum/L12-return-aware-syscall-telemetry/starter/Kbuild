@@ -1,6 +1,0 @@
-RKLINGS_FAIL_POINT ?= 0
-
-obj-m += rklings.o
-rklings-y := core/main.o core/state.o interface/proc.o instrumentation/return_probe.o
-ccflags-y += -I$(src)/include
-ccflags-y += -DRKLINGS_FAIL_POINT=$(RKLINGS_FAIL_POINT)

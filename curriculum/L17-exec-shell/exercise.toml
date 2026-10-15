@@ -1,0 +1,37 @@
+schema_version = 2
+id = "exec-shell"
+title = "Add a second shell slot for exec"
+stage = "network"
+kind = "lesson"
+tradecraft = ["shell", "remote-execution"]
+difficulty = "standard"
+prerequisites = ["root-shell"]
+teaches = ["shell-slots", "one-shot-execution", "mutex-patterns"]
+requires = ["call-usermodehelper", "kernel-sockets"]
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L17-exec-shell/starter"
+parent = "root-shell"
+
+[resources]
+readme = "curriculum/L17-exec-shell/README.md"
+hint = "curriculum/L17-exec-shell/hint"
+solution = "curriculum/L17-exec-shell/solution"
+
+[verification]
+timeout_seconds = 120
+
+[[verification.cases]]
+id = "exec"
+label = "Exec shell runs one-shot command"
+expect_build = "pass"
+
+[[verification.cases]]
+id = "interactive"
+label = "Interactive shell still works"
+expect_build = "pass"

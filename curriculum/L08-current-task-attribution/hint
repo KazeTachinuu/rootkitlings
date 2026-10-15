@@ -1,6 +1,0 @@
-Attribute record materialization, not file open or every partial read.
-Take the thread ID and command name from one local `current` snapshot when the
-show callback runs.
-
-Treat the command name as hostile bytes and pass the bounded copy through the
-supplied quoted renderer rather than printing it as a raw string.

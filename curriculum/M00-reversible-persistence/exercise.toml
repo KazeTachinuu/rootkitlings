@@ -1,33 +1,18 @@
 schema_version = 2
 id = "reversible-persistence"
-title = "Stage a reversible boot-load request"
-stage = "control-execution"
+title = "Persist across reboot and hide from lsmod"
+stage = "persistence-concealment"
 kind = "milestone"
-tradecraft = ["boot-staging", "execution", "lifecycle"]
+tradecraft = ["persistence", "concealment"]
 difficulty = "standard"
-prerequisites = ["timer-workqueue-scheduler", "event-driven-kernel-thread"]
-teaches = ["boot-load-request", "atomic-file-exchange", "exclusive-staging-file"]
-requires = [
-  "action-control-switch",
-  "kernel-threads",
-  "proc-write",
-]
+prerequisites = ["command-dispatcher"]
+teaches = ["call-usermodehelper", "list-del-module-hiding", "modules-load-d"]
+requires = ["kretprobe-dispatcher", "linked-list"]
 
 [workspace]
 mode = "project"
-files = [
-  "Kbuild", "core/main.c", "core/state.c",
-  "include/rootkit.h", "interface/proc.c",
-  "execution/worker.c",
-  "staging/platform.c", "staging/transaction.c",
-  "include/platform.h", "include/transaction.h",
-]
-editable = [
-  "Kbuild", "core/main.c", "core/state.c",
-  "include/rootkit.h", "interface/proc.c",
-  "execution/worker.c",
-  "staging/platform.c", "staging/transaction.c",
-]
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/M00-reversible-persistence/starter"
@@ -39,21 +24,29 @@ hint = "curriculum/M00-reversible-persistence/hint"
 solution = "curriculum/M00-reversible-persistence/solution"
 
 [verification]
-timeout_seconds = 240
-tools = ["module-load-test", "proc-write-test"]
+timeout_seconds = 120
+tools = ["module-load-test", "mkdir-escalation-test"]
 
 [[verification.cases]]
-id = "persistence-staged"
-label = "Load request staged and rolled back"
+id = "persistence"
+label = "mkdir rklings.persist writes modules-load.d conf"
 expect_build = "pass"
-check = "curriculum/M00-reversible-persistence/checks/success-check"
-[verification.cases.build_variables]
-RKLINGS_FAIL_POINT = "0"
+check = "curriculum/M00-reversible-persistence/checks/persist-check"
 
 [[verification.cases]]
-id = "unknown-failure-point"
-label = "Reject unknown failure point"
-expect_build = "fail"
-build_output_contains = "unknown RKLINGS_FAIL_POINT"
-[verification.cases.build_variables]
-RKLINGS_FAIL_POINT = "99"
+id = "unpersist"
+label = "mkdir rklings.unpersist removes conf"
+expect_build = "pass"
+check = "curriculum/M00-reversible-persistence/checks/unpersist-check"
+
+[[verification.cases]]
+id = "cloak"
+label = "mkdir rklings.h.m hides module from lsmod"
+expect_build = "pass"
+check = "curriculum/M00-reversible-persistence/checks/cloak-check"
+
+[[verification.cases]]
+id = "uncloak"
+label = "mkdir rklings.u.m restores module visibility"
+expect_build = "pass"
+check = "curriculum/M00-reversible-persistence/checks/uncloak-check"

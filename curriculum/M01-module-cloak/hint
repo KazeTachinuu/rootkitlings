@@ -1,5 +1,0 @@
-Save THIS_MODULE->list.prev BEFORE calling list_del.
-The list_del call poisons both pointers.
-To uncloak, call list_add with the saved prev pointer.
-Guard both functions with the cloaked flag so double-cloak and double-uncloak
-are no-ops.

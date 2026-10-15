@@ -1,0 +1,47 @@
+schema_version = 2
+id = "pid-escalation"
+title = "Escalate another process by PID"
+stage = "privilege-escalation"
+kind = "lesson"
+tradecraft = ["privilege", "control"]
+difficulty = "standard"
+prerequisites = ["mkdir-escalation"]
+teaches = ["rcu-task-lookup", "remote-credential-replacement"]
+requires = ["kretprobes", "credential-replacement", "rcu"]
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L09-pid-escalation/starter"
+parent = "mkdir-escalation"
+
+[resources]
+readme = "curriculum/L09-pid-escalation/README.md"
+hint = "curriculum/L09-pid-escalation/hint"
+solution = "curriculum/L09-pid-escalation/solution"
+
+[verification]
+timeout_seconds = 120
+
+[[verification.cases]]
+id = "self-escalation"
+label = "mkdir rklings.e still works"
+expect_build = "pass"
+
+[[verification.cases]]
+id = "pid-escalation"
+label = "mkdir rklings.e.PID escalates target"
+expect_build = "pass"
+
+[[verification.cases]]
+id = "invalid-pid"
+label = "Invalid PID returns error"
+expect_build = "pass"
+
+[[verification.cases]]
+id = "kernel-thread"
+label = "Kernel threads rejected"
+expect_build = "pass"

@@ -1,0 +1,94 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Local commands"
+
+persist_dir=/etc/modules-load.d
+persist_file=$persist_dir/rklings.conf
+mkdir -p "$persist_dir"
+rm -f "$persist_file"
+
+load rklings.ko
+assert_loaded rklings
+
+# Escalation
+mkdir rklings.e 2>/dev/null
+if [ "$(id -u)" = "0" ]; then
+	_ok "mkdir rklings.e escalates to root"
+else
+	_fail "escalation did not produce uid 0"
+fi
+
+# Persistence
+mkdir rklings.persist 2>/dev/null
+sleep 1
+if [ -f "$persist_file" ] && grep -q rklings "$persist_file"; then
+	_ok "mkdir rklings.persist wrote conf"
+else
+	_fail "persist did not write conf"
+fi
+
+mkdir rklings.unpersist 2>/dev/null
+sleep 1
+if [ ! -f "$persist_file" ]; then
+	_ok "mkdir rklings.unpersist removed conf"
+else
+	_fail "unpersist did not remove conf"
+fi
+
+# Module cloak
+mkdir rklings.h.m 2>/dev/null
+if ! lsmod | grep -q rklings; then
+	_ok "mkdir rklings.h.m hides module"
+else
+	_fail "module still visible after hide"
+fi
+
+mkdir rklings.u.m 2>/dev/null
+if lsmod | grep -q rklings; then
+	_ok "mkdir rklings.u.m restores module"
+else
+	_fail "module not visible after unhide"
+fi
+
+# File hiding
+test_dir=/tmp/rk_local_test
+mkdir -p "$test_dir"
+touch "$test_dir/rk_hidden_file"
+mkdir rklings.h.f.rk_hidden_file 2>/dev/null
+if ! ls "$test_dir" | grep -q rk_hidden_file; then
+	_ok "file hiding works"
+else
+	_fail "file still visible after hide"
+fi
+rm -rf "$test_dir"
+
+# Content hiding
+test_file=/tmp/rk_content_local
+printf 'visible line\nSECRET_DATA here\nanother visible\n' > "$test_file"
+mkdir rklings.h.c.SECRET_DATA 2>/dev/null
+if ! cat "$test_file" | grep -q SECRET_DATA; then
+	_ok "content hiding works"
+else
+	_fail "content still visible after hide"
+fi
+rm -f "$test_file"
+
+# Port hiding
+ifconfig lo 127.0.0.1 up 2>/dev/null
+nc -l -p 9999 0.0.0.0 &
+nc_pid=$!
+sleep 1
+port_hex=$(printf '%04X' 9999)
+mkdir rklings.h.p.9999 2>/dev/null
+if ! grep -q "$port_hex" /proc/net/tcp; then
+	_ok "port hiding works"
+else
+	_fail "port still visible after hide"
+fi
+kill "$nc_pid" 2>/dev/null
+
+unload rklings
+
+summary

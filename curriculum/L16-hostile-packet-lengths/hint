@@ -1,4 +1,0 @@
-Validate boundaries in dependency order: fixed prefix, header shape, complete
-declared header, then complete declared packet.
-Only after the larger lengths are proven may you subtract them.
-Keep the candidate view local until fragment policy and every length check pass.

@@ -1,0 +1,68 @@
+schema_version = 2
+id = "hmac-replay"
+title = "Accept each authenticated command exactly once"
+stage = "authenticated-operations"
+kind = "lesson"
+tradecraft = ["cryptography", "control", "detection"]
+difficulty = "advanced"
+prerequisites = ["sha256-verify"]
+teaches = ["hmac-authentication", "replay-resistant-state"]
+requires = ["kernel-crypto-api", "sha256-verify"]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "core/main.c", "crypto/auth_platform.c", "include/authenticated.h", "include/auth_platform.h", "include/selftest.h", "message/authenticated.c", "tests/selftest.c"]
+editable = ["message/authenticated.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L20-hmac-replay/starter"
+
+[resources]
+readme = "curriculum/L20-hmac-replay/README.md"
+host_check = "curriculum/L20-hmac-replay/checks/host-check"
+hint = "curriculum/L20-hmac-replay/hint"
+solution = "curriculum/L20-hmac-replay/solution"
+
+[verification]
+timeout_seconds = 360
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "authenticated-replay-transition"
+label = "Authenticated replay-safe transition"
+expect_build = "pass"
+check = "curriculum/L20-hmac-replay/checks/success-check"
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "context-allocation-failure"
+label = "Authentication context allocation failure"
+expect_build = "pass"
+check = "curriculum/L20-hmac-replay/checks/allocation-failure-check"
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "1"
+
+[[verification.cases]]
+id = "key-setup-failure"
+label = "HMAC key setup failure"
+expect_build = "pass"
+check = "curriculum/L20-hmac-replay/checks/key-failure-check"
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "2"
+
+[[verification.cases]]
+id = "digest-failure"
+label = "HMAC calculation failure"
+expect_build = "pass"
+check = "curriculum/L20-hmac-replay/checks/digest-failure-check"
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "3"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+build_output_contains = "must be between 0 and 3"
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "99"

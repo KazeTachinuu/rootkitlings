@@ -1,3 +1,2 @@
-obj-m += rklings.o
-rklings-y := core/main.o core/state.o interface/proc.o execution/worker.o staging/platform.o staging/transaction.o
-ccflags-y := -I$(src)/include -DRKLINGS_FAIL_POINT=$(RKLINGS_FAIL_POINT)
+obj-m := rklings.o
+rklings-y := main.o

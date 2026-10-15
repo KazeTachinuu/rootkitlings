@@ -1,0 +1,40 @@
+schema_version = 2
+id = "port-hiding"
+title = "Hide a listening port from /proc/net/tcp"
+stage = "advanced-hiding"
+kind = "lesson"
+tradecraft = ["concealment", "instrumentation"]
+difficulty = "standard"
+prerequisites = ["content-hiding"]
+teaches = ["tcp-seq-show-suppression"]
+requires = ["kprobes", "seq-file-item-suppression"]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L14-port-hiding/starter"
+
+[resources]
+readme = "curriculum/L14-port-hiding/README.md"
+host_check = ""
+hint = "curriculum/L14-port-hiding/hint"
+solution = "curriculum/L14-port-hiding/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-params"]
+
+[[verification.cases]]
+id = "port-hidden"
+label = "Target port hidden from /proc/net/tcp"
+expect_build = "pass"
+check = "curriculum/L14-port-hiding/checks/success-check"
+
+[[verification.cases]]
+id = "other-ports-visible"
+label = "Non-target ports remain visible"
+expect_build = "pass"
+check = "curriculum/L14-port-hiding/checks/negative-check"

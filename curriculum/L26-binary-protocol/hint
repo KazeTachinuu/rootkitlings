@@ -1,0 +1,2 @@
+Use htons to write the 2-byte length before each payload, ntohs to decode it on
+receive, and loop kernel_recvmsg until you have read exactly that many bytes.

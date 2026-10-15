@@ -1,0 +1,23 @@
+schema_version = 2
+id = "key-provisioning"
+title = "Provision and verify a shared key"
+stage = "authenticated-operations"
+kind = "lesson"
+tradecraft = ["cryptography", "lifecycle"]
+difficulty = "standard"
+prerequisites = ["authenticated-encryption"]
+teaches = ["module-param-key-loading", "hex-parsing", "key-fingerprint"]
+requires = ["kernel-crypto-api", "sha256-verification"]
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L22-key-provisioning/starter"
+
+[resources]
+readme = "curriculum/L22-key-provisioning/README.md"
+hint = "curriculum/L22-key-provisioning/hint"
+solution = "curriculum/L22-key-provisioning/solution"

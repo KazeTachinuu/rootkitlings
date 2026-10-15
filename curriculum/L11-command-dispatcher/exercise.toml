@@ -1,0 +1,47 @@
+schema_version = 2
+id = "command-dispatcher"
+title = "Generalize into a command dispatcher"
+stage = "interception"
+kind = "lesson"
+tradecraft = ["control", "dispatch"]
+difficulty = "standard"
+prerequisites = ["open-the-hook"]
+teaches = ["command-parsing", "dispatch-pattern"]
+requires = ["kretprobes"]
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L11-command-dispatcher/starter"
+parent = "open-the-hook"
+
+[resources]
+readme = "curriculum/L11-command-dispatcher/README.md"
+hint = "curriculum/L11-command-dispatcher/hint"
+solution = "curriculum/L11-command-dispatcher/solution"
+
+[verification]
+timeout_seconds = 120
+
+[[verification.cases]]
+id = "ping"
+label = "mkdir rklings.ping returns 0"
+expect_build = "pass"
+
+[[verification.cases]]
+id = "status"
+label = "mkdir rklings.status prints to dmesg"
+expect_build = "pass"
+
+[[verification.cases]]
+id = "escalation"
+label = "rklings.e still works through dispatcher"
+expect_build = "pass"
+
+[[verification.cases]]
+id = "unknown"
+label = "Unknown commands return ENOENT"
+expect_build = "pass"

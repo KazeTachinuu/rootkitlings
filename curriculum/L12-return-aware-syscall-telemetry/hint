@@ -1,9 +1,0 @@
-Use the Kretprobe instance as the join between entry-time path classification
-and the matching return value; shared scratch state cannot correlate concurrent
-calls.
-Initialize the instance before any admitted return path.
-
-Follow the pinned wrapper's two-level register mapping, and let the supplied
-helper own bounded no-fault copying.
-Keep borrowed module state valid from registration until unregistration has
-drained every instance.

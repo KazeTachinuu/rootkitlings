@@ -1,100 +1,131 @@
-# Local covert control via mkdir
+# Look at what you built
 
-A rootkit needs a local control channel that works without network access.
-This milestone hooks `__x64_sys_mkdir` and parses structured commands from the
-path argument.
-The calling process never creates a real directory: the hook intercepts the
-path, executes the command, and returns a result code.
+No new code. This milestone is a checkpoint: load your module and verify
+that every command you have implemented so far works correctly.
 
-## Command grammar
+By this point your rootkit handles privilege escalation, persistence, module
+cloaking, file hiding, content hiding, and port hiding, all controlled
+through the mkdir interface. Run every command, observe the effect, and
+confirm that your hooks compose cleanly.
 
-```text
-mkdir rklings.h.m              hide module (list_del)
-mkdir rklings.u.m              unhide module (list_add)
-mkdir rklings.e                escalate calling process to root
-mkdir rklings.h.f.PREFIX       hide file prefix (future: M03)
-mkdir rklings.h.i.PID          hide process id (future: M03)
-mkdir rklings.h.c.STRING       hide content substring (future: M06)
-mkdir rklings.h.p.PORT         hide port number (future: M06)
-```
+## Walkthrough
 
-```text
-userspace                          kernelspace
-                                   __x64_sys_mkdir(uregs)
-  mkdir rklings.e                        |
-       |                           kprobe fires
-       v                                |
-  syscall                          uregs->di = pathname
-       |                                |
-       v                           strncpy_from_user
-  return value  <---+                   |
-  (0 or -ENOENT)   |              "rklings." prefix?
-                    |                   |
-                    |              yes: dispatch command
-                    |                   |
-                    +---- override_function_with_return
-                         (skip real mkdir, return result)
-```
+Boot the VM in bare mode:
 
-Return 0 on success, -ENOENT for unrecognized commands (indistinguishable from a
-normal missing directory).
+    ./rklings run --bare
 
-## Privilege escalation
+### 1. Load the module
 
-`mkdir rklings.e` grants root credentials to the calling task and its parent
-shell.
-The technique:
+    insmod rklings.ko
 
-1. Allocate a new credential set with `prepare_kernel_cred(&init_task)`.
-   This copies init's credentials (uid 0, gid 0, all capabilities).
-2. Apply them to the current task with `commit_creds(new_cred)`.
-3. Escalate the parent process (`current->real_parent`) too, so the shell that
-   ran mkdir also becomes root.
-   For the parent path:
-   - Check `parent->mm` first.
-     Kernel threads have `mm == NULL`;
-     escalating them is meaningless and dangerous.
-   - Allocate a second credential set.
-   - Replace `task->real_cred` and `task->cred` via `rcu_assign_pointer`.
-   - Call `put_cred()` on the old credentials to avoid a memory leak.
+Verify it loaded:
 
-## Kprobe pre-handler
+    lsmod | grep rklings
 
-The kprobe hooks `__x64_sys_mkdir(const struct pt_regs *uregs)`.
-The outer `regs` passed to your handler wraps the real syscall registers:
+### 2. Escalation
 
-1. Get the inner pt_regs: `(struct pt_regs *)regs_get_kernel_argument(regs, 0)`
-2. Read the user pathname pointer from `uregs->di`
-3. Copy to kernel buffer with `strncpy_from_user`
-4. Check for the `rklings.`
-   prefix.
-   If not ours, return 0 (let mkdir proceed).
-5. Dispatch to `rk_parse_local_command`.
-   Set the return value and call `override_function_with_return` to skip the
-   real mkdir.
-   Return 1.
+Escalate the current shell to root:
 
-## Your task
+    mkdir rklings.e
+    id
 
-In `main.c`, implement:
+Expected: `uid=0(root) gid=0(root)`.
 
-1. `rk_escalate()` (credential escalation for current + parent)
-2. `rk_parse_local_command()` (command dispatch)
-3. `rk_mkdir_pre()` (kprobe pre-handler)
-4. `rk_init()` / `rk_exit()`
+### 3. PID escalation
 
-Run:
+Start a background process and escalate it by PID:
+
+    sleep 300 &
+    mkdir rklings.e.$!
+
+The sleep process now runs as root.
+
+### 4. Ping and status
+
+    mkdir rklings.ping
+    mkdir rklings.status
+
+Both should return 0 (success). Neither creates a directory.
+
+### 5. Persistence
+
+Write the modules-load.d conf file:
+
+    mkdir rklings.persist
+    cat /etc/modules-load.d/rklings.conf
+
+Expected: `rklings`.
+
+Remove it:
+
+    mkdir rklings.unpersist
+    ls /etc/modules-load.d/rklings.conf 2>&1
+
+Expected: `No such file or directory`.
+
+### 6. Module cloak
+
+    lsmod | grep rklings
+    # rklings  16384  0
+
+    mkdir rklings.h.m
+    lsmod | grep rklings
+    # (nothing)
+
+    mkdir rklings.u.m
+    lsmod | grep rklings
+    # rklings  16384  0
+
+### 7. File hiding
+
+    touch testfile
+    ls testfile
+    # testfile
+
+    mkdir rklings.h.f.testfile
+    ls testfile
+    # (not listed by ls)
+    stat testfile
+    # File: testfile -- still exists on disk
+
+### 8. Content hiding
+
+    printf 'normal line\nSECRET data\nanother line\n' > /tmp/demo
+
+    mkdir rklings.h.c.SECRET
+    cat /tmp/demo
+    # normal line
+    # another line
+
+Lines containing SECRET are removed from read output.
+
+### 9. Port hiding
+
+    nc -l -p 4444 &
+    grep 115C /proc/net/tcp
+    # (port 4444 = 0x115C visible)
+
+    mkdir rklings.h.p.4444
+    grep 115C /proc/net/tcp
+    # (nothing)
+
+### 10. Undo everything
+
+    mkdir rklings.u.m
+    mkdir rklings.unpersist
+    rmmod rklings
+
+Verify the kernel log is clean:
+
+    dmesg | tail -20
+
+No BUG, WARNING, Oops, or KASAN output.
+
+## Verify
 
 ```sh
 ./rklings check
 ```
 
-## References
-
-- [Kprobes API][1]
-- [Linux v7.2 credential replacement][2]
-- [Linux v7.2 module list manipulation][3]
-
-[1]: https://docs.kernel.org/7.2/trace/kprobes.html
-[2]: https://github.com/torvalds/linux/blob/v7.2/kernel/cred.c
-[3]: https://github.com/torvalds/linux/blob/v7.2/include/linux/list.h
+The check script loads your module and runs through each command
+automatically. All features must pass for the milestone to complete.

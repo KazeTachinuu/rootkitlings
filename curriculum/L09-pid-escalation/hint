@@ -1,0 +1,2 @@
+Use kstrtoint(name + 10, 10, &pid) to parse the PID from "rklings.e.1234".
+The RCU read lock must be held from find_task_by_vpid through the credential swap.

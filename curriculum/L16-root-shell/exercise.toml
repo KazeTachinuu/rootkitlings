@@ -1,0 +1,95 @@
+schema_version = 2
+id = "root-shell"
+title = "Hand a TCP socket to a root shell"
+stage = "network-state"
+kind = "lesson"
+tradecraft = ["execution", "privilege", "networking", "lifecycle"]
+difficulty = "advanced"
+prerequisites = [
+  "linux-credential-model",
+  "timer-workqueue-scheduler",
+  "kernel-socket",
+]
+teaches = [
+  "usermode-helper",
+  "socket-file-bridge",
+  "root-shell-execution",
+  "bounded-child-lifecycle",
+]
+requires = [
+  "task-credentials",
+  "workqueues",
+  "socket-lifecycle",
+  "resource-ownership",
+]
+
+[workspace]
+mode = "project"
+files = [
+  "Kbuild",
+  "core/main.c",
+  "execution/root_shell.c",
+  "include/root_shell.h",
+]
+editable = ["execution/root_shell.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L16-root-shell/starter"
+
+[resources]
+readme = "curriculum/L16-root-shell/README.md"
+host_check = "curriculum/L16-root-shell/checks/host-check"
+hint = "curriculum/L16-root-shell/hint"
+solution = "curriculum/L16-root-shell/solution"
+
+[verification]
+timeout_seconds = 360
+tools = ["module-load-params"]
+
+[[verification.cases]]
+id = "root-shell"
+label = "Root reverse shell"
+expect_build = "pass"
+check = "curriculum/L16-root-shell/checks/success-check"
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "shell-timeout"
+label = "Bounded shell timeout"
+expect_build = "pass"
+check = "curriculum/L16-root-shell/checks/timeout-check"
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "blocked-shell-unload"
+label = "Blocked shell unload"
+expect_build = "pass"
+check = "curriculum/L16-root-shell/checks/unload-check"
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "refused-connection"
+label = "Refused peer connection"
+expect_build = "pass"
+check = "curriculum/L16-root-shell/checks/refused-check"
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "invalid-configuration"
+label = "Invalid shell configuration"
+expect_build = "pass"
+check = "curriculum/L16-root-shell/checks/invalid-parameter-check"
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+build_output_contains = "unknown RKLINGS_FAIL_POINT"
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "99"

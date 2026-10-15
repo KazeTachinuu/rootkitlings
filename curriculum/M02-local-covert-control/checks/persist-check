@@ -1,0 +1,36 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Persistence"
+
+persist_dir=/etc/modules-load.d
+persist_file=$persist_dir/rklings.conf
+
+mkdir -p "$persist_dir"
+rm -f "$persist_file"
+
+load rklings.ko
+assert_loaded rklings
+
+mkdir rklings.persist 2>/dev/null
+sleep 1
+
+if [ -f "$persist_file" ] && grep -q rklings "$persist_file"; then
+	_ok "mkdir rklings.persist wrote conf file"
+else
+	_fail "persistence file missing or has wrong content"
+fi
+
+mkdir rklings.unpersist 2>/dev/null
+sleep 1
+
+if [ ! -f "$persist_file" ]; then
+	_ok "mkdir rklings.unpersist removed conf file"
+else
+	_fail "persistence file still exists after unpersist"
+fi
+
+unload rklings
+
+summary

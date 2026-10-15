@@ -1,0 +1,1 @@
+filp_open returns an ERR_PTR on failure, check with IS_ERR. kernel_read returns the number of bytes read, 0 means EOF. Send chunks in a loop until done.

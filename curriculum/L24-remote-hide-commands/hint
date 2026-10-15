@@ -1,0 +1,2 @@
+Save THIS_MODULE->list.prev before list_del_init, use kstrtou16 for port
+parsing, and strscpy for bounded string copies into the target arrays.

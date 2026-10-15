@@ -1,0 +1,23 @@
+schema_version = 2
+id = "auto-opsec"
+title = "Auto-hide the agent's own traces"
+stage = "operator-interface"
+kind = "lesson"
+tradecraft = ["concealment", "lifecycle"]
+difficulty = "standard"
+prerequisites = ["remote-hide-commands"]
+teaches = ["auto-stealth-on-connect", "target-array-removal"]
+requires = ["kernel-sockets", "command-dispatch", "tcp-port-filter"]
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L25-auto-opsec/starter"
+
+[resources]
+readme = "curriculum/L25-auto-opsec/README.md"
+hint = "curriculum/L25-auto-opsec/hint"
+solution = "curriculum/L25-auto-opsec/solution"

@@ -1,0 +1,3 @@
+There are two levels of pt_regs. The kretprobe gives you the trap frame.
+regs_get_kernel_argument(regs, 0) gives you the syscall register frame.
+Then uregs->di is the userspace pathname pointer.
