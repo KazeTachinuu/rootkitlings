@@ -1,1 +1,0 @@
-Validate strlen == 64 before hex2bin, compute SHA-256 of the 32-byte result, and store the first 4 bytes of the digest as your fingerprint for rk_key_verify comparison.

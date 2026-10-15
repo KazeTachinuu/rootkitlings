@@ -1,0 +1,33 @@
+schema_version = 2
+id = "full-operations"
+title = "Complete remote management with auto-OPSEC"
+stage = "reflection"
+kind = "milestone"
+tradecraft = ["control", "network", "crypto", "concealment", "persistence"]
+difficulty = "advanced"
+prerequisites = ["full-protocol", "auto-opsec", "remote-hide-commands", "management-commands"]
+teaches = ["full-integration", "operational-security"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/M05-full-operations/starter"
+
+[resources]
+readme = "curriculum/M05-full-operations/README.md"
+host_check = ""
+hint = "curriculum/M05-full-operations/hint"
+solution = "curriculum/M05-full-operations/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "full-operations"
+label = "Complete rootkit with all commands and auto-OPSEC"
+expect_build = "pass"
+check = ""

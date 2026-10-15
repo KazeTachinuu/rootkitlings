@@ -1,0 +1,39 @@
+schema_version = 2
+id = "file-download"
+title = "Download a file from the target"
+stage = "protocol"
+kind = "lesson"
+tradecraft = ["network"]
+difficulty = "standard"
+prerequisites = ["secure-channel"]
+teaches = ["kernel-file-read", "chunked-transfer"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L23-file-download/starter"
+
+[resources]
+readme = "curriculum/L23-file-download/README.md"
+host_check = ""
+hint = "curriculum/L23-file-download/hint"
+solution = "curriculum/L23-file-download/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "download-file"
+label = "File downloaded in encrypted chunks"
+expect_build = "pass"
+check = ""
+
+[[verification.cases]]
+id = "missing-file"
+label = "Error frame sent for nonexistent file"
+expect_build = "pass"
+check = ""

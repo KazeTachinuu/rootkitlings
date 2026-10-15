@@ -1,0 +1,10 @@
+Use memchr to find each newline in the buffer. The line length includes the
+newline character itself. If the last chunk has no newline, it runs to the end
+of the buffer.
+
+When checking a line, use strnstr(line_start, target, line_len) for each entry
+in content_targets. strnstr is bounded, so it will not read past the line.
+
+When you remove a line, memmove everything after it backward, subtract
+line_len from new_total, and do not advance your position pointer. The next
+line is now at the current position.

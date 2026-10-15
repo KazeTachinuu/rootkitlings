@@ -33,8 +33,8 @@ It removes the entry with `proc_remove()`.
 
 The supplied show function returns one fixed line, `active`, so the read-only
 entry has real behavior from the moment it appears.
-This lesson owns publication and cleanup.
-State snapshots are outside this exercise.
+Publication and cleanup are in scope here.
+State snapshots come later.
 
 Failure point 3 simulates `proc_create_single()` returning `NULL` after state
 already exists.
@@ -42,8 +42,7 @@ The init callback must return `-ENOMEM` and roll back state.
 
 ## Your task
 
-Starting from your passed state-ownership lesson, this lesson adds
-`interface/proc.c`.
+This adds `interface/proc.c` to the existing module.
 Edit these four files:
 
 - Add `interface/proc.o` to `rklings-y` in `Kbuild`.

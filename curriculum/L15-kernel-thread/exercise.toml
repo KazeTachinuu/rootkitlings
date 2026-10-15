@@ -1,0 +1,33 @@
+schema_version = 2
+id = "kernel-thread"
+title = "Run a kernel thread"
+stage = "network"
+kind = "lesson"
+tradecraft = ["network"]
+difficulty = "standard"
+prerequisites = ["owned-kernel-state"]
+teaches = ["kernel-threading", "wait-queue", "jittered-backoff"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L15-kernel-thread/starter"
+
+[resources]
+readme = "curriculum/L15-kernel-thread/README.md"
+host_check = ""
+hint = "curriculum/L15-kernel-thread/hint"
+solution = "curriculum/L15-kernel-thread/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "thread-runs"
+label = "Kernel thread starts and stops cleanly"
+expect_build = "pass"
+check = ""

@@ -1,0 +1,45 @@
+schema_version = 2
+id = "remote-control"
+title = "Full protocol over the encrypted agent connection"
+stage = "reflection"
+kind = "milestone"
+tradecraft = ["control", "network", "crypto"]
+difficulty = "advanced"
+prerequisites = ["shell-timeout", "file-download", "command-parser", "secure-channel", "local-control"]
+teaches = ["remote-protocol-integration"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/M04-remote-control/starter"
+
+[resources]
+readme = "curriculum/M04-remote-control/README.md"
+host_check = ""
+hint = "curriculum/M04-remote-control/hint"
+solution = "curriculum/M04-remote-control/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "remote-hide"
+label = "HIDE FILE command hides a file over encrypted channel"
+expect_build = "pass"
+check = ""
+
+[[verification.cases]]
+id = "remote-shell"
+label = "SHELL command opens interactive shell via protocol"
+expect_build = "pass"
+check = ""
+
+[[verification.cases]]
+id = "remote-download"
+label = "DOWNLOAD command exfiltrates file encrypted"
+expect_build = "pass"
+check = ""

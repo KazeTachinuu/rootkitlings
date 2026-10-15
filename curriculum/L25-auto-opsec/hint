@@ -1,1 +1,0 @@
-Record port_count as your index before appending, then shift entries down from that index on removal and decrement the count.

@@ -1,0 +1,33 @@
+schema_version = 2
+id = "complete-rootkit"
+title = "Assemble and verify the complete rootkit"
+stage = "project"
+kind = "project"
+tradecraft = ["control", "network", "crypto", "concealment", "persistence", "privilege"]
+difficulty = "advanced"
+prerequisites = ["full-operations"]
+teaches = ["full-system-integration", "verification-methodology"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/P00-complete-rootkit/starter"
+
+[resources]
+readme = "curriculum/P00-complete-rootkit/README.md"
+host_check = ""
+hint = "curriculum/P00-complete-rootkit/hint"
+solution = "curriculum/P00-complete-rootkit/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "complete-rootkit"
+label = "Complete rootkit loads, operates, and unloads cleanly"
+expect_build = "pass"
+check = ""

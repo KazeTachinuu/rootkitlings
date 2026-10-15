@@ -1,0 +1,39 @@
+schema_version = 2
+id = "mkdir-escalation"
+title = "Become root with a single mkdir"
+stage = "escalation"
+kind = "lesson"
+tradecraft = ["privilege"]
+difficulty = "standard"
+prerequisites = ["mkdir-reaction"]
+teaches = ["credential-replacement", "privilege-escalation"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L06-mkdir-escalation/starter"
+
+[resources]
+readme = "curriculum/L06-mkdir-escalation/README.md"
+host_check = ""
+hint = "curriculum/L06-mkdir-escalation/hint"
+solution = "curriculum/L06-mkdir-escalation/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "escalation"
+label = "mkdir rklings.e grants root credentials"
+expect_build = "pass"
+check = ""
+
+[[verification.cases]]
+id = "non-matching"
+label = "Non-matching mkdir does not escalate"
+expect_build = "pass"
+check = ""

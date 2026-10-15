@@ -1,0 +1,33 @@
+schema_version = 2
+id = "callback-shell"
+title = "Agent thread calls back with a root shell"
+stage = "reflection"
+kind = "milestone"
+tradecraft = ["network", "privilege"]
+difficulty = "standard"
+prerequisites = ["kernel-socket", "kernel-thread", "root-shell-spawn", "shell-redirect"]
+teaches = ["agent-loop", "callback-shell-integration"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/M02-callback-shell/starter"
+
+[resources]
+readme = "curriculum/M02-callback-shell/README.md"
+host_check = ""
+hint = "curriculum/M02-callback-shell/hint"
+solution = "curriculum/M02-callback-shell/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "callback-shell"
+label = "Agent connects and spawns a root shell"
+expect_build = "pass"
+check = ""

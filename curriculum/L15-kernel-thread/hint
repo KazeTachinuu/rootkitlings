@@ -1,0 +1,5 @@
+Declare a static wait queue head with DECLARE_WAIT_QUEUE_HEAD. The thread
+function loops while !kthread_should_stop(), doing work and then sleeping with
+wait_event_interruptible_timeout. The condition is kthread_should_stop() so the
+thread wakes immediately when asked to stop. Use get_random_u32() % range for
+jitter and msecs_to_jiffies() to convert milliseconds to jiffies.

@@ -1,0 +1,39 @@
+schema_version = 2
+id = "command-parser"
+title = "Parse and dispatch text commands"
+stage = "protocol"
+kind = "lesson"
+tradecraft = ["control"]
+difficulty = "standard"
+prerequisites = ["secure-channel"]
+teaches = ["command-protocol", "text-parsing", "command-dispatch"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L24-command-parser/starter"
+
+[resources]
+readme = "curriculum/L24-command-parser/README.md"
+host_check = ""
+hint = "curriculum/L24-command-parser/hint"
+solution = "curriculum/L24-command-parser/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "parse-commands"
+label = "All command strings parsed to correct kind"
+expect_build = "pass"
+check = ""
+
+[[verification.cases]]
+id = "dispatch-ping"
+label = "PING dispatches and returns PONG"
+expect_build = "pass"
+check = ""

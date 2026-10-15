@@ -1,0 +1,63 @@
+schema_version = 2
+id = "persistence-stealth"
+title = "Persist across reboot and hide from lsmod"
+stage = "persistence"
+kind = "milestone"
+tradecraft = ["persistence", "concealment"]
+difficulty = "standard"
+prerequisites = ["command-dispatcher"]
+teaches = ["module-persistence", "module-cloaking", "filp-kernel-write"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/M00-persistence-stealth/starter"
+
+[resources]
+readme = "curriculum/M00-persistence-stealth/README.md"
+host_check = ""
+hint = "curriculum/M00-persistence-stealth/hint"
+solution = "curriculum/M00-persistence-stealth/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "persist"
+label = "mkdir rklings.persist creates /etc/modules-load.d/rklings.conf"
+expect_build = "pass"
+check = ""
+
+[[verification.cases]]
+id = "unpersist"
+label = "mkdir rklings.unpersist removes the conf file"
+expect_build = "pass"
+check = ""
+
+[[verification.cases]]
+id = "hide-module"
+label = "mkdir rklings.h.m hides from lsmod"
+expect_build = "pass"
+check = ""
+
+[[verification.cases]]
+id = "unhide-module"
+label = "mkdir rklings.u.m restores in lsmod"
+expect_build = "pass"
+check = ""
+
+[[verification.cases]]
+id = "escalation"
+label = "rklings.e still works"
+expect_build = "pass"
+check = ""
+
+[[verification.cases]]
+id = "dispatcher"
+label = "ping and status commands still work"
+expect_build = "pass"
+check = ""

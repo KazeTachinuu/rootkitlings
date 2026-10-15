@@ -1,0 +1,33 @@
+schema_version = 2
+id = "key-provisioning"
+title = "Provision and rotate a shared key"
+stage = "crypto"
+kind = "lesson"
+tradecraft = ["crypto"]
+difficulty = "standard"
+prerequisites = ["aead-encrypt", "secure-envelope"]
+teaches = ["key-provisioning", "key-rotation", "key-zeroization"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L21-key-provisioning/starter"
+
+[resources]
+readme = "curriculum/L21-key-provisioning/README.md"
+host_check = ""
+hint = "curriculum/L21-key-provisioning/hint"
+solution = "curriculum/L21-key-provisioning/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "key-load-rotate"
+label = "Key loading, rotation, and zeroization"
+expect_build = "pass"
+check = ""

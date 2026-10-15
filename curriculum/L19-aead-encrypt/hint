@@ -1,0 +1,5 @@
+The scatterlist must cover the entire buffer: AAD + plaintext + space for the
+tag. Set the encryption length in aead_request_set_crypt to the plaintext
+length (not including the tag). The kernel appends the tag in place. For
+decryption, pass the ciphertext length including the tag. The kernel returns
+-EBADMSG if the tag or AAD does not match.

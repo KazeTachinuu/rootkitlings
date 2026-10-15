@@ -1,0 +1,34 @@
+schema_version = 2
+id = "auto-opsec"
+title = "Auto-hide the agent's own traces"
+stage = "operations"
+kind = "lesson"
+tradecraft = ["concealment"]
+difficulty = "standard"
+prerequisites = ["full-protocol", "dirent-filter", "port-filter"]
+teaches = ["auto-targeting", "opsec-automation"]
+requires = []
+
+[workspace]
+mode = "cumulative"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L26-auto-opsec/starter"
+
+[resources]
+readme = "curriculum/L26-auto-opsec/README.md"
+host_check = ""
+hint = "curriculum/L26-auto-opsec/hint"
+solution = "curriculum/L26-auto-opsec/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "auto-opsec"
+label = "Agent auto-hides PID and port on connect"
+expect_build = "pass"
+check = ""

@@ -1,0 +1,5 @@
+After kernel_connect succeeds, call sock_alloc_file(sock, 0, NULL) to get a
+struct file pointer. In the UMH init callback, loop fd from 0 to 2: call
+get_unused_fd_flags(0) and then fd_install(fd, get_file(sock_file)) for each.
+The shell inherits these fds as stdin, stdout, stderr. Use DEFINE_MUTEX and a
+static bool to prevent a second shell from starting while one is running.

@@ -1,3 +1,0 @@
-obj-m := rklings.o
-rklings-y := core/main.o network/agent.o network/framing.o network/protocol.o execution/root_shell.o crypto/aead.o crypto/aead_platform.o security/control.o
-ccflags-y := -I$(src)/include -DRKLINGS_FAIL_POINT=$(RKLINGS_FAIL_POINT)

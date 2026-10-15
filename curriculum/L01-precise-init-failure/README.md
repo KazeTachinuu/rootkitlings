@@ -54,7 +54,7 @@ This module acquires no resource, so the rejected path has nothing to release.
 
 ## Your task
 
-Start this lesson to copy your passed module forward, then edit its two existing
+Copy your passed module forward, then edit its two existing
 files.
 Do not add files.
 

@@ -1,0 +1,5 @@
+The nonce must never repeat for the same key. Build it deterministically from
+the session_id (8 bytes), direction (1 byte), and the low 3 bytes of the
+sequence counter. The header is AAD: it gets authenticated by the AEAD tag but
+is not encrypted. On decryption, reject any sequence number below the expected
+value to block replays.

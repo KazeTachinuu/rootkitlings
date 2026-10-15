@@ -1,0 +1,45 @@
+schema_version = 2
+id = "port-filter"
+title = "Hide a listening port from ss/netstat"
+stage = "concealment"
+kind = "lesson"
+tradecraft = ["concealment"]
+difficulty = "standard"
+prerequisites = ["command-dispatcher", "target-list"]
+teaches = ["seq-file-interception", "tcp-port-hiding"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L13-port-filter/starter"
+
+[resources]
+readme = "curriculum/L13-port-filter/README.md"
+host_check = ""
+hint = "curriculum/L13-port-filter/hint"
+solution = "curriculum/L13-port-filter/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "hide-port"
+label = "Hidden port vanishes from ss output"
+expect_build = "pass"
+check = ""
+
+[[verification.cases]]
+id = "unhide-port"
+label = "Unhidden port reappears in ss output"
+expect_build = "pass"
+check = ""
+
+[[verification.cases]]
+id = "other-ports-visible"
+label = "Non-targeted ports remain visible"
+expect_build = "pass"
+check = ""

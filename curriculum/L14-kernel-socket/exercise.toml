@@ -1,0 +1,33 @@
+schema_version = 2
+id = "kernel-socket"
+title = "Open a kernel TCP socket"
+stage = "network"
+kind = "lesson"
+tradecraft = ["network"]
+difficulty = "standard"
+prerequisites = ["owned-kernel-state"]
+teaches = ["kernel-socket-api", "kvec-msghdr"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L14-kernel-socket/starter"
+
+[resources]
+readme = "curriculum/L14-kernel-socket/README.md"
+host_check = ""
+hint = "curriculum/L14-kernel-socket/hint"
+solution = "curriculum/L14-kernel-socket/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "socket-connect-send"
+label = "Kernel socket connects and sends data"
+expect_build = "pass"
+check = ""

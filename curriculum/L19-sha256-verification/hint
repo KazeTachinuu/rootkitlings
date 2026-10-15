@@ -1,2 +1,0 @@
-Validate the whole request first, hash into a temporary digest, and use one
-cleanup path for each object you successfully allocated.

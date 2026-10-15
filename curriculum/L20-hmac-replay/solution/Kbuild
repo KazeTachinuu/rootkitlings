@@ -1,5 +1,0 @@
-obj-m += rklings.o
-rklings-y := core/main.o crypto/auth_platform.o message/authenticated.o tests/selftest.o
-RKLINGS_FAIL_POINT ?= 0
-ccflags-y += -I$(src)/include
-ccflags-y += -DRKLINGS_FAIL_POINT=$(RKLINGS_FAIL_POINT)

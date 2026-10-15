@@ -1,0 +1,39 @@
+schema_version = 2
+id = "mkdir-reaction"
+title = "React to a mkdir from the kernel"
+stage = "escalation"
+kind = "lesson"
+tradecraft = ["interception"]
+difficulty = "standard"
+prerequisites = ["owned-kernel-state"]
+teaches = ["mkdir-interception", "reactive-hook"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/L05-mkdir-reaction/starter"
+
+[resources]
+readme = "curriculum/L05-mkdir-reaction/README.md"
+host_check = ""
+hint = "curriculum/L05-mkdir-reaction/hint"
+solution = "curriculum/L05-mkdir-reaction/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "intercept-matching"
+label = "mkdir rklings.hello prints intercepted message"
+expect_build = "pass"
+check = ""
+
+[[verification.cases]]
+id = "ignore-non-matching"
+label = "Non-matching mkdir is ignored"
+expect_build = "pass"
+check = ""

@@ -1,0 +1,33 @@
+schema_version = 2
+id = "secure-channel"
+title = "Encrypted envelope over the agent connection"
+stage = "reflection"
+kind = "milestone"
+tradecraft = ["crypto", "network"]
+difficulty = "standard"
+prerequisites = ["message-framing", "aead-encrypt", "secure-envelope", "key-provisioning", "callback-shell"]
+teaches = ["secure-channel-integration"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+build = "."
+baseline = "starter"
+source = "curriculum/M03-secure-channel/starter"
+
+[resources]
+readme = "curriculum/M03-secure-channel/README.md"
+host_check = ""
+hint = "curriculum/M03-secure-channel/hint"
+solution = "curriculum/M03-secure-channel/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "secure-channel"
+label = "Encrypted agent communication"
+expect_build = "pass"
+check = ""

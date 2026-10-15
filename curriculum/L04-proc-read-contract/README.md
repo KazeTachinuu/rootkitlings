@@ -31,7 +31,7 @@ file; do not add a manual read callback.
 
 No lock is needed here.
 The `active` value does not change while the proc entry exists.
-Synchronization belongs in the lesson where mutable shared state is introduced.
+Synchronization is not needed until mutable shared state is introduced.
 
 ## Removal before destruction
 

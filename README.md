@@ -2,28 +2,23 @@
 
 Build a Linux kernel rootkit one mechanism at a time.
 
-The course has 27 lessons, seven milestones, and one final project.
+27 lessons, 6 milestones, one final project.
 Each exercise adds one bounded mechanism or integrates mechanisms already
 practiced.
 Modules run only in a disposable QEMU guest, never in the host kernel.
 
 ## Requirements
 
-Use an x86-64 Linux host with:
+x86-64 Linux host with:
 
-- at least 2 GiB of memory and 4 GiB of free disk space;
-- Python 3.11 or newer, GCC, Clang, binutils, GNU Make, and the kernel build
-  tools;
-- a statically linked BusyBox, `cpio`, `gzip`, QEMU, OpenSSL, and the libelf and
-  OpenSSL development files.
+- 2 GiB RAM, 4 GiB free disk
+- Python 3.11+, GCC, Clang, binutils, GNU Make, kernel build tools
+- Static BusyBox, `cpio`, `gzip`, QEMU, OpenSSL, libelf-dev, libssl-dev
 
-`make doctor` checks these requirements and prints package hints for Arch,
+`make doctor` checks everything and prints package hints for Arch,
 Debian/Ubuntu, and Fedora.
-KVM is optional; QEMU falls back to slower TCG emulation.
-The course uses its pinned Linux 7.2.9 guest, not the host kernel or headers.
-GDB, Bear, clangd, and ShellCheck are optional development tools.
-
-The supported host is x86-64 Linux.
+KVM is optional (QEMU falls back to TCG).
+The course uses its pinned Linux 7.2.9 guest, not the host kernel.
 
 ## Start
 
@@ -38,84 +33,76 @@ make doctor
 ```
 
 - `setup` prepares the pinned kernel and verifies guest isolation.
-- `prereq` shows direct exercise and concept dependencies.
+- `prereq` shows direct dependencies.
 - `read` explains the mechanism and task.
 - `start` creates the workspace and lists editable files.
-- `check` shows each build and runs its host and guest checks.
+- `check` builds, boots, and runs host and guest checks.
 
-Exercise commands accept a serial such as `L19`, a stable ID such as
-`netfilter-observer`, or an unambiguous prefix.
-Most commands use the current exercise when no selector is given.
+Exercise commands accept a serial (`L19`), a stable ID, or an
+unambiguous prefix. Most default to the current exercise.
 Run `./rklings help` for the complete command list.
 
 ## Course
 
 ```text
-L00-L03  module lifecycle, state, procfs
+L00-L04  module lifecycle, state, procfs
    |
-L04-L07  control, execution engine
+L05-L09  hooks, kprobes, command dispatcher
    |
-   +---> M00  reversible persistence
+   +---> M00  persistence + module cloak
    |
-L08-L12  credentials, probes, telemetry
+L10-L13  target lists, concealment filters
    |
-   +---> M01  module cloaking
-   +---> M02  local covert control
+   +---> M01  full local control
    |
-L13-L15  view filters, directory hiding
+L14-L17  kernel sockets, threads, reverse shell
    |
-   +---> M03  dynamic directory filter
+   +---> M02  callback shell
    |
-L16-L21  packets, sockets, reverse shell
+L18-L21  framing, AEAD, envelope, key provisioning
    |
-   +---> M04  callback shell
+   +---> M03  encrypted channel
    |
-L22-L25  auth, replay defense, encryption
+L22-L26  timeouts, download, protocol, auto-OPSEC
    |
-   +---> M05  authenticated channel
+   +---> M04  remote control
+   +---> M05  full operations
    |
-L26      port hiding
-   |
-   +---> M06  content and port filter
-   |
-   +---> C00  complete rootkit
+   +---> P00  complete rootkit
 ```
 
+Milestones integrate the lessons above them into one operational module.
 Use `list` for the full route and `prereq` for direct dependencies.
 
 ## Recovery
 
-`restore` and `reset` do different jobs:
-
 ```sh
-./rklings restore L12
-./rklings reset L12
+./rklings restore L12   # archive edits, recreate starter workspace
+./rklings reset L12     # clear progress from L12 onward
 ./rklings reset --all --yes
 ```
 
-- `restore` archives the current edits and recreates that exercise's starting
-  workspace.
-  Course progress is unchanged.
-- `reset` clears progress from the selected exercise onward and archives the
-  affected workspaces.
-  Resetting the entire course requires `--all --yes`.
-- `clean` removes declared build outputs but keeps source edits and progress.
+- `restore` archives current edits and recreates that exercise's starter.
+  Progress is unchanged.
+- `reset` clears progress from the selected exercise onward and archives
+  affected workspaces. Full reset requires `--all --yes`.
+- `clean` removes build outputs but keeps source edits and progress.
 
 ## Repository layout
 
 ```text
-course.toml                         route, concepts, tags, and tools
-curriculum/<serial>-<stable-id>/   lessons, workspaces, and checks
-rklings                       learner command
+course.toml                        route, concepts, tags, and tools
+curriculum/<serial>-<stable-id>/   lessons and checks
+rklings                            CLI
 engine/                            catalog, state, and verification
 vm/                                pinned guest runtime and tools
-work/<serial>/                     learner source code
-.rklings/                     builds, state, snapshots, and backups
+work/<serial>/                     your source code
+.rklings/                          builds, state, snapshots, backups
 ```
 
-Learner edits belong under `work/`.
-Files under `curriculum/` define the immutable course bundles.
+Edits go in `work/`. Files under `curriculum/` are immutable course bundles.
 
 See [`docs/COURSE.md`](docs/COURSE.md) for course design and
 [`vm/README.md`](vm/README.md) for the guest runtime.
-Maintainers use `make validate`; `make compile-db` creates clangd metadata.
+`make validate` runs the maintainer checks. `make compile-db` creates
+clangd metadata.

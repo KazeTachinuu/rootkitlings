@@ -1,0 +1,5 @@
+Use module_param_string (not module_param with charp) so the hex buffer is
+stack-local and can be zeroized. For key.rotate, get_random_bytes fills 32 bytes
+directly. For key.<hex>, validate that the suffix is exactly 64 characters before
+calling hex2bin. Return -EEXIST (not 0) to prevent the mkdir from creating a
+real directory.

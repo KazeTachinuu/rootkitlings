@@ -1,0 +1,6 @@
+Wire together all four pieces: framing wraps each send/recv, AEAD encrypts the
+payload, the envelope header becomes the AAD, and the key comes from the module
+parameter. The handshake is a simple encrypted HELLO exchange to confirm both
+sides share the same key before entering the command loop. On any error (auth
+failure, disconnect), release the AEAD transform, close the socket, sleep, and
+retry the entire connection.

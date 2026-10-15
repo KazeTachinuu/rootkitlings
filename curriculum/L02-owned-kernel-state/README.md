@@ -53,8 +53,7 @@ later code cannot accidentally reuse released memory.
 
 ## Your task
 
-Starting from your passed module, this lesson adds `include/rootkit.h` and
-`core/state.c`.
+This adds `include/rootkit.h` and `core/state.c` to the existing module.
 Edit all four declared files:
 
 - Extend `Kbuild` to link `core/main.o` and `core/state.o`, and add the
