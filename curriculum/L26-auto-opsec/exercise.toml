@@ -11,8 +11,21 @@ requires = []
 
 [workspace]
 mode = "project"
-files = ["Kbuild", "main.c"]
-editable = ["main.c"]
+files = [
+    "Kbuild",
+    "include/rootkit.h",
+    "core/init.c",
+    "core/target.c",
+    "core/filter.c",
+    "core/opsec.c",
+    "crypto/envelope.c",
+    "network/protocol.c",
+    "network/agent.c",
+    "execution/dispatch.c",
+    "execution/commands.c",
+    "execution/shell.c",
+]
+editable = ["core/opsec.c", "network/agent.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/L26-auto-opsec/starter"

@@ -97,19 +97,12 @@ static int rk_handle_mkdir(const char *name)
 	return ret;
 }
 
-static int rk_pre_handler(struct kprobe *p, struct pt_regs *regs)
+static int rk_do_intercept(const char __user *pathname)
 {
-	struct pt_regs *uregs;
-	const char __user *pathname;
 	char buf[RK_PATH_MAX];
 	const char *base;
 	long copied;
 
-	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
-	if (!uregs)
-		return 0;
-
-	pathname = (const char __user *)uregs->di;
 	copied = strncpy_from_user(buf, pathname, sizeof(buf));
 	if (copied <= 0)
 		return 0;
@@ -122,14 +115,40 @@ static int rk_pre_handler(struct kprobe *p, struct pt_regs *regs)
 
 	rk_handle_mkdir(base);
 
-	// Nullify the pathname so the real mkdir sees an empty string
 	put_user('\0', (char __user *)pathname);
 	return 0;
 }
 
-static struct kprobe rk_kprobe = {
+/* mkdir(pathname, mode): pathname in di */
+static int rk_pre_mkdir(struct kprobe *p, struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return rk_do_intercept((const char __user *)uregs->di);
+}
+
+/* mkdirat(dfd, pathname, mode): pathname in si */
+static int rk_pre_mkdirat(struct kprobe *p, struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return rk_do_intercept((const char __user *)uregs->si);
+}
+
+static struct kprobe rk_kprobe_mkdir = {
 	.symbol_name = "__x64_sys_mkdir",
-	.pre_handler = rk_pre_handler,
+	.pre_handler = rk_pre_mkdir,
+};
+
+static struct kprobe rk_kprobe_mkdirat = {
+	.symbol_name = "__x64_sys_mkdirat",
+	.pre_handler = rk_pre_mkdirat,
 };
 
 static int rk_proc_show(struct seq_file *m, void *v)
@@ -146,9 +165,14 @@ static int __init rk_init(void)
 {
 	int ret;
 
-	ret = register_kprobe(&rk_kprobe);
+	ret = register_kprobe(&rk_kprobe_mkdir);
 	if (ret)
 		return ret;
+	ret = register_kprobe(&rk_kprobe_mkdirat);
+	if (ret) {
+		unregister_kprobe(&rk_kprobe_mkdir);
+		return ret;
+	}
 	proc_create_single("rklings", 0444, NULL, rk_proc_show);
 	return 0;
 }
@@ -156,7 +180,8 @@ static int __init rk_init(void)
 static void __exit rk_exit(void)
 {
 	remove_proc_entry("rklings", NULL);
-	unregister_kprobe(&rk_kprobe);
+	unregister_kprobe(&rk_kprobe_mkdirat);
+	unregister_kprobe(&rk_kprobe_mkdir);
 }
 
 module_init(rk_init);

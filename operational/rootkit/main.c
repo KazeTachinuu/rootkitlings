@@ -1,1 +1,0 @@
-../../curriculum/P00-complete-rootkit/solution/main.c

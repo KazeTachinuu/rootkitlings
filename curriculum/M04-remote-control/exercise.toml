@@ -3,16 +3,40 @@ id = "remote-control"
 title = "Full protocol over the encrypted agent connection"
 stage = "reflection"
 kind = "milestone"
-tradecraft = ["control", "network", "crypto"]
-difficulty = "advanced"
+tradecraft = ["control", "network", "crypto", "concealment"]
+difficulty = "standard"
 prerequisites = ["shell-timeout", "file-download", "command-parser", "local-control"]
 teaches = ["remote-protocol-integration"]
 requires = []
 
 [workspace]
 mode = "project"
-files = ["Kbuild", "main.c"]
-editable = ["main.c"]
+files = [
+    "Kbuild",
+    "include/rootkit.h",
+    "core/init.c",
+    "core/target.c",
+    "core/filter.c",
+    "core/opsec.c",
+    "crypto/envelope.c",
+    "network/protocol.c",
+    "network/agent.c",
+    "execution/dispatch.c",
+    "execution/commands.c",
+    "execution/shell.c",
+]
+editable = [
+    "core/init.c",
+    "core/target.c",
+    "core/filter.c",
+    "core/opsec.c",
+    "crypto/envelope.c",
+    "network/protocol.c",
+    "network/agent.c",
+    "execution/dispatch.c",
+    "execution/commands.c",
+    "execution/shell.c",
+]
 build = "."
 baseline = "starter"
 source = "curriculum/M04-remote-control/starter"

@@ -5,14 +5,39 @@ stage = "operations"
 kind = "lesson"
 tradecraft = ["control"]
 difficulty = "standard"
-prerequisites = ["command-parser"]
+prerequisites = ["secure-channel"]
 teaches = ["full-command-wiring", "protocol-parity"]
 requires = []
 
 [workspace]
 mode = "project"
-files = ["Kbuild", "main.c"]
-editable = ["main.c"]
+files = [
+    "Kbuild",
+    "include/rootkit.h",
+    "core/init.c",
+    "core/target.c",
+    "core/filter.c",
+    "core/opsec.c",
+    "crypto/envelope.c",
+    "network/protocol.c",
+    "network/agent.c",
+    "execution/dispatch.c",
+    "execution/commands.c",
+    "execution/shell.c",
+]
+editable = [
+    "include/rootkit.h",
+    "core/init.c",
+    "core/target.c",
+    "core/filter.c",
+    "core/opsec.c",
+    "crypto/envelope.c",
+    "network/protocol.c",
+    "network/agent.c",
+    "execution/dispatch.c",
+    "execution/commands.c",
+    "execution/shell.c",
+]
 build = "."
 baseline = "starter"
 source = "curriculum/L25-full-protocol/starter"

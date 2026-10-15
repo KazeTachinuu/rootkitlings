@@ -11,8 +11,8 @@ requires = []
 
 [workspace]
 mode = "project"
-files = ["Kbuild", "main.c"]
-editable = ["main.c"]
+files = ["Kbuild", "include/rootkit.h", "core/init.c", "core/target.c", "core/escalation.c", "core/dispatch.c", "core/filter.c"]
+editable = ["core/init.c", "core/dispatch.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/M01-local-control/starter"

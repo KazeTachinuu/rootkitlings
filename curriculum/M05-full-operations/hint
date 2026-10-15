@@ -1,8 +1,0 @@
-This is full integration.
-Every piece exists from prior lessons.
-Combine the encrypted framing, all command handlers (INFO, STATUS, LIST,
-HIDE/UNHIDE, PERSIST, ESCALATE, DOWNLOAD, SHELL, EXEC), auto-OPSEC on
-connect/disconnect, and the complete init/exit with goto rollback.
-Test each command over the wire.
-If something fails, trace back to the individual lesson where you built that
-piece.

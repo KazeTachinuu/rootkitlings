@@ -2,7 +2,8 @@
 //
 // Your task: upgrade from kprobe to kretprobe and build a command
 // dispatcher that routes "rklings.<cmd>[.<arg>]" mkdir names to
-// handler functions (ping, status, escalate).
+// handler functions (ping, status, escalate). Hook both
+// __x64_sys_mkdir and __x64_sys_mkdirat.
 //
 #include <linux/cred.h>
 #include <linux/errno.h>
@@ -92,13 +93,23 @@ static int rk_try_deferred(void)
  * (separated by '.'), then route to the matching handler.
  * Commands: "e" (escalate), "ping", "status". Return -ENOENT for unknown. */
 
-/* TODO: Implement the kretprobe entry and return handlers for __x64_sys_mkdir.
+/* TODO: Implement the kretprobe handlers for mkdir interception.
  * Use a per-instance data struct to carry the dispatch result and whether
- * interception happened. The entry handler extracts and checks the pathname
- * (same pattern as L08), calls rk_dispatch, and nullifies the pathname.
+ * interception happened.
+ *
+ * Write a shared helper rk_do_entry(inst, pathname) that copies the
+ * pathname, finds the basename, checks the prefix, calls rk_dispatch,
+ * and nullifies the pathname.
+ *
+ * Then write two entry handlers:
+ *   rk_mkdir_entry   - for __x64_sys_mkdir:  pathname in uregs->di
+ *   rk_mkdirat_entry - for __x64_sys_mkdirat: pathname in uregs->si
+ *
  * The return handler overrides the syscall return value if intercepted. */
 
-/* TODO: Define the static struct kretprobe for __x64_sys_mkdir. */
+/* TODO: Define two static struct kretprobes:
+ *   rk_mkdir_probe   targeting "__x64_sys_mkdir"
+ *   rk_mkdirat_probe targeting "__x64_sys_mkdirat" */
 
 static int rk_proc_show(struct seq_file *m, void *v)
 {
@@ -113,13 +124,14 @@ static int rk_proc_show(struct seq_file *m, void *v)
 
 static int __init rk_init(void)
 {
-	/* TODO: Register the kretprobe and create /proc/rklings. */
+	/* TODO: Register both kretprobes and create /proc/rklings.
+	 * If the second register fails, unregister the first. */
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/* TODO: Remove /proc/rklings and unregister the kretprobe. */
+	/* TODO: Remove /proc/rklings and unregister both kretprobes. */
 }
 
 module_init(rk_init);

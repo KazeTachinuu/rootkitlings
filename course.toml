@@ -58,9 +58,6 @@ required_route = [
   # M04: remote control
   "remote-control",
 
-  # M05: full operations
-  "full-operations",
-
   # Final project
   "complete-rootkit",
 ]
@@ -304,10 +301,6 @@ id = "full-command-wiring"
 label = "Full Command Wiring"
 
 [[concepts]]
-id = "full-integration"
-label = "Full Integration"
-
-[[concepts]]
 id = "full-system-integration"
 label = "Full System Integration"
 
@@ -434,10 +427,6 @@ label = "Multi Probe Integration"
 [[concepts]]
 id = "nonce-construction"
 label = "Nonce Construction"
-
-[[concepts]]
-id = "operational-security"
-label = "Operational Security"
 
 [[concepts]]
 id = "opsec-automation"

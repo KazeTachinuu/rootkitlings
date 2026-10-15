@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 //
-// Your task: write a kprobe from scratch. No rklings_hook.h.
-// Hook __x64_sys_mkdir, intercept "rklings." commands, and
-// expose a /proc/rklings status file.
+// Your task: write kprobes from scratch. No rklings_hook.h.
+// Hook both __x64_sys_mkdir and __x64_sys_mkdirat to intercept
+// "rklings." commands, and expose a /proc/rklings status file.
 //
 #include <linux/cred.h>
 #include <linux/errno.h>
@@ -101,25 +101,33 @@ static int rk_handle_mkdir(const char *name)
 	return ret;
 }
 
-/* TODO: Write rk_pre_handler, a kprobe pre_handler for __x64_sys_mkdir.
- * Extract the userspace pathname from pt_regs, copy it to a kernel buffer,
- * find the basename, check the "rklings." prefix, call rk_handle_mkdir,
- * then nullify the pathname so the real syscall sees an empty string. */
+/* TODO: Write a shared helper rk_do_intercept(const char __user *pathname)
+ * that copies the pathname to a kernel buffer, finds the basename, checks
+ * the "rklings." prefix, calls rk_handle_mkdir, and nullifies the pathname.
+ *
+ * Then write two kprobe pre_handlers:
+ *   rk_pre_mkdir  - for __x64_sys_mkdir:  pathname is in uregs->di
+ *   rk_pre_mkdirat - for __x64_sys_mkdirat: pathname is in uregs->si
+ * Both extract uregs via regs_get_kernel_argument(regs, 0), then call
+ * the shared helper with the pathname from the correct register. */
 
-/* TODO: Define a static struct kprobe targeting "__x64_sys_mkdir". */
+/* TODO: Define two static struct kprobes:
+ *   rk_kprobe_mkdir   targeting "__x64_sys_mkdir"
+ *   rk_kprobe_mkdirat targeting "__x64_sys_mkdirat" */
 
 /* TODO: Write rk_proc_show for /proc/rklings. Call rk_try_deferred(),
  * then print "deferred: <pid>" or "idle". */
 
 static int __init rk_init(void)
 {
-	/* TODO: Register the kprobe and create /proc/rklings. */
+	/* TODO: Register both kprobes and create /proc/rklings.
+	 * If the second register fails, unregister the first. */
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/* TODO: Remove /proc/rklings and unregister the kprobe. */
+	/* TODO: Remove /proc/rklings and unregister both kprobes. */
 }
 
 module_init(rk_init);

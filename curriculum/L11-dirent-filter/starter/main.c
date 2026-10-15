@@ -122,12 +122,10 @@ struct rk_mkdir_data {
 	bool intercepted;
 };
 
-static int rk_mkdir_entry(struct kretprobe_instance *inst,
-			   struct pt_regs *regs)
+static int rk_mkdir_do_entry(struct kretprobe_instance *inst,
+			     const char __user *pathname)
 {
 	struct rk_mkdir_data *data;
-	struct pt_regs *uregs;
-	const char __user *pathname;
 	char buf[RK_PATH_MAX];
 	const char *base;
 	long copied;
@@ -135,11 +133,6 @@ static int rk_mkdir_entry(struct kretprobe_instance *inst,
 	data = (struct rk_mkdir_data *)inst->data;
 	data->intercepted = false;
 
-	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
-	if (!uregs)
-		return 0;
-
-	pathname = (const char __user *)uregs->di;
 	copied = strncpy_from_user(buf, pathname, sizeof(buf));
 	if (copied <= 0)
 		return 0;
@@ -157,6 +150,28 @@ static int rk_mkdir_entry(struct kretprobe_instance *inst,
 	return 0;
 }
 
+static int rk_mkdir_entry_mkdir(struct kretprobe_instance *inst,
+				struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return rk_mkdir_do_entry(inst, (const char __user *)uregs->di);
+}
+
+static int rk_mkdir_entry_mkdirat(struct kretprobe_instance *inst,
+				  struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return rk_mkdir_do_entry(inst, (const char __user *)uregs->si);
+}
+
 static int rk_mkdir_return(struct kretprobe_instance *inst,
 			    struct pt_regs *regs)
 {
@@ -170,7 +185,15 @@ static int rk_mkdir_return(struct kretprobe_instance *inst,
 
 static struct kretprobe rk_mkdir_probe = {
 	.kp.symbol_name = "__x64_sys_mkdir",
-	.entry_handler  = rk_mkdir_entry,
+	.entry_handler  = rk_mkdir_entry_mkdir,
+	.handler        = rk_mkdir_return,
+	.data_size      = sizeof(struct rk_mkdir_data),
+	.maxactive      = 8,
+};
+
+static struct kretprobe rk_mkdirat_probe = {
+	.kp.symbol_name = "__x64_sys_mkdirat",
+	.entry_handler  = rk_mkdir_entry_mkdirat,
 	.handler        = rk_mkdir_return,
 	.data_size      = sizeof(struct rk_mkdir_data),
 	.maxactive      = 8,

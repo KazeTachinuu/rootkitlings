@@ -413,6 +413,8 @@ async def _static_handler(request: web.Request) -> web.Response:
             raise web.HTTPForbidden()
 
     if not file.is_file():
+        if path.startswith("assets/"):
+            raise web.HTTPNotFound()
         file = _static_root / "index.html"
 
     content_type = mimetypes.guess_type(file.name)[0] or "application/octet-stream"

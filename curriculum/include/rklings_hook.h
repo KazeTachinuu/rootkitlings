@@ -9,6 +9,9 @@
  * from module_init/module_exit. The header does the rest.
  *
  * L08 opens this file. L09 discards it and writes kretprobe from scratch.
+ *
+ * Hooks both __x64_sys_mkdir and __x64_sys_mkdirat so the interception
+ * works regardless of which syscall the userspace libc uses.
  */
 
 #include <linux/init.h>
@@ -41,22 +44,17 @@ struct __rk_mkdir_data {
 
 static int __rk_user_handler(const char *);
 
-static int __rk_entry(struct kretprobe_instance *inst, struct pt_regs *regs)
+static int __rk_do_entry(struct kretprobe_instance *inst,
+			  struct pt_regs *regs,
+			  const char __user *pathname)
 {
 	struct __rk_mkdir_data *data = (void *)inst->data;
-	struct pt_regs *uregs;
-	const char __user *pathname;
 	char buf[RK_HOOK_PATH_MAX];
 	long copied;
 	const char *base;
 
 	data->intercepted = false;
 
-	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
-	if (!uregs)
-		return 0;
-
-	pathname = (const char __user *)uregs->di;
 	copied = strncpy_from_user(buf, pathname, sizeof(buf));
 	if (copied <= 0)
 		return 0;
@@ -71,6 +69,30 @@ static int __rk_entry(struct kretprobe_instance *inst, struct pt_regs *regs)
 	return 0;
 }
 
+/* mkdir(pathname, mode): pathname in di */
+static int __rk_entry_mkdir(struct kretprobe_instance *inst,
+			     struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return __rk_do_entry(inst, regs, (const char __user *)uregs->di);
+}
+
+/* mkdirat(dfd, pathname, mode): pathname in si */
+static int __rk_entry_mkdirat(struct kretprobe_instance *inst,
+			       struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return __rk_do_entry(inst, regs, (const char __user *)uregs->si);
+}
+
 static int __rk_return(struct kretprobe_instance *inst, struct pt_regs *regs)
 {
 	struct __rk_mkdir_data *data = (void *)inst->data;
@@ -80,9 +102,17 @@ static int __rk_return(struct kretprobe_instance *inst, struct pt_regs *regs)
 	return 0;
 }
 
-static struct kretprobe __rk_probe = {
+static struct kretprobe __rk_probe_mkdir = {
 	.kp.symbol_name = "__x64_sys_mkdir",
-	.entry_handler  = __rk_entry,
+	.entry_handler  = __rk_entry_mkdir,
+	.handler        = __rk_return,
+	.data_size      = sizeof(struct __rk_mkdir_data),
+	.maxactive      = 8,
+};
+
+static struct kretprobe __rk_probe_mkdirat = {
+	.kp.symbol_name = "__x64_sys_mkdirat",
+	.entry_handler  = __rk_entry_mkdirat,
 	.handler        = __rk_return,
 	.data_size      = sizeof(struct __rk_mkdir_data),
 	.maxactive      = 8,
@@ -90,12 +120,23 @@ static struct kretprobe __rk_probe = {
 
 static inline int rk_hook_start(void)
 {
-	return register_kretprobe(&__rk_probe);
+	int ret;
+
+	ret = register_kretprobe(&__rk_probe_mkdir);
+	if (ret)
+		return ret;
+	ret = register_kretprobe(&__rk_probe_mkdirat);
+	if (ret) {
+		unregister_kretprobe(&__rk_probe_mkdir);
+		return ret;
+	}
+	return 0;
 }
 
 static inline void rk_hook_stop(void)
 {
-	unregister_kretprobe(&__rk_probe);
+	unregister_kretprobe(&__rk_probe_mkdirat);
+	unregister_kretprobe(&__rk_probe_mkdir);
 }
 
 #endif /* _RKLINGS_HOOK_H */

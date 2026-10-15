@@ -11,8 +11,8 @@ requires = []
 
 [workspace]
 mode = "project"
-files = ["Kbuild", "main.c"]
-editable = ["main.c"]
+files = ["Kbuild", "include/rootkit.h", "core/init.c", "network/protocol.c", "network/agent.c", "crypto/envelope.c"]
+editable = ["core/init.c", "network/protocol.c", "network/agent.c", "crypto/envelope.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/M03-secure-channel/starter"

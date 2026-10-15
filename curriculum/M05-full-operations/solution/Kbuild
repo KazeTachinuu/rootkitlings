@@ -1,2 +1,0 @@
-obj-m := rklings.o
-rklings-y := main.o

