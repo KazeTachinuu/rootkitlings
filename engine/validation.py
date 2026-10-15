@@ -477,6 +477,7 @@ class Validator:
             if shared_include.is_dir():
                 (temporary_root / "include").symlink_to(shared_include)
 
+            self.console.progress("Materializing starters and solutions")
             for item in catalog.exercises:
                 starter = full_solution_tree(
                     catalog.root / item.workspace.source,
@@ -485,7 +486,12 @@ class Validator:
                 materialize_solution_tree(starter, starter_root, item.id)
                 catalog.materialize_solution(item, solution_root, item.id)
 
-            for item in catalog.required():
+            required = list(catalog.required())
+            total = len(required)
+            for index, item in enumerate(required, 1):
+                self.console.progress(
+                    f"Building {item.id} ({index}/{total})"
+                )
                 self._build_module(
                     kernel_build,
                     starter_root / item.id,
