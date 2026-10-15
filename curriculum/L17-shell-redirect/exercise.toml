@@ -31,4 +31,5 @@ tools = ["module-load-test"]
 id = "shell-redirect"
 label = "Shell I/O redirected to TCP socket"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "vm/checks/socket-accept"
+check_arguments = ["4444", "host=127.0.0.1", "port=4444"]

@@ -3,12 +3,13 @@
 #include <linux/module.h>
 #include <linux/umh.h>
 #include <linux/cred.h>
+#include <linux/sched/task.h>
 #include <linux/slab.h>
 
 // Escalate the spawned process to root
 static int rk_umh_init(struct subprocess_info *info, struct cred *new)
 {
-	// TODO: Set root credentials with commit_creds(prepare_kernel_cred(NULL)).
+	// TODO: Set root credentials with commit_creds(prepare_kernel_cred(&init_task)).
 	// pr_info("rklings: escalate to root here\n");
 	return 0;
 }

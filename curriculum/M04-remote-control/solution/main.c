@@ -701,6 +701,7 @@ static int rk_agent_fn(void *data)
 			break;
 	}
 
+	agent_thread = NULL;
 	return 0;
 }
 

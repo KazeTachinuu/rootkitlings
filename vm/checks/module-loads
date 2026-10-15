@@ -5,7 +5,7 @@
 
 begin "Module loads"
 
-load rklings.ko
+load rklings.ko "$@"
 assert_loaded rklings
 
 unload rklings

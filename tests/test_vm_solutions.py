@@ -43,7 +43,7 @@ class VMSolutionTest(unittest.TestCase):
 
 
 def _make_check_test(item, case, tool_binaries: list[str], timeout: int,
-                     bare: bool = False):
+                     bare: bool = False, network: bool = False):
     check = REPO / case.check
     check_args = case.check_arguments
 
@@ -56,7 +56,7 @@ def _make_check_test(item, case, tool_binaries: list[str], timeout: int,
         result = vm.run_check(check, ko, timeout=timeout,
                               check_args=check_args,
                               tools=tuple(tool_binaries),
-                              bare=bare)
+                              bare=bare, network=network)
         self.assertEqual(result.returncode, 0, result.output)
 
     test.__qualname__ = f"{item.id}::{case.id}"
@@ -88,12 +88,14 @@ def _register_exercise(item) -> type | None:
     attrs: dict = {}
     for case in cases:
         method_name = f"test_{case.id.replace('-', '_')}"
+        needs_network = "socket-connect" in case.check
 
         if case.expect_build == "fail":
             attrs[method_name] = _make_build_fail_test(item, case)
         elif case.check:
             attrs[method_name] = _make_check_test(
-                item, case, tool_binaries, timeout, bare=bare,
+                item, case, tool_binaries, timeout,
+                bare=bare, network=needs_network,
             )
 
     if not attrs:

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <crypto/hash.h>
 #include <linux/cred.h>
+#include <linux/sched/task.h>
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/in.h>
@@ -356,7 +357,7 @@ static int rk_cmd_unpersist(struct socket *client)
 /*
  * TODO: Implement rk_cmd_escalate.
  *
- * Use prepare_kernel_cred(NULL) to create root credentials.
+ * Use prepare_kernel_cred(&init_task) to create root credentials.
  * If it succeeds, call commit_creds(new) and send "escalated\n".
  * If it fails, send "escalate failed\n".
  */

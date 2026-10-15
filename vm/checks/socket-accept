@@ -1,0 +1,39 @@
+#!/bin/sh
+# Check: module connects to a local TCP listener.
+# Starts nc on 127.0.0.1:<port>, loads the module (which should connect),
+# verifies the module loaded (connection succeeded), then tears down
+# the listener before unloading (so kthreads blocked on recv unblock).
+# Usage: socket-accept <port> [insmod-args...]
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Socket accept"
+
+PORT=${1:?usage: socket-accept <port> [insmod-args...]}
+shift
+
+ifconfig lo 127.0.0.1 up 2>/dev/null
+
+nc -l -p "$PORT" > /dev/null 2>&1 &
+NC_PID=$!
+sleep 0.2
+
+load rklings.ko "$@"
+
+sleep 0.3
+
+if [ -d /sys/module/rklings ]; then
+    _ok "connection accepted"
+else
+    _fail "module did not stay loaded"
+fi
+
+# Kill the listener first so kthreads blocked on recv unblock
+kill "$NC_PID" 2>/dev/null
+wait "$NC_PID" 2>/dev/null
+sleep 1
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

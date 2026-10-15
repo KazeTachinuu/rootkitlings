@@ -6,6 +6,7 @@
 #include <linux/inet.h>
 #include <linux/umh.h>
 #include <linux/cred.h>
+#include <linux/sched/task.h>
 #include <linux/file.h>
 #include <linux/fdtable.h>
 #include <linux/mutex.h>
@@ -27,7 +28,7 @@ static int rk_umh_init(struct subprocess_info *info, struct cred *new)
 	int fd;
 	int i;
 
-	commit_creds(prepare_kernel_cred(NULL));
+	commit_creds(prepare_kernel_cred(&init_task));
 
 	for (i = 0; i < 3; i++) {
 		fd = get_unused_fd_flags(0);

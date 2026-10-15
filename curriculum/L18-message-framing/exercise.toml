@@ -31,4 +31,5 @@ tools = ["module-load-test"]
 id = "framed-send-recv"
 label = "Framed send and receive over TCP"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "vm/checks/socket-exchange"
+check_arguments = ["4444"]

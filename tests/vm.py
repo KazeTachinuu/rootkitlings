@@ -42,13 +42,16 @@ class VM:
                   timeout: int = 60,
                   check_args: tuple[str, ...] = (),
                   tools: tuple[str, ...] = (),
-                  bare: bool = False) -> VMResult:
+                  bare: bool = False,
+                  network: bool = False) -> VMResult:
         cmd = [
             str(REPO / "vm/boot"),
             "--check", str(check),
         ]
         if bare:
             cmd.append("--bare")
+        if network:
+            cmd += ["--cap", "network"]
         for tool in tools:
             cmd += ["--tool", str(tool)]
         for arg in check_args:

