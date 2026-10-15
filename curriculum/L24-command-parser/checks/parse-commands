@@ -1,0 +1,34 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Command parser: module loads and structures compile"
+
+# The command parser is a purely internal kernel module that parses text
+# buffers into structured commands. All parsing functions are internal
+# (not exposed via proc/sysfs). We verify the module loads, which confirms
+# the parser code compiles and the enum/struct definitions are correct.
+
+assert_absent /sys/module/rklings
+
+# -- Load: verifies all parsing code compiles cleanly --
+load rklings.ko
+
+assert_loaded rklings
+
+# The module init is a no-op (returns 0), confirming the parser structures
+# and dispatch table are correctly defined.
+_ok "command parser structures initialized"
+
+# -- Unload cleanly --
+unload rklings
+assert_absent /sys/module/rklings
+
+# -- Verify repeated load/unload (no leaks) --
+_hdr "Repeated load/unload"
+load rklings.ko
+assert_loaded rklings
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

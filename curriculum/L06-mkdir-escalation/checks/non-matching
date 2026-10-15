@@ -1,0 +1,33 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Non-matching mkdir does not escalate"
+
+load rklings.ko
+
+# Run a non-matching mkdir as a non-root user. Uid should stay 1000.
+uid_after=$(su student -c 'mkdir /tmp/rklings.other 2>/dev/null; id -u')
+
+if [ "$uid_after" = "1000" ]; then
+    _ok "uid unchanged (still 1000) for non-matching mkdir"
+else
+    _fail "uid changed unexpectedly: expected 1000, got '$uid_after'"
+fi
+
+# Verify no escalation log.
+log=$(dmesg)
+case "$log" in
+    *"rklings: escalated"*)
+        _fail "dmesg contains escalation log for non-matching mkdir"
+        ;;
+    *)
+        _ok "no escalation log for non-matching mkdir"
+        ;;
+esac
+
+# Clean up.
+rm -rf /tmp/rklings.other 2>/dev/null
+unload rklings
+
+summary

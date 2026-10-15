@@ -1,0 +1,57 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Matching line removed from read output"
+
+TESTFILE="/tmp/rk_content_test"
+
+# Create a test file with known content
+printf "line one: apples\nline two: secret_token\nline three: bananas\nline four: another secret_token here\nline five: cherries\n" > "$TESTFILE"
+
+# Verify file has all lines before loading module
+count_before=$(wc -l < "$TESTFILE")
+if [ "$count_before" -eq 5 ]; then
+  _ok "test file has 5 lines before module load"
+else
+  _fail "test file should have 5 lines, got $count_before"
+fi
+
+load rklings.ko
+
+# Register a content filter pattern via mkdir command
+mkdir /tmp/rklings.h.c.secret_token
+
+# Read the file and check the matching lines are gone
+output=$(cat "$TESTFILE")
+
+if echo "$output" | grep -q "secret_token"; then
+  _fail "secret_token lines still visible after hiding"
+else
+  _ok "secret_token lines are filtered from read output"
+fi
+
+# Verify non-matching lines are still present
+if echo "$output" | grep -q "apples"; then
+  _ok "non-matching line 'apples' still visible"
+else
+  _fail "non-matching line 'apples' was incorrectly filtered"
+fi
+
+if echo "$output" | grep -q "bananas"; then
+  _ok "non-matching line 'bananas' still visible"
+else
+  _fail "non-matching line 'bananas' was incorrectly filtered"
+fi
+
+if echo "$output" | grep -q "cherries"; then
+  _ok "non-matching line 'cherries' still visible"
+else
+  _fail "non-matching line 'cherries' was incorrectly filtered"
+fi
+
+# Cleanup
+unload rklings
+rm -f "$TESTFILE"
+
+summary

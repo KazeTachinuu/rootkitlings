@@ -1,0 +1,57 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Hidden PID vanishes from ps"
+
+load rklings.ko
+
+# Start a background process to hide
+sleep 3600 &
+pid=$!
+
+# Verify the PID directory exists in /proc
+if [ -d "/proc/$pid" ]; then
+    _ok "PID $pid exists in /proc before hiding"
+else
+    _fail "PID $pid not in /proc before hiding"
+fi
+
+# Verify ps shows the process
+ps_out=$(ps)
+case "$ps_out" in
+    *"$pid"*) _ok "ps shows PID $pid before hiding" ;;
+    *) _fail "ps does not show PID $pid before hiding" ;;
+esac
+
+# Hide the PID
+mkdir "/tmp/rklings.h.i.$pid" 2>/dev/null
+
+# Verify ps no longer shows the PID
+ps_out=$(ps)
+case "$ps_out" in
+    *"$pid"*) _fail "PID $pid still visible in ps after hiding" ;;
+    *) _ok "PID $pid hidden from ps" ;;
+esac
+
+# The process is still running (the /proc entry still exists for direct access)
+if kill -0 "$pid" 2>/dev/null; then
+    _ok "process $pid still running"
+else
+    _fail "process $pid was killed"
+fi
+
+# Also check ls /proc does not show the PID directory
+proc_listing=$(ls /proc)
+case "$proc_listing" in
+    *"$pid"*) _fail "PID $pid directory still listed in /proc" ;;
+    *) _ok "PID $pid directory hidden from /proc listing" ;;
+esac
+
+# Clean up
+kill "$pid" 2>/dev/null
+wait "$pid" 2>/dev/null
+
+unload rklings
+
+summary

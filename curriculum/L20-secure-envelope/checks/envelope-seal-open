@@ -1,0 +1,26 @@
+#!/bin/sh
+# Verify secure envelope seal/open with replay rejection self-test.
+# The solution's module_init seals "test" into an envelope, opens it,
+# verifies the round-trip, then replays the same envelope and confirms
+# -EPROTO. Success = init returns 0.
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Envelope seal, open, and replay rejection"
+
+# A successful load means the self-test passed: seal, open, verify
+# round-trip match, and replay detection all worked correctly.
+load rklings.ko "$@"
+assert_loaded rklings
+
+# Verify clean unload (no leaks, no kernel warnings).
+unload rklings
+assert_absent /sys/module/rklings
+
+# Second cycle to confirm repeatability.
+load rklings.ko "$@"
+assert_loaded rklings
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

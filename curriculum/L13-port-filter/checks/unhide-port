@@ -1,0 +1,42 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Unhidden port reappears in netstat output"
+
+# Ensure loopback is up
+ifconfig lo 127.0.0.1 up
+
+# Start a TCP listener on port 31337
+nc -l -p 31337 &
+NC_PID=$!
+sleep 1
+
+load rklings.ko
+
+# Hide port 31337
+mkdir /tmp/rklings.h.p.31337
+
+# Confirm it is hidden
+if netstat -tln | grep -q ":31337 "; then
+  _fail "port 31337 still visible after hide (setup failed)"
+else
+  _ok "port 31337 is hidden (setup confirmed)"
+fi
+
+# Unhide by index 0 (first and only entry)
+mkdir /tmp/rklings.u.p.0
+
+# Verify port reappears
+if netstat -tln | grep -q ":31337 "; then
+  _ok "port 31337 reappears after unhide command"
+else
+  _fail "port 31337 still missing after unhide command"
+fi
+
+# Cleanup
+kill $NC_PID 2>/dev/null
+wait $NC_PID 2>/dev/null
+unload rklings
+
+summary

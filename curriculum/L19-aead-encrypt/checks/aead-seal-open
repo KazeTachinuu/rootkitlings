@@ -1,0 +1,26 @@
+#!/bin/sh
+# Verify AEAD seal/open round-trip self-test passes on module load.
+# The solution's module_init encrypts "hello", decrypts it, verifies the
+# round-trip, then confirms tamper detection. Success = init returns 0.
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "AEAD seal and open round-trip"
+
+# The module's init runs the full self-test: seal, open, verify match,
+# then tamper a byte and confirm -EBADMSG. A successful load means all
+# of that passed.
+load rklings.ko "$@"
+assert_loaded rklings
+
+# Run a second load/unload cycle to confirm the module is well-behaved
+# across its full lifetime and does not leak or corrupt state.
+unload rklings
+assert_absent /sys/module/rklings
+
+load rklings.ko "$@"
+assert_loaded rklings
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

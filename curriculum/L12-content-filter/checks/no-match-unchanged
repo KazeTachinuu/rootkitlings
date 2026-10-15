@@ -1,0 +1,51 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Non-matching reads pass through unchanged"
+
+TESTFILE="/tmp/rk_nomatch_test"
+
+# Create test file with no matching content
+printf "first line of text\nsecond line of text\nthird line of text\n" > "$TESTFILE"
+
+expected=$(cat "$TESTFILE")
+
+load rklings.ko
+
+# Register a pattern that does not appear in the file
+mkdir /tmp/rklings.h.c.ZZZZNOTPRESENT
+
+# Read the file; output should be identical
+output=$(cat "$TESTFILE")
+
+if [ "$output" = "$expected" ]; then
+  _ok "file contents unchanged when no lines match filter"
+else
+  _fail "file contents altered despite no matching lines"
+fi
+
+# Verify line count is preserved
+count=$(echo "$output" | wc -l)
+if [ "$count" -eq 3 ]; then
+  _ok "line count preserved (3 lines)"
+else
+  _fail "expected 3 lines, got $count"
+fi
+
+# Also test with no patterns registered at all (fresh module)
+unload rklings
+load rklings.ko
+
+output2=$(cat "$TESTFILE")
+if [ "$output2" = "$expected" ]; then
+  _ok "file contents unchanged with no patterns registered"
+else
+  _fail "file contents altered with empty pattern list"
+fi
+
+# Cleanup
+unload rklings
+rm -f "$TESTFILE"
+
+summary

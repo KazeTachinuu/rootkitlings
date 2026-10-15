@@ -31,5 +31,5 @@ tools = ["module-load-test"]
 id = "key-load-rotate"
 label = "Key loading, rotation, and zeroization"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L21-key-provisioning/checks/key-load-rotate"
 check_arguments = ["control_key=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"]

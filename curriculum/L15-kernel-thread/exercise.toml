@@ -31,4 +31,4 @@ tools = ["module-load-test"]
 id = "thread-runs"
 label = "Kernel thread starts and stops cleanly"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L15-kernel-thread/checks/thread-runs"

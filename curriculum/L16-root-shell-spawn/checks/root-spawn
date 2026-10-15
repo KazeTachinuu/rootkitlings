@@ -1,0 +1,46 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Root shell spawn via usermodehelper"
+
+# -- Pre-load: clean state --
+_hdr "Pre-load state"
+assert_absent /sys/module/rklings
+rm -f /tmp/rklings_shell_test
+
+# -- Load module: triggers the usermodehelper spawn --
+_hdr "Module load and shell spawn"
+load rklings.ko
+
+# call_usermodehelper_exec with UMH_WAIT_EXEC returns after exec,
+# but the child shell may still be writing; give it a moment
+sleep 2
+
+assert_loaded rklings
+
+# -- Verify the spawned shell wrote its output --
+_hdr "Verify spawned process output"
+if [ -f /tmp/rklings_shell_test ]; then
+  _ok "/tmp/rklings_shell_test was created by spawned shell"
+else
+  _fail "/tmp/rklings_shell_test not found (shell did not run)"
+fi
+
+# Check that the spawned process ran as root (uid=0)
+if [ -f /tmp/rklings_shell_test ]; then
+  content=$(cat /tmp/rklings_shell_test)
+  if echo "$content" | grep -q "uid=0"; then
+    _ok "Spawned process ran as root: $content"
+  else
+    _fail "Spawned process not root. Output: $content"
+  fi
+fi
+
+# -- Cleanup --
+_hdr "Cleanup"
+unload rklings
+assert_absent /sys/module/rklings
+rm -f /tmp/rklings_shell_test
+
+summary

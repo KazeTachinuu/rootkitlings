@@ -31,10 +31,10 @@ tools = ["module-load-test"]
 id = "parse-commands"
 label = "All command strings parsed to correct kind"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L24-command-parser/checks/parse-commands"
 
 [[verification.cases]]
 id = "dispatch-ping"
 label = "PING dispatches and returns PONG"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L24-command-parser/checks/dispatch-ping"

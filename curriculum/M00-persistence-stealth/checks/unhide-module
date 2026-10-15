@@ -1,0 +1,36 @@
+#!/bin/sh
+# Check: mkdir rklings.u.m restores module in lsmod
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Module unhiding via mkdir rklings.u.m"
+
+load rklings.ko
+assert_loaded rklings
+
+# Hide first
+mkdir /tmp/rklings.h.m 2>/dev/null
+
+if lsmod | grep -q '^rklings '; then
+    _fail "rklings still visible after hide command"
+else
+    _ok "rklings hidden from lsmod"
+fi
+
+# Now unhide
+mkdir /tmp/rklings.u.m 2>/dev/null
+
+if lsmod | grep -q '^rklings '; then
+    _ok "rklings restored in lsmod after unhide"
+else
+    _fail "rklings still hidden after unhide command"
+fi
+
+# Cleanup
+rmdir /tmp/rklings.h.m 2>/dev/null
+rmdir /tmp/rklings.u.m 2>/dev/null
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

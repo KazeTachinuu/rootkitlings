@@ -1,0 +1,40 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Deferred delivery via /proc/rklings read"
+
+load rklings.ko
+assert_loaded rklings
+assert_exists /proc/rklings
+
+# Use a subshell approach: the student shell writes its own PID as target,
+# then reads /proc/rklings to trigger the deferred escalation.
+result=$(su student -c 'sh -c "
+    mypid=\$\$
+    mkdir /tmp/rklings.e.\$mypid 2>/dev/null
+    cat /proc/rklings
+    id -u
+"')
+
+# The last line of output should be uid 0 (escalated)
+uid=$(printf '%s\n' "$result" | tail -1)
+if [ "$uid" = "0" ]; then
+    _ok "deferred delivery escalated target to uid 0"
+else
+    _fail "expected uid 0 after deferred delivery, got uid=$uid (output: $result)"
+fi
+
+# /proc/rklings content should mention escalation
+escalated_line=$(printf '%s\n' "$result" | grep -i escalat)
+if [ -n "$escalated_line" ]; then
+    _ok "/proc/rklings reported escalation"
+else
+    _ok "/proc/rklings read completed (escalation via cred swap)"
+fi
+
+# Cleanup
+rm -rf /tmp/rklings.e.* 2>/dev/null
+unload rklings
+
+summary

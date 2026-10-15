@@ -31,22 +31,22 @@ tools = ["module-load-test"]
 id = "hide-file"
 label = "Hidden file vanishes from ls"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L11-dirent-filter/checks/hide-file"
 
 [[verification.cases]]
 id = "unhide-file"
 label = "Unhidden file reappears"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L11-dirent-filter/checks/unhide-file"
 
 [[verification.cases]]
 id = "hide-pid"
 label = "Hidden PID vanishes from ps"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L11-dirent-filter/checks/hide-pid"
 
 [[verification.cases]]
 id = "unhide-pid"
 label = "Unhidden PID reappears"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L11-dirent-filter/checks/unhide-pid"

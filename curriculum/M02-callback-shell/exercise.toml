@@ -31,4 +31,4 @@ tools = ["module-load-test"]
 id = "callback-shell"
 label = "Agent connects and spawns a root shell"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/M02-callback-shell/checks/callback-shell"

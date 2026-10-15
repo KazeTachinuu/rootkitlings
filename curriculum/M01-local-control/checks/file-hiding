@@ -1,0 +1,51 @@
+#!/bin/sh
+# Check: mkdir rklings.h.f.<name> hides files from directory listing
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "File hiding via getdents filter"
+
+TESTDIR=/tmp/rk_fh_test
+rm -rf "$TESTDIR"
+mkdir -p "$TESTDIR"
+touch "$TESTDIR/visible.txt"
+touch "$TESTDIR/secret.txt"
+
+load rklings.ko
+assert_loaded rklings
+
+# Before hiding, both files should be visible
+if [ -e "$TESTDIR/secret.txt" ]; then
+    _ok "secret.txt visible before hiding"
+else
+    _fail "secret.txt not visible before hiding"
+fi
+
+# Add secret.txt to file hide list
+mkdir /tmp/rklings.h.f.secret.txt 2>/dev/null
+
+# After hiding, secret.txt should not appear in directory listing
+# Use find to check getdents-level visibility (stat still works, listing doesn't)
+found=$(find "$TESTDIR" -maxdepth 1 -name 'secret.txt' 2>/dev/null)
+if [ -n "$found" ]; then
+    _fail "secret.txt still visible after hide command"
+else
+    _ok "secret.txt hidden from directory listing"
+fi
+
+# visible.txt should still be there
+found=$(find "$TESTDIR" -maxdepth 1 -name 'visible.txt' 2>/dev/null)
+if [ -n "$found" ]; then
+    _ok "visible.txt still shows in listing"
+else
+    _fail "visible.txt was incorrectly hidden"
+fi
+
+# Cleanup
+rmdir /tmp/rklings.h.f.secret.txt 2>/dev/null
+rm -rf "$TESTDIR"
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

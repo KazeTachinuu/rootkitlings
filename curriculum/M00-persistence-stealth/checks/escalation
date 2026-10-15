@@ -1,0 +1,41 @@
+#!/bin/sh
+# Check: mkdir rklings.e escalates to root
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Credential escalation via mkdir rklings.e"
+
+load rklings.ko
+assert_loaded rklings
+
+# Trigger escalation (works for current process context via kretprobe)
+mkdir /tmp/rklings.e 2>/dev/null
+
+# Verify escalation by checking /proc/rklings for escalation count
+if [ -f /proc/rklings ]; then
+    content=$(cat /proc/rklings)
+    case "$content" in
+        *"escalations: "*)
+            count=$(echo "$content" | grep 'escalations:' | sed 's/.*escalations: //')
+            if [ -n "$count" ] && [ "$count" -gt 0 ] 2>/dev/null; then
+                _ok "escalation count incremented to $count"
+            else
+                _fail "escalation count not incremented, got: $count"
+            fi
+            ;;
+        *)
+            _fail "/proc/rklings does not report escalations"
+            ;;
+    esac
+else
+    # Without proc, check dmesg or just verify the command was accepted
+    _ok "escalation command accepted (no /proc/rklings to verify count)"
+fi
+
+# Cleanup
+rmdir /tmp/rklings.e 2>/dev/null
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

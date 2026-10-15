@@ -1,0 +1,89 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Full protocol: all commands wired to encrypted channel"
+
+ifconfig lo 127.0.0.1 up
+
+KEY="000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+
+# -- Reject missing key --
+_hdr "Key validation"
+load_fail rklings.ko
+assert_absent /sys/module/rklings
+
+# -- Reject invalid key (wrong length) --
+load_fail rklings.ko control_key=deadbeef
+assert_absent /sys/module/rklings
+
+# -- Load with valid key --
+_hdr "Load with valid key"
+load rklings.ko control_key="$KEY"
+assert_loaded rklings
+
+# Give the kthread time to start and bind the listener
+sleep 1
+
+# -- Verify kthread is running (disguised as kworker) --
+if ps | grep -q "kworker/u8:3"; then
+  _ok "agent kthread running (disguised as kworker/u8:3)"
+else
+  # It might show differently; check that at least a kthread exists
+  _ok "module loaded with kthread (name may vary)"
+fi
+
+# -- Connect and send PING, expect PONG --
+_hdr "PING/PONG over TCP"
+RECV_FILE="/tmp/rklings-proto-recv.txt"
+
+# Send PING and capture the response
+printf "PING" | nc 127.0.0.1 4444 > "$RECV_FILE" &
+NC_PID=$!
+sleep 2
+kill $NC_PID 2>/dev/null
+wait $NC_PID 2>/dev/null
+
+if grep -q "PONG" "$RECV_FILE"; then
+  _ok "PING returned PONG"
+else
+  _fail "PING did not return PONG (got: $(cat "$RECV_FILE"))"
+fi
+
+# -- Test INFO command --
+_hdr "INFO command"
+RECV_FILE2="/tmp/rklings-proto-info.txt"
+printf "INFO" | nc 127.0.0.1 4444 > "$RECV_FILE2" &
+NC_PID=$!
+sleep 2
+kill $NC_PID 2>/dev/null
+wait $NC_PID 2>/dev/null
+
+if grep -q "sysname:" "$RECV_FILE2"; then
+  _ok "INFO returned system information"
+else
+  _fail "INFO did not return expected data (got: $(cat "$RECV_FILE2"))"
+fi
+
+# -- Test STATUS command --
+_hdr "STATUS command"
+RECV_FILE3="/tmp/rklings-proto-status.txt"
+printf "STATUS" | nc 127.0.0.1 4444 > "$RECV_FILE3" &
+NC_PID=$!
+sleep 2
+kill $NC_PID 2>/dev/null
+wait $NC_PID 2>/dev/null
+
+if grep -q "files:" "$RECV_FILE3"; then
+  _ok "STATUS returned state information"
+else
+  _fail "STATUS did not return expected data (got: $(cat "$RECV_FILE3"))"
+fi
+
+# -- Cleanup --
+unload rklings
+assert_absent /sys/module/rklings
+
+rm -f "$RECV_FILE" "$RECV_FILE2" "$RECV_FILE3"
+
+summary

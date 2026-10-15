@@ -31,40 +31,40 @@ tools = ["module-load-test"]
 id = "all-probes-registered"
 label = "All five kretprobes register successfully"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/M01-local-control/checks/all-probes-registered"
 
 [[verification.cases]]
 id = "escalation"
 label = "mkdir rklings.e grants root"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/M01-local-control/checks/escalation"
 
 [[verification.cases]]
 id = "file-hiding"
 label = "mkdir rklings.h.f hides files"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/M01-local-control/checks/file-hiding"
 
 [[verification.cases]]
 id = "pid-hiding"
 label = "mkdir rklings.h.i hides PIDs"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/M01-local-control/checks/pid-hiding"
 
 [[verification.cases]]
 id = "content-hiding"
 label = "mkdir rklings.h.c hides content lines"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/M01-local-control/checks/content-hiding"
 
 [[verification.cases]]
 id = "port-hiding"
 label = "mkdir rklings.h.p hides ports"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/M01-local-control/checks/port-hiding"
 
 [[verification.cases]]
 id = "clean-unload"
 label = "Module unloads without errors"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/M01-local-control/checks/clean-unload"

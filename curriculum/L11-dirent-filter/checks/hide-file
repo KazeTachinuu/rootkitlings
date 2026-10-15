@@ -1,0 +1,68 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Hidden file vanishes from ls"
+
+# Set up test directory with known files
+rm -rf /tmp/testdir
+mkdir -p /tmp/testdir
+touch /tmp/testdir/visible1
+touch /tmp/testdir/secret
+touch /tmp/testdir/visible2
+
+# Verify all three are visible before module loads
+listing=$(ls /tmp/testdir)
+case "$listing" in
+    *secret*) _ok "secret visible before module load" ;;
+    *) _fail "secret missing before module load" ;;
+esac
+
+load rklings.ko
+
+# All files still visible before hiding
+listing=$(ls /tmp/testdir)
+case "$listing" in
+    *visible1*) _ok "visible1 present before hiding" ;;
+    *) _fail "visible1 missing before hiding" ;;
+esac
+case "$listing" in
+    *secret*) _ok "secret present before hiding" ;;
+    *) _fail "secret missing before hiding" ;;
+esac
+case "$listing" in
+    *visible2*) _ok "visible2 present before hiding" ;;
+    *) _fail "visible2 missing before hiding" ;;
+esac
+
+# Hide "secret" via mkdir command
+mkdir /tmp/rklings.h.f.secret 2>/dev/null
+
+# Verify secret is hidden
+listing=$(ls /tmp/testdir)
+case "$listing" in
+    *secret*) _fail "secret still visible after hiding" ;;
+    *) _ok "secret hidden from ls" ;;
+esac
+
+# Verify other files are still visible
+case "$listing" in
+    *visible1*) _ok "visible1 still visible" ;;
+    *) _fail "visible1 incorrectly hidden" ;;
+esac
+case "$listing" in
+    *visible2*) _ok "visible2 still visible" ;;
+    *) _fail "visible2 incorrectly hidden" ;;
+esac
+
+# The file itself still exists (stat can find it)
+if [ -f /tmp/testdir/secret ]; then
+    _ok "secret file still exists on disk"
+else
+    _fail "secret file was actually deleted"
+fi
+
+unload rklings
+rm -rf /tmp/testdir
+
+summary

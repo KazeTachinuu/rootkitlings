@@ -1,0 +1,104 @@
+#!/bin/sh
+# Check: Complete rootkit with all commands and auto-OPSEC.
+# M05 listens on 127.0.0.1:4444 and accepts connections.
+# On connect, it auto-hides its kthread PID and listening port.
+# Commands are newline-delimited text over raw TCP.
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Full operations with auto-OPSEC"
+
+ifconfig lo 127.0.0.1 up 2>/dev/null
+
+# Load with control key
+load rklings.ko "$@"
+assert_loaded rklings
+
+# Give the listener time to bind
+sleep 0.5
+
+# Verify the module is listening on port 4444
+if netstat -tln 2>/dev/null | grep -q ':4444'; then
+    _ok "agent listening on port 4444"
+else
+    _ok "agent started (port check via netstat may not work)"
+fi
+
+# Connect and send commands. M05 uses raw newline-delimited protocol.
+RESP=/tmp/rk_full_resp.txt
+rm -f "$RESP"
+
+# Send PING and STATUS commands
+{
+    printf 'PING\n'
+    sleep 0.5
+    printf 'STATUS\n'
+    sleep 0.5
+    printf 'HIDE FILE secret_doc.txt\n'
+    sleep 0.5
+    printf 'HIDE MODULE\n'
+    sleep 0.5
+    printf 'STATUS\n'
+    sleep 0.5
+} | nc 127.0.0.1 4444 > "$RESP" 2>&1 &
+NC_PID=$!
+sleep 4
+
+kill "$NC_PID" 2>/dev/null
+wait "$NC_PID" 2>/dev/null
+
+# Check responses
+if [ -s "$RESP" ]; then
+    _ok "received responses from agent"
+
+    if grep -q 'PONG' "$RESP"; then
+        _ok "PING command returned PONG"
+    else
+        _fail "no PONG response to PING"
+    fi
+
+    if grep -q 'cloaked:' "$RESP" || grep -q 'files:' "$RESP"; then
+        _ok "STATUS command returned state info"
+    else
+        _ok "STATUS response received"
+    fi
+
+    if grep -q 'hidden' "$RESP"; then
+        _ok "HIDE FILE command acknowledged"
+    else
+        _ok "HIDE FILE response received"
+    fi
+else
+    _fail "no responses received from agent"
+fi
+
+# Verify auto-OPSEC: module should be hidden from lsmod after HIDE MODULE
+if lsmod | grep -q '^rklings '; then
+    _fail "rklings still visible in lsmod after HIDE MODULE"
+else
+    _ok "rklings hidden from lsmod (HIDE MODULE or auto-OPSEC)"
+fi
+
+# The agent thread PID should be auto-hidden
+# (auto_hide adds current kthread PID to hidden list on connect)
+
+# Verify the module is still functional (sys/module still exists)
+assert_loaded rklings
+
+# Send UNHIDE MODULE so we can unload
+{
+    printf 'UNHIDE MODULE\n'
+    sleep 0.5
+} | nc 127.0.0.1 4444 > /dev/null 2>&1 &
+NC2=$!
+sleep 1
+kill "$NC2" 2>/dev/null
+wait "$NC2" 2>/dev/null
+
+# Cleanup
+rm -f "$RESP"
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

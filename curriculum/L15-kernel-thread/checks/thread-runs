@@ -1,0 +1,101 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Kernel thread lifecycle"
+
+# -- Pre-load: no thread, no module --
+_hdr "Pre-load state"
+assert_absent /sys/module/rklings
+if ps -e 2>/dev/null | grep -q '\brkworker\b'; then
+  _fail "rkworker thread exists before module load"
+else
+  _ok "No rkworker thread before load"
+fi
+
+# -- Load module, verify thread appears --
+_hdr "Thread creation"
+load rklings.ko
+assert_loaded rklings
+
+# Give the thread a moment to appear in the process list
+sleep 1
+
+found=0
+if ps -e 2>/dev/null | grep -q '\brkworker\b'; then
+  found=1
+fi
+# Also try ps aux in case ps -e is not available
+if [ "$found" = 0 ] && ps aux 2>/dev/null | grep -q '\[rkworker\]'; then
+  found=1
+fi
+# Last resort: check /proc for the thread
+if [ "$found" = 0 ]; then
+  for pid_dir in /proc/[0-9]*; do
+    comm_file="$pid_dir/comm"
+    if [ -f "$comm_file" ] && [ "$(cat "$comm_file" 2>/dev/null)" = "rkworker" ]; then
+      found=1
+      break
+    fi
+  done
+fi
+
+if [ "$found" = 1 ]; then
+  _ok "rkworker thread is running"
+else
+  _fail "rkworker thread not found in process list"
+fi
+
+# -- Unload module, verify thread is gone --
+_hdr "Thread cleanup"
+unload rklings
+assert_absent /sys/module/rklings
+
+sleep 1
+
+gone=1
+if ps -e 2>/dev/null | grep -q '\brkworker\b'; then
+  gone=0
+fi
+if [ "$gone" = 1 ] && ps aux 2>/dev/null | grep -q '\[rkworker\]'; then
+  gone=0
+fi
+if [ "$gone" = 1 ]; then
+  for pid_dir in /proc/[0-9]*; do
+    comm_file="$pid_dir/comm"
+    if [ -f "$comm_file" ] && [ "$(cat "$comm_file" 2>/dev/null)" = "rkworker" ]; then
+      gone=0
+      break
+    fi
+  done
+fi
+
+if [ "$gone" = 1 ]; then
+  _ok "rkworker thread stopped after unload"
+else
+  _fail "rkworker thread still running after unload"
+fi
+
+# -- Second load/unload cycle to test repeatability --
+_hdr "Repeat cycle"
+load rklings.ko
+sleep 1
+
+found2=0
+for pid_dir in /proc/[0-9]*; do
+  comm_file="$pid_dir/comm"
+  if [ -f "$comm_file" ] && [ "$(cat "$comm_file" 2>/dev/null)" = "rkworker" ]; then
+    found2=1
+    break
+  fi
+done
+if [ "$found2" = 1 ]; then
+  _ok "rkworker thread running on second load"
+else
+  _fail "rkworker thread not found on second load"
+fi
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

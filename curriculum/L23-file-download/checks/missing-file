@@ -1,0 +1,51 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Error frame for nonexistent file"
+
+ifconfig lo 127.0.0.1 up
+
+RECV_FILE="/tmp/rklings-missing-recv.bin"
+NONEXISTENT="/tmp/rklings-no-such-file-ever"
+
+# Make sure the target file does not exist
+rm -f "$NONEXISTENT"
+
+# Start a TCP listener to capture the error frame
+nc -l -p 4444 > "$RECV_FILE" &
+NC_PID=$!
+sleep 1
+
+# Load module with a nonexistent target file.
+# The module should connect, send an error frame, and the init may return
+# an error (which means insmod fails). That is expected behavior.
+insmod /rklings/rklings.ko target_file="$NONEXISTENT"
+INSMOD_RC=$?
+
+sleep 2
+wait $NC_PID 2>/dev/null
+
+# The module should have sent some data (the error frame)
+if [ -s "$RECV_FILE" ]; then
+  _ok "module sent error frame for nonexistent file"
+else
+  # Even if insmod failed (because init returned the error), we should
+  # have received the error frame before failure was reported.
+  if [ "$INSMOD_RC" -ne 0 ]; then
+    _ok "module correctly rejected load for missing file (init returned error)"
+  else
+    _fail "no error frame received and module did not report error"
+  fi
+fi
+
+# If the module is loaded (unlikely for missing file, but possible), unload it
+if [ -d /sys/module/rklings ]; then
+  unload rklings
+fi
+assert_absent /sys/module/rklings
+
+# Cleanup
+rm -f "$RECV_FILE"
+
+summary

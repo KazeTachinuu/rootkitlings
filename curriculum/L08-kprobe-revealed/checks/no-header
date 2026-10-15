@@ -1,0 +1,35 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Code does not include rklings_hook.h"
+
+# This check verifies the student wrote raw kprobe code
+# rather than relying on the rklings_hook.h convenience header.
+# Check the source file in the workspace.
+src="/rklings/main.c"
+
+if [ ! -f "$src" ]; then
+    _fail "main.c not found at $src"
+    summary
+fi
+
+if grep -q 'rklings_hook\.h' "$src"; then
+    _fail "main.c includes rklings_hook.h (must use raw kprobe API)"
+else
+    _ok "main.c does not include rklings_hook.h"
+fi
+
+if grep -q 'kprobe' "$src"; then
+    _ok "main.c references kprobe API"
+else
+    _fail "main.c does not reference kprobe API"
+fi
+
+# Also verify the module actually loads and works
+load rklings.ko
+assert_loaded rklings
+assert_exists /proc/rklings
+unload rklings
+
+summary

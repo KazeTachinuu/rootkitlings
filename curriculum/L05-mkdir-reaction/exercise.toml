@@ -31,10 +31,10 @@ tools = ["module-load-test"]
 id = "intercept-matching"
 label = "mkdir rklings.hello prints intercepted message"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L05-mkdir-reaction/checks/intercept-matching"
 
 [[verification.cases]]
 id = "ignore-non-matching"
 label = "Non-matching mkdir is ignored"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L05-mkdir-reaction/checks/ignore-non-matching"

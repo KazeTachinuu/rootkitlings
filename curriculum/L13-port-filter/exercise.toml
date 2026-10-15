@@ -29,18 +29,18 @@ tools = ["module-load-test"]
 
 [[verification.cases]]
 id = "hide-port"
-label = "Hidden port vanishes from ss output"
+label = "Hidden port vanishes from netstat output"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L13-port-filter/checks/hide-port"
 
 [[verification.cases]]
 id = "unhide-port"
-label = "Unhidden port reappears in ss output"
+label = "Unhidden port reappears in netstat output"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L13-port-filter/checks/unhide-port"
 
 [[verification.cases]]
 id = "other-ports-visible"
 label = "Non-targeted ports remain visible"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L13-port-filter/checks/other-ports-visible"

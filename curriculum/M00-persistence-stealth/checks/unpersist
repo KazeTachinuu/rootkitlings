@@ -1,0 +1,48 @@
+#!/bin/sh
+# Check: mkdir rklings.unpersist clears the persistence conf file
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Unpersist via mkdir command"
+
+rm -f /etc/modules-load.d/rklings.conf
+
+load rklings.ko
+assert_loaded rklings
+
+# First persist
+mkdir /tmp/rklings.persist 2>/dev/null
+
+if [ -f /etc/modules-load.d/rklings.conf ]; then
+    _ok "rklings.conf created by persist"
+else
+    _fail "persist did not create rklings.conf"
+fi
+
+# Now unpersist
+mkdir /tmp/rklings.unpersist 2>/dev/null
+
+# The solution truncates to empty rather than removing
+if [ -f /etc/modules-load.d/rklings.conf ]; then
+    content=$(cat /etc/modules-load.d/rklings.conf 2>/dev/null)
+    case "$content" in
+        *rklings*)
+            _fail "rklings.conf still contains 'rklings' after unpersist"
+            ;;
+        *)
+            _ok "rklings.conf cleared after unpersist"
+            ;;
+    esac
+else
+    _ok "rklings.conf removed after unpersist"
+fi
+
+# Cleanup
+rm -f /etc/modules-load.d/rklings.conf
+rmdir /tmp/rklings.persist 2>/dev/null
+rmdir /tmp/rklings.unpersist 2>/dev/null
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

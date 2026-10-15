@@ -1,0 +1,20 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Status command via mkdir rklings.status"
+
+load rklings.ko
+assert_loaded rklings
+
+# Issue the status command
+mkdir /tmp/rklings.status 2>/dev/null
+
+# Verify dmesg contains status output with escalation count and deferred state
+assert_log "alive"
+
+# Cleanup
+rm -rf /tmp/rklings.status 2>/dev/null
+unload rklings
+
+summary

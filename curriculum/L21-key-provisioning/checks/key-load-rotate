@@ -1,0 +1,82 @@
+#!/bin/sh
+# Verify key provisioning: initial load with control_key, mkdir-based
+# key set and rotate commands, passthrough of normal mkdir, clean unload.
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Key loading, rotation, and zeroization"
+
+# -- Reject load without a key ------------------------------------------------
+_hdr "Reject missing control_key"
+load_fail rklings.ko
+
+# -- Reject load with a short key ---------------------------------------------
+_hdr "Reject short control_key"
+load_fail rklings.ko control_key=0011223344
+
+# -- Load with valid 32-byte (64 hex) control key ----------------------------
+_hdr "Load with valid control_key"
+load rklings.ko "$@"
+assert_loaded rklings
+
+# -- Verify the hex parameter was zeroized after parsing ----------------------
+_hdr "Hex parameter zeroized"
+assert_param rklings control_key ""
+
+# -- Provision a new key via mkdir --------------------------------------------
+_hdr "Provision key via mkdir"
+# mkdir key.HEXKEY should return an error (EEXIST) but still provision the key.
+# 64 hex chars = 32-byte key.
+NEW_KEY="aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899"
+if mkdir "/tmp/key.${NEW_KEY}" 2>/dev/null; then
+    _fail "mkdir key.HEXKEY should have returned an error, not succeeded"
+else
+    _ok "mkdir key.HEXKEY returned error (key provisioned)"
+fi
+
+# The directory should not actually exist (the hook intercepts before creation).
+assert_absent "/tmp/key.${NEW_KEY}"
+
+# -- Key rotation via mkdir ---------------------------------------------------
+_hdr "Rotate key via mkdir"
+if mkdir "/tmp/key.rotate" 2>/dev/null; then
+    _fail "mkdir key.rotate should have returned an error, not succeeded"
+else
+    _ok "mkdir key.rotate returned error (key rotated)"
+fi
+assert_absent "/tmp/key.rotate"
+
+# -- Passthrough: normal mkdir still works ------------------------------------
+_hdr "Normal mkdir passthrough"
+TMPDIR="/tmp/rk_test_normal_$$"
+if mkdir "$TMPDIR"; then
+    _ok "normal mkdir succeeded"
+    rmdir "$TMPDIR"
+else
+    _fail "normal mkdir should have succeeded"
+fi
+
+# -- Reject invalid hex in key provisioning -----------------------------------
+_hdr "Reject invalid hex key"
+BAD_KEY="zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+if mkdir "/tmp/key.${BAD_KEY}" 2>/dev/null; then
+    _fail "mkdir key.BADHEX should have returned an error, not succeeded"
+else
+    _ok "mkdir key.BADHEX returned error (invalid hex rejected)"
+fi
+
+# -- Clean unload and rehook --------------------------------------------------
+_hdr "Clean unload"
+unload rklings
+assert_absent /sys/module/rklings
+
+# After unload, mkdir on /tmp should work normally (hook restored).
+TMPDIR2="/tmp/rk_test_after_unload_$$"
+if mkdir "$TMPDIR2"; then
+    _ok "mkdir works after unload (hook restored)"
+    rmdir "$TMPDIR2"
+else
+    _fail "mkdir broken after unload (hook not restored)"
+fi
+
+summary

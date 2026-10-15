@@ -31,16 +31,16 @@ tools = ["module-load-test"]
 id = "hide-line"
 label = "Matching line removed from read output"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L12-content-filter/checks/hide-line"
 
 [[verification.cases]]
 id = "unhide-line"
 label = "Unhidden string reappears in output"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L12-content-filter/checks/unhide-line"
 
 [[verification.cases]]
 id = "no-match-unchanged"
 label = "Non-matching reads pass through unchanged"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L12-content-filter/checks/no-match-unchanged"

@@ -1,0 +1,39 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Exec slot: one-shot command shell structure"
+
+# -- Pre-load state --
+assert_absent /sys/module/rklings
+
+# -- Load with custom port parameter --
+load rklings.ko shell_port=5555
+
+assert_loaded rklings
+
+# Verify the shell_port parameter was accepted
+if [ -f /sys/module/rklings/parameters/shell_port ]; then
+  actual=$(cat /sys/module/rklings/parameters/shell_port)
+  if [ "$actual" = "5555" ]; then
+    _ok "shell_port parameter set to 5555"
+  else
+    _fail "shell_port: expected 5555, got $actual"
+  fi
+else
+  _fail "shell_port parameter file missing"
+fi
+
+# -- Unload: cancel_delayed_work_sync must not hang --
+# If the module does not properly cancel delayed work on exit, rmmod hangs.
+unload rklings
+assert_absent /sys/module/rklings
+
+# -- Load with default parameters --
+_hdr "Default parameter load"
+load rklings.ko
+assert_loaded rklings
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

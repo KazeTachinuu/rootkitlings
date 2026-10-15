@@ -31,16 +31,16 @@ tools = ["module-load-test"]
 id = "escalation"
 label = "mkdir rklings.e grants root"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L08-kprobe-revealed/checks/escalation"
 
 [[verification.cases]]
 id = "pid-escalation"
 label = "mkdir rklings.e.PID escalates target"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L08-kprobe-revealed/checks/pid-escalation"
 
 [[verification.cases]]
 id = "no-header"
 label = "Code does not include rklings_hook.h"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L08-kprobe-revealed/checks/no-header"

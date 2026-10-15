@@ -31,5 +31,5 @@ tools = ["module-load-test"]
 id = "auto-opsec"
 label = "Agent auto-hides PID and port on connect"
 expect_build = "pass"
-check = "vm/checks/module-loads"
-check_arguments = ["control_key=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"]
+check = "curriculum/L26-auto-opsec/checks/auto-opsec"
+network = true

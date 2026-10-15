@@ -1,0 +1,40 @@
+#!/bin/sh
+# Check: mkdir rklings.persist creates /etc/modules-load.d/rklings.conf
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Persistence via mkdir command"
+
+# Ensure conf does not already exist
+rm -f /etc/modules-load.d/rklings.conf
+
+load rklings.ko
+assert_loaded rklings
+
+# Issue persist command
+mkdir /tmp/rklings.persist 2>/dev/null
+
+if [ -f /etc/modules-load.d/rklings.conf ]; then
+    _ok "rklings.conf created"
+else
+    _fail "rklings.conf not created after mkdir rklings.persist"
+fi
+
+content=$(cat /etc/modules-load.d/rklings.conf 2>/dev/null)
+case "$content" in
+    *rklings*)
+        _ok "rklings.conf contains module name"
+        ;;
+    *)
+        _fail "rklings.conf does not contain 'rklings', got: $content"
+        ;;
+esac
+
+# Cleanup
+rm -f /etc/modules-load.d/rklings.conf
+rmdir /tmp/rklings.persist 2>/dev/null
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

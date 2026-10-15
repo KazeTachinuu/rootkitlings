@@ -31,10 +31,10 @@ tools = ["module-load-test"]
 id = "timeout-fires"
 label = "Shell auto-killed after inactivity timeout"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L22-shell-timeout/checks/timeout-fires"
 
 [[verification.cases]]
 id = "exec-slot"
 label = "Exec slot runs one-shot command and releases"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L22-shell-timeout/checks/exec-slot"

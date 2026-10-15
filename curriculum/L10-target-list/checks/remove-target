@@ -1,0 +1,66 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Remove a target by index"
+
+load rklings.ko
+
+# Add three targets
+printf 'add alpha' > /proc/rklings
+printf 'add beta' > /proc/rklings
+printf 'add gamma' > /proc/rklings
+
+content=$(cat /proc/rklings)
+expected="alpha
+beta
+gamma"
+if [ "$content" = "$expected" ]; then
+    _ok "three targets added"
+else
+    _fail "setup: expected alpha/beta/gamma, got '$content'"
+fi
+
+# Remove index 0 (alpha), beta and gamma shift down
+printf 'remove 0' > /proc/rklings
+content=$(cat /proc/rklings)
+expected="beta
+gamma"
+if [ "$content" = "$expected" ]; then
+    _ok "remove 0 shifted remaining targets correctly"
+else
+    _fail "after remove 0: expected beta/gamma, got '$content'"
+fi
+
+# Remove index 1 (gamma), only beta remains
+printf 'remove 1' > /proc/rklings
+content=$(cat /proc/rklings)
+if [ "$content" = "beta" ]; then
+    _ok "remove 1 left only beta"
+else
+    _fail "after remove 1: expected 'beta', got '$content'"
+fi
+
+# Remove last remaining target
+printf 'remove 0' > /proc/rklings
+content=$(cat /proc/rklings)
+if [ -z "$content" ]; then
+    _ok "list is empty after removing all targets"
+else
+    _fail "expected empty list, got '$content'"
+fi
+
+# Test clear command
+printf 'add one' > /proc/rklings
+printf 'add two' > /proc/rklings
+printf 'clear' > /proc/rklings
+content=$(cat /proc/rklings)
+if [ -z "$content" ]; then
+    _ok "clear empties the list"
+else
+    _fail "after clear: expected empty, got '$content'"
+fi
+
+unload rklings
+
+summary

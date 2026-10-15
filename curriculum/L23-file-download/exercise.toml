@@ -31,10 +31,12 @@ tools = ["module-load-test"]
 id = "download-file"
 label = "File downloaded in encrypted chunks"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L23-file-download/checks/download-file"
+network = true
 
 [[verification.cases]]
 id = "missing-file"
 label = "Error frame sent for nonexistent file"
 expect_build = "pass"
-check = "vm/checks/module-loads"
+check = "curriculum/L23-file-download/checks/missing-file"
+network = true

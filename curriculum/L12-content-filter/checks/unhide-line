@@ -1,0 +1,47 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Unhidden string reappears in output"
+
+TESTFILE="/tmp/rk_unhide_test"
+
+# Create test file
+printf "visible line\nhidden_marker data\nanother visible line\n" > "$TESTFILE"
+
+load rklings.ko
+
+# Hide the pattern
+mkdir /tmp/rklings.h.c.hidden_marker
+
+# Confirm it is hidden
+output=$(cat "$TESTFILE")
+if echo "$output" | grep -q "hidden_marker"; then
+  _fail "hidden_marker still visible after hide command"
+else
+  _ok "hidden_marker is filtered after hide command"
+fi
+
+# Unhide by index (index 0, since it was the first/only entry)
+mkdir /tmp/rklings.u.c.0
+
+# Confirm it reappears
+output=$(cat "$TESTFILE")
+if echo "$output" | grep -q "hidden_marker"; then
+  _ok "hidden_marker reappears after unhide command"
+else
+  _fail "hidden_marker still missing after unhide command"
+fi
+
+# Verify other lines are intact
+if echo "$output" | grep -q "visible line"; then
+  _ok "other lines remain intact throughout"
+else
+  _fail "other lines were corrupted"
+fi
+
+# Cleanup
+unload rklings
+rm -f "$TESTFILE"
+
+summary
