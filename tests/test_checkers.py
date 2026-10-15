@@ -46,6 +46,7 @@ class CheckerRunnerTests(unittest.TestCase):
                     "cwd": ROOT,
                     "timeout": RUNNER["CHECKER_TIMEOUT_SECONDS"],
                     "discard_stdin": True,
+                    "capture": True,
                 },
             )
 

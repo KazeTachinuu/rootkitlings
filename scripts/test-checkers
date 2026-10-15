@@ -32,41 +32,52 @@ def main(arguments: list[str]) -> int:
     if requested:
         items = tuple(item for item in items if item.id in requested)
 
+    runnable = [
+        item for item in items
+        if (ROOT / item.path / "checks/test").is_file()
+    ]
+    skipped = len(items) - len(runnable)
+    total = len(runnable)
+
     passed = 0
-    failed = 0
-    skipped = 0
-    for item in items:
+    failures: list[tuple[str, str]] = []
+    width = len(str(total))
+
+    for index, item in enumerate(runnable, 1):
         label = item.serial or item.id
         check = ROOT / item.path / "checks/test"
-        if not check.is_file():
-            skipped += 1
-            continue
-        UI.section(f"{label}  {item.title}")
-        UI.transcript([check.relative_to(ROOT)])
+        UI.progress(f"  {label:<6} {index:>{width}}/{total}")
         try:
             result = run_process(
                 [check],
                 cwd=ROOT,
                 timeout=CHECKER_TIMEOUT_SECONDS,
                 discard_stdin=True,
+                capture=True,
             )
         except ProcessError as error:
-            UI.error(str(error))
-            failed += 1
+            failures.append((label, str(error)))
         else:
             if result.returncode:
-                UI.error(f"{label} checker failed (exit {result.returncode})")
-                failed += 1
+                output = (result.stdout or "") + (result.stderr or "")
+                failures.append((label, output))
             else:
-                UI.success(f"{label} checker passed")
                 passed += 1
 
-    UI.section("Checker tests")
-    UI.field("Passed", str(passed), value_style="success")
-    UI.field("Failed", str(failed), value_style="error" if failed else None)
+    if failures:
+        for label, output in failures:
+            UI.error(f"FAIL: {label}")
+            if output:
+                UI.raw(output[-500:], error=True)
+                if not output.endswith("\n"):
+                    UI.raw("\n", error=True)
+
+    UI.success(f"Checkers: {passed}/{total} passed")
     if skipped:
-        UI.field("Skipped", f"{skipped} (no local checker)", value_style="dim")
-    return int(failed != 0)
+        UI.progress(f"  {skipped} without local checker (VM-only)")
+    if failures:
+        UI.error(f"  {len(failures)} failed: {', '.join(l for l, _ in failures)}")
+    return int(bool(failures))
 
 
 if __name__ == "__main__":
