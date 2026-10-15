@@ -507,9 +507,16 @@ class Validator:
         t_build = time.monotonic()
         catalog = _LaxCatalog(REPO)
         build_root = Path(tempfile.mkdtemp(prefix="rklings-vm-"))
-        jobs = discover_jobs(catalog, build_root)
+
+        def on_build(eid: str, index: int, total: int) -> None:
+            width = len(str(total))
+            self.console.progress(
+                f"    build {eid:<30} {index:>{width}}/{total}"
+            )
+
+        jobs = discover_jobs(catalog, build_root, on_build=on_build)
         build_time = time.monotonic() - t_build
-        self.console.progress(
+        self.console.success(
             f"  VM tests: {len(jobs)} cases built in {build_time:.0f}s"
         )
 

@@ -49,13 +49,22 @@ class VMJobResult:
     output: str
 
 
-def discover_jobs(catalog: _LaxCatalog, build_root: Path) -> list[VMJob]:
+def discover_jobs(
+    catalog: _LaxCatalog,
+    build_root: Path,
+    on_build: None | callable = None,
+) -> list[VMJob]:
     """Materialize solutions, build .ko files, return runnable jobs."""
     tool_registry = {tool.id: tool.binary for tool in catalog.tools}
     solution_cache: dict[str, Path] = {}
     jobs: list[VMJob] = []
+    build_index = 0
+    exercises_with_cases = [
+        item for item in catalog.exercises if item.verification.cases
+    ]
+    build_total = len(exercises_with_cases)
 
-    for item in catalog.exercises:
+    for item in exercises_with_cases:
         cases = item.verification.cases
         if not cases:
             continue
@@ -65,6 +74,9 @@ def discover_jobs(catalog: _LaxCatalog, build_root: Path) -> list[VMJob]:
         bare = item.stage == "module-core"
 
         if item.id not in solution_cache:
+            build_index += 1
+            if on_build:
+                on_build(item.id, build_index, build_total)
             solution_cache[item.id] = catalog.materialize_solution(
                 item, build_root,
             )
