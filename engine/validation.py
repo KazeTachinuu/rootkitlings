@@ -438,10 +438,16 @@ class Validator:
                 f.stem for f in sorted(test_dir.glob("test_*.py"))
             ]
         total = len(modules)
+        width = len(str(total))
+        label_width = max(
+            len(m.removeprefix("test_")) for m in modules
+        )
         failed: list[str] = []
         for index, module in enumerate(modules, 1):
             label = module.removeprefix("test_")
-            self.console.progress(f"  {label} ({index}/{total})")
+            self.console.progress(
+                f"  {label:<{label_width}}  {index:>{width}}/{total}"
+            )
             result = self.command(
                 [sys.executable, "-m", "unittest", f"tests.{module}"],
                 capture=True,
@@ -501,9 +507,11 @@ class Validator:
 
             required = list(catalog.required())
             total = len(required)
+            width = len(str(total))
+            label_width = max(len(item.id) for item in required)
             for index, item in enumerate(required, 1):
                 self.console.progress(
-                    f"Building {item.id} ({index}/{total})"
+                    f"  {item.id:<{label_width}}  {index:>{width}}/{total}"
                 )
                 self._build_module(
                     kernel_build,
