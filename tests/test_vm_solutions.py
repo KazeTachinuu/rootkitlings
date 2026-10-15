@@ -15,7 +15,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from engine.catalog import Catalog  # noqa: E402
-from tests.vm import VM, build_module, clean_module, build_tool, REPO, VMError  # noqa: E402
+from tests.vm import VM, build_module, clean_module, REPO, VMError  # noqa: E402
 
 
 class _LaxCatalog(Catalog):
@@ -42,20 +42,21 @@ class VMSolutionTest(unittest.TestCase):
     pass
 
 
-def _make_check_test(item, case, tool_names: list[str], timeout: int):
+def _make_check_test(item, case, tool_binaries: list[str], timeout: int,
+                     bare: bool = False):
     check = REPO / case.check
     check_args = case.check_arguments
 
     def test(self):
-        for tool in tool_names:
-            build_tool(tool)
         src = _get_solution(item)
         clean_module(src)
         build_vars = dict(case.build_variables)
         ko = build_module(src, variables=build_vars)
         vm = VM()
         result = vm.run_check(check, ko, timeout=timeout,
-                              check_args=check_args)
+                              check_args=check_args,
+                              tools=tuple(tool_binaries),
+                              bare=bare)
         self.assertEqual(result.returncode, 0, result.output)
 
     test.__qualname__ = f"{item.id}::{case.id}"
@@ -80,7 +81,9 @@ def _register_exercise(item) -> type | None:
         return None
 
     timeout = item.verification.timeout_seconds
-    tool_names = [t.replace("-", "_") for t in item.verification.tools]
+    tool_registry = {tool.id: tool.binary for tool in CATALOG.tools}
+    tool_binaries = [tool_registry[tid] for tid in item.verification.tools]
+    bare = item.stage == "module-core"
 
     attrs: dict = {}
     for case in cases:
@@ -90,7 +93,7 @@ def _register_exercise(item) -> type | None:
             attrs[method_name] = _make_build_fail_test(item, case)
         elif case.check:
             attrs[method_name] = _make_check_test(
-                item, case, tool_names, timeout,
+                item, case, tool_binaries, timeout, bare=bare,
             )
 
     if not attrs:

@@ -4,6 +4,7 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/in.h>
+#include <linux/inet.h>
 #include <linux/init.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -210,7 +211,7 @@ static struct socket *rk_connect(void)
 	if (error)
 		return ERR_PTR(error);
 
-	error = kernel_connect(sock, (struct sockaddr *)&peer,
+	error = kernel_connect(sock, (struct sockaddr_unsized *)&peer,
 			       sizeof(peer), 0);
 	if (error) {
 		sock_release(sock);

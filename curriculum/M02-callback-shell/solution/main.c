@@ -80,7 +80,7 @@ static int rk_try_connect(void)
 	addr.sin_addr.s_addr = in_aton(host);
 	addr.sin_port = htons(port);
 
-	error = kernel_connect(sock, (struct sockaddr *)&addr,
+	error = kernel_connect(sock, (struct sockaddr_unsized *)&addr,
 			       sizeof(addr), 0);
 	if (error)
 		goto out_sock;

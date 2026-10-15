@@ -125,7 +125,7 @@ static int __init rk_init(void)
 	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 	addr.sin_port = htons(RK_PORT);
 
-	error = kernel_connect(sock, (struct sockaddr *)&addr,
+	error = kernel_connect(sock, (struct sockaddr_unsized *)&addr,
 			       sizeof(addr), 0);
 	if (error)
 		goto out;

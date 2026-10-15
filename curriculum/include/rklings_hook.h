@@ -39,6 +39,8 @@ struct __rk_mkdir_data {
 #define RK_ON_MKDIR(param_name) \
 	static int __rk_user_handler(const char *param_name)
 
+static int __rk_user_handler(const char *);
+
 static int __rk_entry(struct kretprobe_instance *inst, struct pt_regs *regs)
 {
 	struct __rk_mkdir_data *data = (void *)inst->data;

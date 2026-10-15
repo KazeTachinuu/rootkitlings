@@ -18,6 +18,7 @@ def _course_kernel(subcommand: str) -> Path:
 
 
 KDIR = _course_kernel("build-dir")
+SHARED_INCLUDE = REPO / "curriculum/include"
 
 
 class VMError(RuntimeError):
@@ -39,11 +40,17 @@ class VM:
 
     def run_check(self, check: str | Path, ko: str | Path,
                   timeout: int = 60,
-                  check_args: tuple[str, ...] = ()) -> VMResult:
+                  check_args: tuple[str, ...] = (),
+                  tools: tuple[str, ...] = (),
+                  bare: bool = False) -> VMResult:
         cmd = [
             str(REPO / "vm/boot"),
             "--check", str(check),
         ]
+        if bare:
+            cmd.append("--bare")
+        for tool in tools:
+            cmd += ["--tool", str(tool)]
         for arg in check_args:
             cmd += ["--check-arg", arg]
         cmd.append(str(ko))
@@ -59,6 +66,10 @@ class VM:
 
 def build_module(src: Path, variables: dict[str, str] | None = None) -> Path:
     """Build a kernel module against the course kernel."""
+    include_target = src.parent.parent / "include"
+    if not include_target.exists() and SHARED_INCLUDE.is_dir():
+        include_target.parent.mkdir(parents=True, exist_ok=True)
+        include_target.symlink_to(SHARED_INCLUDE)
     var_args = [f"{k}={v}" for k, v in (variables or {}).items()]
     subprocess.run(
         ["make", "-s", "-C", str(KDIR), f"M={src}", "modules", *var_args],
@@ -78,11 +89,3 @@ def clean_module(src: Path) -> None:
     )
 
 
-def build_tool(name: str) -> Path:
-    out = REPO / ".rklings/build/tools"
-    target = out / name
-    subprocess.run(
-        ["make", "-s", "-C", str(REPO), f"TOOL_OUT={out}", str(target)],
-        check=True, capture_output=True, text=True,
-    )
-    return target

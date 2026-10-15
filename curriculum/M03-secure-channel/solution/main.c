@@ -3,6 +3,8 @@
 #include <crypto/gcm.h>
 #include <linux/in.h>
 #include <linux/inet.h>
+#include <linux/delay.h>
+#include <linux/hex.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
@@ -377,7 +379,7 @@ static int rk_agent_thread(void *data)
 		addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 		addr.sin_port = htons(RK_PORT);
 
-		error = kernel_connect(sock, (struct sockaddr *)&addr,
+		error = kernel_connect(sock, (struct sockaddr_unsized *)&addr,
 				       sizeof(addr), 0);
 		if (error)
 			goto close_retry;
