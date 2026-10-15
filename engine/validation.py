@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 import os
 from pathlib import Path
@@ -437,29 +438,100 @@ class Validator:
             modules = [
                 f.stem for f in sorted(test_dir.glob("test_*.py"))
             ]
-        total = len(modules)
-        width = len(str(total))
-        label_width = max(
-            len(m.removeprefix("test_")) for m in modules
-        )
+        vm_modules = [m for m in modules if m.startswith("test_vm")]
+        host_modules = [m for m in modules if not m.startswith("test_vm")]
+
         failed: list[str] = []
-        for index, module in enumerate(modules, 1):
-            label = module.removeprefix("test_")
-            self.console.progress(
-                f"  {label:<{label_width}}  {index:>{width}}/{total}"
+
+        if host_modules:
+            total = len(host_modules)
+            width = len(str(total))
+            label_width = max(
+                len(m.removeprefix("test_")) for m in host_modules
             )
-            result = self.command(
-                [sys.executable, "-m", "unittest", f"tests.{module}"],
-                capture=True,
-            )
-            if result.returncode:
-                failed.append(module)
-                self.console.raw(result.output, error=True)
+            for index, module in enumerate(host_modules, 1):
+                label = module.removeprefix("test_")
+                self.console.progress(
+                    f"  {label:<{label_width}}  {index:>{width}}/{total}"
+                )
+                result = self.command(
+                    [sys.executable, "-m", "unittest", f"tests.{module}"],
+                    capture=True,
+                )
+                if result.returncode:
+                    failed.append(module)
+                    self.console.raw(result.output, error=True)
+
+        if vm_modules:
+            vm_tests = self._discover_vm_tests(vm_modules)
+            workers = int(os.environ.get("RKLINGS_VM_JOBS", "8"))
+            self._run_vm_tests_parallel(vm_tests, workers, failed)
+
         if failed:
             raise ValidationError(
                 f"unit tests failed: {', '.join(failed)}"
             )
+        total = len(host_modules) + len(vm_modules)
         self.console.success(f"Unit tests: {total} modules")
+
+    def _discover_vm_tests(
+        self, vm_modules: list[str],
+    ) -> list[tuple[str, str]]:
+        """Return (module, test_id) pairs for all VM test methods."""
+        import unittest
+        loader = unittest.TestLoader()
+        tests: list[tuple[str, str]] = []
+        for module in vm_modules:
+            qualified = f"tests.{module}"
+            suite = loader.loadTestsFromName(qualified)
+            for group in suite:
+                for test in group:
+                    tests.append((module, str(test).split()[-1].strip("()")))
+        return tests
+
+    def _run_vm_tests_parallel(
+        self,
+        tests: list[tuple[str, str]],
+        workers: int,
+        failed: list[str],
+    ) -> None:
+        """Run VM tests in parallel subprocesses."""
+        total = len(tests)
+        width = len(str(total))
+        completed = 0
+        lock = __import__("threading").Lock()
+
+        def run_one(index: int, module: str, test_id: str) -> tuple[str, CommandResult]:
+            result = self.command(
+                [sys.executable, "-m", "unittest", test_id],
+                capture=True,
+            )
+            return test_id, result
+
+        self.console.progress(
+            f"  VM tests: {total} cases, {workers} workers"
+        )
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(run_one, i, mod, tid): (i, mod, tid)
+                for i, (mod, tid) in enumerate(tests, 1)
+            }
+            for future in as_completed(futures):
+                index, module, test_id = futures[future]
+                test_id_result, result = future.result()
+                with lock:
+                    completed += 1
+                    short = test_id.rsplit(".", 1)[-1]
+                    if result.returncode:
+                        self.console.error(
+                            f"  FAIL {short:<30} {completed:>{width}}/{total}"
+                        )
+                        self.console.raw(result.output, error=True)
+                        failed.append(test_id)
+                    else:
+                        self.console.progress(
+                            f"  pass {short:<30} {completed:>{width}}/{total}"
+                        )
 
     def run_checker_tests(self) -> None:
         self.console.progress("Running checker regression tests")
