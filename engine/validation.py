@@ -634,28 +634,40 @@ class Validator:
             total = len(required)
             width = len(str(total))
             label_width = max(len(item.id) for item in required)
+            build_failures: list[str] = []
             for index, item in enumerate(required, 1):
                 self.console.progress(
                     f"  {item.id:<{label_width}}  {index:>{width}}/{total}"
                 )
-                self._build_module(
-                    kernel_build,
-                    starter_root / item.id,
-                    item.workspace.build,
-                    f"starter does not compile: {item.id}",
-                    warn_free=False,
-                )
-                starters += 1
-                self._build_module(
-                    kernel_build,
-                    solution_root / item.id,
-                    item.workspace.build,
-                    f"solution does not build warning-free: {item.id}",
-                )
-                solutions += 1
+                try:
+                    self._build_module(
+                        kernel_build,
+                        starter_root / item.id,
+                        item.workspace.build,
+                        f"starter does not compile: {item.id}",
+                        warn_free=False,
+                    )
+                    starters += 1
+                except ValidationError as exc:
+                    build_failures.append(str(exc))
+                try:
+                    self._build_module(
+                        kernel_build,
+                        solution_root / item.id,
+                        item.workspace.build,
+                        f"solution does not build warning-free: {item.id}",
+                    )
+                    solutions += 1
+                except ValidationError as exc:
+                    build_failures.append(str(exc))
 
         self.console.success(f"Starters: {starters} builds")
         self.console.success(f"Solutions: {solutions} warning-free builds")
+        if build_failures:
+            raise ValidationError(
+                f"{len(build_failures)} build failures:\n  "
+                + "\n  ".join(build_failures)
+            )
 
     def _build_module(
         self,
