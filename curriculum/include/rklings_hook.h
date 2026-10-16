@@ -44,9 +44,8 @@ struct __rk_mkdir_data {
 
 static int __rk_user_handler(const char *);
 
-static int __rk_do_entry(struct kretprobe_instance *inst,
-			  struct pt_regs *regs,
-			  const char __user *pathname)
+static int __rk_do_entry(struct kretprobe_instance *inst, struct pt_regs *regs,
+			 const char __user *pathname)
 {
 	struct __rk_mkdir_data *data = (void *)inst->data;
 	char buf[RK_HOOK_PATH_MAX];
@@ -71,7 +70,7 @@ static int __rk_do_entry(struct kretprobe_instance *inst,
 
 /* mkdir(pathname, mode): pathname in di */
 static int __rk_entry_mkdir(struct kretprobe_instance *inst,
-			     struct pt_regs *regs)
+			    struct pt_regs *regs)
 {
 	struct pt_regs *uregs;
 
@@ -83,7 +82,7 @@ static int __rk_entry_mkdir(struct kretprobe_instance *inst,
 
 /* mkdirat(dfd, pathname, mode): pathname in si */
 static int __rk_entry_mkdirat(struct kretprobe_instance *inst,
-			       struct pt_regs *regs)
+			      struct pt_regs *regs)
 {
 	struct pt_regs *uregs;
 
@@ -103,19 +102,19 @@ static int __rk_return(struct kretprobe_instance *inst, struct pt_regs *regs)
 }
 
 static struct kretprobe __rk_probe_mkdir = {
-	.kp.symbol_name = "__x64_sys_mkdir",
-	.entry_handler  = __rk_entry_mkdir,
-	.handler        = __rk_return,
-	.data_size      = sizeof(struct __rk_mkdir_data),
-	.maxactive      = 8,
+    .kp.symbol_name = "__x64_sys_mkdir",
+    .entry_handler = __rk_entry_mkdir,
+    .handler = __rk_return,
+    .data_size = sizeof(struct __rk_mkdir_data),
+    .maxactive = 8,
 };
 
 static struct kretprobe __rk_probe_mkdirat = {
-	.kp.symbol_name = "__x64_sys_mkdirat",
-	.entry_handler  = __rk_entry_mkdirat,
-	.handler        = __rk_return,
-	.data_size      = sizeof(struct __rk_mkdir_data),
-	.maxactive      = 8,
+    .kp.symbol_name = "__x64_sys_mkdirat",
+    .entry_handler = __rk_entry_mkdirat,
+    .handler = __rk_return,
+    .data_size = sizeof(struct __rk_mkdir_data),
+    .maxactive = 8,
 };
 
 static inline int rk_hook_start(void)

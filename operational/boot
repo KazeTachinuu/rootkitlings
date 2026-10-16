@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Boot a target VM and register it with the operator server."""
+"""Boot a target VM, reading server state from server.json."""
 
 import os
 import sys
-import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -12,8 +11,8 @@ sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE / "server"))
 os.chdir(HERE)
 
-from control_console import OperatorError, create_target_session
-from server import server_running
+from control_console import OperatorError
+from server import read_server_state
 
 VM_BOOT = HERE.parent / "vm" / "boot"
 RUNTIME = HERE.parent / "vm" / "runtime" / "complete-rootkit"
@@ -22,40 +21,28 @@ MODULE = HERE / "rootkit" / "rklings.ko"
 label = sys.argv[1] if len(sys.argv) > 1 else "C00"
 
 if not MODULE.is_file():
-    sys.exit(f"[x] Build the rootkit first: make rootkit")
+    sys.exit("[x] Build the rootkit first: make rootkit")
 
 if not VM_BOOT.is_file():
     sys.exit(f"[x] vm/boot not found at {VM_BOOT}")
 
 try:
-    target = create_target_session(ROOT, label)
+    state = read_server_state(ROOT)
 except OperatorError as error:
     sys.exit(f"[x] {error}")
 
-try:
-    if server_running(ROOT):
-        print("[+] Server detected, waiting for port binding")
-    else:
-        print("[!] Start the server first: make server")
-        print("[*] Waiting for operator...")
+key_hex = state["key_hex"]
+key_file = ROOT / ".state" / "control.key"
+key_file.parent.mkdir(parents=True, exist_ok=True)
+key_file.write_text(key_hex)
+os.chmod(key_file, 0o600)
 
-    ready_file = target.ready_file
-    deadline = time.monotonic() + 30
-    while not ready_file.exists():
-        if time.monotonic() > deadline:
-            sys.exit("[x] Timed out waiting for operator")
-        time.sleep(0.2)
-
-    print("[+] Operator ready")
-
-    command = [
-        str(VM_BOOT),
-        "--runtime-setup", str(RUNTIME),
-        "--control-key-file", str(target.key_file),
-        "--control-port", str(target.control_port),
-        "--shell-port", str(target.shell_port),
-        str(MODULE),
-    ]
-    os.execvp(command[0], command)
-finally:
-    target.close()
+command = [
+    str(VM_BOOT),
+    "--runtime-setup", str(RUNTIME),
+    "--control-key-file", str(key_file),
+    "--control-port", str(state["control_port"]),
+    "--shell-port", str(state["shell_port"]),
+    str(MODULE),
+]
+os.execvp(command[0], command)

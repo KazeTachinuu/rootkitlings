@@ -1,5 +1,0 @@
-Open the file with filp_open(path, O_RDONLY, 0).
-Loop with kernel_read(filp, buf, 4096, &pos) until it returns 0.
-Each chunk becomes a framed encrypted message.
-Send a zero-length frame at the end to signal EOF.
-If filp_open returns an error, send an error frame instead.

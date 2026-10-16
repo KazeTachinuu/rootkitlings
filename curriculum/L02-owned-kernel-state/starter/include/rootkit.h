@@ -3,6 +3,7 @@
 #define RKLINGS_ROOTKIT_H
 
 #include <linux/compiler_attributes.h>
+#include <linux/types.h>
 
 enum rk_fail_point {
 	RK_FAIL_NONE = 0,

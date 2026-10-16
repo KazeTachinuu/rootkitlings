@@ -1,6 +1,0 @@
-The init callback receives a struct subprocess_info pointer but you only need
-the current process context.
-Call commit_creds(prepare_kernel_cred(NULL)) to become root.
-Set argv to { "/bin/sh", "-c", "id > /tmp/rklings_shell_test", NULL } and envp
-to { "HOME=/", "PATH=/sbin:/bin:/usr/sbin:/usr/bin", NULL }.
-Use UMH_WAIT_EXEC so the kernel does not block waiting for the child to finish.

@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0
+#include "rklings_hook.h"
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/string.h>
-#include "rklings_hook.h"
 
-#define RK_PREFIX "rklings."
+#define RK_PREFIX     "rklings."
 #define RK_PREFIX_LEN 8
 
-RK_ON_MKDIR(name) {
+RK_ON_MKDIR(name)
+{
 	/* TODO: If name starts with RK_PREFIX, log the suffix to dmesg.
 	 * Always return -ENOENT. */
 	return -ENOENT;

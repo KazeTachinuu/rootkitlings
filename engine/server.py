@@ -12,7 +12,7 @@ from lib.operator.server import (  # noqa: E402
     Target,
     TargetManager,
     ServerConsole,
-    server_running,
+    read_server_state,
     run_server as _run_server,
 )
 from lib.operator.control_console import OperatorError  # noqa: E402

@@ -15,11 +15,11 @@ enum rk_fail_point {
 struct rk_state;
 
 __must_check struct rk_state *rk_state_create(void);
+bool rk_state_is_active(const struct rk_state *state);
+void rk_state_set_active(struct rk_state *state, bool active);
 void rk_state_destroy(struct rk_state *state);
 
-/* TODO: declare the narrow state accessor. */
-
-__must_check int rk_proc_publish(void);
+__must_check int rk_proc_publish(struct rk_state *state);
 void rk_proc_unpublish(void);
 
 #endif

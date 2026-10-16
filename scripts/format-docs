@@ -78,22 +78,27 @@ def format_markdown(source: str) -> str:
 	paragraph: list[str] = []
 	initial = ""
 	subsequent = ""
+	is_list_item = False
 	in_fence = False
 	expect_reference_destination = False
 
 	def flush() -> None:
-		nonlocal initial, subsequent
+		nonlocal initial, subsequent, is_list_item
 		if paragraph:
 			text = " ".join(part.strip() for part in paragraph)
-			for index, sentence in enumerate(split_sentences(text)):
-				result.extend(wrap_text(
-					sentence,
-					initial if index == 0 else subsequent,
-					subsequent,
-				))
+			if is_list_item:
+				result.append(initial + text)
+			else:
+				for index, sentence in enumerate(split_sentences(text)):
+					result.extend(wrap_text(
+						sentence,
+						initial if index == 0 else subsequent,
+						subsequent,
+					))
 			paragraph.clear()
 			initial = ""
 			subsequent = ""
+			is_list_item = False
 
 	for line in lines:
 		stripped = line.lstrip()
@@ -115,6 +120,7 @@ def format_markdown(source: str) -> str:
 			flush()
 			initial, text = match.groups()
 			subsequent = " " * len(initial)
+			is_list_item = True
 			paragraph.append(text)
 		elif match := QUOTE.match(line):
 			flush()
@@ -146,6 +152,8 @@ def overlong_prose(source: str) -> list[int]:
 		if len(line) <= WIDTH or in_fence:
 			continue
 		if line.startswith(("    ", "\t")) or URL_LINE.fullmatch(stripped):
+			continue
+		if LIST_ITEM.match(line):
 			continue
 		if stripped.startswith("|"):
 			continue

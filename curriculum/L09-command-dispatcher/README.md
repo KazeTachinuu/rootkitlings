@@ -1,107 +1,160 @@
-# Build a command dispatcher with kretprobe
+# L09: Command Dispatcher
 
-In L08 you used a plain kprobe.
-It fires before the function runs, so you can act on the arguments, but you
-cannot control the return value.
-The real mkdir still returns an error (ENOENT from the nullified path) and the
-caller sees a failure even though your action succeeded.
+L08 uses a kprobe.
+It fires before the function runs, so you can read arguments and take action,
+but you cannot control the return value.
+The real mkdir still returns ENOENT, even when your action succeeded.
 
-A **kretprobe** fixes this.
-It fires two handlers as a matched pair:
+## Kretprobe: entry + return
 
+A kretprobe fires two handlers as a matched pair.
+The entry handler runs before the function, the return handler runs after.
+Between them, you store state in per-instance data.
+
+```text
+  mkdir("rklings.ping")
+       |
+       v
+  __x64_sys_mkdir entry
+       |
+    [entry_handler]
+       |  read pathname, parse command
+       |  dispatch to handler, store result
+       |  nullify pathname, set intercepted=true
+       |
+       v
+  __x64_sys_mkdir runs (empty path, fails)
+       |
+    [return handler]
+       |  if intercepted: regs_set_return_value(result)
+       |
+       v
+  userspace sees return code 0
 ```
-userspace: mkdir("rklings.ping")
-       |
-       v
-__x64_sys_mkdir entry
-       |
-  [entry_handler fires]
-       |  - extract pathname, parse command
-       |  - dispatch to handler, store result
-       |  - nullify pathname
-       |  - set intercepted = true
-       |
-       v
-__x64_sys_mkdir runs (empty path, fails)
-       |
-  [return handler fires]
-       |  - check intercepted flag
-       |  - regs_set_return_value(regs, our_result)
-       |
-       v
-userspace sees return code 0 (success)
-```
 
-## Per-instance data
-
-Each kretprobe firing gets its own `kretprobe_instance`.
-The `data` field is a private buffer sized by `.data_size` in the kretprobe
-struct.
-Cast it to your own type to pass state from entry to return:
+The entry handler stores its result in `ri->data`, a per-instance buffer sized
+by `.data_size`.
+The return handler reads it back.
+This is how you pass information from entry to return without global state:
 
 ```c
 struct rk_mkdir_data {
     int result;
     bool intercepted;
 };
+
+static struct kretprobe rk_mkdir_probe = {
+    .kp.symbol_name = "__x64_sys_mkdir",
+    .entry_handler  = rk_mkdir_entry,
+    .handler        = rk_mkdir_return,
+    .data_size      = sizeof(struct rk_mkdir_data),
+    .maxactive      = 8,
+};
 ```
 
-## Command dispatch
+`.maxactive` limits how many simultaneous calls the probe tracks.
+8 is safe for a system call that completes quickly.
 
-Parse the basename after "rklings."
-into a command and optional argument, separated by a dot:
+## Command table
 
+Instead of a chain of strcmp calls, use a table:
+
+```c
+struct rk_cmd_entry {
+    const char *name;
+    int (*handler)(const char *arg);
+};
+
+static const struct rk_cmd_entry cmd_table[] = {
+    { "e",      rk_cmd_escalate },
+    { "ping",   rk_cmd_ping },
+    { "status", rk_cmd_status },
+};
 ```
+
+The dispatcher strips the `rklings.`
+prefix, splits on the first dot to separate command from argument, then searches
+the table:
+
+```text
 rklings.ping        -> cmd="ping",   arg=NULL
-rklings.status      -> cmd="status", arg=NULL
 rklings.e           -> cmd="e",      arg=NULL
 rklings.e.1234      -> cmd="e",      arg="1234"
 ```
 
-Use `strchr` on the suffix to find the dot.
-Compare the command length and string to dispatch:
+## The trap
 
-| Command | Argument | Action |
-|---------|----------|--------|
-| e       | (none)   | Escalate current process |
-| e       | PID      | Escalate target PID |
-| ping    | (none)   | pr_info acknowledgment |
-| status  | (none)   | pr_info with escalation count |
+A kprobe `pre_handler` returns 0 to continue or non-zero to skip.
+A kretprobe `entry_handler` returns 0 to track this call or non-zero to skip
+tracking (the return handler will not fire).
+They look similar but skip semantics are opposite.
 
-## Overriding the return value
+Also: `regs_set_return_value` takes an `unsigned long`.
+Cast your int result through `(unsigned long)(long)` to preserve negative
+errnos.
 
-In the return handler, use `regs_set_return_value` to replace the syscall return
-code:
+## You write
+
+`main.c` (~270 lines):
+
+- kretprobe pair (`__x64_sys_mkdir` + `__x64_sys_mkdirat`)
+- `struct rk_mkdir_data` for per-instance state
+- command table with longest-prefix dispatch
+- three handlers: `e`, `ping`, `status`
+
+## API
 
 ```c
+#include <linux/kprobes.h>
+
+int register_kretprobe(struct kretprobe *rp);
+void unregister_kretprobe(struct kretprobe *rp);
+
+// Per-instance data (entry_handler)
+struct rk_mkdir_data *data = (struct rk_mkdir_data *)ri->data;
+
+// Override return value (return handler)
 regs_set_return_value(regs, (unsigned long)(long)data->result);
+
+// Command parsing
+const char *dot = strchr(suffix, '.');
 ```
 
-Cast through `long` first to sign-extend negative error codes properly.
+## Test it
 
-## Your task
-
-1. Define `struct rk_mkdir_data` for per-instance state
-2. Write command handlers: `rk_cmd_escalate`, `rk_cmd_ping`, `rk_cmd_status`
-3. Write `rk_dispatch` to parse "rklings.<cmd>.<arg>" and route
-4. Write `rk_mkdir_entry` (extract path, parse, dispatch, nullify)
-5. Write `rk_mkdir_return` (override return value if intercepted)
-6. Define the `struct kretprobe` for `__x64_sys_mkdir`
-7. Register and unregister in init/exit
-
-## Verify
-
-```sh
-$ mkdir rklings.ping && echo "ok"
-ok
-$ dmesg | tail -1
+```
+$ rklings run l09
+root@vm:~# mkdir rklings.ping && echo "exit: $?"
+exit: 0
+root@vm:~# dmesg | tail -1
 rklings: dispatch: cmd=ping
-$ mkdir rklings.e && id
-uid=0(root)
+root@vm:~# mkdir rklings.status && dmesg | tail -1
+rklings: alive, escalations=0, deferred=0
+root@vm:~# mkdir rklings.e && id
+uid=0(root) gid=0(root) groups=0(root)
 ```
 
-Run:
+`mkdir rklings.ping` returns exit code 0.
+In L08 it returned ENOENT.
+The kretprobe return handler overrode the syscall return value.
 
-```sh
-./rklings check
+## Validate
+
 ```
+$ rklings validate l09
+  [+] module loads
+  [+] kretprobe registered on __x64_sys_mkdir
+  [+] kretprobe registered on __x64_sys_mkdirat
+  [+] mkdir rklings.ping returns 0 (not ENOENT)
+  [+] ping dispatched in dmesg
+  [+] status dispatched in dmesg
+  [+] escalation via mkdir rklings.e
+  [+] PID targeting via mkdir rklings.e.<pid>
+  PASS
+```
+
+## Next
+
+You have interception, escalation, and a command dispatcher.
+L10 adds the data structure behind every concealment exercise: a thread-safe
+target list tracking what to hide.

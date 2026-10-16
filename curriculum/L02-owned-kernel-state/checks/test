@@ -24,12 +24,12 @@ build_variant()
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
 		RKLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
 		cat "$log" >&2
-		printf '[x] %s build failed\n' "$name" >&2
+		printf '[-] %s build failed\n' "$name" >&2
 		exit 1
 	fi
 	if grep -q 'warning:' "$log"; then
 		cat "$log" >&2
-		printf '[x] %s builds with warnings\n' "$name" >&2
+		printf '[-] %s builds with warnings\n' "$name" >&2
 		exit 1
 	fi
 }
@@ -45,13 +45,13 @@ sed -i '/^struct rk_state {$/,/^};$/d' "$work/core/state.c"
 build_variant public-state 0
 if output=$("$HERE/host-check" "$scratch/public-state" \
 	"$scratch/public-state/rklings.ko" 2>&1); then
-	printf '%s\n[x] public-state fixture unexpectedly passed\n' "$output" >&2
+	printf '%s\n[-] public-state fixture unexpectedly passed\n' "$output" >&2
 	exit 1
 fi
 case $output in
 	*"struct rk_state layout is visible outside core/state.c"*) ;;
 	*)
-		printf '%s\n[x] public-state fixture failed for the wrong reason\n' \
+		printf '%s\n[-] public-state fixture failed for the wrong reason\n' \
 			"$output" >&2
 		exit 1
 		;;
@@ -64,12 +64,12 @@ cp "$HERE/../fixtures/no-free-state.c" "$work/core/state.c"
 build_variant no-free 0
 if output=$("$HERE/host-check" "$scratch/no-free" \
 	"$scratch/no-free/rklings.ko" 2>&1); then
-	printf '%s\n[x] wrong-free fixture unexpectedly passed\n' "$output" >&2
+	printf '%s\n[-] wrong-free fixture unexpectedly passed\n' "$output" >&2
 	exit 1
 fi
 case $output in
 	*"destroy must free the exact object returned by create"*) ;;
-	*) printf '%s\n[x] wrong-free fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
+	*) printf '%s\n[-] wrong-free fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
 esac
 printf '[+] wrong-free fixture rejected by lifecycle instrumentation\n'
 
@@ -78,12 +78,12 @@ cp "$HERE/../fixtures/collapsed-error-main.c" "$work/core/main.c"
 build_variant collapsed-error 0
 if output=$("$HERE/host-check" "$scratch/collapsed-error" \
 	"$scratch/collapsed-error/rklings.ko" 2>&1); then
-	printf '%s\n[x] collapsed-error fixture unexpectedly passed\n' "$output" >&2
+	printf '%s\n[-] collapsed-error fixture unexpectedly passed\n' "$output" >&2
 	exit 1
 fi
 case $output in
 	*"init must preserve the constructor's exact error"*) ;;
-	*) printf '%s\n[x] collapsed-error fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
+	*) printf '%s\n[-] collapsed-error fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
 esac
 printf '[+] collapsed-error fixture rejected by injected constructor error\n'
 
@@ -92,7 +92,7 @@ cp -p "$HERE/../solution/core/main.c" "$work/core/main.c"
 cp -a "$work" "$scratch/unknown"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 RKLINGS_FAIL_POINT=99 \
 	modules >"$scratch/unknown.log" 2>&1; then
-	printf '[x] unknown failure-point value compiled successfully\n' >&2
+	printf '[-] unknown failure-point value compiled successfully\n' >&2
 	exit 1
 fi
 
@@ -102,7 +102,7 @@ run_guest()
 	shift 2
 	if ! output=$("$HERE/../../../vm/boot" --check "$check_script" "$@" "$module" 2>&1); then
 		printf '%s\n' "$output" >&2
-		printf '[x] disposable guest did not complete\n' >&2
+		printf '[-] disposable guest did not complete\n' >&2
 		exit 1
 	fi
 	printf '%s\n' "$output"

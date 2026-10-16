@@ -26,8 +26,7 @@ static int __init rk_init(void)
 		return error;
 	}
 
-	/* TODO: give the owned state to the procfs component. */
-	error = rk_proc_publish();
+	error = rk_proc_publish(state);
 	if (error)
 		goto destroy_state;
 

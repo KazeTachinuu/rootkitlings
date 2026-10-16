@@ -23,45 +23,39 @@ enum rk_shell_state {
 };
 
 struct rk_shell {
-	struct mutex		lock;
-	bool			busy;
-	enum rk_shell_state	state;
-	int			result;
-	u32			request_id;
-	u64			cookie;
-	unsigned short		port;
-	struct socket		*sock;
-	struct file		*file;
-	struct delayed_work	timeout_work;
-	unsigned long		timeout_jiffies;
+	struct mutex lock;
+	bool busy;
+	enum rk_shell_state state;
+	int result;
+	u32 request_id;
+	u64 cookie;
+	unsigned short port;
+	struct socket *sock;
+	struct file *file;
+	struct delayed_work timeout_work;
+	unsigned long timeout_jiffies;
 };
 
 static struct rk_shell interactive_shell;
 static struct rk_shell exec_shell;
 
 static char *shell_envp[] = {
-	"HOME=/",
-	"PATH=/sbin:/bin:/usr/sbin:/usr/bin",
-	"TERM=linux",
-	"HISTFILE=/dev/null",
-	NULL,
+    "HOME=/",	  "PATH=/sbin:/bin:/usr/sbin:/usr/bin",
+    "TERM=linux", "HISTFILE=/dev/null",
+    NULL,
 };
 
 static const char *state_names[] = {
-	[RK_SHELL_IDLE]       = "idle",
-	[RK_SHELL_CONNECTING] = "connecting",
-	[RK_SHELL_RUNNING]    = "running",
-	[RK_SHELL_EXITED]     = "exited",
-	[RK_SHELL_REFUSED]    = "refused",
-	[RK_SHELL_TIMED_OUT]  = "timed-out",
-	[RK_SHELL_FAILED]     = "failed",
-	[RK_SHELL_STOPPED]    = "stopped",
+    [RK_SHELL_IDLE] = "idle",	    [RK_SHELL_CONNECTING] = "connecting",
+    [RK_SHELL_RUNNING] = "running", [RK_SHELL_EXITED] = "exited",
+    [RK_SHELL_REFUSED] = "refused", [RK_SHELL_TIMED_OUT] = "timed-out",
+    [RK_SHELL_FAILED] = "failed",   [RK_SHELL_STOPPED] = "stopped",
 };
 
 static void rk_shell_timeout_fn(struct work_struct *work)
 {
-	struct rk_shell *shell = container_of(
-		to_delayed_work(work), struct rk_shell, timeout_work);
+	struct rk_shell *shell =
+	    container_of(to_delayed_work(work), struct rk_shell, timeout_work);
 
 	mutex_lock(&shell->lock);
 	if (shell->busy && shell->sock) {
@@ -103,8 +97,7 @@ static int rk_install_fd(struct file *file, unsigned int wanted)
 	return 0;
 }
 
-static int rk_shell_init_fn(struct subprocess_info *info,
-			     struct cred *new)
+static int rk_shell_init_fn(struct subprocess_info *info, struct cred *new)
 {
 	struct rk_shell *shell = info->data;
 	unsigned int fd;
@@ -150,11 +143,11 @@ static void rk_shell_release(struct rk_shell *shell)
 static int rk_send_prelude(struct socket *sock, u32 request_id, u64 cookie)
 {
 	char prelude[32];
-	struct msghdr msg = { 0 };
+	struct msghdr msg = {0};
 	struct kvec vec;
 
-	snprintf(prelude, sizeof(prelude), "RKSH %08x %016llx\n",
-		 request_id, (unsigned long long)cookie);
+	snprintf(prelude, sizeof(prelude), "RKSH %08x %016llx\n", request_id,
+		 (unsigned long long)cookie);
 	vec.iov_base = prelude;
 	vec.iov_len = 31;
 	return kernel_sendmsg(sock, &msg, &vec, 1, 31);
@@ -195,9 +188,8 @@ static int rk_shell_spawn(struct rk_shell *shell, char **argv)
 	mod_delayed_work(system_wq, &shell->timeout_work,
 			 shell->timeout_jiffies);
 
-	sub = call_usermodehelper_setup("/bin/sh", argv, shell_envp,
-					GFP_KERNEL, rk_shell_init_fn,
-					NULL, shell);
+	sub = call_usermodehelper_setup("/bin/sh", argv, shell_envp, GFP_KERNEL,
+					rk_shell_init_fn, NULL, shell);
 	if (!sub) {
 		shell->state = RK_SHELL_FAILED;
 		shell->result = -ENOMEM;
@@ -215,7 +207,7 @@ static int rk_shell_spawn(struct rk_shell *shell, char **argv)
 static void rk_interactive_work(struct work_struct *work)
 {
 	struct rk_shell *shell = &interactive_shell;
-	char *argv[] = { "/bin/sh", "-i", NULL };
+	char *argv[] = {"/bin/sh", "-i", NULL};
 
 	rk_shell_spawn(shell, argv);
 
@@ -228,7 +220,7 @@ static void rk_interactive_work(struct work_struct *work)
 static void rk_exec_work(struct work_struct *work)
 {
 	struct rk_shell *shell = &exec_shell;
-	char *argv[] = { "/bin/sh", "-i", NULL };
+	char *argv[] = {"/bin/sh", "-i", NULL};
 
 	rk_shell_spawn(shell, argv);
 
@@ -309,8 +301,7 @@ int rk_start_exec_shell(unsigned short port, u32 request_id, u64 cookie)
 void rk_shell_status(char *buf, size_t size)
 {
 	mutex_lock(&interactive_shell.lock);
-	snprintf(buf, size, "STATE %08x %s %d",
-		 interactive_shell.request_id,
+	snprintf(buf, size, "STATE %08x %s %d", interactive_shell.request_id,
 		 state_names[interactive_shell.state],
 		 interactive_shell.result);
 	mutex_unlock(&interactive_shell.lock);

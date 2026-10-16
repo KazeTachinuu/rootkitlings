@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 set -Eeuo pipefail
 
-die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+die() { printf '[-] %s\n' "$*" >&2; exit 1; }
 
 (( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR ARTIFACT_PATH"
 build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"

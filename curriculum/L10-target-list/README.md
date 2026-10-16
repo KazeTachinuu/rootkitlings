@@ -1,89 +1,101 @@
-# Build a thread-safe target list
+# L10: Target List
 
 A rootkit hides things: files, PIDs, ports, strings.
 Before you can hide anything, you need a data structure to track what to hide.
-Build a fixed-size, spinlock-protected target list that every later concealment
-module will reuse.
 
-## The problem
+## Why spinlocks
 
 Kernel code runs concurrently.
-An interrupt can fire while you are modifying your target array.
-A second CPU can call your match function while the first CPU is adding a name.
-Without locking, you get torn reads, corrupted counts, or worse.
+A kretprobe handler can fire on any CPU at any time.
+If one CPU adds a target while another CPU walks the list looking for a match,
+you get torn reads, a corrupted count, or a panic.
 
-## spinlock_t and IRQ safety
+A spinlock serializes access.
+`spin_lock_irqsave` disables local interrupts and acquires the lock.
+`spin_unlock_irqrestore` releases it and restores the interrupt state.
+The `irqsave` variant is safe in both process context (your proc write handler)
+and interrupt context (your kretprobe handlers).
 
-A `spinlock_t` is the kernel's simplest mutual exclusion primitive.
-It busy waits, so hold it briefly.
-
-```
-spinlock_t lock;
-spin_lock_init(&lock);
-```
-
-Plain `spin_lock` / `spin_unlock` protect against concurrent threads, but not
-against interrupts.
-If an interrupt handler also touches your list, you deadlock.
-Use the IRQ-safe variants:
-
-```
+```c
 unsigned long flags;
-spin_lock_irqsave(&lock, flags);
-// critical section
-spin_unlock_irqrestore(&lock, flags);
+spin_lock_irqsave(&list->lock, flags);
+// critical section: only one CPU at a time
+spin_unlock_irqrestore(&list->lock, flags);
 ```
-
-These disable local interrupts while the lock is held, then restore the previous
-interrupt state on unlock.
 
 ## The data structure
 
 ```c
-#define RK_TARGET_MAX 32
-
 struct rk_target_list {
-    spinlock_t lock;
-    char targets[RK_TARGET_MAX][64];
-    int count;
+	spinlock_t lock;
+	char targets[RK_TARGET_MAX][RK_NAME_MAX];
+	int count;
 };
 ```
 
-Fixed-size array, no heap allocation inside the critical section, no complexity.
-32 slots of 64 bytes each is plenty for a rootkit's needs.
+Fixed-size array, no heap allocation inside the lock.
+Three operations:
 
-## Operations
+- **add**: `strscpy` the name into `targets[count]`, increment count. Return `-ENOSPC` if full.
+- **remove**: validate the index, `memmove` to shift entries down (no gaps), decrement count. `memmove` handles overlapping regions, `memcpy` does not.
+- **match**: `strcmp` loop, return true on first hit.
 
-Four operations, all lock-protected:
+All three acquire the lock, do the work, release the lock.
 
-- `rk_target_add(list, name)`: check count < max, `strscpy` the name in,
-  increment count.
-  Return 0 on success, -ENOSPC if full.
-- `rk_target_remove(list, idx)`: validate index, `memmove` to close the gap,
-  decrement count.
-- `rk_target_match(list, name)`: iterate, `strcmp` each entry, return
-  true/false.
-- `rk_target_clear(list)`: set count to 0.
+## Proc interface
 
-## Test interface
+`/proc/rklings` with permissions `0666` (everyone reads and writes).
+Write handler parses three commands:
 
-Expose the list through `/proc/rklings`:
+```text
+  echo "add secret.txt" > /proc/rklings
+       |
+       v
+  rk_proc_write --> parse "add " prefix --> rk_target_add("secret.txt")
 
-- Write `"add <name>"` to add a target.
-- Write `"remove <idx>"` to remove by index.
-- Read to see all current targets, one per line.
+  echo "remove 0" > /proc/rklings
+       |
+       v
+  rk_proc_write --> parse "remove " prefix --> rk_target_remove(0)
 
-Use `proc_create` with a `proc_ops` struct.
-Remove it with `proc_remove` in your exit function.
-Initialize the spinlock in `module_init`.
-
-## Verify
-
-```
-./rklings check
+  cat /proc/rklings --> rk_proc_show --> print each target, one per line
 ```
 
-```sh
+This is the same proc_ops pattern from L04, now with a richer command set.
+
+## You write
+
+`main.c`, ~160 lines:
+
+- `struct rk_target_list` with spinlock, fixed-size array, count
+- `rk_target_add()`, `rk_target_remove()`, `rk_target_match()`, `rk_target_clear()`
+- `/proc/rklings` with proc_ops (read + write, `0666`)
+
+## API
+
+```c
+#include <linux/spinlock.h>
+
+#define RK_TARGET_MAX 32
+#define RK_NAME_MAX   64
+
+int  rk_target_add(struct rk_target_list *list, const char *name);
+int  rk_target_remove(struct rk_target_list *list, int idx);
+bool rk_target_match(struct rk_target_list *list, const char *name);
+void rk_target_clear(struct rk_target_list *list);
+
+spin_lock_init(&list->lock);
+spin_lock_irqsave(&list->lock, flags);
+spin_unlock_irqrestore(&list->lock, flags);
+void strscpy(char *dest, const char *src, size_t count);
+```
+
+## Test it
+
+The module is pre-loaded.
+You are logged in as student.
+
+```
 $ echo "add secret.txt" > /proc/rklings
 $ echo "add hidden_dir" > /proc/rklings
 $ cat /proc/rklings
@@ -92,4 +104,25 @@ hidden_dir
 $ echo "remove 0" > /proc/rklings
 $ cat /proc/rklings
 hidden_dir
+$ echo "clear" > /proc/rklings
+$ cat /proc/rklings
+(empty)
 ```
+
+## Validate
+
+```
+$ rklings validate l10
+  [+] module loaded
+  [+] /proc/rklings writable
+  [+] add stores target
+  [+] remove shifts entries (no gaps)
+  [+] match finds stored target
+  [+] clear empties list
+  PASS
+```
+
+## Next
+
+The target list stores names but nothing uses them yet.
+L11 hooks getdents64 to hide files and PIDs from ls and ps.

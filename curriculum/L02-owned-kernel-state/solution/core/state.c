@@ -8,9 +8,10 @@
 
 struct rk_state {
 	bool active;
+	unsigned int capacity;
 };
 
-__must_check struct rk_state *rk_state_create(void)
+__must_check struct rk_state *rk_state_create(unsigned int capacity)
 {
 	struct rk_state *state;
 
@@ -22,7 +23,18 @@ __must_check struct rk_state *rk_state_create(void)
 		return ERR_PTR(-ENOMEM);
 
 	state->active = true;
+	state->capacity = capacity;
 	return state;
+}
+
+bool rk_state_is_active(const struct rk_state *state)
+{
+	return state->active;
+}
+
+unsigned int rk_state_capacity(const struct rk_state *state)
+{
+	return state->capacity;
 }
 
 void rk_state_destroy(struct rk_state *state)

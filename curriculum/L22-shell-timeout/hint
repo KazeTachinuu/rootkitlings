@@ -1,6 +1,0 @@
-Use INIT_DELAYED_WORK to set up the timeout callback.
-On every shell activity, call mod_delayed_work(system_wq, &shell->timeout_work,
-shell->timeout_jiffies) to reset the timer.
-In the timeout function, check shell->busy under the mutex, then kill the
-process and release the socket.
-Call cancel_delayed_work_sync in cleanup before destroying the mutex.

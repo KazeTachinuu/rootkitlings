@@ -21,8 +21,8 @@ __must_check int rk_proc_publish(void)
 	if (RKLINGS_FAIL_POINT == RK_FAIL_PROC_PUBLISH)
 		proc_entry = NULL;
 	else
-		proc_entry = proc_create_single("rklings", 0444, NULL,
-						rk_status_show);
+		proc_entry =
+		    proc_create_single("rklings", 0444, NULL, rk_status_show);
 	if (!proc_entry)
 		return -ENOMEM;
 

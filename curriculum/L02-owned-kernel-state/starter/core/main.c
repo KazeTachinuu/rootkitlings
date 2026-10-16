@@ -3,12 +3,16 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 
 #include "rootkit.h"
 
 #if RKLINGS_FAIL_POINT < 0 || RKLINGS_FAIL_POINT > 2
 #error "unknown RKLINGS_FAIL_POINT"
 #endif
+
+/* TODO: declare a module_param for capacity (unsigned int, default 32,
+ * read-only). */
 
 static struct rk_state *state;
 
@@ -19,7 +23,8 @@ static int __init rk_init(void)
 	if (RKLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT)
 		return -ECANCELED;
 
-	/* TODO: create the private state, handle error with IS_ERR/PTR_ERR. */
+	/* TODO: create the private state with capacity, handle error with
+	 * IS_ERR/PTR_ERR. */
 
 	return 0;
 }

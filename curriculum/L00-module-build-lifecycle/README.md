@@ -1,60 +1,58 @@
-# Build and load a kernel module
+# L00: Module Init
 
-Start with a module that can enter and leave the test kernel cleanly.
-Build it, load it, confirm that it is resident, then unload it.
-Success proves that you control the complete module lifecycle before adding any
-new behavior.
+Before you can hide, you need to exist in the kernel.
 
-Most programs run in **userspace**, isolated from the operating system.
-A kernel module runs inside the kernel with full kernel privileges.
-Drivers and loadable rootkits use this mechanism to add functionality.
+A kernel module is code that loads into the running kernel at runtime.
+No recompilation, no reboot.
+`insmod` drops it in, `rmmod` pulls it out.
+Drivers use this mechanism.
+So do rootkits.
 
-A bug in a module can crash or corrupt the whole kernel.
-This exercise loads code only in the disposable test VM, never in the host
-kernel.
+Unlike userspace programs, a module shares the kernel's address space and runs
+with full kernel privileges.
+A bug does not segfault your process.
+It panics the machine.
+Everything in this course runs inside a disposable QEMU guest for exactly that
+reason.
 
-## From source to a running module
+## How it gets built
 
-Linux cannot load a C source file directly.
-The kernel build system compiles it into an object and links a loadable kernel
-object, whose filename ends in `.ko`:
+You write C.
+The kernel build system (`Kbuild`) compiles it into a loadable kernel object
+(`.ko`):
 
 ```text
-  build                          runtime
+  source                      runtime
 
-  core/main.c                    insmod rklings.ko
-       |                              |
-       | compile (Kbuild)             v
-       v                         rk_init() --> return 0
-  core/main.o                         |
-       |                         module is resident
-       | link                         |
-       v                         rmmod rklings
-  rklings.ko                          |
-                                      v
-                                 rk_exit()
-                                      |
-                                 module removed
+  core/main.c                 insmod rklings.ko
+       |                           |
+       | Kbuild                    v
+       v                      rk_init() --> return 0
+  core/main.o                      |
+       |                      module is resident
+       | link                      |
+       v                      rmmod rklings
+  rklings.ko                       |
+                                   v
+                              rk_exit()
+                                   |
+                              module removed
 ```
 
-This is an **external module**: its source lives outside the kernel source tree,
-but it is built against the target kernel's headers and configuration.
-The build command identifies the module workspace with `M=<workspace>`.
-
-`Kbuild` names the module and its object:
+Your `Kbuild` file tells the build system what to produce:
 
 ```make
 obj-m += rklings.o
 rklings-y := core/main.o
 ```
 
-`obj-m` declares `rklings.ko` as a loadable module.
-`rklings-y` lists the objects linked into it.
+`obj-m` says "build rklings.ko as a loadable module."
+`rklings-y` lists the object files that go into it.
 
-## Module lifecycle
+## How it runs
 
-A module has no `main()` function.
-The kernel calls registered callbacks when it accepts and removes the module:
+There is no `main()`.
+The kernel calls two callbacks you register:
 
 ```c
 static int __init rk_init(void)
@@ -70,66 +68,81 @@ module_init(rk_init);
 module_exit(rk_exit);
 ```
 
-`module_init()` registers the load callback.
-Returning `0` tells the loader that initialization succeeded.
-A negative return value rejects the load; the module does not remain installed,
-and its exit callback is not called.
+`rk_init` runs when the module loads.
+Return 0 means success.
+Return a negative errno and the kernel rejects the load entirely: the module is
+never installed and `rk_exit` is never called.
 
-`module_exit()` registers the unload callback.
-It runs before the kernel releases a successfully loaded module.
-After successful initialization, the kernel may discard code marked `__init`.
-Every resource created during init must be removed before the exit callback
-returns; otherwise the kernel could call code that is no longer loaded.
+`rk_exit` runs when the module unloads.
+Everything you set up in init, you tear down here.
+The kernel may discard `__init`-marked code after init returns, so exit cannot
+call init functions.
 
-These macros add static metadata to the module:
+Two metadata macros round it out:
 
 ```c
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Rklings kernel module");
 ```
 
-`modinfo` can read this metadata without loading the module.
-`insmod rklings.ko` asks the kernel to load the file.
-`rmmod rklings` asks it to remove the loaded module by name.
+Without `GPL`, the kernel taints itself and some symbols become unavailable.
+`modinfo rklings.ko` reads these fields without loading.
 
-## Your task
+## You write
 
-Edit only `Kbuild` and `core/main.c`:
+`Kbuild` (~2 lines):
 
-- Build `rklings.ko` from `core/main.o`.
-- Register a load callback that returns `0`.
-- Register an unload callback.
-- Set the license to `GPL`.
-- Set the description to `Rklings kernel module`.
+- declare the module and its source
 
-The module must build without warnings.
-You may add kernel log messages for debugging, but messages do not prove that a
-module is loaded or cleaned up.
+`core/main.c` (~19 lines):
 
-## Check and observe
+- `rk_init`
+- `rk_exit`
+- license
+- description
 
-From the repository root, run:
+## API
 
-```sh
-./rklings check
+```c
+static int __init rk_init(void);     // return 0 = loaded
+static void __exit rk_exit(void);    // clean up everything
+
+module_init(rk_init);
+module_exit(rk_exit);
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Rklings kernel module");
 ```
 
-The host phase builds the module and inspects its metadata.
-The guest phase proves the lifecycle behavior by loading it and checking two
-kernel-maintained views: `/proc/modules` and `/sys/module/rklings`.
-It then unloads the module, proves both views disappeared, and immediately
-repeats the load/unload cycle.
+## Test it
 
-These same artifacts are visible to defenders: the `.ko` exposes metadata and
-symbols before loading, and a loaded module appears in kernel inventory and
-sysfs.
-Kernel logs may outlive the module, so they are useful diagnostics but not
-cleanup evidence.
+```
+$ rklings run l00
+root@vm:~# insmod rklings.ko
+root@vm:~# grep rklings /proc/modules
+rklings 12288 0 - Live 0x...
+root@vm:~# ls /sys/module/rklings/
+...
+root@vm:~# rmmod rklings
+root@vm:~# grep rklings /proc/modules
+(no output)
+```
 
-## References
+## Validate
 
-- [Building external modules](https://docs.kernel.org/kbuild/modules.html)
-- [Driver basics: `module_init()` and `module_exit()`][ref-1]
+```
+$ rklings validate l00
+  [+] rklings.ko builds without warnings
+  [+] modinfo shows LICENSE=GPL
+  [+] insmod succeeds, /proc/modules lists rklings
+  [+] /sys/module/rklings exists
+  [+] rmmod succeeds, both entries gone
+  [+] reload succeeds (clean lifecycle)
+  PASS
+```
 
-[ref-1]:
-  https://docs.kernel.org/driver-api/basics.html#c.module_init
+## Next
+
+Your module enters and leaves the kernel cleanly, but it has no way to fail
+gracefully.
+L01 adds goto cleanup chains so init can back out when an allocation fails,
+freeing only what was actually created.

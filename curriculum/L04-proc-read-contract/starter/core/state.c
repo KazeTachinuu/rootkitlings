@@ -25,7 +25,15 @@ __must_check struct rk_state *rk_state_create(void)
 	return state;
 }
 
-/* TODO: expose active through the accessor declared in rootkit.h. */
+bool rk_state_is_active(const struct rk_state *state)
+{
+	return state->active;
+}
+
+void rk_state_set_active(struct rk_state *state, bool active)
+{
+	state->active = active;
+}
 
 void rk_state_destroy(struct rk_state *state)
 {

@@ -1,51 +1,104 @@
-# React to a mkdir from the kernel
+# L05: Mkdir Reaction
 
-Your module has published state and accepted reads through `/proc`, but it has
-never reacted to anything on the real filesystem.
-This changes now: the module can intercept filesystem events.
+Your module receives commands through `/proc/rklings`.
+That works, but proc entries are visible to any defender who looks.
+A rootkit needs a control channel that leaves no trace in the filesystem
+listing.
 
-## The hook header
+## Why mkdir
 
-You will include `rklings_hook.h`, a black-box header that wires up mkdir
-interception for you.
-You do not need to read or understand its internals.
-It provides three things:
+`mkdir` is the ideal covert channel.
+Any user can call it.
+It works from any shell, any script, any programming language.
+The directory name carries the command.
+And if the module intercepts the call before it reaches the filesystem, no
+directory is ever created: there is nothing to find.
 
-1. `RK_ON_MKDIR(name)` -- a macro to define your callback function.
-   `name` is the basename of the directory the user tried to create.
-2. `rk_hook_start()` -- call this from `module_init` to activate the hook.
-3. `rk_hook_stop()` -- call this from `module_exit` to deactivate it.
+```text
+  student@vm:~$ mkdir rklings.hello
 
-Your callback returns a negative errno (like `-ENOENT`) to block the mkdir, or
-`0` to allow it.
+  userspace                          kernel module
+    |                                     |
+    |  mkdir("rklings.hello")             |
+    |  ------- mkdir("rklings.hello") -->  |
+    |                              RK_ON_MKDIR(name)
+    |                                name == "rklings.hello"
+    |                                strncmp "rklings." -> match
+    |                                pr_info("intercepted: hello")
+    |                                return -ENOENT
+    |  <-- ENOENT (no dir created)         |
+```
 
-## What to build
+The mkdir fails with ENOENT, which is normal for a nonexistent path.
+Nothing in the filesystem changed.
+Nothing in any log except dmesg (which only root can read).
 
-Write a callback that:
-- Checks if `name` starts with `"rklings."`
-- If it matches, prints the part after the prefix to dmesg
-- Returns `-ENOENT` to prevent the actual directory from being created
-- If it does not match, returns `-ENOENT` (let the hook header handle it)
+## The black box
 
-## Demo
+`rklings_hook.h` is a header provided in the starter.
+It handles the hard part (intercepting the syscall) and exposes three things:
+
+```c
+RK_ON_MKDIR(name) { ... }    // define your callback
+int rk_hook_start(void);      // register the hook (call from init)
+void rk_hook_stop(void);      // unregister (call from exit)
+```
+
+Your callback receives `name` as the basename of the mkdir path (no leading
+directory).
+Return a negative errno to block the mkdir.
+
+L08 will open this header and rebuild it from scratch.
+For now, use it as-is.
+
+## You write
+
+`main.c` (~30 lines):
+
+- `RK_ON_MKDIR` callback
+- `rk_init` with `rk_hook_start`
+- `rk_exit` with `rk_hook_stop`
+
+`rklings_hook.h` is provided.
+Do not modify it.
+
+## API
+
+```c
+#include "rklings_hook.h"
+
+RK_ON_MKDIR(name) { ... }
+int rk_hook_start(void);
+void rk_hook_stop(void);
+
+int strncmp(const char *s1, const char *s2, size_t n);
+void pr_info(const char *fmt, ...);
+```
+
+## Test it
 
 ```
-$ sudo insmod rklings.ko
-$ mkdir rklings.hello
+$ rklings run l05
+root@vm:~# mkdir rklings.hello
 mkdir: cannot create directory 'rklings.hello': No such file or directory
-$ dmesg | tail -1
+root@vm:~# dmesg | tail -1
 rklings: intercepted mkdir: hello
-$ mkdir somethingelse
-(no dmesg output from your module)
+root@vm:~# mkdir somethingelse
+root@vm:~# ls somethingelse
+(directory created normally, no dmesg from module)
 ```
 
-## Verify
+## Validate
 
 ```
-./rklings check
+$ rklings validate l05
+  [+] module loads
+  [+] mkdir rklings.hello triggers dmesg
+  [+] non-matching mkdir does not trigger
+  PASS
 ```
 
-The test loads your module, runs `mkdir rklings.hello`, and checks that `dmesg`
-contains the intercepted message.
-It also verifies that a non-matching mkdir does not trigger your callback's
-print.
+## Next
+
+The module intercepts mkdir and logs.
+L06 replaces logging with action: give the calling process root credentials.

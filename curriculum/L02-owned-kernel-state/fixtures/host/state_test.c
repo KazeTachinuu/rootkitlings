@@ -20,7 +20,7 @@ static const void *freed_pointer;
 static void require(bool condition, const char *message)
 {
 	if (!condition) {
-		fprintf(stderr, "[x] %s\n", message);
+		fprintf(stderr, "[-] %s\n", message);
 		exit(EXIT_FAILURE);
 	}
 }

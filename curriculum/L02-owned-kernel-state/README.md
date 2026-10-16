@@ -1,110 +1,158 @@
-# Give the module private state
+# L02: Kernel State
 
-The module now needs memory for information that must survive between calls.
-Give that memory one clear owner and release it on every exit path.
-Success proves that private state lives exactly as long as the module, including
-when startup fails.
+Your module can load, fail safely, and clean up.
+But it remembers nothing.
+A rootkit needs persistent state: which files to hide, which PIDs to cloak,
+whether persistence is enabled.
+That state lives in kernel memory, survives across system calls, and must be
+freed when the module unloads.
 
-Kernel memory with this lifetime is the module's **private state**.
-One component creates it, and the same component destroys it.
+## Opaque structs
+
+The kernel hides implementation behind opaque types.
+Callers see only a forward declaration and use accessor functions:
+
+```c
+// rootkit.h (public)
+struct rk_state;
+struct rk_state *rk_state_create(unsigned int capacity);
+bool rk_state_is_active(const struct rk_state *state);
+void rk_state_destroy(struct rk_state *state);
+
+// state.c (private)
+struct rk_state {
+	bool active;
+	unsigned int capacity;
+};
+```
+
+This is the same pattern as `struct file`, `struct inode`, and most kernel
+subsystems.
+Callers cannot touch fields directly, so the implementation can change without
+breaking callers.
+
+## kmalloc and kfree
+
+Kernel memory allocation works like malloc but takes a flags argument:
+
+```c
+state = kzalloc(sizeof(*state), GFP_KERNEL);
+```
+
+`GFP_KERNEL` means the allocator can sleep (fine in module init, forbidden in
+interrupt context).
+`kzalloc` zeros the memory.
+On failure it returns NULL, which your create function converts to
+`ERR_PTR(-ENOMEM)`.
+
+Every `kzalloc` must have a matching `kfree` in the teardown path.
+`WARN_ON_ONCE` in destroy catches double-free bugs during development.
+
+## module_param
+
+Module parameters let the user configure behavior at load time:
+
+```c
+static unsigned int capacity = 32;
+module_param(capacity, uint, 0444);
+```
+
+`insmod rklings.ko capacity=128` overrides the default.
+The value appears at `/sys/module/rklings/parameters/capacity`.
+Permission `0444` means readable by all, writable by none.
+
+## Multi-file layout
+
+This is the first exercise with multiple source files:
 
 ```text
-insmod                                     rmmod
-  |                                          |
-  v                                          v
-rk_init()                               rk_exit()
-  |                                          |
-  +-- rk_state_create()                      +-- rk_state_destroy()
-  |     |                                    |     |
-  |     +-- kzalloc() -> struct rk_state *   |     +-- kfree()
-  |                                          |
-  +-- (on failure: destroy + return error)   +-- state = NULL
+  insmod rklings.ko capacity=64
+           |
+           v
+       rk_init()
+           |
+           v
+    rk_state_create(64)    <-- core/state.c
+           |
+           v
+     +-- rk_state --+
+     | active: true |      <-- opaque: callers use accessors
+     | capacity: 64 |
+     +--------------+
+           |
+       rk_exit()
+           |
+           v
+    rk_state_destroy()
 ```
 
-Here, `core/state.c` owns a small heap object.
-`core/main.c` controls when that object exists but cannot inspect its fields.
-During init, `rk_state_create()` allocates it with `kzalloc()`.
-During unload, `rk_state_destroy()` releases it with `kfree()`.
+The struct definition lives in `core/state.c`.
+Callers in `core/main.c` see only the forward declaration in
+`include/rootkit.h`.
 
-## One return value
+## You write
 
-`kzalloc(size, GFP_KERNEL)` returns zero-filled memory or `NULL`.
-`GFP_KERNEL` tells the allocator it may sleep while finding memory, which is
-allowed during module init but not inside interrupt handlers.
+`include/rootkit.h` (~21 lines):
 
-A plain `NULL` carries no reason for the failure.
-The state constructor converts `NULL` to `ERR_PTR(-ENOMEM)`, encoding the exact
-negative errno into the pointer itself.
-The caller must use `IS_ERR()` before treating that value as an object and
-`PTR_ERR()` to recover the original negative error.
-An error pointer is encoded error information; it must never be dereferenced.
+- forward-declare `struct rk_state`
+- declare accessors
 
-The header only forward-declares `struct rk_state`.
-That makes the type **opaque**: other files may hold its pointer but only
-`core/state.c` knows its layout or calls `kfree()` for it.
-`__must_check` asks the compiler to warn when a caller ignores the constructor
-result.
+`core/state.c` (~47 lines):
 
-Failed module initialization does not call the exit callback.
-If state creation fails, init must preserve the constructor's error and leave
-the stored pointer as `NULL`.
-Normal unload destroys the state and immediately sets that pointer to `NULL`, so
-later code cannot accidentally reuse released memory.
+- define `struct rk_state`
+- implement create/destroy/accessors
 
-## Your task
+`core/main.c` (~48 lines):
 
-This adds `include/rootkit.h` and `core/state.c` to the existing module.
-Edit all four declared files:
+- `module_param` for capacity
+- `rk_state_create(capacity)` in init
+- goto cleanup chain
 
-- Extend `Kbuild` to link `core/main.o` and `core/state.o`, and add the
-  `include` directory to compiler search paths.
-- In `include/rootkit.h`, define failure points 0 through 2, forward-declare
-  `struct rk_state`, and declare the create/destroy API with `__must_check` on
-  the constructor.
-- In `core/state.c`, keep the structure definition private, allocate it with
-  `kzalloc(..., GFP_KERNEL)`, and make this file its sole allocator and
-  releaser.
-- Make failure point 2 return `ERR_PTR(-ENOMEM)` through the same constructor
-  path used for a real allocation failure.
-- In `core/main.c`, use `IS_ERR()` and `PTR_ERR()`, preserve the exact error,
-  and clear the stored pointer after a failed create and after destruction.
-- Keep failure point 1 returning `-ECANCELED`, reject unknown build-time values,
-  and preserve the module name and metadata.
+## API
 
-Do not free state from `core/main.c`, expose the structure fields in the header,
-or use a log message as proof of ownership.
+```c
+// rootkit.h
+struct rk_state;
+__must_check struct rk_state *rk_state_create(unsigned int capacity);
+bool rk_state_is_active(const struct rk_state *state);
+unsigned int rk_state_capacity(const struct rk_state *state);
+void rk_state_destroy(struct rk_state *state);
 
-## Check and observe
-
-Run:
-
-```sh
-./rklings check
+// main.c
+static unsigned int capacity = 32;
+module_param(capacity, uint, 0444);
+MODULE_PARM_DESC(capacity, "Maximum number of targets");
 ```
 
-The checker builds failure points 0, 1, and 2 without warnings and rejects an
-unknown value at compile time.
-In disposable guests, value 1 must return numeric `ECANCELED`, value 2 must
-return numeric `ENOMEM`, and both rejected loads must leave the module absent.
-Value 0 must load, unload, disappear from kernel inventory and sysfs, then load
-and unload again.
+## Test it
 
-On the host, injected allocator and constructor results verify the exact object
-lifetime and error propagation without relying on source-text patterns.
-Object-file and header checks enforce only the component boundary: allocation
-and release belong to `core/state.c`, and the state layout stays private.
+```
+$ rklings run l02
+root@vm:~# insmod rklings.ko
+root@vm:~# cat /sys/module/rklings/parameters/capacity
+32
+root@vm:~# rmmod rklings
 
-## References
+root@vm:~# insmod rklings.ko capacity=128
+root@vm:~# cat /sys/module/rklings/parameters/capacity
+128
+root@vm:~# rmmod rklings
+```
 
-- [Linux memory allocation guide][ref-1]
-- [Error pointers][ref-2]
-- [Driver basics: module initialization and exit][ref-3]
+## Validate
 
-[ref-1]:
-  https://docs.kernel.org/core-api/memory-allocation.html
+```
+$ rklings validate l02
+  [+] builds at all fail points
+  [+] default capacity=32 visible in /sys/module
+  [+] capacity=128 override works
+  [+] FAIL_POINT=1: rejects load (preflight)
+  [+] FAIL_POINT=2: rejects load (alloc failure, no leak)
+  [+] rmmod cleans up without warnings
+  PASS
+```
 
-[ref-2]:
-  https://docs.kernel.org/core-api/kernel-api.html#error-pointers
+## Next
 
-[ref-3]:
-  https://docs.kernel.org/driver-api/basics.html#c.module_init
+The module owns persistent state, but nothing in userspace can see it.
+L03 publishes it through /proc/rklings using the seq_file interface.

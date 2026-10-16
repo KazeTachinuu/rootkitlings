@@ -105,7 +105,8 @@ static int rk_proc_show(struct seq_file *m, void *v)
 
 static int __init rk_init(void)
 {
-	/* Register both kretprobes, create /proc/rklings. Roll back on failure. */
+	/* Register both kretprobes, create /proc/rklings. Roll back on failure.
+	 */
 	return 0;
 }
 

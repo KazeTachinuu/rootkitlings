@@ -2,110 +2,118 @@
 
 Build a Linux kernel rootkit one mechanism at a time.
 
-27 lessons, 6 milestones, one final project.
-Each exercise adds one bounded mechanism or integrates mechanisms already
-practiced.
-Modules run only in a disposable QEMU guest, never in the host kernel.
+26 lessons, 4 milestones, 1 deployment exercise, 1 final project.
+C for kernel stealth.
+Go for the agent and server.
+Every exercise runs in a disposable QEMU guest, never in the host kernel.
 
 ## Requirements
 
-x86-64 Linux host with:
+x86-64 Linux or macOS host with:
 
-- 2 GiB RAM, 4 GiB free disk
-- Python 3.11+, GCC, Clang, binutils, GNU Make, kernel build tools
-- Static BusyBox, `cpio`, `gzip`, QEMU, OpenSSL, libelf-dev, libssl-dev
+- Go 1.22+
+- Docker or Podman
+- QEMU 8.0+
+- mkcert
 
-`make doctor` checks everything and prints package hints for Arch,
-Debian/Ubuntu, and Fedora.
-KVM is optional (QEMU falls back to TCG).
-The course uses its pinned Linux 7.2.9 guest, not the host kernel.
+```
+rklings setup
+```
+
+Checks everything, downloads the VM image, pulls the build container, generates
+SSH keys and certificates.
+Prints install instructions for anything missing.
 
 ## Start
 
-```sh
-make doctor
-./rklings setup
-./rklings prereq L00
-./rklings read L00
-./rklings start L00
-# Edit the paths printed by start.
-./rklings check L00
 ```
-
-- `setup` prepares the pinned kernel and verifies guest isolation.
-- `prereq` shows direct dependencies.
-- `read` explains the mechanism and task.
-- `start` creates the workspace and lists editable files.
-- `check` builds, boots, and runs host and guest checks.
-
-Exercise commands accept a serial (`L19`), a stable ID, or an unambiguous
-prefix.
-Most default to the current exercise.
-Run `./rklings help` for the complete command list.
+rklings setup          # one-time: deps, VM image, certs
+rklings run l00        # build, boot VM, drop into shell
+# edit exercises/l00-module-init/starter/core/main.c
+rklings validate l00   # automated: build, boot, test, teardown
+rklings status         # show progress
+```
 
 ## Course
 
 ```text
-L00-L04  module lifecycle, state, procfs
-   |
-L05-L09  hooks, kprobes, command dispatcher
-   |
-   +---> M00  persistence + module cloak
-   |
-L10-L13  target lists, concealment filters
-   |
-   +---> M01  full local control
-   |
-L14-L17  kernel sockets, threads, reverse shell
-   |
-   +---> M02  callback shell
-   |
-L18-L21  framing, AEAD, envelope, key provisioning
-   |
-   +---> M03  encrypted channel
-   |
-L22-L26  timeouts, download, protocol, auto-OPSEC
-   |
-   +---> M04  remote control
-   +---> M05  full operations
-   |
-   +---> P00  complete rootkit
+Phase 1: Foundation (C)
+  L00-L04  module lifecycle, state, procfs
+
+Phase 2: Escalation (C)
+  L05-L07  mkdir interception, credential escalation
+
+Phase 3: Interception (C)
+  L08-L09  kprobes from scratch, command dispatcher
+  M00      persistence + module hiding
+
+Phase 4: Concealment (C)
+  L10-L13  target lists, hide files/PIDs/content/ports
+  M01      full local rootkit (16 mkdir commands)
+
+D00: Deploy
+  Initial access, LPE, rootkit deployment against a live VM
+
+Phase 5: The Split (C + Go)
+  L14      call_usermodehelper (kernel launches agent)
+  L15-L16  mTLS agent, mkdir bridge
+
+Phase 6: Remote Operations (Go)
+  L17-L19  command dispatch, remote shell, file transfer
+  M02      operator TUI with full remote control
+
+Phase 7: Tradecraft (Go)
+  L20-L24  fileless loading, decoy routing, process masquerade, anti-forensics
+  M03      ghost mode (all tradecraft integrated)
+
+P00: Complete Rootkit
+  Production deployment with real domain and obfuscation
 ```
 
-Milestones integrate the lessons above them into one operational module.
-Use `list` for the full route and `prereq` for direct dependencies.
-
-## Recovery
-
-```sh
-./rklings restore L12   # archive edits, recreate starter workspace
-./rklings reset L12     # clear progress from L12 onward
-./rklings reset --all --yes
-```
-
-- `restore` archives current edits and recreates that exercise's starter.
-  Progress is unchanged.
-- `reset` clears progress from the selected exercise onward and archives
-  affected workspaces.
-  Full reset requires `--all --yes`.
-- `clean` removes build outputs but keeps source edits and progress.
-
-## Repository layout
+## Architecture
 
 ```text
-course.toml                        route, concepts, tags, and tools
-curriculum/<serial>-<stable-id>/   lessons and checks
-rklings                            CLI
-engine/                            catalog, state, and verification
-vm/                                pinned guest runtime and tools
-work/<serial>/                     your source code
-.rklings/                          builds, state, snapshots, backups
+  kernel module (C)          agent (Go)            server (Go)
+  stealth only               all network comms     operator tooling
+  kprobes, hiding            mTLS to server :443   mTLS listener :443
+  mkdir dispatch             os.Mkdir to kernel    webapp 127.0.0.1:8080
 ```
 
-Edits go in `work/`.
-Files under `curriculum/` are immutable course bundles.
+The kernel module never touches the network.
+The agent handles all communication over mTLS.
+The server provides operator control via TUI and web interface.
 
-See [`docs/COURSE.md`](docs/COURSE.md) for course design and
-[`vm/README.md`](vm/README.md) for the guest runtime.
-`make validate` runs the maintainer checks.
-`make compile-db` creates clangd metadata.
+## CLI
+
+| Command | What it does |
+|---------|-------------|
+| `rklings setup` | Check deps, download VM, generate keys and certs |
+| `rklings build <ex>` | Cross-compile .ko and/or Go agent |
+| `rklings run <ex>` | Build + boot VM + deploy + drop into shell |
+| `rklings validate <ex>` | Automated test: build, boot, verify, teardown |
+| `rklings status` | Show exercise progress |
+| `rklings solution <ex>` | Print reference solution (requires prior validate pass) |
+| `rklings reset <ex>` | Restore starter files |
+| `rklings server` | Start operator server (M02/P00) |
+
+## File layout
+
+```text
+rootkitlings/
+  exercises/              student workspace
+    l00-module-init/
+      README.md
+      starter/
+  .rklings/               internals (hidden)
+    solutions/
+    validate/
+    lab/
+  cmd/rklings/            CLI source
+  internal/               compiled into rklings
+```
+
+## VM
+
+Ubuntu Minimal 26.04 cloud image, kernel 7.0.0-38-generic.
+QEMU overlay per run gives clean state in seconds.
+SSH on localhost:2222, agent callbacks to 10.0.2.2:443.

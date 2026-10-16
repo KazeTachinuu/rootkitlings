@@ -48,8 +48,7 @@ Both prove success, rejection, and cleanup behavior.
 The exact graph is metadata, not prose:
 
 - `course.toml` owns the route and controlled vocabularies.
-- Each `exercise.toml` owns direct prerequisites, concepts, workspace
-  composition, and verification cases.
+- Each `exercise.toml` owns direct prerequisites, concepts, workspace composition, and verification cases.
 - L, M, and C serials are display names; stable IDs are durable state keys.
 
 ## Prerequisites

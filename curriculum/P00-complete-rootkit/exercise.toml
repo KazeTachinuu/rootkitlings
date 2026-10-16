@@ -50,7 +50,7 @@ solution = "curriculum/P00-complete-rootkit/solution"
 
 [verification]
 timeout_seconds = 180
-tools = ["module-load-test", "secure-agent-fixture"]
+tools = ["module-load-test", "mkdir-escalation-test", "secure-agent-fixture"]
 
 [[verification.cases]]
 id = "complete-rootkit"

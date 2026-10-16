@@ -1,81 +1,131 @@
-# Escalate another process by PID
+# L07: PID Escalation
 
-L06 let you escalate the process that runs mkdir.
-But what if you want to escalate a different process, one you do not control
-directly?
-This uses deferred execution: set a target PID via mkdir, and the target process
-picks up root credentials the next time it reads `/proc/rklings`.
+L06 escalates the process that calls mkdir.
+But the process you want to escalate might be someone else's shell, a daemon, or
+a service you cannot run mkdir from.
+You need deferred delivery: set a target, wait for that process to trigger it.
 
-## Deferred delivery with atomic flags
+## Deferred execution
 
-You cannot directly modify another process's credentials from your mkdir
-handler.
-The credential API (`commit_creds`) only works on the calling process.
-Instead, you store the target PID in an atomic variable:
+The attacker sets a target PID with `mkdir rklings.e.<pid>`.
+The module stores it.
+When the target process reads `/proc/rklings`, the module checks `current->pid`
+and escalates on match.
+
+```text
+  Attacker                           Target (pid 1234)
+    |                                     |
+    | mkdir rklings.e.1234                |
+    |----> RK_ON_MKDIR                    |
+    |      atomic_set(pid, 1234)          |
+    |                                     |
+    |                         cat /proc/rklings
+    |                         rk_proc_show ---|
+    |                         pid match? yes  |
+    |                         rk_escalate()   |
+    |                         atomic_set(0)   |
+    |                                     |
+    |                         id -> uid=0(root)
+```
+
+## atomic_t
+
+The target PID is shared between the mkdir handler (writer) and the proc handler
+(reader).
+These can run on different CPUs at the same time.
+`atomic_t` provides safe concurrent access without a full spinlock:
 
 ```c
 static atomic_t rk_target_pid = ATOMIC_INIT(0);
+
+atomic_set(&rk_target_pid, pid);           // store
+int target = atomic_read(&rk_target_pid);  // load
 ```
 
-When a mkdir like `rklings.e.1234` arrives, you parse the PID and store it with
-`atomic_set`.
-When process 1234 reads `/proc/rklings`, you check if its PID matches the stored
-target, escalate it, and clear the flag.
+## Three mkdir cases
 
-## Architecture
+The mkdir handler now parses the suffix:
 
-```
-  User A                         User B (pid 1234)
-    |                                |
-    | mkdir rklings.e.1234           |
-    |----> RK_ON_MKDIR              |
-    |      atomic_set(pid, 1234)     |
-    |                                |
-    |                    cat /proc/rklings
-    |                    proc_read ---|
-    |                    pid match?  yes
-    |                    escalate + clear
-    |                                |
-    |                    id -> uid=0
+- `"rklings.e"` (no dot after): self-escalation via `commit_creds`
+- `"rklings.e.<pid>"`: parse PID with `kstrtoint`, store in atomic
+- Anything else: return `-ENOENT`
+
+```c
+int kstrtoint(const char *s, unsigned int base, int *res);
 ```
 
-## What to build
+`kstrtoint` is the kernel's safe string-to-int.
+It rejects trailing garbage and overflow.
+Always check its return value.
 
-This module combines two subsystems:
+## You write
 
-1. The mkdir hook (from L05/L06): handles three cases:
-   - `rklings.e` with no suffix: self-escalation (like L06)
-   - `rklings.e.<pid>`: store the PID for deferred delivery
-   - Anything else: return `-ENOENT`
+`main.c` (~120 lines):
 
-2. A `/proc/rklings` file (from L03): on read, check if `current->pid` matches
-   the stored target.
-   If so, escalate and clear the atomic.
-   Always print a status line.
+- mkdir handler with three cases (`rklings.e`, `rklings.e.<pid>`, other)
+- `rk_escalate` for credential replacement
+- `/proc/rklings` with deferred PID delivery
 
-Use `kstrtoint` to parse the PID string into an integer.
+## API
 
-## Demo
+```c
+#include <linux/atomic.h>
+static atomic_t rk_target_pid = ATOMIC_INIT(0);
+
+atomic_set(&rk_target_pid, pid);
+int target = atomic_read(&rk_target_pid);
+
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
+static const struct proc_ops rk_proc_ops;
+proc_create("rklings", 0444, NULL, &rk_proc_ops);
+
+int kstrtoint(const char *s, unsigned int base, int *res);
+```
+
+## Test it
+
+The module is pre-loaded.
+You log in as student.
 
 ```
-$ echo $$
+$ rklings run l07
+
+(Terminal 1)
+student@vm:~$ echo $$
 1234
-$ # (from another terminal)
-$ mkdir rklings.e.1234
-mkdir: cannot create directory 'rklings.e.1234': No such file or directory
-$ # (back in pid 1234's terminal)
-$ cat /proc/rklings
+
+(Terminal 2)
+student@vm:~$ mkdir rklings.e.1234
+
+(Terminal 1)
+student@vm:~$ cat /proc/rklings
 rklings: escalated
-$ id
-uid=0(root) gid=0(root) ...
+student@vm:~$ id
+uid=0(root) gid=0(root) groups=0(root)
 ```
 
-## Verify
+Self-escalation still works:
 
 ```
-./rklings check
+student@vm:~$ mkdir rklings.e
+student@vm:~$ id
+uid=0(root) gid=0(root) groups=0(root)
 ```
 
-The test verifies all three paths: self-escalation via `rklings.e`, PID
-targeting via `rklings.e.<pid>`, and deferred delivery when the target process
-reads `/proc/rklings`.
+## Validate
+
+```
+$ rklings validate l07
+  [+] module loaded
+  [+] self-escalation via mkdir rklings.e
+  [+] PID targeting via mkdir rklings.e.<pid>
+  [+] deferred delivery on /proc/rklings read
+  PASS
+```
+
+## Next
+
+You have been using rklings_hook.h as a black box.
+L08 opens it, explains every line, and rebuilds mkdir interception from scratch
+using kprobes.

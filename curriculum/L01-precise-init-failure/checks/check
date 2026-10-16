@@ -5,7 +5,7 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source-path=SCRIPTDIR
 source "$HERE/../../../scripts/lesson-env"
 
-die() { printf '[x] %s\n' "$*" >&2; exit 1; }
+die() { printf '[-] %s\n' "$*" >&2; exit 1; }
 
 ROOT=$RKLINGS_ROOT
 

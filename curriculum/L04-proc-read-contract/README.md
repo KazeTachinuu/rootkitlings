@@ -1,89 +1,129 @@
-# Read live module state from procfs
+# L04: Proc Write Handler
 
-The status channel says `active`, but that fixed word proves little.
-Connect it to the module's real private state and make every read return one
-stable record.
-Success proves that userspace can inspect live state without exposing its
-internal layout.
+Your proc file is read-only.
+A rootkit needs to receive commands, not just report status.
+Writing to `/proc/rklings` will let userspace control the module with nothing
+more than `echo`.
 
-The record is:
+## copy_from_user
+
+Userspace and kernel memory are separate address spaces.
+The kernel must copy data across the boundary explicitly:
+
+```c
+if (copy_from_user(buf, ubuf, len))
+	return -EFAULT;
+```
+
+`__user` marks a pointer as userspace.
+`copy_from_user` returns 0 on success, nonzero on fault.
+Always check: a malicious process can pass an unmapped address.
+
+## proc_ops
+
+A writable proc entry needs the full `proc_ops` struct instead of
+`proc_create_single`:
+
+```c
+static const struct proc_ops rk_proc_ops = {
+	.proc_open    = rk_proc_open,
+	.proc_read    = seq_read,
+	.proc_write   = rk_proc_write,
+	.proc_lseek   = seq_lseek,
+	.proc_release = single_release,
+};
+
+proc_create("rklings", 0644, NULL, &rk_proc_ops);
+```
+
+Permission `0644`: owner writes, everyone reads.
+`proc_open` uses `single_open` to wire seq_file for reads.
+`proc_write` handles input.
 
 ```text
+  echo "1" > /proc/rklings
+       |
+       v
+  rk_proc_write(ubuf, count)
+       |
+       v
+  copy_from_user --> buf[0]=='1' --> set_active(true)
+       |
+       v
+  return count
+
+  cat /proc/rklings --> rk_status_show --> "active=1\n"
+```
+
+## The trap
+
+If `copy_from_user` fails and you use `buf` anyway, you read uninitialized
+kernel stack.
+On a hardened kernel this is a fatal fault.
+
+## You write
+
+`interface/proc.c` (~76 lines):
+
+- `rk_proc_write` with `copy_from_user`
+- `proc_ops` struct
+- switch from `proc_create_single` to `proc_create`
+
+`include/rootkit.h`:
+
+- add `rk_state_set_active`
+
+`core/state.c`:
+
+- implement `rk_state_set_active`
+
+## API
+
+```c
+void rk_state_set_active(struct rk_state *state, bool active);
+
+unsigned long copy_from_user(void *to, const void __user *from,
+    unsigned long n);
+struct proc_dir_entry *proc_create(const char *name, umode_t mode,
+    struct proc_dir_entry *parent, const struct proc_ops *ops);
+int single_open(struct file *file,
+    int (*show)(struct seq_file *, void *), void *data);
+```
+
+## Test it
+
+```
+$ rklings run l04
+root@vm:~# insmod rklings.ko
+root@vm:~# cat /proc/rklings
 active=1
+root@vm:~# echo 0 > /proc/rklings
+root@vm:~# cat /proc/rklings
+active=0
+root@vm:~# echo 1 > /proc/rklings
+root@vm:~# cat /proc/rklings
+active=1
+root@vm:~# echo x > /proc/rklings
+bash: echo: write error: Invalid argument
 ```
 
-`struct rk_state` stays private to `core/state.c`.
-Add one narrow accessor, `rk_state_is_active()`, instead of exposing the
-structure layout to the procfs component.
+## Validate
 
-## Pass state to the show function
-
-Change `rk_proc_publish()` to receive the live state pointer.
-Pass that pointer to `proc_create_single_data()`, which works like
-`proc_create_single()` but adds one extra argument: a `void *` that the kernel
-stores and passes to the show callback as `output->private`, where `output` is a
-`struct seq_file *`.
-
-The show function reads `output->private` once, copies the accessor result into
-one local `bool`, and emits one line with `seq_printf()`.
-The `seq_file` helpers handle partial reads, file offsets, seeking, and end of
-file; do not add a manual read callback.
-
-No lock is needed here.
-The `active` value does not change while the proc entry exists.
-Synchronization is not needed until mutable shared state is introduced.
-
-## Removal before destruction
-
-Keep the existing teardown order: unpublish procfs, then destroy state.
-
-In Linux v7.2, proc entry removal runs `proc_entry_rundown()`.
-It prevents new callbacks, waits for callbacks already running, and releases
-open procfs contexts before removal returns.
-State remains valid throughout that rundown because the module destroys it
-afterward.
-A descriptor held open during unload does not keep the module loaded; reads
-through that stale descriptor fail.
-
-## Your task
-
-Edit these four files:
-
-- In `include/rootkit.h`, declare the state accessor and pass state to
-  `rk_proc_publish()`.
-- In `core/state.c`, return the private `active` value through the accessor.
-- In `interface/proc.c`, pass state through `proc_create_single_data()` and
-  print `active=1` from `output->private`.
-- In `core/main.c`, give the owned state pointer to `rk_proc_publish()`.
-
-Keep the state layout private.
-Do not add a proc read callback, mutable state, or a lock.
-
-## Check and observe
-
-Run:
-
-```sh
-./rklings check
+```
+$ rklings validate l04
+  [+] builds at all fail points
+  [+] /proc/rklings permissions are 0644
+  [+] cat shows active=1 after load
+  [+] echo 0 sets active=0
+  [+] echo 1 restores active=1
+  [+] echo x returns -EINVAL
+  [+] rmmod removes proc entry cleanly
+  PASS
 ```
 
-The checker keeps the earlier build, failure, rollback, and unload checks.
-It also verifies the exact output bytes, uneven partial reads, repeated end of
-file, rewind and reread, rejected writes, reload, and unload while a proc file
-descriptor is open.
+## Next
 
-## References
-
-- [Linux v7.2 procfs entry creation and removal][ref-1]
-- [Linux v7.2 procfs callback rundown][ref-2]
-- [The seq_file interface](https://docs.kernel.org/filesystems/seq_file.html)
-- [Linux v7.2 procfs API declarations][ref-3]
-
-[ref-1]:
-  https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/fs/proc/generic.c?h=v7.2
-
-[ref-2]:
-  https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/fs/proc/inode.c?h=v7.2
-
-[ref-3]:
-  https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/linux/proc_fs.h?h=v7.2
+Your module takes commands through proc, but proc is visible to any defender who
+looks.
+L05 introduces a covert channel: intercepting mkdir so the module reacts to
+`mkdir rklings.something` with no visible interface.

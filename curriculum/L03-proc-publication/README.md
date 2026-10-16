@@ -1,97 +1,138 @@
-# Publish a procfs status file
+# L03: Proc Publication
 
-Private state is invisible to an operator in userspace.
-Open `/proc/rklings` as a local exchange point only after the module is ready,
-then remove it before its state disappears.
-Success proves that a failed start leaves neither the channel nor its state
-behind.
+Your module owns state, but nothing outside the kernel can see it.
 
-`procfs` is Linux's virtual `/proc` filesystem.
-Kernel code can publish small runtime records there without creating a normal
-disk file.
-This status file is a visible control point: system tools can see the proc
-entry.
+`/proc` is a virtual filesystem the kernel generates on the fly.
+Each file is backed by a callback, not data on disk.
+Reading `/proc/rklings` calls your function and returns whatever it prints.
+This is how you make kernel state visible to userspace.
 
-The order matters:
+## procfs and seq_file
+
+The simplest way to create a read-only proc entry is `proc_create_single`:
+
+```c
+proc_create_single("rklings", 0444, NULL, rk_status_show);
+```
+
+This creates `/proc/rklings` with mode `0444` (world-readable).
+When someone reads it, the kernel calls `rk_status_show`:
+
+```c
+static int rk_status_show(struct seq_file *output, void *unused)
+{
+	seq_puts(output, "active\n");
+	return 0;
+}
+```
+
+`seq_file` is the kernel's buffered output interface.
+It handles partial reads, large outputs, and seeking.
+`seq_puts` writes a string, `seq_printf` works like printf.
+Returning 0 means success.
+
+## Lifecycle integration
+
+The proc entry depends on module state: it must be created after state is ready
+and removed before state is destroyed.
+This extends the goto cleanup chain from L01:
 
 ```text
-init:     rk_state_create()   -> rk_proc_publish()
-teardown: rk_proc_unpublish() -> rk_state_destroy()
+  rk_init()
+    |
+    +---> rk_state_create()
+    |         |
+    |        ok
+    |         v
+    +---> rk_proc_publish()
+    |         |
+    |     proc_create_single("rklings", 0444, ...)
+    |         |
+    |         v
+    |     /proc/rklings  <--cat-- "active\n"
+    |
+    |   (failure at any step)
+    |         |
+    |         v
+    |     goto: destroy state, return error
+
+  rk_exit()
+      rk_proc_unpublish()    // remove /proc entry first
+      rk_state_destroy()     // then free state
 ```
 
-The exit callback is not called when module initialization fails.
-If procfs publication fails after state creation, the init callback must destroy
-state before it returns the publication error.
+Exit order is the reverse of init order: remove the proc entry first (so no
+reader can access state), then free the state.
 
-## The procfs owner
+## File organization
 
-`interface/proc.c` alone stores the `struct proc_dir_entry *`.
-It publishes the entry with `proc_create_single(name, mode, parent, show_fn)`:
-the name to appear under `/proc`, a permissions mode, a parent directory (NULL
-for `/proc` itself), and a show callback that writes the file's content.
-It removes the entry with `proc_remove()`.
+A new file `interface/proc.c` owns the proc entry.
+The main module calls `rk_proc_publish` after state is ready and
+`rk_proc_unpublish` before state is destroyed.
+The Kbuild file adds `interface/proc.o` to the `rklings-y` list.
 
-The supplied show function returns one fixed line, `active`, so the read-only
-entry has real behavior from the moment it appears.
-Publication and cleanup are in scope here.
-State snapshots come later.
+## You write
 
-Failure point 3 simulates `proc_create_single()` returning `NULL` after state
-already exists.
-The init callback must return `-ENOMEM` and roll back state.
+`interface/proc.c` (~37 lines):
 
-## Your task
+- `rk_status_show`
+- `rk_proc_publish`
+- `rk_proc_unpublish`
 
-This adds `interface/proc.c` to the existing module.
-Edit these four files:
+`core/main.c` (~53 lines):
 
-- Add `interface/proc.o` to `rklings-y` in `Kbuild`.
-- Extend `include/rootkit.h` with failure point 3 and the status publication
-  functions.
-- In `interface/proc.c`, use the supplied show function to create
-  `/proc/rklings` with mode `0444`, keep its entry pointer private, return
-  `-ENOMEM` on a real creation failure, and clear the pointer after removal.
-- In `core/main.c`, publish only after state creation.
-  On publication failure, destroy state and return the original error.
-  On unload, remove the proc entry before destroying state.
+- goto cleanup for proc after state
 
-Do not publish before state exists, remove the proc entry after destroying
-state, or replace an error returned by a component with a different one.
+`Kbuild`:
 
-## Check and observe
+- add `interface/proc.o` to `rklings-y`
 
-Run:
+## API
 
-```sh
-./rklings check
+```c
+// proc.c
+static int rk_status_show(struct seq_file *output, void *unused);
+__must_check int rk_proc_publish(void);
+void rk_proc_unpublish(void);
+
+// Kernel calls
+struct proc_dir_entry *proc_create_single(
+    const char *name, umode_t mode,
+    struct proc_dir_entry *parent,
+    int (*show)(struct seq_file *, void *));
+void proc_remove(struct proc_dir_entry *de);
+void seq_puts(struct seq_file *m, const char *s);
 ```
 
-The checker builds failure points 0 through 3 without warnings and rejects an
-unknown value.
-A host fixture injects independent state and procfs operations to verify
-acquisition order, reverse-order cleanup, exact error propagation, and the
-publication API contract.
-A disposable guest verifies that `/proc/rklings` exists with mode `0444` and
-content `active` only while the module is loaded.
-It also checks the exact errors for all three rejected loads.
+## Test it
 
-For failure point 3, kernel allocation trace events must show that a module
-allocation is passed to `kfree()` during rollback; object-file checks enforce
-the component ownership boundary.
-Module logs are not accepted as cleanup evidence.
+```
+$ rklings run l03
+root@vm:~# insmod rklings.ko
+root@vm:~# cat /proc/rklings
+active
+root@vm:~# ls -l /proc/rklings
+-r--r--r-- 1 root root 0 ... /proc/rklings
+root@vm:~# rmmod rklings
+root@vm:~# cat /proc/rklings
+cat: /proc/rklings: No such file or directory
+```
 
-## References
+## Validate
 
-- [Procfs API declarations][ref-1]
-- [The seq_file interface](https://docs.kernel.org/filesystems/seq_file.html)
-- [Driver basics: module initialization and exit][ref-2]
-- [Centralized function exits][ref-3]
+```
+$ rklings validate l03
+  [+] builds at all fail points
+  [+] /proc/rklings exists after insmod
+  [+] cat /proc/rklings returns "active"
+  [+] permissions are 0444 (read-only)
+  [+] FAIL_POINT=3: proc publish fails, module rejects load, state freed
+  [+] rmmod removes /proc/rklings
+  PASS
+```
 
-[ref-1]:
-  https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/linux/proc_fs.h
+## Next
 
-[ref-2]:
-  https://docs.kernel.org/driver-api/basics.html#c.module_init
-
-[ref-3]:
-  https://docs.kernel.org/process/coding-style.html#centralized-exiting-of-functions
+The proc file is read-only.
+L04 adds a write handler with copy_from_user so userspace can send commands to
+the module.

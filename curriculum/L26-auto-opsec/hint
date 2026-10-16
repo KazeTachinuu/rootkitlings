@@ -1,6 +1,0 @@
-After kernel_accept returns the client socket, call inet_sk(client->sk) to get
-the inet_sock, then ntohs(inet_sk(client->sk)->inet_sport) for the source port.
-Convert the kthread PID with snprintf into a string and add it to the
-pid_targets array.
-On disconnect, remove both entries.
-Track the indices so you can shift the arrays back down.

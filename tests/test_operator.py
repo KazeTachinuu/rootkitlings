@@ -5,7 +5,6 @@ import io
 import os
 from pathlib import Path
 import socket
-import stat
 import struct
 import subprocess
 import tempfile
@@ -15,26 +14,21 @@ from unittest.mock import Mock, patch
 
 from engine.control_console import (
     HEADER_LENGTH,
-    HostOperator,
     KEY_LENGTH,
     OpenSslAead,
     OperatorError,
     REPLY,
     REQUEST,
     SecureControl,
-    TargetProcess,
-    accept_shell_while_running,
-    create_target_session,
+    accept_shell,
     encode_control_command,
     parse_shell_ticket,
     poll_shell_status,
-    read_target_session,
     receive_frame,
     send_frame,
 )
 from lib.operator.control_console import (
     _nonce,
-    _process_start,
     _shell_input,
 )
 
@@ -87,32 +81,6 @@ def _test_listener() -> socket.socket:
     listener.bind(("127.0.0.1", 0))
     listener.listen(1)
     return listener
-
-
-def _mode(path: Path) -> int:
-    return stat.S_IMODE(path.stat().st_mode)
-
-
-class HostOperatorTests(unittest.TestCase):
-    def test_control_key_is_fresh_and_nonzero(self) -> None:
-        expected = bytes((1,)) + bytes(KEY_LENGTH - 1)
-        with patch(
-            "engine.control_console.secrets.token_bytes",
-            side_effect=(bytes(KEY_LENGTH), expected),
-        ):
-            operator = HostOperator.create()
-        try:
-            self.assertEqual(operator.key, expected)
-            self.assertEqual(
-                operator.control_listener.getsockname()[0],
-                "127.0.0.1",
-            )
-            self.assertEqual(
-                operator.shell_listener.getsockname()[0],
-                "127.0.0.1",
-            )
-        finally:
-            operator.close()
 
 
 class SecureControlTests(unittest.TestCase):
@@ -171,111 +139,6 @@ class SecureControlTests(unittest.TestCase):
                     self.control.open_reply(candidate)
 
 
-class TargetSessionTests(unittest.TestCase):
-    def test_create_read_and_close_private_target_session(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            session = create_target_session(root, "complete-rootkit")
-            try:
-                self.assertEqual(_mode(root / ".rklings/run"), 0o700)
-                self.assertEqual(_mode(session.directory), 0o700)
-                self.assertEqual(_mode(session.key_file), 0o600)
-                self.assertEqual(
-                    _mode(session.directory / "session.toml"),
-                    0o600,
-                )
-                self.assertEqual(len(session.key), KEY_LENGTH)
-                self.assertTrue(any(session.key))
-                self.assertNotEqual(
-                    session.control_port,
-                    session.shell_port,
-                )
-                self.assertEqual(
-                    read_target_session(root, "complete-rootkit"),
-                    session,
-                )
-            finally:
-                session.close()
-            self.assertFalse(session.directory.exists())
-
-    def test_live_target_gets_numbered_suffix(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            first = create_target_session(root, "complete-rootkit")
-            try:
-                second = create_target_session(root, "complete-rootkit")
-                try:
-                    self.assertEqual(second.directory.name, "complete-rootkit-2")
-                finally:
-                    second.close()
-            finally:
-                first.close()
-
-    def test_stale_target_is_removed_before_recreation(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            first = create_target_session(root, "complete-rootkit")
-            metadata = first.directory / "session.toml"
-            stale = metadata.read_text(encoding="ascii").replace(
-                f"target_start = {first.target_start}",
-                f"target_start = {first.target_start + 1}",
-            )
-            metadata.write_text(stale, encoding="ascii")
-
-            second = create_target_session(root, "complete-rootkit")
-            try:
-                self.assertEqual(
-                    second.target_start,
-                    _process_start(os.getpid()),
-                )
-                self.assertEqual(
-                    read_target_session(root, "complete-rootkit"),
-                    second,
-                )
-            finally:
-                second.close()
-
-    def test_pid_start_time_prevents_pid_reuse(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            session = create_target_session(root, "complete-rootkit")
-            metadata = session.directory / "session.toml"
-            content = metadata.read_text(encoding="ascii").replace(
-                f"target_start = {session.target_start}",
-                f"target_start = {session.target_start + 1}",
-            )
-            metadata.write_text(content, encoding="ascii")
-            with self.assertRaisesRegex(OperatorError, "no longer active"):
-                read_target_session(root, "complete-rootkit")
-            session.close()
-
-    def test_target_process_checks_pid_and_start_time_together(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            session = create_target_session(
-                Path(directory),
-                "complete-rootkit",
-            )
-            process = TargetProcess(session)
-            try:
-                self.assertIsNone(process.poll())
-                with patch(
-                    "lib.operator.control_console._process_start",
-                    return_value=session.target_start + 1,
-                ):
-                    self.assertEqual(process.poll(), "stopped")
-                    self.assertEqual(process.returncode, "stopped")
-            finally:
-                session.close()
-
-    def test_session_reader_rejects_a_missing_target(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(
-                OperatorError,
-                "start it in another terminal",
-            ):
-                read_target_session(Path(directory), "complete-rootkit")
-
-
 class FramingTests(unittest.TestCase):
     def test_shell_exit_closes_input_after_forwarding_the_command(self) -> None:
         line = bytearray()
@@ -294,9 +157,6 @@ class FramingTests(unittest.TestCase):
 
     def test_shell_wait_rejects_wrong_ticket_then_accepts_peer(self) -> None:
         listener = _test_listener()
-        process = Mock()
-        process.poll.return_value = None
-        warnings: list[str] = []
 
         def connect(prelude: bytes) -> None:
             with socket.create_connection(
@@ -317,41 +177,22 @@ class FramingTests(unittest.TestCase):
             wrong.start()
             wrong.join(timeout=2)
             correct.start()
-            peer = accept_shell_while_running(
+            peer = accept_shell(
                 listener,
-                process,
                 42,
                 0x0102030405060708,
-                2,
-                warnings.append,
+                5,
             )
             peer.close()
             correct.join(timeout=2)
-            self.assertEqual(
-                warnings,
-                ["Rejected a shell connection with the wrong ticket"],
-            )
         finally:
             listener.close()
 
-    def test_shell_wait_reports_a_stopped_target_immediately(self) -> None:
+    def test_shell_wait_times_out_without_correct_ticket(self) -> None:
         listener = _test_listener()
-        process = Mock()
-        process.poll.return_value = "stopped"
-        process.returncode = "stopped"
         try:
-            with self.assertRaisesRegex(
-                OperatorError,
-                r"target stopped before connecting \(stopped\)",
-            ):
-                accept_shell_while_running(
-                    listener,
-                    process,
-                    1,
-                    1,
-                    30,
-                    lambda _message: None,
-                )
+            with self.assertRaisesRegex(OperatorError, "timed out"):
+                accept_shell(listener, 1, 1, 0.1)
         finally:
             listener.close()
 

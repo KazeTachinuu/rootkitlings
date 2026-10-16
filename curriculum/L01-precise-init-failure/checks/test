@@ -15,23 +15,23 @@ for path in Kbuild core/main.c; do cp -p "$HERE/../solution/$path" "$work/$path"
 
 cp "$HERE/../fixtures/hardcoded-Kbuild" "$work/Kbuild"
 if output=$("$HERE/check" "$work" "$baseline" 2>&1); then
-	printf '%s\n[x] hardcoded Kbuild unexpectedly passed\n' "$output" >&2
+	printf '%s\n[-] hardcoded Kbuild unexpectedly passed\n' "$output" >&2
 	exit 1
 fi
 case $output in
 	*"unknown failure-point value compiled successfully"*) ;;
-	*) printf '%s\n[x] hardcoded fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
+	*) printf '%s\n[-] hardcoded fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
 esac
 printf '[+] hardcoded failure-point fixture rejected before guest boot\n'
 
 cp -p "$HERE/../solution/Kbuild" "$work/Kbuild"
 cp "$HERE/../fixtures/wrong-errno-main.c" "$work/core/main.c"
 if output=$("$HERE/check" "$work" "$baseline" 2>&1); then
-	printf '%s\n[x] wrong-errno fixture unexpectedly passed\n' "$output" >&2
+	printf '%s\n[-] wrong-errno fixture unexpectedly passed\n' "$output" >&2
 	exit 1
 fi
 case $output in
 	*"did not return ECANCELED"*) ;;
-	*) printf '%s\n[x] wrong-errno fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
+	*) printf '%s\n[-] wrong-errno fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
 esac
 printf '[+] wrong-errno fixture rejected in disposable guest\n'

@@ -30,12 +30,12 @@ build_variant()
 	if ! make -s -C "$KDIR" M="$destination" W=1 \
 		RKLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
 		cat "$log" >&2
-		printf '[x] %s build failed\n' "$name" >&2
+		printf '[-] %s build failed\n' "$name" >&2
 		exit 1
 	fi
 	if grep -q 'warning:' "$log"; then
 		cat "$log" >&2
-		printf '[x] %s builds with warnings\n' "$name" >&2
+		printf '[-] %s builds with warnings\n' "$name" >&2
 		exit 1
 	fi
 }
@@ -52,7 +52,7 @@ reject_host_mutant()
 
 	if "$HERE/host-check" "$directory" "$directory/rklings.ko" \
 		> "$scratch/$label-host.log" 2>&1; then
-		printf '[x] host checker accepted %s\n' "$label" >&2
+		printf '[-] host checker accepted %s\n' "$label" >&2
 		exit 1
 	fi
 }
@@ -76,7 +76,7 @@ reject_host_mutant "$constant_renderer" constant-proc-renderer
 cp -a "$work" "$scratch/unknown"
 if make -s -C "$KDIR" M="$scratch/unknown" W=1 RKLINGS_FAIL_POINT=99 \
 	modules >"$scratch/unknown.log" 2>&1; then
-	printf '[x] unknown failure-point value compiled successfully\n' >&2
+	printf '[-] unknown failure-point value compiled successfully\n' >&2
 	exit 1
 fi
 
@@ -86,7 +86,7 @@ run_guest()
 	shift 2
 	if ! output=$("$HERE/../../../vm/boot" --check "$check_script" "$@" "$module" 2>&1); then
 		printf '%s\n' "$output" >&2
-		printf '[x] disposable guest did not complete\n' >&2
+		printf '[-] disposable guest did not complete\n' >&2
 		exit 1
 	fi
 	printf '%s\n' "$output"

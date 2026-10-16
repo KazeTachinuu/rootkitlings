@@ -13,14 +13,8 @@ from engine.catalog import Catalog, CatalogError
 from engine.build_env import module_build_environment
 from engine.console import Console
 from engine.process import ProcessError, ProcessTimeout, run_process
-from engine.control_console import (
-    OperatorError,
-    create_target_session,
-    read_target_session,
-    run_control_console,
-    wait_for_operator,
-)
-from engine.server import run_server, server_running
+from engine.control_console import OperatorError
+from engine.server import run_server, read_server_state
 from engine.state import StateStore, StateError
 from engine.verification import VerificationError, build_verification_cases
 from engine.workspace import (
@@ -516,30 +510,28 @@ def boot_flags(x):
 def boot_exercise(x, module):
     if x.runtime is not None:
         try:
-            target = create_target_session(ROOT, label(x))
+            state = read_server_state(ROOT)
         except OperatorError as error:
-            raise CLIError(str(error)) from error
-        try:
-            if server_running(ROOT):
-                UI.progress('Server detected, waiting for port binding')
-            else:
-                UI.section('Start the operator server first')
-                UI.command('./rklings server')
-                UI.progress('Waiting for operator')
-            wait_for_operator(target)
-            UI.success('Operator ready')
-            UI.section('Target console')
-            command = [
-                str(ROOT / 'vm/boot'),
-                '--runtime-setup', str(ROOT / x.runtime.setup),
-                '--control-key-file', str(target.key_file),
-                '--control-port', str(target.control_port),
-                '--shell-port', str(target.shell_port),
-                str(module),
-            ]
-            return run(command, visible=True).returncode
-        finally:
-            target.close()
+            raise CLIError(
+                str(error),
+                recovery=(
+                    ('Start the server first', './rklings server'),
+                ),
+            ) from error
+        key_hex = state['key_hex']
+        key_file = ROOT / '.rklings' / 'control.key'
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_text(key_hex)
+        key_file.chmod(0o600)
+        command = [
+            str(ROOT / 'vm/boot'),
+            '--runtime-setup', str(ROOT / x.runtime.setup),
+            '--control-key-file', str(key_file),
+            '--control-port', str(state['control_port']),
+            '--shell-port', str(state['shell_port']),
+            str(module),
+        ]
+        return run(command, visible=True).returncode
     command = [
         str(ROOT / 'vm/boot'),
         *boot_flags(x),
@@ -831,33 +823,6 @@ def cmd_server(a):
         die(f'Server exited with status {status}')
 
 
-def cmd_connect(a):
-    with STORE.read_locked() as state:
-        item = resolve(one(a, 'connect'), state)
-    if item.runtime is None:
-        die(f'{label(item)} has no interactive completed reference')
-    try:
-        target = read_target_session(ROOT, label(item))
-        UI.heading(f'{label(item)} control console')
-        UI.field('Target', item.title)
-        UI.field('Control', 'AES-256-GCM authenticated')
-        UI.field('Shell', 'Ticket-bound plaintext PTY')
-        status = run_control_console(
-            ROOT,
-            target,
-            transcript=UI.transcript,
-        )
-    except OperatorError as error:
-        raise CLIError(
-            str(error),
-            recovery=((
-                'Start the target in another terminal',
-                f'./rklings run {label(item)} --reference',
-            ),),
-        ) from error
-    if status:
-        die(f'Control console exited with status {status}')
-    UI.success('Console disconnected; the target is still running')
 
 
 def cmd_status(a):
@@ -1059,7 +1024,6 @@ def usage():
             ('run [EXERCISE]', 'Run your module in a disposable guest'),
             ('run ID --reference', 'Run the completed reference'),
             ('server', 'Start the multi-target operator server'),
-            ('connect [EXERCISE]', 'Connect to its control console'),
             ('gdb [EXERCISE]', 'Open a guest waiting for GDB'),
         )),
         ('Progress', (
@@ -1097,7 +1061,6 @@ CMDS = {
     'solution': cmd_solution,
     'run': cmd_run,
     'server': cmd_server,
-    'connect': cmd_connect,
     'gdb': lambda a: cmd_run(a, True),
     'status': cmd_status,
     'list': cmd_list,
@@ -1130,7 +1093,7 @@ def main(a):
         CMDS[command](arguments)
         return 0
     initialize_runtime()
-    if command in {'build', 'check', 'run', 'gdb', 'connect', 'server'}:
+    if command in {'build', 'check', 'run', 'gdb', 'server'}:
         require_setup()
     CMDS[command](arguments)
     return 0

@@ -1,6 +1,0 @@
-Start by matching fixed commands (PING, STATUS, SHELL, INFO) with strncmp
-against the buffer.
-For commands with arguments (EXEC, DOWNLOAD, HIDE FILE, etc.), match the prefix
-and copy the remainder into cmd->arg.
-Use strncpy with a size limit of sizeof(cmd->arg) - 1 and null-terminate.
-Default to RK_CMD_UNKNOWN for unrecognized input.

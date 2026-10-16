@@ -86,16 +86,26 @@ static int rk_try_deferred(void)
 }
 
 // Write the module's conf file to survive reboot.
-static int rk_persist(void) { return -ENOSYS; }
+static int rk_persist(void)
+{
+	return -ENOSYS;
+}
 
 // Remove the conf file.
-static int rk_unpersist(void) { return -ENOSYS; }
+static int rk_unpersist(void)
+{
+	return -ENOSYS;
+}
 
 // Unlink the module from the kernel's module list.
-static void rk_module_hide(void) { }
+static void rk_module_hide(void)
+{
+}
 
 // Re-insert the module into the list.
-static void rk_module_unhide(void) { }
+static void rk_module_unhide(void)
+{
+}
 
 static int rk_cmd_ping(const char *arg)
 {
@@ -192,8 +202,7 @@ static int rk_mkdir_do_entry(struct kretprobe_instance *inst,
 	return 0;
 }
 
-static int rk_entry_mkdir(struct kretprobe_instance *inst,
-			  struct pt_regs *regs)
+static int rk_entry_mkdir(struct kretprobe_instance *inst, struct pt_regs *regs)
 {
 	struct pt_regs *uregs;
 
@@ -226,19 +235,19 @@ static int rk_mkdir_return(struct kretprobe_instance *inst,
 }
 
 static struct kretprobe rk_mkdir_probe = {
-	.kp.symbol_name = "__x64_sys_mkdir",
-	.entry_handler  = rk_entry_mkdir,
-	.handler        = rk_mkdir_return,
-	.data_size      = sizeof(struct rk_mkdir_data),
-	.maxactive      = 8,
+    .kp.symbol_name = "__x64_sys_mkdir",
+    .entry_handler = rk_entry_mkdir,
+    .handler = rk_mkdir_return,
+    .data_size = sizeof(struct rk_mkdir_data),
+    .maxactive = 8,
 };
 
 static struct kretprobe rk_mkdirat_probe = {
-	.kp.symbol_name = "__x64_sys_mkdirat",
-	.entry_handler  = rk_entry_mkdirat,
-	.handler        = rk_mkdir_return,
-	.data_size      = sizeof(struct rk_mkdir_data),
-	.maxactive      = 8,
+    .kp.symbol_name = "__x64_sys_mkdirat",
+    .entry_handler = rk_entry_mkdirat,
+    .handler = rk_mkdir_return,
+    .data_size = sizeof(struct rk_mkdir_data),
+    .maxactive = 8,
 };
 
 static int rk_proc_show(struct seq_file *m, void *v)

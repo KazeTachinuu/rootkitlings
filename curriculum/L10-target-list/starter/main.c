@@ -34,18 +34,18 @@ static int rk_proc_open(struct inode *inode, struct file *file)
 }
 
 static ssize_t rk_proc_write(struct file *file, const char __user *ubuf,
-			      size_t count, loff_t *ppos)
+			     size_t count, loff_t *ppos)
 {
 	// Parse "add <name>", "remove <idx>", and "clear".
 	return count;
 }
 
 static const struct proc_ops rk_proc_ops = {
-	.proc_open    = rk_proc_open,
-	.proc_read    = seq_read,
-	.proc_write   = rk_proc_write,
-	.proc_lseek   = seq_lseek,
-	.proc_release = single_release,
+    .proc_open = rk_proc_open,
+    .proc_read = seq_read,
+    .proc_write = rk_proc_write,
+    .proc_lseek = seq_lseek,
+    .proc_release = single_release,
 };
 
 static int __init rk_init(void)

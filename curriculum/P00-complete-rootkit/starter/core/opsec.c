@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // core/opsec.c - Escalation, module cloaking, persistence, auto-opsec.
+#include "rootkit.h"
 #include <linux/cred.h>
 #include <linux/fs.h>
 #include <linux/list.h>
@@ -7,7 +8,6 @@
 #include <linux/rcupdate.h>
 #include <linux/sched.h>
 #include <net/inet_sock.h>
-#include "rootkit.h"
 
 int rk_escalate(void)
 {
@@ -129,6 +129,5 @@ void rk_auto_unhide(void)
 	}
 
 	if (rk_port_targets.count > 0)
-		rk_target_remove(&rk_port_targets,
-				  rk_port_targets.count - 1);
+		rk_target_remove(&rk_port_targets, rk_port_targets.count - 1);
 }

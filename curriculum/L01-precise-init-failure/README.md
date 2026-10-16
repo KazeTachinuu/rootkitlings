@@ -1,104 +1,138 @@
-# Abort a bad start cleanly
+# L01: Goto Cleanup
 
-A module must refuse to load when a required condition is missing.
-Add a controlled preflight failure, report its exact cause, and prove that no
-module remains behind.
-Success means a rejected start is clean and diagnosable, not a partial install.
+Your module loads cleanly, but it allocates nothing.
+A real module claims resources during init: memory, devices, proc entries.
+If the third allocation fails, the first two must be freed.
+Skip cleanup and you leak kernel memory.
+Free something never allocated and you corrupt the heap.
 
-A module becomes **resident**, or remains loaded, only if its load callback
-returns `0`.
-If initialization returns a negative Linux error number, the loader reports that
-error and the module never becomes loaded.
+The kernel convention is a goto cleanup chain: each failure label undoes
+everything allocated before it, in reverse order.
 
-A controlled failure path lets you verify how the kernel handles rejected
-initialization instead of waiting for an accidental failure.
+## The pattern
 
-## One build, two deterministic paths
+```c
+static int __init rk_init(void)
+{
+	chan_a = rk_channel_create(1);
+	if (IS_ERR(chan_a))
+		return PTR_ERR(chan_a);    // nothing to clean up
 
-This exercise selects the path at build time:
+	chan_b = rk_channel_create(2);
+	if (IS_ERR(chan_b))
+		goto free_a;              // chan_a exists, free it
 
-```text
-RKLINGS_FAIL_POINT=0        RKLINGS_FAIL_POINT=1
-            |                                |
-            v                                v
-      init returns 0                 init returns -ECANCELED
-            |                                |
-            v                                v
- module appears in inventory       module remains absent
-            |
-            v
-   rmmod calls module exit
+	return 0;
+
+free_a:
+	kfree(chan_a);
+	return PTR_ERR(chan_b);
+}
 ```
 
-Kbuild's `?=` operator supplies a default without overriding a value selected by
-the checker.
-The compiler's `-D` option makes that integer available to C as a preprocessor
-macro:
+Labels stack in reverse allocation order.
+Each label frees one resource and falls through to the labels below it.
+Exit does the same teardown in reverse:
 
-```make
-RKLINGS_FAIL_POINT ?= 0
-ccflags-y += -DRKLINGS_FAIL_POINT=$(RKLINGS_FAIL_POINT)
+```c
+static void __exit rk_exit(void)
+{
+	kfree(chan_b);    // last allocated, first freed
+	kfree(chan_a);
+}
 ```
 
-Only values `0` and `1` are valid here.
-A preprocessor `#if` can test that range, and `#error` can stop compilation for
-an unknown value instead of silently selecting the normal path.
+## Error pointers
 
-`-ECANCELED` is the negative Linux error for a canceled operation.
-Returning it preserves a precise reason for rejection.
-Because failed initialization never installs the module, the kernel does not
-call its registered exit callback.
-That is kernel behavior; module inventory proves that the module remained
-absent, not whether a callback ran.
-This module acquires no resource, so the rejected path has nothing to release.
+Kernel allocators cannot return both a pointer and an error code.
+The convention is to encode errors as invalid pointers in the top of the address
+space:
 
-## Your task
-
-Copy your passed module forward, then edit its two existing files.
-Do not add files.
-
-- In `Kbuild`, define `RKLINGS_FAIL_POINT` with default `0` and pass it to C.
-- In `core/main.c`, define `RK_FAIL_NONE` as `0` and `RK_FAIL_PREFLIGHT` as `1`.
-- Reject unknown build-time values with a compile-time error.
-- Return `-ECANCELED` from init when the selected value is `RK_FAIL_PREFLIGHT`.
-- Preserve the existing load and unload behavior for value `0`.
-- Preserve the existing license, description, artifact name, and module name.
-
-The module must build without warnings.
-Do not call the exit callback from the rejected init path; failed init is not
-unload.
-
-## Check and observe
-
-Run:
-
-```sh
-./rklings check
+```c
+void *ERR_PTR(long error);     // encode: ERR_PTR(-ENOMEM)
+long PTR_ERR(const void *ptr); // decode: returns the negative errno
+bool IS_ERR(const void *ptr);  // test: true if ptr is an error
 ```
 
-The checker builds value `1`, boots a disposable guest, and calls
-`finit_module()` through a small verifier.
-It requires the numeric error to be `ECANCELED`, then repeats the rejected load.
-Before and after both attempts, it verifies that `rklings` is absent from both
-`/proc/modules` and `/sys/module/rklings`.
+`kzalloc` returns NULL on failure, so your `rk_channel_create` converts that to
+`ERR_PTR(-ENOMEM)`.
+Callers use `IS_ERR` to detect failure and `PTR_ERR` to extract the error code.
 
-The checker then rebuilds value `0` in a clean directory and uses a fresh guest
-to load, unload, and immediately reload the module.
-It also proves that an unknown failure-point value cannot compile.
+## Injecting failures
 
-The module is never inserted into the host kernel.
-Each guest is diskless and discarded after the check.
+The build system defines `RKLINGS_FAIL_POINT` at compile time.
+Your code checks this value to simulate allocation failures at specific points,
+letting the validator prove that each goto path works:
 
-A rejected load leaves no entry in `/proc/modules` or `/sys/module`; kernel
-messages alone do not prove that absence.
+```c
+enum rk_fail_point {
+	RK_FAIL_NONE         = 0,   // both succeed
+	RK_FAIL_FIRST_ALLOC  = 1,   // first alloc fails
+	RK_FAIL_SECOND_ALLOC = 2,   // second alloc fails
+};
+```
 
-## References
+## The trap
 
-- [Driver basics: module initialization and exit][ref-1]
-- [Linux kernel error conventions][ref-2]
+If the second allocation fails but you free `chan_b` (which was never
+allocated), you corrupt the heap.
+The goto chain must free only what was successfully created.
+That is the entire point of having separate labels.
 
-[ref-1]:
-  https://docs.kernel.org/driver-api/basics.html#c.module_init
+## You write
 
-[ref-2]:
-  https://docs.kernel.org/kernel-hacking/hacking.html#return-conventions
+`core/main.c` (~80 lines):
+
+- `rk_channel_create`
+- `rk_init` with goto chain
+- `rk_exit` with reverse teardown
+
+## API
+
+```c
+struct rk_channel *rk_channel_create(unsigned int id);
+
+void *kzalloc(size_t size, gfp_t flags);
+void kfree(const void *ptr);
+void *ERR_PTR(long error);
+long PTR_ERR(const void *ptr);
+bool IS_ERR(const void *ptr);
+```
+
+## Test it
+
+```
+$ rklings run l01
+root@vm:~# insmod rklings.ko
+root@vm:~# grep rklings /proc/modules
+rklings 12288 0 - Live 0x...
+root@vm:~# rmmod rklings
+
+root@vm:~# insmod rklings_fail1.ko
+insmod: ERROR: could not insert module: Operation canceled
+root@vm:~# grep rklings /proc/modules
+(no output, module rejected)
+
+root@vm:~# insmod rklings_fail2.ko
+insmod: ERROR: could not insert module: Operation canceled
+root@vm:~# grep rklings /proc/modules
+(no output, first alloc freed via goto)
+```
+
+## Validate
+
+```
+$ rklings validate l01
+  [+] rklings.ko builds at all three fail points
+  [+] FAIL_POINT=0: loads, both channels created
+  [+] FAIL_POINT=1: rejects load, no module resident
+  [+] FAIL_POINT=2: rejects load, no module resident
+  [+] rmmod after FAIL_POINT=0 succeeds cleanly
+  PASS
+```
+
+## Next
+
+The cleanup chain works, but the module owns no persistent data.
+L02 adds kmalloc/kfree with an opaque struct and module_param so the module
+carries state across calls.

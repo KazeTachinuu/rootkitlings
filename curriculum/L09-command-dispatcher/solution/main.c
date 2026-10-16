@@ -114,9 +114,9 @@ struct rk_cmd_entry {
 };
 
 static const struct rk_cmd_entry cmd_table[] = {
-	{ "e",      rk_cmd_escalate },
-	{ "ping",   rk_cmd_ping },
-	{ "status", rk_cmd_status },
+    {"e", rk_cmd_escalate},
+    {"ping", rk_cmd_ping},
+    {"status", rk_cmd_status},
 };
 
 static int rk_dispatch(const char *name)
@@ -141,7 +141,8 @@ static int rk_dispatch(const char *name)
 	for (i = 0; i < ARRAY_SIZE(cmd_table); i++) {
 		int nlen = strlen(cmd_table[i].name);
 
-		if (cmd_len == nlen && strncmp(suffix, cmd_table[i].name, nlen) == 0)
+		if (cmd_len == nlen &&
+		    strncmp(suffix, cmd_table[i].name, nlen) == 0)
 			return cmd_table[i].handler(arg);
 	}
 
@@ -182,8 +183,7 @@ static int rk_do_entry(struct kretprobe_instance *inst,
 }
 
 /* mkdir(pathname, mode): pathname in di */
-static int rk_mkdir_entry(struct kretprobe_instance *inst,
-			  struct pt_regs *regs)
+static int rk_mkdir_entry(struct kretprobe_instance *inst, struct pt_regs *regs)
 {
 	struct pt_regs *uregs;
 
@@ -217,19 +217,19 @@ static int rk_mkdir_return(struct kretprobe_instance *inst,
 }
 
 static struct kretprobe rk_mkdir_probe = {
-	.kp.symbol_name = "__x64_sys_mkdir",
-	.entry_handler  = rk_mkdir_entry,
-	.handler        = rk_mkdir_return,
-	.data_size      = sizeof(struct rk_mkdir_data),
-	.maxactive      = 8,
+    .kp.symbol_name = "__x64_sys_mkdir",
+    .entry_handler = rk_mkdir_entry,
+    .handler = rk_mkdir_return,
+    .data_size = sizeof(struct rk_mkdir_data),
+    .maxactive = 8,
 };
 
 static struct kretprobe rk_mkdirat_probe = {
-	.kp.symbol_name = "__x64_sys_mkdirat",
-	.entry_handler  = rk_mkdirat_entry,
-	.handler        = rk_mkdir_return,
-	.data_size      = sizeof(struct rk_mkdir_data),
-	.maxactive      = 8,
+    .kp.symbol_name = "__x64_sys_mkdirat",
+    .entry_handler = rk_mkdirat_entry,
+    .handler = rk_mkdir_return,
+    .data_size = sizeof(struct rk_mkdir_data),
+    .maxactive = 8,
 };
 
 static int rk_proc_show(struct seq_file *m, void *v)

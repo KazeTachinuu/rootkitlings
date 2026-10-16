@@ -1,9 +1,15 @@
-"""Multi-target operator server."""
+"""Multi-target operator server.
+
+Pure TCP callback architecture: the server binds fixed ports, agents call
+back when they load. No filesystem coupling between server and targets.
+"""
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import select
 import socket
 import socketserver
 import sys
@@ -20,21 +26,22 @@ from rich.table import Table
 
 import lib.operator as _config
 from lib.operator.control_console import (
-    HostOperator,
+    DEFAULT_BIND_ADDR,
+    DEFAULT_CONTROL_PORT,
+    DEFAULT_SHELL_PORT,
     OperatorConsole,
-    OpenSslAead,
     OperatorError,
+    OpenSslAead,
     SecureControl,
-    TargetProcess,
-    TargetSession,
-    accept_shell_while_running,
+    accept_shell,
     build_crypto_helper,
     encode_control_command,
-    mark_operator_ready,
+    listener,
+    new_key,
     parse_shell_ticket,
     protocol_error,
-    read_target_session,
     receive_frame,
+    relay_shell,
     send_frame,
     setup_logging as _setup_logging,
 )
@@ -42,27 +49,27 @@ from lib.operator.dashboard import add_event
 
 log = logging.getLogger("operator")
 
+STATE_FILE = "server.json"
+
+
+# ---------------------------------------------------------------------------
+# Target: one connected agent
+# ---------------------------------------------------------------------------
 
 class Target:
-    """One connected target VM."""
-
     def __init__(
         self,
         target_id: str,
         label: str,
-        session: TargetSession,
-        operator: HostOperator,
-        peer,
+        peer: socket.socket,
         secure: SecureControl,
-        process: TargetProcess,
+        shell_listener: socket.socket,
     ):
         self.id = target_id
         self.label = label
-        self.session = session
-        self.operator = operator
         self.peer = peer
         self.secure = secure
-        self.process = process
+        self.shell_listener = shell_listener
         self.hostname = ""
         self.kernel = ""
         self.arch = ""
@@ -73,7 +80,7 @@ class Target:
         self._exec_shell = None
         self._exec_lock = threading.Lock()
 
-    def reconnect(self, peer, secure, session=None, operator=None, process=None):
+    def reconnect(self, peer, secure):
         with self._lock:
             try:
                 self.peer.close()
@@ -81,12 +88,6 @@ class Target:
                 pass
             self.peer = peer
             self.secure = secure
-            if session is not None:
-                self.session = session
-            if operator is not None:
-                self.operator = operator
-            if process is not None:
-                self.process = process
             self._generation += 1
             self.online = True
             self._close_exec_shell()
@@ -102,13 +103,11 @@ class Target:
                 self.online = False
                 raise
 
-    def download_file(self, path: str,
-                      on_progress: Callable[[int, int], None] | None = None,
-                      ) -> tuple[bytes, int]:
-        """Download a file from the target via the control channel.
-
-        Returns (file_bytes, total_size).
-        """
+    def download_file(
+        self,
+        path: str,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> tuple[bytes, int]:
         with self._lock:
             try:
                 payload = encode_control_command(f"DOWNLOAD {path}")
@@ -128,13 +127,11 @@ class Target:
                 total = int(header.split()[1])
                 chunks = []
                 received = 0
-                chunk_num = 0
                 while True:
                     frame = receive_frame(self.peer)
                     raw = self.secure.open_reply(frame)
                     if raw == b"EOF":
                         break
-                    chunk_num += 1
                     chunks.append(raw)
                     received += len(raw)
                     if on_progress:
@@ -147,7 +144,7 @@ class Target:
     def _request_shell(self, command: str, timeout: float) -> socket.socket:
         with self._lock:
             try:
-                shell_port = self.operator.shell_port
+                shell_port = self.shell_listener.getsockname()[1]
                 payload = encode_control_command(f"{command} {shell_port}")
                 send_frame(self.peer, self.secure.seal_request(payload))
                 reply = self.secure.open_reply(
@@ -160,13 +157,11 @@ class Target:
                 msg = protocol_error(reply) or reply
                 raise OperatorError(f"shell failed: {msg}")
             request_id, cookie = parse_shell_ticket(reply)
-            return accept_shell_while_running(
-                self.operator.shell_listener,
-                self.process,
+            return accept_shell(
+                self.shell_listener,
                 request_id,
                 cookie,
                 timeout,
-                lambda msg: None,
             )
 
     def open_shell(self, timeout: float = 10) -> socket.socket:
@@ -176,7 +171,6 @@ class Target:
         return self._request_shell("EXEC_SHELL", timeout)
 
     def _ensure_exec_shell(self, timeout: float = 10) -> socket.socket:
-        """Return a persistent exec shell, opening one if needed."""
         if self._exec_shell is not None:
             try:
                 self._exec_shell.sendall(b"")
@@ -196,7 +190,6 @@ class Target:
         with self._exec_lock:
             shell = self._ensure_exec_shell(timeout)
             try:
-                # drain any leftover data from previous commands
                 shell.settimeout(0.05)
                 try:
                     while shell.recv(4096):
@@ -241,16 +234,18 @@ class Target:
     def close(self) -> None:
         self.online = False
         self._close_exec_shell()
-        for resource in (self.peer, self.secure, self.operator):
+        for resource in (self.peer, self.secure):
             try:
                 resource.close()
             except Exception:
                 pass
 
 
-class TargetManager:
-    """Thread-safe target registry."""
+# ---------------------------------------------------------------------------
+# Target manager
+# ---------------------------------------------------------------------------
 
+class TargetManager:
     def __init__(self):
         self._targets: dict[str, Target] = {}
         self._next_id = 1
@@ -259,22 +254,19 @@ class TargetManager:
     def add(
         self,
         label: str,
-        session: TargetSession,
-        operator: HostOperator,
-        peer,
+        peer: socket.socket,
         secure: SecureControl,
-        process: TargetProcess,
+        shell_listener: socket.socket,
     ) -> tuple[Target, bool]:
-        """Register a target. Returns (target, is_reconnect)."""
         with self._lock:
             for existing in self._targets.values():
-                if existing.label == label and not existing.online:
-                    existing.reconnect(peer, secure, session, operator, process)
+                if existing.label == label:
+                    existing.reconnect(peer, secure)
                     return existing, True
             target_id = f"target-{self._next_id}"
             self._next_id += 1
             target = Target(
-                target_id, label, session, operator, peer, secure, process,
+                target_id, label, peer, secure, shell_listener,
             )
             self._targets[target_id] = target
             return target, False
@@ -282,9 +274,9 @@ class TargetManager:
     def remove(self, target_id: str) -> Target | None:
         with self._lock:
             target = self._targets.pop(target_id, None)
-        if target:
-            target.close()
-        return target
+            if target:
+                target.close()
+            return target
 
     def get(self, target_id: str) -> Target | None:
         with self._lock:
@@ -301,25 +293,132 @@ class TargetManager:
             self._targets.clear()
 
 
-class _TargetCompleter(Completer):
-    """Dynamic completer that lists live target IDs."""
+# ---------------------------------------------------------------------------
+# Connection handler
+# ---------------------------------------------------------------------------
 
+class _SessionHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        server_ctx = self.server.server_ctx
+        peer = self.request
+        peer.settimeout(30)
+
+        try:
+            secure = SecureControl(
+                server_ctx["key"],
+                lambda key: OpenSslAead(
+                    key, server_ctx["helper"],
+                    lambda msg: log.debug("%s", msg.rstrip()),
+                ),
+            )
+            session_id = secure.accept_hello(receive_frame(peer))
+        except Exception as e:
+            log.warning("reject   %s", e)
+            return
+
+        # Query INFO to identify the agent before registering.
+        try:
+            payload = encode_control_command("INFO")
+            send_frame(peer, secure.seal_request(payload))
+            reply = secure.open_reply(receive_frame(peer))
+            info_str = reply.decode("ascii", errors="replace")
+        except Exception:
+            log.warning("reject   INFO exchange failed")
+            return
+
+        hostname = "unknown"
+        kernel_ver = ""
+        arch = ""
+        build_id = ""
+        if info_str.startswith("INFO "):
+            parts = info_str[5:].split(None, 3)
+            if len(parts) >= 1:
+                hostname = parts[0]
+            if len(parts) >= 2:
+                kernel_ver = parts[1]
+            if len(parts) >= 3:
+                arch = parts[2]
+            if len(parts) >= 4:
+                build_id = parts[3]
+
+        target, is_reconnect = server_ctx["manager"].add(
+            hostname, peer, secure, server_ctx["shell_listener"],
+        )
+        target.hostname = hostname
+        target.kernel = kernel_ver
+        target.arch = arch
+        target.build_id = build_id
+
+        verb = "reconn" if is_reconnect else "connect"
+        info_tag = f" [{hostname}]" if hostname != "unknown" else ""
+        log.info(
+            "%s  %s%s  session=%016x",
+            verb, target.id, info_tag, session_id,
+        )
+        add_event(
+            f"{verb} {target.id}{info_tag}",
+            "reconnect" if is_reconnect else "connect",
+        )
+
+        peer.settimeout(None)
+        peer.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
+        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 6)
+
+        my_gen = target._generation
+        while target.online and target._generation == my_gen:
+            try:
+                ready, _, _ = select.select([peer], [], [], 1.0)
+                if ready:
+                    chunk = peer.recv(1, socket.MSG_PEEK)
+                    if not chunk:
+                        break
+            except (OSError, ValueError):
+                break
+
+        if target._generation == my_gen:
+            target.online = False
+            log.info(
+                "lost     %s (%s): agent disconnected, waiting for reconnect",
+                target.id, target.label,
+            )
+            add_event(
+                f"lost {target.id} ({target.label})",
+                "disconnect",
+            )
+
+
+class _ControlServer(socketserver.ThreadingTCPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+    def __init__(self, sock: socket.socket, ctx: dict):
+        self.server_ctx = ctx
+        super().__init__(sock.getsockname(), _SessionHandler)
+        self.socket.close()
+        self.socket = sock
+
+
+# ---------------------------------------------------------------------------
+# Server console (targets / use / kick)
+# ---------------------------------------------------------------------------
+
+class _TargetCompleter(Completer):
     def __init__(self, manager: TargetManager, online_only: bool = False):
         self._manager = manager
         self._online_only = online_only
 
     def get_completions(self, document, complete_event):
-        word = document.get_word_before_cursor()
-        for t in self._manager.list_all():
-            if self._online_only and not t.online:
+        text = document.text_before_cursor
+        for target in self._manager.list_all():
+            if self._online_only and not target.online:
                 continue
-            if t.id.startswith(word):
-                yield Completion(t.id, start_position=-len(word))
+            if target.id.startswith(text):
+                yield Completion(target.id, start_position=-len(text))
 
 
 class ServerConsole:
-    """Multiplexed server console backed by prompt_toolkit + rich."""
-
     def __init__(self, manager: TargetManager, root: Path):
         self._manager = manager
         self._root = root
@@ -432,8 +531,6 @@ class ServerConsole:
 
 
 def _run_target_console(target: Target) -> None:
-    """Run an operator console for a single target."""
-
     def exchange(command: str) -> str:
         log.info("send    %s", command)
         reply = exchange_quiet(command)
@@ -452,24 +549,21 @@ def _run_target_console(target: Target) -> None:
     def handle_shell(reply: str) -> None:
         request_id, cookie = parse_shell_ticket(reply)
         log.info("  waiting for shell callback...")
-        shell = accept_shell_while_running(
-            target.operator.shell_listener,
-            target.process,
+        shell = accept_shell(
+            target.shell_listener,
             request_id,
             cookie,
             30,
-            lambda msg: log.warning("%s", msg),
         )
         log.info("shell connected")
         log.info("  Remote root Bash. Type exit to return.")
         with shell:
-            from lib.operator.control_console import relay_shell
             relay_shell(shell, sys.stdin, lambda msg: sys.stdout.write(msg))
         log.info("Remote Bash closed.")
 
     console = OperatorConsole(
         exchange, exchange_quiet, handle_shell,
-        shell_port=target.operator.shell_port,
+        shell_port=target.shell_listener.getsockname()[1],
         target=target,
     )
     console.prompt = f"{target.id}> "
@@ -479,217 +573,44 @@ def _run_target_console(target: Target) -> None:
         print()
 
 
-def _watcher_loop(
-    root: Path,
-    manager: TargetManager,
-    helper: Path,
-) -> None:
-    """Watch for new target sessions and accept connections."""
-    run_dir = root / _config.state_dir / "run"
-    known: dict[str, float] = {}
+# ---------------------------------------------------------------------------
+# Server state (written on startup, read by ./rklings run)
+# ---------------------------------------------------------------------------
 
-    while True:
-        try:
-            if not run_dir.is_dir():
-                time.sleep(1)
-                continue
-
-            for gone in [n for n in known if not (run_dir / n).is_dir()]:
-                del known[gone]
-
-            for entry in run_dir.iterdir():
-                if not entry.is_dir() or entry.is_symlink():
-                    continue
-
-                session_file = entry / "session.toml"
-                key_file = entry / "control.key"
-
-                if not session_file.exists() or not key_file.exists():
-                    continue
-
-                try:
-                    mtime = session_file.stat().st_mtime
-                except OSError:
-                    continue
-                if known.get(entry.name) == mtime:
-                    continue
-
-                known[entry.name] = mtime
-                threading.Thread(
-                    target=_handle_session,
-                    args=(root, entry.name, manager, helper),
-                    daemon=True,
-                ).start()
-
-            for target in manager.list_all():
-                if target.online and target.process.poll() is not None:
-                    target.online = False
-                    log.warning(
-                        "%s (%s): target process stopped",
-                        target.id, target.label,
-                    )
-                    add_event(
-                        f"offline {target.id} ({target.label})",
-                        "disconnect",
-                    )
-
-            time.sleep(0.5)
-        except Exception:
-            time.sleep(1)
-
-
-class _SessionHandler(socketserver.BaseRequestHandler):
-    """Handle one agent connection: authenticate or drop."""
-
-    def handle(self):
-        ctx = self.server.session_ctx
-        peer = self.request
-        peer.settimeout(30)
-
-        try:
-            secure = SecureControl(
-                ctx["key"],
-                lambda key: OpenSslAead(
-                    key, ctx["helper"],
-                    lambda msg: log.debug("%s", msg.rstrip()),
-                ),
-            )
-            session_id = secure.accept_hello(receive_frame(peer))
-        except Exception as e:
-            log.warning("reject   %s: %s", ctx["label"], e)
-            return
-
-        target, is_reconnect = ctx["manager"].add(
-            ctx["label"], ctx["session"], ctx["operator"],
-            peer, secure, ctx["process"],
-        )
-
-        try:
-            reply = target.exchange("INFO")
-            if reply.startswith("INFO "):
-                parts = reply[5:].split(None, 3)
-                if len(parts) >= 3:
-                    target.hostname, target.kernel, target.arch = parts[:3]
-                    target.build_id = parts[3] if len(parts) > 3 else ""
-        except Exception:
-            pass
-
-        info = f" [{target.hostname}]" if target.hostname else ""
-        verb = "reconn" if is_reconnect else "connect"
-        log.info(
-            "%s  %s  %s%s  session=%016x",
-            verb, target.id, ctx["label"], info, session_id,
-        )
-        add_event(
-            f"{verb} {target.id} {ctx['label']}{info}",
-            "reconnect" if is_reconnect else "connect",
-        )
-
-        peer.settimeout(None)
-        peer.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
-        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
-        peer.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 6)
-
-        my_gen = target._generation
-        import select
-        while target.online and target._generation == my_gen \
-                and ctx["process"].poll() is None:
-            try:
-                ready, _, _ = select.select([peer], [], [], 1.0)
-                if ready:
-                    chunk = peer.recv(1, socket.MSG_PEEK)
-                    if not chunk:
-                        break
-            except (OSError, socket.error):
-                break
-        if target._generation != my_gen:
-            return
-        target.online = False
-        log.warning(
-            "lost     %s (%s): agent disconnected, waiting for reconnect",
-            target.id, ctx["label"],
-        )
-        add_event(
-            f"offline {target.id} ({ctx['label']})", "disconnect",
-        )
-
-
-class _SessionServer(socketserver.ThreadingTCPServer):
-    allow_reuse_address = True
-    daemon_threads = True
-
-    def __init__(self, existing_socket, ctx):
-        self.session_ctx = ctx
-        # Skip bind/listen: reuse the socket HostOperator already bound
-        socketserver.TCPServer.__init__(
-            self, existing_socket.getsockname(), _SessionHandler,
-            bind_and_activate=False,
-        )
-        self.socket = existing_socket
-
-
-def _handle_session(
-    root: Path,
-    label: str,
-    manager: TargetManager,
-    helper: Path,
-) -> None:
-    """Run a ThreadingTCPServer on the session's control port.
-
-    Accepts any number of connections. Each one authenticates via HELLO
-    handshake or gets dropped. Runs until the target process dies.
-    """
-    try:
-        session = read_target_session(root, label)
-        operator = HostOperator.from_session(session)
-    except OperatorError as error:
-        log.warning("skip     %s: %s", label, error)
-        return
-
-    mark_operator_ready(session)
-    log.info(
-        "  session  %s  control=:%d  shell=:%d",
-        label, operator.control_port, operator.shell_port,
-    )
-
-    process = TargetProcess(session)
-
-    ctx = {
-        "label": label,
-        "session": session,
-        "operator": operator,
-        "process": process,
-        "manager": manager,
-        "helper": helper,
-        "key": operator.key,
+def write_server_state(root: Path, key: bytes, control_port: int, shell_port: int):
+    state_dir = root / _config.state_dir
+    state_dir.mkdir(parents=True, exist_ok=True)
+    state_file = state_dir / STATE_FILE
+    state = {
+        "key_hex": key.hex(),
+        "control_port": control_port,
+        "shell_port": shell_port,
+        "pid": os.getpid(),
     }
-
-    server = _SessionServer(operator.control_listener, ctx)
-
-    server_thread = threading.Thread(
-        target=server.serve_forever, daemon=True,
-    )
-    server_thread.start()
-
-    # Wait until the target process dies
-    while process.poll() is None:
-        time.sleep(1)
-
-    server.shutdown()
-    operator.close()
+    state_file.write_text(json.dumps(state) + "\n")
+    state_file.chmod(0o600)
 
 
-def server_running(root: Path) -> bool:
-    """Check whether an operator server is alive."""
-    pid_file = root / _config.state_dir / "server.pid"
+def read_server_state(root: Path) -> dict:
+    state_file = root / _config.state_dir / STATE_FILE
+    if not state_file.exists():
+        raise OperatorError(
+            "server is not running; start it first: ./rklings server"
+        )
+    state = json.loads(state_file.read_text())
+    pid = state.get("pid", 0)
     try:
-        pid = int(pid_file.read_text().strip())
         os.kill(pid, 0)
-        return True
-    except (FileNotFoundError, ValueError, ProcessLookupError, PermissionError):
-        return False
+    except (ProcessLookupError, PermissionError, OSError):
+        raise OperatorError(
+            "server is not running; start it first: ./rklings server"
+        )
+    return state
 
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 def run_server(
     root: Path,
@@ -697,12 +618,11 @@ def run_server(
     transcript: Callable[[list[object]], None],
     banner: str = "",
     webapp_dist: Path | None = None,
+    bind_addr: str = DEFAULT_BIND_ADDR,
+    control_port: int = DEFAULT_CONTROL_PORT,
+    shell_port: int = DEFAULT_SHELL_PORT,
     **_kwargs,
 ) -> int:
-    """Start the multi-target operator server."""
-    if server_running(root):
-        raise OperatorError("another server is already running")
-
     _setup_logging()
 
     if banner:
@@ -713,16 +633,32 @@ def run_server(
         lambda msg: log.debug("%s", msg.rstrip()),
     )
 
+    key = new_key()
+    control_listener = listener(bind_addr, control_port)
+    shell_listener = listener(bind_addr, shell_port)
+
+    actual_control = control_listener.getsockname()[1]
+    actual_shell = shell_listener.getsockname()[1]
+
+    write_server_state(root, key, actual_control, actual_shell)
+
+    log.info("  control  %s:%d", bind_addr, actual_control)
+    log.info("  shell    %s:%d", bind_addr, actual_shell)
+    log.info("  key      %s", key.hex())
+
     manager = TargetManager()
-    pid_file = root / _config.state_dir / "server.pid"
-    pid_file.parent.mkdir(parents=True, exist_ok=True)
-    pid_file.write_text(str(os.getpid()))
+
+    ctx = {
+        "key": key,
+        "helper": helper,
+        "manager": manager,
+        "shell_listener": shell_listener,
+    }
+    server = _ControlServer(control_listener, ctx)
 
     try:
         threading.Thread(
-            target=_watcher_loop,
-            args=(root, manager, helper),
-            daemon=True,
+            target=server.serve_forever, daemon=True,
         ).start()
 
         from lib.operator.dashboard import start_dashboard
@@ -741,5 +677,7 @@ def run_server(
         return 0
     finally:
         manager.close_all()
-        pid_file.unlink(missing_ok=True)
-        log.info("Server stopped.")
+        server.shutdown()
+        shell_listener.close()
+        state_file = root / _config.state_dir / STATE_FILE
+        state_file.unlink(missing_ok=True)
