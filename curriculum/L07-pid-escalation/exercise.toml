@@ -11,7 +11,7 @@ requires = []
 
 [workspace]
 mode = "project"
-files = ["Kbuild", "main.c"]
+files = ["Kbuild", "main.c", "rklings_hook.h"]
 editable = ["main.c"]
 build = "."
 baseline = "starter"
@@ -25,7 +25,7 @@ solution = "curriculum/L07-pid-escalation/solution"
 
 [verification]
 timeout_seconds = 120
-tools = ["module-load-test"]
+tools = ["module-load-test", "mkdir-escalation-test"]
 
 [[verification.cases]]
 id = "self-escalation"

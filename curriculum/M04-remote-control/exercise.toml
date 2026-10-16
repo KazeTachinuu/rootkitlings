@@ -41,25 +41,10 @@ solution = "curriculum/M04-remote-control/solution"
 
 [verification]
 timeout_seconds = 120
-tools = ["module-load-test"]
+tools = ["module-load-test", "secure-agent-fixture"]
 
 [[verification.cases]]
-id = "remote-hide"
-label = "HIDE FILE command hides a file over encrypted channel"
+id = "remote-control"
+label = "All commands work over encrypted channel"
 expect_build = "pass"
-check = "curriculum/M04-remote-control/checks/remote-hide"
-check_arguments = ["peer_address=127.0.0.1", "peer_port=4444"]
-
-[[verification.cases]]
-id = "remote-shell"
-label = "SHELL command opens interactive shell via protocol"
-expect_build = "pass"
-check = "curriculum/M04-remote-control/checks/remote-shell"
-check_arguments = ["peer_address=127.0.0.1", "peer_port=4444"]
-
-[[verification.cases]]
-id = "remote-download"
-label = "DOWNLOAD command exfiltrates file encrypted"
-expect_build = "pass"
-check = "curriculum/M04-remote-control/checks/remote-download"
-check_arguments = ["peer_address=127.0.0.1", "peer_port=4444"]
+check = "curriculum/M04-remote-control/checks/remote-control"

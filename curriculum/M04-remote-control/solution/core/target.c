@@ -17,18 +17,18 @@ void rk_target_init(struct rk_target_list *list)
 int rk_target_add(struct rk_target_list *list, const char *name)
 {
 	unsigned long flags;
-	int ret = 0;
+	int idx;
 
 	spin_lock_irqsave(&list->lock, flags);
 	if (list->count >= RK_TARGET_MAX) {
-		ret = -ENOSPC;
-		goto out;
+		idx = -ENOSPC;
+	} else {
+		idx = list->count;
+		strscpy(list->targets[idx], name, RK_NAME_MAX);
+		list->count++;
 	}
-	strscpy(list->targets[list->count], name, RK_NAME_MAX);
-	list->count++;
-out:
 	spin_unlock_irqrestore(&list->lock, flags);
-	return ret;
+	return idx;
 }
 
 int rk_target_remove(struct rk_target_list *list, int idx)
@@ -49,6 +49,15 @@ int rk_target_remove(struct rk_target_list *list, int idx)
 out:
 	spin_unlock_irqrestore(&list->lock, flags);
 	return ret;
+}
+
+void rk_target_clear(struct rk_target_list *list)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&list->lock, flags);
+	list->count = 0;
+	spin_unlock_irqrestore(&list->lock, flags);
 }
 
 bool rk_target_match(struct rk_target_list *list, const char *name)

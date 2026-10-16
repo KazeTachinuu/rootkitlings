@@ -11,7 +11,7 @@ requires = []
 
 [workspace]
 mode = "project"
-files = ["Kbuild", "main.c"]
+files = ["Kbuild", "main.c", "rklings_hook.h"]
 editable = ["main.c"]
 build = "."
 baseline = "starter"

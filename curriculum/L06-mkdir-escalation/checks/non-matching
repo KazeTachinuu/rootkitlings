@@ -7,7 +7,7 @@ begin "Non-matching mkdir does not escalate"
 load rklings.ko
 
 # Run a non-matching mkdir as a non-root user. Uid should stay 1000.
-uid_after=$(su student -c 'mkdir /tmp/rklings.other 2>/dev/null; id -u')
+uid_after=$(su student -c 'mkdir_escalation_test /tmp/rklings.other')
 
 if [ "$uid_after" = "1000" ]; then
     _ok "uid unchanged (still 1000) for non-matching mkdir"

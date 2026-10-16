@@ -49,12 +49,11 @@ hint = "curriculum/L25-full-protocol/hint"
 solution = "curriculum/L25-full-protocol/solution"
 
 [verification]
-timeout_seconds = 120
-tools = ["module-load-test"]
+timeout_seconds = 180
+tools = ["module-load-test", "secure-agent-fixture"]
 
 [[verification.cases]]
 id = "full-protocol"
 label = "All commands wired to encrypted protocol"
 expect_build = "pass"
 check = "curriculum/L25-full-protocol/checks/full-protocol"
-network = true

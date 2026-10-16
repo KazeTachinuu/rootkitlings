@@ -113,6 +113,16 @@ id = "proc-read-test"
 binary = "vm/tools/proc_read_test"
 source = "vm/tools/proc_read_test.c"
 
+[[tools]]
+id = "mkdir-escalation-test"
+binary = "vm/tools/mkdir_escalation_test"
+source = "vm/tools/mkdir_escalation_test.c"
+
+[[tools]]
+id = "secure-agent-fixture"
+binary = "vm/tools/secure_agent_fixture"
+source = "vm/tools/secure_agent_fixture.c"
+
 [[assumptions]]
 concept = "c-functions-and-errors"
 competency = "Read small C functions, control flow, return values, and compiler diagnostics."

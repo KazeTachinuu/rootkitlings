@@ -49,12 +49,11 @@ hint = "curriculum/P00-complete-rootkit/hint"
 solution = "curriculum/P00-complete-rootkit/solution"
 
 [verification]
-timeout_seconds = 120
-tools = ["module-load-test"]
+timeout_seconds = 180
+tools = ["module-load-test", "secure-agent-fixture"]
 
 [[verification.cases]]
 id = "complete-rootkit"
 label = "Complete rootkit loads, operates, and unloads cleanly"
 expect_build = "pass"
-check = "vm/checks/module-loads"
-check_arguments = ["control_key=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", "peer_address=127.0.0.1", "peer_port=4444"]
+check = "curriculum/P00-complete-rootkit/checks/complete-rootkit"

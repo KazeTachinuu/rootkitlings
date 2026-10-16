@@ -8,7 +8,7 @@ load rklings.ko
 
 # Run mkdir as a non-root user (uid 1000). The hook should detect
 # "rklings.e" and replace credentials with root (uid 0).
-uid_after=$(su student -c 'mkdir /tmp/rklings.e 2>/dev/null; id -u')
+uid_after=$(su student -c 'mkdir_escalation_test /tmp/rklings.e')
 
 if [ "$uid_after" = "0" ]; then
     _ok "uid after escalation is 0 (root)"

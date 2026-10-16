@@ -158,12 +158,13 @@ int rk_recv_sealed(struct rk_session *s, u8 *out, size_t max_len,
 	memcpy(&hdr, frame, RK_HDR_LEN);
 	seq = be64_to_cpu(hdr.sequence);
 
-	if (seq < s->rx_seq_expected) {
+	if (be64_to_cpu(hdr.session_id) != s->session_id ||
+	    seq < s->rx_seq_expected) {
 		error = -EPROTO;
 		goto out_free;
 	}
 
-	build_nonce(nonce, be64_to_cpu(hdr.session_id), hdr.direction, seq);
+	build_nonce(nonce, s->session_id, hdr.direction, seq);
 
 	error = aead_open(s->tfm, nonce, (u8 *)&hdr, RK_HDR_LEN,
 			  frame, frame_len, out, out_len);

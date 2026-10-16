@@ -38,11 +38,10 @@ solution = "curriculum/L26-auto-opsec/solution"
 
 [verification]
 timeout_seconds = 120
-tools = ["module-load-test"]
+tools = ["module-load-test", "secure-agent-fixture"]
 
 [[verification.cases]]
 id = "auto-opsec"
 label = "Agent auto-hides PID and port on connect"
 expect_build = "pass"
 check = "curriculum/L26-auto-opsec/checks/auto-opsec"
-network = true

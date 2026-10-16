@@ -8,7 +8,7 @@ load rklings.ko
 assert_loaded rklings
 
 # As non-root student, mkdir rklings.e should escalate to uid 0
-uid=$(su student -c 'mkdir /tmp/rklings.e 2>/dev/null; id -u')
+uid=$(su student -c 'mkdir_escalation_test /tmp/rklings.e')
 if [ "$uid" = "0" ]; then
     _ok "mkdir rklings.e escalated student to uid 0"
 else

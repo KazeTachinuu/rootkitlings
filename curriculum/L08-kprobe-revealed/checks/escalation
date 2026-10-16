@@ -11,7 +11,7 @@ assert_loaded rklings
 assert_exists /proc/rklings
 
 # As non-root student, mkdir rklings.e should escalate to uid 0
-uid=$(su student -c 'mkdir /tmp/rklings.e 2>/dev/null; id -u')
+uid=$(su student -c 'mkdir_escalation_test /tmp/rklings.e')
 if [ "$uid" = "0" ]; then
     _ok "mkdir rklings.e escalated student to uid 0"
 else
@@ -19,11 +19,10 @@ else
 fi
 
 # Verify non-matching mkdir does NOT escalate
-uid2=$(su student -c 'mkdir /tmp/something_else 2>/dev/null; id -u')
+uid2=$(su student -c 'mkdir_escalation_test /tmp/something_else')
 if [ "$uid2" != "0" ]; then
     _ok "non-matching mkdir did not escalate"
 else
-    # Student process may have been previously escalated, check a fresh one
     _ok "non-matching mkdir test completed"
 fi
 

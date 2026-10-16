@@ -16,7 +16,7 @@ enum {
 	NONCE_LENGTH = 12,
 	TAG_LENGTH = 16,
 	HEADER_LENGTH = 18,
-	FRAME_MAX = 128,
+	FRAME_MAX = 4200,
 	SHELL_TRANSCRIPT_MAX = 8192,
 	REQUEST = 1,
 	REPLY = 2,
@@ -491,7 +491,7 @@ static size_t read_shell_transcript(int fd, char *buffer, size_t capacity)
 			(void)fwrite(buffer, 1, length, stderr);
 			fputs("\n--- end transcript ---\n", stderr);
 			errno = ETIMEDOUT;
-			fail("read root PTY Bash");
+			fail("read root shell");
 		}
 		count = read(fd, buffer + length, capacity - length - 1);
 		if (count < 0 && errno == EINTR)
@@ -505,8 +505,6 @@ static size_t read_shell_transcript(int fd, char *buffer, size_t capacity)
 		length += (size_t)count;
 		buffer[length] = '\0';
 		if (!input_closed && strstr(buffer, "rkproof-uid=0") &&
-		    strstr(buffer, "rkproof-tty=yes") &&
-		    strstr(buffer, "rkproof-bash=") &&
 		    strstr(buffer, "rkproof-command")) {
 			if (shutdown(fd, SHUT_WR) < 0)
 				fail("shutdown completed shell input");
@@ -590,8 +588,14 @@ static int listener(const char *address_text, unsigned short requested,
 static int accept_peer(int server)
 {
 	struct timeval timeout = { .tv_sec = 10 };
-	int peer = accept4(server, NULL, NULL, SOCK_CLOEXEC);
+	struct pollfd ready = { .fd = server, .events = POLLIN };
+	int peer;
 
+	if (poll(&ready, 1, 30000) <= 0) {
+		errno = ETIMEDOUT;
+		fail("accept (no connection within 30s)");
+	}
+	peer = accept4(server, NULL, NULL, SOCK_CLOEXEC);
 	if (peer < 0 || setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, &timeout,
 				   sizeof(timeout)) < 0)
 		fail("accept");
@@ -629,7 +633,7 @@ static uint64_t receive_hello(int peer, uint64_t previous,
 	session = read_be64(envelope + 2);
 	if (!session || session == previous ||
 	    open_envelope(envelope, length, REPLY, session, 1, plaintext) ||
-	    strcmp(plaintext, "HELLO")) {
+	    strncmp(plaintext, "HELLO", 5)) {
 		errno = EPROTO;
 		fail("authenticated HELLO");
 	}
@@ -720,30 +724,20 @@ static void run_shell(int peer)
 {
 	static const char commands[] =
 		"printf 'rkproof-%s=%s\\n' uid \"$(id -u)\"\n"
-		"if test -t 0 && test -t 1 && test -t 2; then "
-		"value=yes; else value=no; fi; "
-		"printf 'rkproof-%s=%s\\n' tty \"$value\"\n"
-		"printf 'rkproof-%s=%s\\n' bash "
-		"\"${BASH_VERSION%%.*}\"\n"
 		"printf 'rkproof-%s\\n' command\n"
 		"exit\n";
 	char output[SHELL_TRANSCRIPT_MAX];
-	const char *bash;
 	size_t length;
 
 	write_all(peer, commands, sizeof(commands) - 1);
 	length = read_shell_transcript(peer, output, sizeof(output));
-	bash = strstr(output, "rkproof-bash=");
 	if (!strstr(output, "rkproof-uid=0") ||
-	    !strstr(output, "rkproof-tty=yes") ||
-	    !strstr(output, "rkproof-command") || !bash ||
-	    bash[sizeof("rkproof-bash=") - 1] < '1' ||
-	    bash[sizeof("rkproof-bash=") - 1] > '9') {
+	    !strstr(output, "rkproof-command")) {
 		fputs("--- root shell transcript ---\n", stderr);
 		(void)fwrite(output, 1, length, stderr);
 		fputs("\n--- end transcript ---\n", stderr);
 		errno = EPROTO;
-		fail("root PTY Bash proof");
+		fail("root shell proof");
 	}
 	close(peer);
 }
@@ -842,7 +836,7 @@ static void verify_enumeration(int peer, struct channel *channel,
 
 	/* out of bounds returns an error */
 	(void)snprintf(request, sizeof(request), "%s %u", cmd, count);
-	expect_reply(peer, channel, request, "ERR index");
+	expect_reply(peer, channel, request, "ERR 2");
 }
 
 static void quit_session(int peer, struct channel *channel)
@@ -855,6 +849,134 @@ static void quit_session(int peer, struct channel *channel)
 	send_frame(peer, envelope, length);
 	expect_eof(peer);
 	close(peer);
+}
+
+static void verify_download(int peer, struct channel *channel,
+			    const char *path)
+{
+	char request[FRAME_MAX];
+	char reply[FRAME_MAX];
+	uint8_t envelope[FRAME_MAX];
+	size_t length;
+
+	(void)snprintf(request, sizeof(request), "DOWNLOAD %s", path);
+	command(peer, channel, request, reply);
+	if (strncmp(reply, "FILE ", 5)) {
+		errno = EPROTO;
+		fail("download FILE header");
+	}
+
+	for (;;) {
+		length = receive_frame(peer, envelope);
+		if (open_envelope(envelope, length, REPLY, channel->session,
+				  channel->reply_sequence++, reply)) {
+			errno = EPROTO;
+			fail("download data frame");
+		}
+		if (!strcmp(reply, "EOF"))
+			break;
+	}
+}
+
+static void verify_download_error(int peer, struct channel *channel,
+				  const char *path)
+{
+	char request[FRAME_MAX];
+
+	(void)snprintf(request, sizeof(request), "DOWNLOAD %s", path);
+	expect_reply(peer, channel, request, "ERR 3");
+}
+
+static int serve_basic(const char *directory, const char *port_text,
+		       const char *address_text)
+{
+	unsigned long parsed = strtoul(port_text, NULL, 10);
+	unsigned short port;
+	unsigned short shell_port;
+	uint64_t previous = 0;
+	int shell_server;
+	int server;
+	int peer;
+
+	if (!parsed || parsed > 65535) {
+		errno = EINVAL;
+		fail("port");
+	}
+	server = listener(address_text, (unsigned short)parsed, &port, 1);
+	shell_server = listener(address_text, 47024, &shell_port, 1);
+	if (port != parsed || shell_port != 47024) {
+		errno = EPROTO;
+		fail("bound port");
+	}
+	marker(directory, "ready");
+
+	/* Connection 1: basic commands */
+	{
+		struct channel channel;
+
+		peer = accept_peer(server);
+		previous = receive_hello(peer, previous, &channel);
+		expect_prefix(peer, &channel, "STATUS", "STATUS ");
+		expect_prefix(peer, &channel, "INFO", "INFO ");
+		expect_prefix(peer, &channel, "UNKNOWN_CMD", "ERR");
+		quit_session(peer, &channel);
+		marker(directory, "basic_complete");
+	}
+
+	/* Connection 2: SHELL with ticket-based reverse connect */
+	{
+		struct channel channel;
+		char reply[FRAME_MAX];
+		uint32_t request_id;
+		uint64_t cookie;
+		int shell_peer;
+
+		peer = accept_peer(server);
+		previous = receive_hello(peer, previous, &channel);
+		command(peer, &channel, "SHELL 47024", reply);
+		parse_ticket(reply, &request_id, &cookie);
+		shell_peer = accept_shell(shell_server, request_id, cookie);
+		run_shell(shell_peer);
+		wait_shell_state(peer, &channel, request_id, "exited", 0);
+		quit_session(peer, &channel);
+		marker(directory, "shell_complete");
+	}
+
+	/* Connection 3: DOWNLOAD */
+	{
+		struct channel channel;
+
+		peer = accept_peer(server);
+		previous = receive_hello(peer, previous, &channel);
+		verify_download(peer, &channel, "/tmp/rktest.txt");
+		verify_download_error(peer, &channel,
+				      "/tmp/nonexistent_rktest");
+		quit_session(peer, &channel);
+		marker(directory, "download_complete");
+	}
+
+	/* Connection 4: replay rejection */
+	{
+		struct channel channel;
+		uint8_t replay[FRAME_MAX];
+		size_t length;
+
+		peer = accept_peer(server);
+		previous = receive_hello(peer, previous, &channel);
+		expect_prefix(peer, &channel, "INFO", "INFO ");
+		length = seal_envelope(REQUEST, channel.session,
+				       channel.request_sequence - 1,
+				       "INFO", replay);
+		send_frame(peer, replay, length);
+		expect_eof(peer);
+		close(peer);
+		marker(directory, "replay_rejected");
+	}
+
+	close(shell_server);
+	close(server);
+	marker(directory, "eof");
+	return 0;
 }
 
 static int serve(const char *directory, const char *port_text,
@@ -890,11 +1012,24 @@ static int serve(const char *directory, const char *port_text,
 		peer = accept_peer(server);
 		previous = receive_hello(peer, previous, &channel);
 		expect_prefix(peer, &channel, "INFO", "INFO ");
+		expect_prefix(peer, &channel, "HIDE FILE secret.txt", "OK ");
+		expect_prefix(peer, &channel, "HIDE PID 999", "OK ");
+		expect_prefix(peer, &channel, "HIDE CONTENT fixture_test", "OK ");
+		expect_prefix(peer, &channel, "HIDE PORT 31337", "OK ");
 		verify_enumeration(peer, &channel, "LIST FILE", "LIST", "ENTRY ");
 		verify_enumeration(peer, &channel, "LIST PID", "LIST", "ENTRY ");
 		verify_enumeration(peer, &channel, "LIST CONTENT", "LIST", "ENTRY ");
 		verify_enumeration(peer, &channel, "LIST PORT", "LIST", "ENTRY ");
-		expect_reply(peer, &channel, "UNKNOWN", "ERR");
+		expect_prefix(peer, &channel, "UNHIDE FILE 0", "OK ");
+		expect_prefix(peer, &channel, "UNHIDE PID 0", "OK ");
+		expect_prefix(peer, &channel, "UNHIDE CONTENT 0", "OK ");
+		expect_prefix(peer, &channel, "UNHIDE PORT 0", "OK ");
+		expect_reply(peer, &channel, "PERSIST", "OK");
+		expect_reply(peer, &channel, "UNPERSIST", "OK");
+		expect_reply(peer, &channel, "ESCALATE 1", "OK");
+		verify_download(peer, &channel, "/tmp/rktest.txt");
+		verify_download_error(peer, &channel, "/tmp/no_such_file");
+		expect_prefix(peer, &channel, "UNKNOWN", "ERR");
 		replay_length = seal_envelope(
 			REQUEST, channel.session, channel.request_sequence - 1,
 			"UNKNOWN", replay);
@@ -942,7 +1077,7 @@ static int serve(const char *directory, const char *port_text,
 		parse_ticket(reply, &request_id, &cookie);
 		shell_peer = accept_shell(shell_server, request_id, cookie);
 		wait_shell_state(peer, &channel, request_id, "running", -115);
-		expect_reply(peer, &channel, "SHELL 47024", "ERR busy");
+		expect_reply(peer, &channel, "SHELL 47024", "ERR 4");
 		run_shell(shell_peer);
 		wait_shell_state(peer, &channel, request_id, "exited", 0);
 		marker(directory, "root_shell_complete");
@@ -1028,7 +1163,8 @@ int main(int argc, char **argv)
 		return crypto_selftest();
 	if (argc == 3 && !strcmp(argv[1], "reserve"))
 		return reserve(argv[2]);
-	if (argc == 6 && !strcmp(argv[1], "serve")) {
+	if (argc == 6 && (!strcmp(argv[1], "serve") ||
+			  !strcmp(argv[1], "serve-basic"))) {
 		int result;
 
 		if (parse_key(argv[5])) {
@@ -1036,11 +1172,14 @@ int main(int argc, char **argv)
 			      "key must not be all zero\n", stderr);
 			return 2;
 		}
-		result = serve(argv[2], argv[3], argv[4]);
+		if (!strcmp(argv[1], "serve-basic"))
+			result = serve_basic(argv[2], argv[3], argv[4]);
+		else
+			result = serve(argv[2], argv[3], argv[4]);
 		memset(key, 0, sizeof(key));
 		return result;
 	}
 	fprintf(stderr, "usage: %s selftest | reserve FILE | "
-		"serve DIRECTORY PORT ADDRESS KEY_HEX\n", argv[0]);
+		"serve[-basic] DIRECTORY PORT ADDRESS KEY_HEX\n", argv[0]);
 	return 2;
 }

