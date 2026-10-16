@@ -36,32 +36,26 @@ The agent kthread loop:
 
 Every M01 local command now works remotely:
 
-| Wire command         | Kernel operation              | Reply format                     |
-|----------------------|-------------------------------|----------------------------------|
-| PING                 | Liveness check                | OK                               |
-| STATUS               | Report rootkit state          | STATUS hidden=yes persisted=no ...  |
-| INFO                 | Report target identity        | INFO hostname kernel arch        |
-| SHELL port           | Open interactive shell (L22)  | OPEN request_id cookie           |
-| SHELL STATUS         | Check shell state             | STATE request_id state result    |
-| EXEC_SHELL port      | Open exec shell               | OPEN request_id cookie           |
-| DOWNLOAD path        | Exfiltrate file (L23)         | FILE size ... EOF                |
-| HIDE FILE name       | Hook getdents64               | OK index                         |
-| UNHIDE FILE idx      | Remove getdents64 filter      | OK removed_name                  |
-| HIDE PID pid         | Filter /proc entries          | OK index                         |
-| UNHIDE PID idx       | Restore /proc entry           | OK removed_name                  |
-| HIDE CONTENT pat     | Filter file content           | OK index                         |
-| UNHIDE CONTENT idx   | Restore content visibility    | OK removed_name                  |
-| HIDE PORT port       | Filter /proc/net/tcp          | OK index                         |
-| UNHIDE PORT idx      | Restore port visibility       | OK removed_name                  |
-| HIDE MODULE          | Remove module from /proc      | OK                               |
-| UNHIDE MODULE        | Restore module visibility     | OK                               |
-| UNHIDE ALL           | Clear all hide lists          | OK                               |
-| PERSIST              | Write persistence files       | OK                               |
-| UNPERSIST            | Remove persistence            | OK                               |
-| ESCALATE pid         | Grant root to PID             | OK or ERR 6                      |
-| LIST category        | Count hidden entries          | LIST count                       |
-| LIST category idx    | Show one entry by index       | ENTRY idx value                  |
-| QUIT                 | Disconnect                    | (close)                          |
+| Wire command         | Kernel operation              |
+|----------------------|-------------------------------|
+| PING                 | Respond with PONG             |
+| STATUS               | Report rootkit state          |
+| SHELL                | Open interactive shell (L22)  |
+| EXEC <cmd>           | Run one-shot command (L22)    |
+| DOWNLOAD <path>      | Exfiltrate file (L23)         |
+| HIDE FILE <name>     | Hook getdents64               |
+| UNHIDE FILE <idx>    | Remove getdents64 filter      |
+| HIDE PID <pid>       | Filter /proc entries          |
+| UNHIDE PID <pid>     | Restore /proc entry           |
+| HIDE CONTENT <pat>   | Filter file content           |
+| UNHIDE CONTENT <idx> | Restore content visibility    |
+| HIDE PORT <port>     | Filter /proc/net/tcp          |
+| UNHIDE PORT <port>   | Restore port visibility       |
+| PERSIST              | Write persistence files       |
+| UNPERSIST            | Remove persistence            |
+| ESCALATE             | commit_creds(root)            |
+| INFO                 | Report module info            |
+| LIST FILE/PID/...    | List active hides             |
 
 ## Integration pattern
 
@@ -86,16 +80,14 @@ stops it.
 
 Edit `execution/commands.c`:
 
-1. Implement every command handler listed in the table above.
+1. Implement all 8 command handlers (ping, status, info, shell, exec, download,
+   cloak, uncloak).
    Each receives the session and an argument string.
-   Response formats must match the operator's protocol (see protocol.toml).
 
 Edit `execution/dispatch.c`:
 
-2. Build the dispatch table mapping wire prefixes to handlers.
-   Longer prefixes first so "UNHIDE FILE" matches before "HIDE FILE".
-   Prefixes with a trailing space take an argument; exact-match otherwise.
-3. Implement `rk_send_response` (send a sealed text frame) and `rk_dispatch`.
+2. Build the dispatch table mapping command prefixes to handlers.
+3. Implement `rk_send_response` and `rk_dispatch`.
 
 The remaining files (agent, protocol, envelope, init, target, filter, opsec,
 shell) are provided complete from prior exercises.

