@@ -13,8 +13,8 @@
 #define RK_TAG_LEN	16
 #define RK_HDR_LEN	18
 
-#define RK_DIR_CLIENT	0
-#define RK_DIR_SERVER	1
+#define RK_DIR_CLIENT	1
+#define RK_DIR_SERVER	2
 
 struct rk_envelope_hdr {
 	u8 version;
@@ -31,7 +31,7 @@ struct rk_envelope_ctx {
 	u64 rx_seq_expected;
 };
 
-// Implement rk_build_nonce: 12-byte nonce from session_id, direction, sequence.
+// Implement rk_build_nonce: 12-byte nonce from session_id (8) + counter (4).
 
 // Implement rk_envelope_seal: build header, encrypt with header as AAD.
 
@@ -66,14 +66,14 @@ static int __init rk_init(void)
 	sender.tfm = tfm;
 	sender.session_id = session_id;
 	sender.direction = RK_DIR_CLIENT;
-	sender.tx_seq = 0;
-	sender.rx_seq_expected = 0;
+	sender.tx_seq = 1;
+	sender.rx_seq_expected = 1;
 
 	receiver.tfm = tfm;
 	receiver.session_id = session_id;
 	receiver.direction = RK_DIR_CLIENT;
-	receiver.tx_seq = 0;
-	receiver.rx_seq_expected = 0;
+	receiver.tx_seq = 1;
+	receiver.rx_seq_expected = 1;
 
 	// Self-test: seal "test", open it, verify. Replay same envelope, expect -EPROTO.
 	error = -ENOSYS;

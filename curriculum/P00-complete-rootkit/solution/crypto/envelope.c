@@ -9,11 +9,10 @@
 static void build_nonce(u8 *nonce, u64 session_id, u8 direction, u64 seq)
 {
 	__be64 sid = cpu_to_be64(session_id);
+	__be32 counter = cpu_to_be32((u32)((seq << 1) | (direction == RK_DIR_SERVER)));
+
 	memcpy(nonce, &sid, 8);
-	nonce[8] = direction;
-	nonce[9] = (seq >> 16) & 0xFF;
-	nonce[10] = (seq >> 8) & 0xFF;
-	nonce[11] = seq & 0xFF;
+	memcpy(nonce + 8, &counter, 4);
 }
 
 static int aead_seal(struct crypto_aead *tfm, const u8 *nonce,

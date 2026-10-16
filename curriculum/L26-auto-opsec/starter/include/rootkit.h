@@ -18,8 +18,8 @@
 #define RK_TAG_LEN		16
 #define RK_HDR_LEN		18
 
-#define RK_DIR_CLIENT		0
-#define RK_DIR_SERVER		1
+#define RK_DIR_CLIENT		1
+#define RK_DIR_SERVER		2
 
 /* ---- Protocol constants ---- */
 

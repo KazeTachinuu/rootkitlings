@@ -15,22 +15,7 @@
 // Exchange encrypted HELLO to confirm both sides share the key.
 static int rk_handshake(struct rk_session *s)
 {
-	u8 buf[32];
-	size_t len;
-	int error;
-
-	error = rk_send_sealed(s, (const u8 *)"HELLO", 5);
-	if (error)
-		return error;
-
-	error = rk_recv_sealed(s, buf, sizeof(buf), &len);
-	if (error)
-		return error;
-
-	if (len != 5 || memcmp(buf, "HELLO", 5) != 0)
-		return -EPROTO;
-
-	return 0;
+	return rk_send_sealed(s, (const u8 *)"HELLO 1", 7);
 }
 
 // Initialize AEAD transform and session state.
@@ -52,8 +37,8 @@ static int rk_session_init(struct rk_session *sess, struct socket *sock)
 
 	get_random_bytes(&sess->session_id, sizeof(sess->session_id));
 	sess->sock = sock;
-	sess->tx_seq = 0;
-	sess->rx_seq_expected = 0;
+	sess->tx_seq = 1;
+	sess->rx_seq_expected = 1;
 	return 0;
 
 free_tfm:

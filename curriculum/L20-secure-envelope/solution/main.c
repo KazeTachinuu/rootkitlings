@@ -14,8 +14,8 @@
 #define RK_HDR_LEN	18
 
 /* Direction constants */
-#define RK_DIR_CLIENT	0
-#define RK_DIR_SERVER	1
+#define RK_DIR_CLIENT	1
+#define RK_DIR_SERVER	2
 
 /* Envelope header: version (1) + direction (1) + session_id (8) + sequence (8) */
 struct rk_envelope_hdr {
@@ -34,16 +34,14 @@ struct rk_envelope_ctx {
 	u64 rx_seq_expected;
 };
 
-/* Build a 12-byte GCM nonce: session_id (8) + direction (1) + seq low 3 bytes */
+/* Build a 12-byte GCM nonce: session_id (8) + counter (4). */
 static void rk_build_nonce(u8 *nonce, u64 session_id, u8 direction, u64 seq)
 {
 	__be64 sid = cpu_to_be64(session_id);
+	__be32 counter = cpu_to_be32((u32)((seq << 1) | (direction == RK_DIR_SERVER)));
 
 	memcpy(nonce, &sid, 8);
-	nonce[8] = direction;
-	nonce[9] = (seq >> 16) & 0xFF;
-	nonce[10] = (seq >> 8) & 0xFF;
-	nonce[11] = seq & 0xFF;
+	memcpy(nonce + 8, &counter, 4);
 }
 
 /*
@@ -197,15 +195,15 @@ static int __init rk_init(void)
 	sender.tfm = tfm;
 	sender.session_id = session_id;
 	sender.direction = RK_DIR_CLIENT;
-	sender.tx_seq = 0;
-	sender.rx_seq_expected = 0;
+	sender.tx_seq = 1;
+	sender.rx_seq_expected = 1;
 
 	/* Initialize receiver (expects client direction) */
 	receiver.tfm = tfm;
 	receiver.session_id = session_id;
 	receiver.direction = RK_DIR_CLIENT;
-	receiver.tx_seq = 0;
-	receiver.rx_seq_expected = 0;
+	receiver.tx_seq = 1;
+	receiver.rx_seq_expected = 1;
 
 	/* Seal and open a test message */
 	error = rk_envelope_seal(&sender, "test", 4, envelope, &env_len);

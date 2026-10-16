@@ -17,8 +17,8 @@
 #define RK_PORT		4444
 #define RK_RECONNECT_MS	5000
 
-#define RK_DIR_CLIENT	0
-#define RK_DIR_SERVER	1
+#define RK_DIR_CLIENT	1
+#define RK_DIR_SERVER	2
 
 /* ---- Shared types ---- */
 
