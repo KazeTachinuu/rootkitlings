@@ -1,7 +1,0 @@
-Preserve the state boundary: procfs should receive an opaque state pointer and
-ask one accessor for the value it renders.
-Snapshot that value once per materialized record.
-
-Keep the existing `seq_file` path.
-It already owns partial reads, offsets, seeking, and EOF; a second read
-implementation would create conflicting rules.

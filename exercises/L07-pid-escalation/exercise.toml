@@ -20,7 +20,6 @@ source = "exercises/L07-pid-escalation/starter"
 [resources]
 readme = "exercises/L07-pid-escalation/README.md"
 host_check = ""
-hint = "exercises/L07-pid-escalation/hint"
 solution = "exercises/L07-pid-escalation/solution"
 
 [verification]

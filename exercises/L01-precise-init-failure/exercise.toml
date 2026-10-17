@@ -20,7 +20,6 @@ source = "exercises/L01-precise-init-failure/starter"
 [resources]
 readme = "exercises/L01-precise-init-failure/README.md"
 host_check = "exercises/L00-module-build-lifecycle/checks/host-check"
-hint = "exercises/L01-precise-init-failure/hint"
 solution = "exercises/L01-precise-init-failure/solution"
 
 [verification]

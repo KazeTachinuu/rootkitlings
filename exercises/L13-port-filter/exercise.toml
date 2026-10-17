@@ -20,7 +20,6 @@ source = "exercises/L13-port-filter/starter"
 [resources]
 readme = "exercises/L13-port-filter/README.md"
 host_check = ""
-hint = "exercises/L13-port-filter/hint"
 solution = "exercises/L13-port-filter/solution"
 
 [verification]

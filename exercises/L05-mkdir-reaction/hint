@@ -1,6 +1,0 @@
-The RK_ON_MKDIR macro defines a function for you.
-Inside its body, "name" is already a plain C string with the directory basename.
-Use strncmp to check if the first 8 characters match "rklings."
-and pr_info to log the rest.
-Remember to return a negative errno from every code path.
-Look at how the header's comment block shows the expected function shape.

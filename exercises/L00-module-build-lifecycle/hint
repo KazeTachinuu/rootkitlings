@@ -1,7 +1,0 @@
-Treat the build and runtime lifecycles separately.
-`Kbuild` must turn the one source object into the requested module artifact; the
-C file must expose one successful load path and one unload path through the
-kernel's module macros.
-
-If the artifact builds but will not load, inspect its license, description, and
-registered callbacks before adding logging.

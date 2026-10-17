@@ -20,7 +20,6 @@ source = "exercises/L09-command-dispatcher/starter"
 [resources]
 readme = "exercises/L09-command-dispatcher/README.md"
 host_check = ""
-hint = "exercises/L09-command-dispatcher/hint"
 solution = "exercises/L09-command-dispatcher/solution"
 
 [verification]

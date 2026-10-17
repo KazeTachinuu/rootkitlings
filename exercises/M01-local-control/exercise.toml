@@ -20,7 +20,6 @@ source = "exercises/M01-local-control/starter"
 [resources]
 readme = "exercises/M01-local-control/README.md"
 host_check = ""
-hint = "exercises/M01-local-control/hint"
 solution = "exercises/M01-local-control/solution"
 
 [verification]

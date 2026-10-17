@@ -20,7 +20,6 @@ source = "exercises/L02-owned-kernel-state/starter"
 [resources]
 readme = "exercises/L02-owned-kernel-state/README.md"
 host_check = "exercises/L02-owned-kernel-state/checks/host-check"
-hint = "exercises/L02-owned-kernel-state/hint"
 solution = "exercises/L02-owned-kernel-state/solution"
 
 [verification]

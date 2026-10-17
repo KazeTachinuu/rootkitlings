@@ -45,7 +45,6 @@ source = "exercises/P00-complete-rootkit/starter"
 [resources]
 readme = "exercises/P00-complete-rootkit/README.md"
 host_check = ""
-hint = "exercises/P00-complete-rootkit/hint"
 solution = "exercises/P00-complete-rootkit/solution"
 
 [verification]

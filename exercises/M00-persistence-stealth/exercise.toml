@@ -20,7 +20,6 @@ source = "exercises/M00-persistence-stealth/starter"
 [resources]
 readme = "exercises/M00-persistence-stealth/README.md"
 host_check = ""
-hint = "exercises/M00-persistence-stealth/hint"
 solution = "exercises/M00-persistence-stealth/solution"
 
 [verification]

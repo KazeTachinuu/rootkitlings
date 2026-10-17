@@ -1,8 +1,0 @@
-#!/usr/bin/env python3
-"""Run the Rklings learner CLI."""
-
-from engine.cli import entrypoint
-
-
-if __name__ == "__main__":
-    entrypoint()

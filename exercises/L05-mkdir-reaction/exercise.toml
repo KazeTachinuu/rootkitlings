@@ -20,7 +20,6 @@ source = "exercises/L05-mkdir-reaction/starter"
 [resources]
 readme = "exercises/L05-mkdir-reaction/README.md"
 host_check = ""
-hint = "exercises/L05-mkdir-reaction/hint"
 solution = "exercises/L05-mkdir-reaction/solution"
 
 [verification]

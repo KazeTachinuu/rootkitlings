@@ -1,8 +1,0 @@
-First locate the ownership boundary: only one translation unit should know the
-fields of `struct rk_state`, call `kzalloc()`, or call `kfree()`.
-
-If the failure build reports the wrong errno, follow the value from
-`rk_state_create()` through `IS_ERR()` and `PTR_ERR()` without replacing it.
-
-If unload or reload fails, check the lifetime in reverse: destroy the object
-once, then invalidate the stored pointer immediately.

@@ -20,7 +20,6 @@ source = "exercises/L10-target-list/starter"
 [resources]
 readme = "exercises/L10-target-list/README.md"
 host_check = ""
-hint = "exercises/L10-target-list/hint"
 solution = "exercises/L10-target-list/solution"
 
 [verification]

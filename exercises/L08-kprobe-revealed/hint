@@ -1,7 +1,0 @@
-The kprobe pre_handler receives struct pt_regs for the probed function.
-For __x64_sys_mkdir, the first argument is itself a pt_regs pointer.
-Use regs_get_kernel_argument(regs, 0) to extract it, then read uregs->di for the
-userspace pathname.
-Copy it with strncpy_from_user, find the basename with strrchr, and check for
-the "rklings."
-prefix.

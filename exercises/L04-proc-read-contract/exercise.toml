@@ -20,7 +20,6 @@ source = "exercises/L04-proc-read-contract/starter"
 [resources]
 readme = "exercises/L04-proc-read-contract/README.md"
 host_check = "exercises/L04-proc-read-contract/checks/host-check"
-hint = "exercises/L04-proc-read-contract/hint"
 solution = "exercises/L04-proc-read-contract/solution"
 
 [verification]

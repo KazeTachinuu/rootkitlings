@@ -20,7 +20,6 @@ source = "exercises/L03-proc-publication/starter"
 [resources]
 readme = "exercises/L03-proc-publication/README.md"
 host_check = "exercises/L03-proc-publication/checks/host-check"
-hint = "exercises/L03-proc-publication/hint"
 solution = "exercises/L03-proc-publication/solution"
 
 [verification]
