@@ -1,0 +1,46 @@
+schema_version = 2
+id = "pid-escalation"
+title = "Escalate another process by PID"
+stage = "escalation"
+kind = "lesson"
+tradecraft = ["privilege", "control"]
+difficulty = "standard"
+prerequisites = ["mkdir-escalation", "proc-publication"]
+teaches = ["deferred-execution", "atomic-flag", "pid-targeting"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c", "rklings_hook.h"]
+editable = ["main.c"]
+build = "."
+baseline = "starter"
+source = "exercises/L07-pid-escalation/starter"
+
+[resources]
+readme = "exercises/L07-pid-escalation/README.md"
+host_check = ""
+hint = "exercises/L07-pid-escalation/hint"
+solution = "exercises/L07-pid-escalation/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test", "mkdir-escalation-test"]
+
+[[verification.cases]]
+id = "self-escalation"
+label = "mkdir rklings.e grants root to calling process"
+expect_build = "pass"
+check = "exercises/L07-pid-escalation/checks/self-escalation"
+
+[[verification.cases]]
+id = "pid-targeting"
+label = "mkdir rklings.e.PID sets deferred target"
+expect_build = "pass"
+check = "exercises/L07-pid-escalation/checks/pid-targeting"
+
+[[verification.cases]]
+id = "deferred-delivery"
+label = "Target PID gets root on /proc/rklings read"
+expect_build = "pass"
+check = "exercises/L07-pid-escalation/checks/deferred-delivery"

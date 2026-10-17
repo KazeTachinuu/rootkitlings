@@ -269,21 +269,21 @@ Platform detection: runtime.GOOS for install instructions.
 ```
 rootkitlings/
   exercises/                    # STUDENT WORKSPACE (visible)
-    l00-module-init/
+    L00-module-build-lifecycle/
       README.md
       starter/
-    l15-mtls-connect/
+    L15-mtls-connect/
       README.md
       starter/
         main.go
         go.mod
   .rklings/                     # INTERNALS (hidden dotdir)
     solutions/
-      l00/main.c
-      l15/main.go
+      L00/main.c
+      L15/main.go
     validate/
-      l00.go
-      l15.go
+      L00.go
+      L15.go
     lab/
       l15/server.go
       l15/assets/
@@ -413,7 +413,7 @@ Exercise progress stored in ~/.rklings/progress.json.
 - Kernel files by subsystem (Reptile): main.c, dispatch.c, cred.c, targets.c, dir.c, file.c, network.c, module.c, persist.c
 - Kernel functions verb_noun (Diamorphine): escalate_cred(), module_hide(), filter_dir(), target_add(), is_hidden()
 - Agent packages by capability (Sliver): transport.go, mkdir.go, dispatch.go, handlers/, evasion/
-- Exercise dirs: l00-module-init/, lowercase, hyphenated, describes technique
+- Exercise dirs: L00-module-build-lifecycle/, uppercase prefix, hyphenated, describes technique
 - No invented terminology. Names from kernel source, Go docs, or MITRE ATT&CK only.
 
 ## README Format
@@ -466,8 +466,8 @@ Regular functions (`ksys_read`, `tcp*_seq_show`): args directly in registers
 This is the #1 gotcha.
 Existing legacy code handles both patterns correctly.
 
-Total kretprobes in final rootkit: 7 (mkdir, mkdirat, getdents64, ksys_read,
-tcp4_seq_show, tcp6_seq_show, plus mkdir pair reused).
+Total kretprobes in final rootkit: 6 (mkdir, mkdirat, getdents64, ksys_read,
+tcp4_seq_show, tcp6_seq_show).
 
 ## rklings_hook.h (L05-L07 black box)
 

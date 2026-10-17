@@ -1,0 +1,46 @@
+schema_version = 2
+id = "content-filter"
+title = "Remove matching lines from file reads"
+stage = "concealment"
+kind = "lesson"
+tradecraft = ["concealment"]
+difficulty = "standard"
+prerequisites = ["command-dispatcher", "target-list"]
+teaches = ["read-interception", "text-buffer-filtering"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+baseline = "starter"
+source = "exercises/L12-content-filter/starter"
+
+[resources]
+readme = "exercises/L12-content-filter/README.md"
+host_check = ""
+hint = "exercises/L12-content-filter/hint"
+solution = "exercises/L12-content-filter/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "hide-line"
+label = "Matching line removed from read output"
+expect_build = "pass"
+check = "exercises/L12-content-filter/checks/hide-line"
+
+[[verification.cases]]
+id = "unhide-line"
+label = "Unhidden string reappears in output"
+expect_build = "pass"
+check = "exercises/L12-content-filter/checks/unhide-line"
+
+[[verification.cases]]
+id = "no-match-unchanged"
+label = "Non-matching reads pass through unchanged"
+expect_build = "pass"
+check = "exercises/L12-content-filter/checks/no-match-unchanged"
