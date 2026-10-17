@@ -11,7 +11,7 @@
 RK_ON_MKDIR(name)
 {
 	if (strncmp(name, RK_PREFIX, RK_PREFIX_LEN) != 0)
-		return -ENOENT;
+		return 0;
 	pr_info("rklings: intercepted mkdir: %s\n", name + RK_PREFIX_LEN);
 	return -ENOENT;
 }

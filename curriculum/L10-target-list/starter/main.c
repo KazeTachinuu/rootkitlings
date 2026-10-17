@@ -19,12 +19,14 @@ struct rk_target_list {
 static struct rk_target_list target_list;
 static struct proc_dir_entry *proc_entry;
 
-// Implement the four target list operations: add, remove, match, clear.
-// All must be IRQ-safe.
+// TODO: rk_target_add (strscpy into targets[count], return -ENOSPC if full)
+// TODO: rk_target_remove (validate idx, memmove to close gap)
+// TODO: rk_target_match (strcmp loop, return true on hit)
+// TODO: rk_target_clear (reset count to 0)
 
 static int rk_proc_show(struct seq_file *m, void *v)
 {
-	// Print each target, one per line.
+	// TODO: print each target, one per line
 	return 0;
 }
 
@@ -36,7 +38,7 @@ static int rk_proc_open(struct inode *inode, struct file *file)
 static ssize_t rk_proc_write(struct file *file, const char __user *ubuf,
 			     size_t count, loff_t *ppos)
 {
-	// Parse "add <name>", "remove <idx>", and "clear".
+	// TODO: parse "add <name>", "remove <idx>", "clear" commands
 	return count;
 }
 
@@ -50,13 +52,13 @@ static const struct proc_ops rk_proc_ops = {
 
 static int __init rk_init(void)
 {
-	// Initialize the spinlock and create /proc/rklings.
+	// TODO: init spinlock, create /proc/rklings, pr_info loaded
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	// Remove the proc entry.
+	// TODO: remove proc entry, pr_info unloaded
 }
 
 module_init(rk_init);

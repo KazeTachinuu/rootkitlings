@@ -24,9 +24,7 @@ static int rk_proc_open(struct inode *inode, struct file *file)
 static ssize_t rk_proc_write(struct file *file, const char __user *ubuf,
 			     size_t count, loff_t *ppos)
 {
-	/* TODO: copy_from_user into a small buffer, parse "0" or "1",
-	 * call rk_state_set_active. Return count on success, -EFAULT
-	 * or -EINVAL on error. */
+	/* TODO: read user input, toggle active state */
 	return -ENOSYS;
 }
 

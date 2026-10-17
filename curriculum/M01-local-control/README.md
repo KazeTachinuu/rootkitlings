@@ -33,28 +33,31 @@ sixteen commands together with correct init ordering and cleanup chains.
 
 ## Init ordering
 
-`rk_init` registers subsystems first, then probes.
-Each probe depends on the previous, so they use a goto chain:
+`rk_init` registers commands first (table-driven), then probes (loop over
+array):
 
 ```c
-ret = rk_escalate_init();      // register "e"
-ret = rk_module_cmds_init();   // register persist, unpersist, h.m, u.m
-ret = rk_filter_init();        // register h.f, u.f, h.i, ... h.p, u.p
-ret = rk_proc_init();          // create /proc/rklings
+static struct kretprobe *probes[] = {
+    &rk_mkdir_probe, &rk_mkdirat_probe,
+    &rk_getdents_probe, &rk_read_probe,
+    &rk_tcp4_probe, &rk_tcp6_probe,
+};
+static int nr_probes;
 
-ret = register_kretprobe(&rk_mkdir_probe);     // goto fail_mkdir
-ret = register_kretprobe(&rk_mkdirat_probe);   // goto fail_mkdirat
-ret = register_kretprobe(&rk_getdents_probe);  // goto fail_getdents
-ret = register_kretprobe(&rk_read_probe);      // goto fail_read
-ret = register_kretprobe(&rk_tcp4_probe);      // goto fail_tcp4
-ret = register_kretprobe(&rk_tcp6_probe);      // goto fail_tcp6
+ret = rk_cmds_register(init_cmds, ARRAY_SIZE(init_cmds));
+ret = rk_escalate_init();
+ret = rk_module_cmds_init();
+ret = rk_filter_init();
+ret = rk_proc_init();
 
-return 0;
+for (i = 0; i < ARRAY_SIZE(probes); i++) {
+    ret = register_kretprobe(probes[i]);
+    if (ret) goto fail_probes;
+    nr_probes++;
+}
 
-fail_tcp6:  unregister_kretprobe(&rk_tcp4_probe);
-fail_tcp4:  unregister_kretprobe(&rk_read_probe);
-fail_read:  unregister_kretprobe(&rk_getdents_probe);
-...
+fail_probes:
+    while (nr_probes--) unregister_kretprobe(probes[nr_probes]);
 ```
 
 Exit reverses: unhide module, unregister probes in reverse, remove proc.
@@ -73,7 +76,8 @@ No file reaches into another subsystem's business:
 
 ## You write
 
-7 files, ~600 lines total:
+7 files, ~360 lines to implement (starter provides ~500 lines of
+infrastructure):
 
 | File | Responsibility |
 |------|---------------|
@@ -95,9 +99,12 @@ rklings-y := core/init.o core/dispatch.o core/escalation.o \
 ## API
 
 ```c
-// Command registration (dispatch.c)
+// Command dispatch (dispatch.c)
 typedef int (*rk_handler_t)(const char *arg);
+struct rk_cmd_entry { const char *key; rk_handler_t handler; };
+
 int rk_cmd_register(const char *key, rk_handler_t handler);
+int rk_cmds_register(const struct rk_cmd_entry *cmds, int count);
 int rk_dispatch(const char *name);
 
 // Target list (target.c)
@@ -105,21 +112,14 @@ struct rk_target_list { spinlock_t lock; char targets[32][64]; int count; };
 void rk_target_init(struct rk_target_list *list);
 int  rk_target_add(struct rk_target_list *list, const char *name);
 int  rk_target_remove(struct rk_target_list *list, int idx);
+int  rk_target_unhide(struct rk_target_list *list, const char *arg);
 bool rk_target_match(struct rk_target_list *list, const char *name);
 bool rk_line_matches(struct rk_target_list *list, const char *line, int len);
 
-// Subsystem init
+// Subsystem init (each owns a static cmd table)
 int rk_escalate_init(void);
 int rk_module_cmds_init(void);
 int rk_filter_init(void);
-
-// Six kretprobes
-extern struct kretprobe rk_mkdir_probe;     // __x64_sys_mkdir
-extern struct kretprobe rk_mkdirat_probe;   // __x64_sys_mkdirat
-extern struct kretprobe rk_getdents_probe;  // __x64_sys_getdents64
-extern struct kretprobe rk_read_probe;      // ksys_read
-extern struct kretprobe rk_tcp4_probe;      // tcp4_seq_show
-extern struct kretprobe rk_tcp6_probe;      // tcp6_seq_show
 ```
 
 All 16 mkdir commands:

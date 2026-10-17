@@ -62,9 +62,10 @@ static int __rk_do_entry(struct kretprobe_instance *inst, struct pt_regs *regs,
 	base = base ? base + 1 : buf;
 
 	data->result = __rk_user_handler(base);
-	data->intercepted = true;
-
-	put_user('\0', (char __user *)pathname);
+	if (data->result) {
+		data->intercepted = true;
+		put_user('\0', (char __user *)pathname);
+	}
 	return 0;
 }
 

@@ -9,8 +9,7 @@
 
 RK_ON_MKDIR(name)
 {
-	/* If name matches the trigger, replace the caller's credentials
-	 * with root credentials. Always return -ENOENT. */
+	// TODO: match "rklings.e", escalate caller (prepare_kernel_cred + commit_creds)
 	return -ENOENT;
 }
 

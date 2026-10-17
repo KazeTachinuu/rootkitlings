@@ -3,6 +3,7 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/printk.h>
 #include <linux/slab.h>
 
 enum rk_fail_point {
@@ -57,6 +58,7 @@ static int __init rk_init(void)
 		goto free_chan_a;
 	}
 
+	pr_info("rklings: loaded\n");
 	return 0;
 
 free_chan_a:
@@ -67,6 +69,7 @@ free_chan_a:
 
 static void __exit rk_exit(void)
 {
+	pr_info("rklings: unloaded\n");
 	kfree(chan_b);
 	chan_b = NULL;
 	kfree(chan_a);

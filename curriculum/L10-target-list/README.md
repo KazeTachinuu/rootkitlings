@@ -88,6 +88,7 @@ spin_lock_init(&list->lock);
 spin_lock_irqsave(&list->lock, flags);
 spin_unlock_irqrestore(&list->lock, flags);
 void strscpy(char *dest, const char *src, size_t count);
+int kstrtoint(const char *s, unsigned int base, int *res);
 ```
 
 ## Test it

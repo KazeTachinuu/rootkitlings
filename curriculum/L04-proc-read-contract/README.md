@@ -63,19 +63,9 @@ On a hardened kernel this is a fatal fault.
 
 ## You write
 
-`interface/proc.c` (~76 lines):
+`interface/proc.c` (~10 lines, starter provides proc_ops and proc_create):
 
-- `rk_proc_write` with `copy_from_user`
-- `proc_ops` struct
-- switch from `proc_create_single` to `proc_create`
-
-`include/rootkit.h`:
-
-- add `rk_state_set_active`
-
-`core/state.c`:
-
-- implement `rk_state_set_active`
+- `rk_proc_write` body: `copy_from_user`, parse "1"/"0", call `rk_state_set_active`
 
 ## API
 
@@ -95,6 +85,8 @@ int single_open(struct file *file,
 ```
 $ rklings run l04
 root@vm:~# insmod rklings.ko
+root@vm:~# dmesg | tail -1
+rklings: loaded
 root@vm:~# cat /proc/rklings
 active=1
 root@vm:~# echo 0 > /proc/rklings
@@ -112,6 +104,7 @@ bash: echo: write error: Invalid argument
 ```
 $ rklings validate l04
   [+] builds at all fail points
+  [+] dmesg shows "rklings: loaded"
   [+] /proc/rklings permissions are 0644
   [+] cat shows active=1 after load
   [+] echo 0 sets active=0

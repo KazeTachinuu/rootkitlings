@@ -16,6 +16,6 @@ struct rk_state;
 __must_check struct rk_state *rk_state_create(void);
 void rk_state_destroy(struct rk_state *state);
 
-/* TODO: declare rk_proc_publish and rk_proc_unpublish. */
+// TODO: declare rk_proc_publish and rk_proc_unpublish
 
 #endif

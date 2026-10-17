@@ -52,6 +52,17 @@ out:
 	return ret;
 }
 
+int rk_target_unhide(struct rk_target_list *list, const char *arg)
+{
+	int idx;
+
+	if (!arg)
+		return -EINVAL;
+	if (kstrtoint(arg, 10, &idx) != 0)
+		return -EINVAL;
+	return rk_target_remove(list, idx);
+}
+
 bool rk_target_match(struct rk_target_list *list, const char *name)
 {
 	unsigned long flags;

@@ -32,9 +32,9 @@ Between them, you store state in per-instance data.
   userspace sees return code 0
 ```
 
-The entry handler stores its result in `ri->data`, a per-instance buffer sized
-by `.data_size`.
-The return handler reads it back.
+Both handlers receive a `struct kretprobe_instance *ri` as their first argument.
+`ri->data` is a per-instance buffer sized by `.data_size`, where you store state
+that the return handler reads back.
 This is how you pass information from entry to return without global state:
 
 ```c
@@ -61,7 +61,7 @@ Instead of a chain of strcmp calls, use a table:
 
 ```c
 struct rk_cmd_entry {
-    const char *name;
+    const char *key;
     int (*handler)(const char *arg);
 };
 
@@ -99,7 +99,7 @@ errnos.
 
 - kretprobe pair (`__x64_sys_mkdir` + `__x64_sys_mkdirat`)
 - `struct rk_mkdir_data` for per-instance state
-- command table with longest-prefix dispatch
+- command table with exact-match dispatch
 - three handlers: `e`, `ping`, `status`
 
 ## API
@@ -110,7 +110,11 @@ errnos.
 int register_kretprobe(struct kretprobe *rp);
 void unregister_kretprobe(struct kretprobe *rp);
 
-// Per-instance data (entry_handler)
+// Entry/return handler signature
+int entry(struct kretprobe_instance *ri, struct pt_regs *regs);
+int ret(struct kretprobe_instance *ri, struct pt_regs *regs);
+
+// Per-instance data
 struct rk_mkdir_data *data = (struct rk_mkdir_data *)ri->data;
 
 // Override return value (return handler)
@@ -156,5 +160,7 @@ $ rklings validate l09
 ## Next
 
 You have interception, escalation, and a command dispatcher.
+M00 upgrades the dispatcher to longest-prefix matching for commands with
+arguments.
 L10 adds the data structure behind every concealment exercise: a thread-safe
 target list tracking what to hide.

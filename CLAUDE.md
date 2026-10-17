@@ -314,7 +314,58 @@ All kernel exercises produce `rklings.ko`.
 One module, grows over exercises.
 Each kernel exercise starter includes a Kbuild file.
 - L00-L09: single file. Kbuild: `obj-m := rklings.o`
-- M00+: multi-file. Kbuild: `obj-m := rklings.o` + `rklings-objs := main.o dispatch.o cred.o ...` `rklings build` runs make inside the Docker container targeting the starter directory.
+- M00+: multi-file. Kbuild with `ccflags-y := -I$(src)/include`:
+  - M00: `init.o dispatch.o cred.o module.o`
+  - M01: `init.o dispatch.o escalation.o module.o target.o filter.o`
+
+`rklings build` runs make inside the Docker container targeting the starter
+directory.
+
+### Command Dispatch
+
+Table-driven function pointer registry.
+Every subsystem owns a static command table:
+
+```c
+typedef int (*rk_handler_t)(const char *arg);
+
+struct rk_cmd_entry {
+    const char *key;
+    rk_handler_t handler;
+};
+
+static const struct rk_cmd_entry filter_cmds[] = {
+    { "h.f", cmd_hide_file },
+    { "u.f", cmd_unhide_file },
+};
+
+int rk_filter_init(void) {
+    return rk_cmds_register(filter_cmds, ARRAY_SIZE(filter_cmds));
+}
+```
+
+Dispatch progression:
+- L09: static `cmd_table[]`, exact-match (first dot splits cmd from arg)
+- L11-L13: static `cmd_table[]`, longest-prefix match
+- M00+: dynamic `rk_cmd_register()`, longest-prefix match
+
+### pr_info Convention
+
+- L00-L09: pr_info on load, unload, and key actions (mkdir intercept, escalation). dmesg is the only feedback channel. Students need it.
+- L10+: pr_info on load/unload only. Commands verified by real system behavior (ls, ps, ss, cat, lsmod, /proc). No command-level pr_info. ping and status exist for debugging.
+- P00: ZERO pr_info. OPSEC rule.
+
+### Starter TODO Style
+
+One TODO per concept, one line, says WHAT not HOW:
+```c
+// TODO: rk_dispatch (longest-prefix match, call handler)
+```
+Never leak the implementation recipe:
+```c
+// BAD: TODO: use strncmp to compare suffix with each registry[i].key,
+//      track longest match, then call best->handler(arg)
+```
 
 ## Exercise Chain
 

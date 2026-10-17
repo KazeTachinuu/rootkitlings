@@ -11,6 +11,6 @@ enum rk_fail_point {
 	RK_FAIL_STATE_ALLOC = 2,
 };
 
-/* TODO: declare the private state type and its ownership API. */
+// TODO: forward-declare rk_state, declare create/destroy/accessors
 
 #endif

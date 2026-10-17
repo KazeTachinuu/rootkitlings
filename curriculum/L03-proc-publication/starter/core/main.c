@@ -26,14 +26,14 @@ static int __init rk_init(void)
 		return error;
 	}
 
-	/* TODO: publish state via procfs, roll back on failure. */
+	// TODO: publish procfs entry, goto cleanup on failure
 
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/* TODO: unpublish procfs entry. */
+	// TODO: unpublish procfs entry
 	rk_state_destroy(state);
 	state = NULL;
 }

@@ -18,13 +18,14 @@
 #include <linux/seq_file.h>
 #include <linux/string.h>
 #include <linux/types.h>
+#include <linux/atomic.h>
 #include <linux/uaccess.h>
 
 #define RK_PREFIX     "rklings."
 #define RK_PREFIX_LEN 8
 #define RK_PATH_MAX   128
 
-static int deferred_pid;
+static atomic_t deferred_pid = ATOMIC_INIT(0);
 
 static int rk_escalate(void)
 {
@@ -67,13 +68,14 @@ static int rk_escalate_pid(int pid)
 
 static int rk_try_deferred(void)
 {
+	int pid = atomic_read(&deferred_pid);
 	int ret;
 
-	if (deferred_pid <= 0)
+	if (pid <= 0)
 		return 0;
-	ret = rk_escalate_pid(deferred_pid);
+	ret = rk_escalate_pid(pid);
 	if (ret == 0)
-		deferred_pid = 0;
+		atomic_set(&deferred_pid, 0);
 	return ret;
 }
 
@@ -95,28 +97,29 @@ static int rk_handle_mkdir(const char *name)
 
 	ret = rk_escalate_pid(pid);
 	if (ret == -ESRCH) {
-		deferred_pid = pid;
+		atomic_set(&deferred_pid, pid);
 		return 0;
 	}
 	return ret;
 }
 
-/* Shared intercept helper + two kprobe pre_handlers (mkdir and mkdirat).
- * Copy pathname, check prefix, dispatch, suppress the real syscall. */
+// TODO: rk_do_intercept (strncpy_from_user, check prefix, dispatch, put_user)
 
-/* Two kprobes: one for mkdir, one for mkdirat. */
+// TODO: rk_pre_mkdir and rk_pre_mkdirat (kprobe pre_handlers, double indirection)
 
-/* /proc/rklings: attempt deferred delivery, then print status. */
+// TODO: struct kprobe for mkdir and mkdirat
+
+// TODO: rk_proc_show (deferred delivery + status)
 
 static int __init rk_init(void)
 {
-	/* Register both kprobes, create /proc/rklings. Roll back on failure. */
+	// TODO: register kprobes, create /proc/rklings (rollback on failure)
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/* Tear down proc entry and both kprobes. */
+	// TODO: tear down proc entry and both kprobes
 }
 
 module_init(rk_init);

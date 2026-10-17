@@ -3,6 +3,7 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/printk.h>
 
 #include "rootkit.h"
 
@@ -30,6 +31,7 @@ static int __init rk_init(void)
 	if (error)
 		goto destroy_state;
 
+	pr_info("rklings: loaded\n");
 	return 0;
 
 destroy_state:
@@ -40,6 +42,7 @@ destroy_state:
 
 static void __exit rk_exit(void)
 {
+	pr_info("rklings: unloaded\n");
 	rk_proc_unpublish();
 	rk_state_destroy(state);
 	state = NULL;

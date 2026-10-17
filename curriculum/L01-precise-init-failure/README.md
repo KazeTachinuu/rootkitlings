@@ -81,9 +81,8 @@ That is the entire point of having separate labels.
 
 ## You write
 
-`core/main.c` (~80 lines):
+`core/main.c` (~40 lines, starter provides `rk_channel_create`):
 
-- `rk_channel_create`
 - `rk_init` with goto chain
 - `rk_exit` with reverse teardown
 
@@ -104,18 +103,20 @@ bool IS_ERR(const void *ptr);
 ```
 $ rklings run l01
 root@vm:~# insmod rklings.ko
-root@vm:~# grep rklings /proc/modules
-rklings 12288 0 - Live 0x...
+root@vm:~# dmesg | tail -1
+rklings: loaded
+root@vm:~# lsmod | grep rklings
+rklings 12288 0
 root@vm:~# rmmod rklings
 
 root@vm:~# insmod rklings_fail1.ko
-insmod: ERROR: could not insert module: Operation canceled
-root@vm:~# grep rklings /proc/modules
+insmod: ERROR: could not insert module: Cannot allocate memory
+root@vm:~# lsmod | grep rklings
 (no output, module rejected)
 
 root@vm:~# insmod rklings_fail2.ko
-insmod: ERROR: could not insert module: Operation canceled
-root@vm:~# grep rklings /proc/modules
+insmod: ERROR: could not insert module: Cannot allocate memory
+root@vm:~# lsmod | grep rklings
 (no output, first alloc freed via goto)
 ```
 
@@ -124,7 +125,7 @@ root@vm:~# grep rklings /proc/modules
 ```
 $ rklings validate l01
   [+] rklings.ko builds at all three fail points
-  [+] FAIL_POINT=0: loads, both channels created
+  [+] FAIL_POINT=0: loads, dmesg shows "rklings: loaded"
   [+] FAIL_POINT=1: rejects load, no module resident
   [+] FAIL_POINT=2: rejects load, no module resident
   [+] rmmod after FAIL_POINT=0 succeeds cleanly

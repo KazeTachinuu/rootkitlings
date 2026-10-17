@@ -2,6 +2,7 @@
 #include <linux/init.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
+#include <linux/printk.h>
 #include <linux/ptrace.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
@@ -160,19 +161,46 @@ static struct kretprobe rk_read_probe = {
 
 /* ── mkdir command dispatcher ────────────────────────────────── */
 
+typedef int (*rk_handler_t)(const char *arg);
+
+struct rk_cmd_entry {
+	const char *key;
+	rk_handler_t handler;
+};
+
+static int cmd_hide_content(const char *arg)   { return rk_target_add(&content_targets, arg); }
+static int cmd_unhide_content(const char *arg) { int i; return kstrtoint(arg, 10, &i) == 0 ? rk_target_remove(&content_targets, i) : -EINVAL; }
+
+static const struct rk_cmd_entry cmd_table[] = {
+	{ "h.c", cmd_hide_content },
+	{ "u.c", cmd_unhide_content },
+};
+
 static int rk_dispatch(const char *name)
 {
-	int idx;
+	const struct rk_cmd_entry *best = NULL;
+	int best_len = 0;
+	const char *arg;
+	int i;
 
-	if (strncmp(name, "h.c.", 4) == 0)
-		return rk_target_add(&content_targets, name + 4);
-	if (strncmp(name, "u.c.", 4) == 0) {
-		if (kstrtoint(name + 4, 10, &idx) == 0)
-			return rk_target_remove(&content_targets, idx);
-		return -EINVAL;
+	for (i = 0; i < ARRAY_SIZE(cmd_table); i++) {
+		int klen = strlen(cmd_table[i].key);
+
+		if (strncmp(name, cmd_table[i].key, klen) != 0)
+			continue;
+		if (name[klen] != '\0' && name[klen] != '.')
+			continue;
+		if (klen > best_len) {
+			best = &cmd_table[i];
+			best_len = klen;
+		}
 	}
 
-	return -ENOENT;
+	if (!best)
+		return -ENOENT;
+
+	arg = name[best_len] == '.' ? name + best_len + 1 : NULL;
+	return best->handler(arg);
 }
 
 struct rk_mkdir_data {
@@ -277,6 +305,7 @@ static int __init rk_init(void)
 	if (ret)
 		goto fail_mkdirat;
 
+	pr_info("rklings: loaded\n");
 	return 0;
 
 fail_mkdirat:
@@ -288,6 +317,7 @@ fail_mkdir:
 
 static void __exit rk_exit(void)
 {
+	pr_info("rklings: unloaded\n");
 	unregister_kretprobe(&rk_mkdirat_probe);
 	unregister_kretprobe(&rk_mkdir_probe);
 	unregister_kretprobe(&rk_read_probe);

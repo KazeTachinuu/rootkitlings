@@ -122,6 +122,8 @@ The module is pre-loaded.
 You are logged in as student.
 
 ```
+$ dmesg | tail -1
+rklings: loaded
 $ nc -l -p 4444 &
 [1] 5678
 $ ss -tlnp | grep 4444

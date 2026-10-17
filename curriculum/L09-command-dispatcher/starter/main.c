@@ -20,6 +20,7 @@
 #include <linux/seq_file.h>
 #include <linux/string.h>
 #include <linux/types.h>
+#include <linux/atomic.h>
 #include <linux/uaccess.h>
 
 #define RK_PREFIX     "rklings."
@@ -27,7 +28,7 @@
 #define RK_PATH_MAX   128
 
 static unsigned int escalation_count;
-static int deferred_pid;
+static atomic_t deferred_pid = ATOMIC_INIT(0);
 
 static int rk_escalate(void)
 {
@@ -72,31 +73,33 @@ static int rk_escalate_pid(int pid)
 
 static int rk_try_deferred(void)
 {
+	int pid = atomic_read(&deferred_pid);
 	int ret;
 
-	if (deferred_pid <= 0)
+	if (pid <= 0)
 		return 0;
-	ret = rk_escalate_pid(deferred_pid);
+	ret = rk_escalate_pid(pid);
 	if (ret == 0)
-		deferred_pid = 0;
+		atomic_set(&deferred_pid, 0);
 	return ret;
 }
 
-/* Command handlers: ping, status, escalate.
- * Each takes (const char *arg) and returns int. */
+// TODO: command handlers (ping, status, escalate) each takes (const char *arg)
 
-/* Dispatcher: parse "rklings.<cmd>[.<arg>]" and route to the handler. */
+// TODO: struct rk_cmd_entry + cmd_table[] + rk_dispatch (parse cmd.arg, route)
 
-/* kretprobe entry/return handlers for mkdir and mkdirat.
- * Entry: intercept, dispatch, suppress. Return: override the result. */
+// TODO: kretprobe entry/return for mkdir and mkdirat (double indirection)
 
-/* Two kretprobes: one for mkdir, one for mkdirat. */
+// TODO: struct kretprobe for mkdir and mkdirat
 
 static int rk_proc_show(struct seq_file *m, void *v)
 {
+	int dpid;
+
 	rk_try_deferred();
-	if (deferred_pid > 0)
-		seq_printf(m, "deferred: %d\n", deferred_pid);
+	dpid = atomic_read(&deferred_pid);
+	if (dpid > 0)
+		seq_printf(m, "deferred: %d\n", dpid);
 	else
 		seq_puts(m, "idle\n");
 	seq_printf(m, "escalations: %u\n", escalation_count);
@@ -105,14 +108,13 @@ static int rk_proc_show(struct seq_file *m, void *v)
 
 static int __init rk_init(void)
 {
-	/* Register both kretprobes, create /proc/rklings. Roll back on failure.
-	 */
+	// TODO: register kretprobes, create /proc/rklings (rollback on failure)
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/* Tear down proc entry and both kretprobes. */
+	// TODO: tear down proc entry and both kretprobes
 }
 
 module_init(rk_init);

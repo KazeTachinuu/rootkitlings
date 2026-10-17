@@ -17,26 +17,21 @@
 static atomic_t rk_target_pid = ATOMIC_INIT(0);
 static struct proc_dir_entry *rk_proc_entry;
 
-/* Escalate the calling process to root. */
 static int rk_escalate(void)
 {
-	/* Replace the caller's credentials with root. */
+	// TODO: rk_escalate (prepare_kernel_cred + commit_creds)
 	return -ENOMEM;
 }
 
 RK_ON_MKDIR(name)
 {
-	/* Match the trigger prefix. Three cases:
-	 * - no suffix: self-escalation
-	 * - ".<pid>": store target for deferred delivery
-	 * - no match: ignore */
+	// TODO: three cases (self-escalate, store PID, ignore)
 	return -ENOENT;
 }
 
 static int rk_proc_show(struct seq_file *m, void *v)
 {
-	/* If current process matches the stored target, escalate and clear.
-	 * Print a status line: escalated, waiting, or idle. */
+	// TODO: check current->pid against target, escalate on match, print status
 	seq_printf(m, "rklings: idle\n");
 	return 0;
 }
@@ -57,14 +52,13 @@ static int __init rk_init(void)
 {
 	int ret;
 
-	/* Create /proc/rklings and start the hook.
-	 * Roll back on failure. */
+	// TODO: create /proc/rklings, start hook (rollback on failure)
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/* Tear down hook and proc entry. */
+	// TODO: tear down hook and proc entry
 }
 
 module_init(rk_init);

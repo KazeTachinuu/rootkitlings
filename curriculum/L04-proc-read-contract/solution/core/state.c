@@ -37,8 +37,5 @@ void rk_state_set_active(struct rk_state *state, bool active)
 
 void rk_state_destroy(struct rk_state *state)
 {
-	if (WARN_ON_ONCE(!state->active))
-		return;
-	state->active = false;
 	kfree(state);
 }

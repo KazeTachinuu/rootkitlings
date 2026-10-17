@@ -148,6 +148,8 @@ root@vm:~# cat /sys/kernel/debug/kprobes/list
 (two kprobes on __x64_sys_mkdir and __x64_sys_mkdirat)
 root@vm:~# mkdir rklings.e && id
 uid=0(root) gid=0(root) groups=0(root)
+root@vm:~# dmesg | tail -1
+rklings: mkdir e
 ```
 
 Deferred PID delivery still works:
@@ -165,6 +167,7 @@ $ rklings validate l08
   [+] module loads (no rklings_hook.h)
   [+] kprobe registered on __x64_sys_mkdir
   [+] kprobe registered on __x64_sys_mkdirat
+  [+] dmesg shows intercepted command
   [+] self-escalation works
   [+] PID targeting works
   [+] deferred delivery via /proc/rklings

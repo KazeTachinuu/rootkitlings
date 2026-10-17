@@ -10,8 +10,7 @@
 
 RK_ON_MKDIR(name)
 {
-	/* TODO: If name starts with RK_PREFIX, log the suffix to dmesg.
-	 * Always return -ENOENT. */
+	// TODO: log intercepted suffix to dmesg (strncmp + pr_info)
 	return -ENOENT;
 }
 

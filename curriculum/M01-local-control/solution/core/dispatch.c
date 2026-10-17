@@ -10,12 +10,9 @@
 #define RK_PREFIX_LEN 8
 #define RK_PATH_MAX   128
 
-struct rk_cmd {
-	const char *key;
-	rk_handler_t handler;
-};
+/* Command registry */
 
-static struct rk_cmd registry[RK_CMD_MAX];
+static struct rk_cmd_entry registry[RK_CMD_MAX];
 static int nr_cmds;
 
 int rk_cmd_register(const char *key, rk_handler_t handler)
@@ -28,10 +25,22 @@ int rk_cmd_register(const char *key, rk_handler_t handler)
 	return 0;
 }
 
+int rk_cmds_register(const struct rk_cmd_entry *cmds, int count)
+{
+	int i, ret;
+
+	for (i = 0; i < count; i++) {
+		ret = rk_cmd_register(cmds[i].key, cmds[i].handler);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 int rk_dispatch(const char *name)
 {
 	const char *suffix = name + RK_PREFIX_LEN;
-	const struct rk_cmd *best = NULL;
+	const struct rk_cmd_entry *best = NULL;
 	int best_len = 0;
 	int i;
 
@@ -55,6 +64,8 @@ int rk_dispatch(const char *name)
 		return best->handler(suffix + best_len + 1);
 	return best->handler(NULL);
 }
+
+/* Mkdir interception */
 
 struct rk_mkdir_data {
 	int result;

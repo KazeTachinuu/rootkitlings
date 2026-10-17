@@ -73,6 +73,8 @@ student@vm:~$ mkdir rklings.e
 mkdir: cannot create directory 'rklings.e': No such file or directory
 student@vm:~$ id
 uid=0(root) gid=0(root) groups=0(root)
+student@vm:~$ dmesg | tail -1
+rklings: escalated pid ... to root
 ```
 
 ## Validate
@@ -83,6 +85,7 @@ $ rklings validate l06
   [+] uid=1000 before mkdir
   [+] mkdir rklings.e
   [+] uid=0 after mkdir
+  [+] dmesg shows escalation
   [+] non-matching mkdir does not escalate
   PASS
 ```

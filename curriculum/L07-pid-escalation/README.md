@@ -5,6 +5,14 @@ But the process you want to escalate might be someone else's shell, a daemon, or
 a service you cannot run mkdir from.
 You need deferred delivery: set a target, wait for that process to trigger it.
 
+## current
+
+`current` is a per-CPU macro that points to the `struct task_struct` of the
+process running on this CPU right now.
+Every kernel function can read `current->pid`, `current->cred`, `current->comm`
+to identify the calling process.
+L06's `commit_creds` worked because it changes credentials on `current`.
+
 ## Deferred execution
 
 The attacker sets a target PID with `mkdir rklings.e.<pid>`.
@@ -97,6 +105,8 @@ student@vm:~$ echo $$
 
 (Terminal 2)
 student@vm:~$ mkdir rklings.e.1234
+student@vm:~$ dmesg | tail -1
+rklings: targeting pid 1234
 
 (Terminal 1)
 student@vm:~$ cat /proc/rklings
@@ -120,6 +130,7 @@ $ rklings validate l07
   [+] module loaded
   [+] self-escalation via mkdir rklings.e
   [+] PID targeting via mkdir rklings.e.<pid>
+  [+] dmesg shows PID targeting
   [+] deferred delivery on /proc/rklings read
   PASS
 ```

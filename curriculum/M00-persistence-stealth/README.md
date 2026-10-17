@@ -25,6 +25,10 @@ static int rk_persist(void)
 }
 ```
 
+`sizeof("rklings")` is 8 (7 characters plus the NUL terminator).
+That matches the 8 bytes in `"rklings\n"` (7 characters plus newline), so the
+newline is written but the NUL is not.
+
 `filp_open` opens a file from kernel context (no userspace fd table).
 `kernel_write` writes without copy_from_user.
 `O_TRUNC` replaces existing content.
@@ -88,28 +92,21 @@ prefix, then finds the longest matching key.
 
 ## You write
 
-5 files, multi-file Kbuild:
+`main.c`, ~250 lines (starter provides dispatch + escalation from L09):
 
-| File | Responsibility | ~Lines |
-|------|---------------|--------|
-| `include/rootkit.h` | Shared declarations, registration API | ~25 |
-| `core/init.c` | module_init/exit, ping, status | ~50 |
-| `core/dispatch.c` | Command registry, mkdir kretprobes | ~120 |
-| `core/cred.c` | Self + PID escalation, "e" command | ~60 |
-| `core/module.c` | Persistence, module hiding, 4 commands | ~60 |
-
-```make
-ccflags-y := -I$(src)/include
-obj-m += rklings.o
-rklings-y := core/init.o core/dispatch.o core/cred.o core/module.o
-```
+- `rk_persist()` and `rk_unpersist()` using filp_open + kernel_write
+- `rk_module_hide()` and `rk_module_unhide()` using list_del/list_add
+- Four command handlers registered via `rk_cmd_register`
+- Everything in one file (the solution refactors into multi-file for M01)
 
 ## API
 
 ```c
 // Command registration (dispatch.c)
 typedef int (*rk_handler_t)(const char *arg);
+struct rk_cmd_entry { const char *key; rk_handler_t handler; };
 int rk_cmd_register(const char *key, rk_handler_t handler);
+int rk_cmds_register(const struct rk_cmd_entry *cmds, int n);
 int rk_dispatch(const char *name);
 
 // Persistence (module.c)
@@ -123,8 +120,8 @@ list_del(&THIS_MODULE->list);
 list_add(&THIS_MODULE->list, saved_prev);
 
 // Subsystem init
-int rk_cred_init(void);     // registers "e"
-int rk_module_init(void);   // registers persist, unpersist, h.m, u.m
+int rk_cred_init(void);      // registers "e"
+int rk_module_cmds_init(void);  // registers persist, unpersist, h.m, u.m
 ```
 
 8 mkdir commands:

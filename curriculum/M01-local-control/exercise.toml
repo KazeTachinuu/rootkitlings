@@ -11,8 +11,8 @@ requires = []
 
 [workspace]
 mode = "project"
-files = ["Kbuild", "include/rootkit.h", "core/init.c", "core/target.c", "core/escalation.c", "core/dispatch.c", "core/filter.c"]
-editable = ["core/init.c", "core/dispatch.c"]
+files = ["Kbuild", "include/rootkit.h", "core/init.c", "core/target.c", "core/escalation.c", "core/dispatch.c", "core/module.c", "core/filter.c"]
+editable = ["core/init.c", "core/dispatch.c", "core/escalation.c", "core/module.c", "core/target.c", "core/filter.c"]
 build = "."
 baseline = "starter"
 source = "curriculum/M01-local-control/starter"
@@ -29,7 +29,7 @@ tools = ["module-load-test"]
 
 [[verification.cases]]
 id = "all-probes-registered"
-label = "All five kretprobes register successfully"
+label = "All six kretprobes register successfully"
 expect_build = "pass"
 check = "curriculum/M01-local-control/checks/all-probes-registered"
 

@@ -10,11 +10,17 @@
 
 typedef int (*rk_handler_t)(const char *arg);
 
+struct rk_cmd_entry {
+	const char *key;
+	rk_handler_t handler;
+};
+
 int rk_cmd_register(const char *key, rk_handler_t handler);
+int rk_cmds_register(const struct rk_cmd_entry *cmds, int n);
 int rk_dispatch(const char *name);
 
 int rk_cred_init(void);
-int rk_module_init(void);
+int rk_module_cmds_init(void);
 
 void rk_module_hide(void);
 void rk_module_unhide(void);

@@ -119,6 +119,8 @@ The module is pre-loaded.
 You are logged in as student.
 
 ```
+$ dmesg | tail -1
+rklings: loaded
 $ touch /tmp/hidden
 $ ls /tmp/ | grep hidden
 hidden

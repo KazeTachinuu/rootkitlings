@@ -4,6 +4,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/printk.h>
 
 #include "rootkit.h"
 
@@ -31,11 +32,13 @@ static int __init rk_init(void)
 		return error;
 	}
 
+	pr_info("rklings: loaded, capacity=%u\n", capacity);
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
+	pr_info("rklings: unloaded\n");
 	rk_state_destroy(state);
 	state = NULL;
 }

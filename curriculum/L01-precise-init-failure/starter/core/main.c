@@ -35,18 +35,13 @@ static struct rk_channel *rk_channel_create(unsigned int id)
 
 static int __init rk_init(void)
 {
-	/*
-	 * TODO: Allocate chan_a and chan_b using rk_channel_create().
-	 * Use IS_ERR/PTR_ERR to check each allocation.
-	 * If chan_b fails, use a goto label to free chan_a.
-	 * Use RKLINGS_FAIL_POINT to inject failures at each step.
-	 */
+	// TODO: rk_init (allocate channels, goto cleanup on failure)
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/* TODO: Free both channels in reverse allocation order. */
+	// TODO: rk_exit (free channels, reverse order)
 }
 
 module_init(rk_init);

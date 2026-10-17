@@ -88,24 +88,46 @@ MODULE_DESCRIPTION("Rklings kernel module");
 Without `GPL`, the kernel taints itself and some symbols become unavailable.
 `modinfo rklings.ko` reads these fields without loading.
 
+## Logging from kernel space
+
+There is no `printf` in the kernel.
+The kernel has its own log buffer that `dmesg` reads.
+`pr_info` writes a message to that buffer:
+
+```c
+#include <linux/printk.h>
+
+pr_info("rklings: loaded\n");
+```
+
+`pr_info` works like `printf`: format string, optional arguments, explicit `\n`.
+The output goes to the kernel ring buffer, visible with `dmesg`.
+This is the only way your module can tell you it ran.
+
 ## You write
 
 `Kbuild` (~2 lines):
 
 - declare the module and its source
 
-`core/main.c` (~19 lines):
+`core/main.c` (~21 lines):
 
-- `rk_init`
-- `rk_exit`
+- `rk_init` with pr_info on load
+- `rk_exit` with pr_info on unload
 - license
 - description
 
 ## API
 
 ```c
+#include <linux/init.h>       // __init, __exit
+#include <linux/module.h>     // module_init, module_exit, MODULE_LICENSE
+#include <linux/printk.h>     // pr_info
+
 static int __init rk_init(void);     // return 0 = loaded
 static void __exit rk_exit(void);    // clean up everything
+
+pr_info("format string\n", ...);     // kernel printf, writes to dmesg
 
 module_init(rk_init);
 module_exit(rk_exit);
@@ -118,12 +140,14 @@ MODULE_DESCRIPTION("Rklings kernel module");
 ```
 $ rklings run l00
 root@vm:~# insmod rklings.ko
-root@vm:~# grep rklings /proc/modules
-rklings 12288 0 - Live 0x...
-root@vm:~# ls /sys/module/rklings/
-...
+root@vm:~# dmesg | tail -1
+rklings: loaded
+root@vm:~# lsmod | grep rklings
+rklings 12288 0
 root@vm:~# rmmod rklings
-root@vm:~# grep rklings /proc/modules
+root@vm:~# dmesg | tail -1
+rklings: unloaded
+root@vm:~# lsmod | grep rklings
 (no output)
 ```
 
@@ -134,8 +158,9 @@ $ rklings validate l00
   [+] rklings.ko builds without warnings
   [+] modinfo shows LICENSE=GPL
   [+] insmod succeeds, /proc/modules lists rklings
+  [+] dmesg shows "rklings: loaded"
   [+] /sys/module/rklings exists
-  [+] rmmod succeeds, both entries gone
+  [+] rmmod succeeds, dmesg shows "rklings: unloaded"
   [+] reload succeeds (clean lifecycle)
   PASS
 ```

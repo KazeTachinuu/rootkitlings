@@ -109,7 +109,11 @@ void rk_proc_exit(void)
 	proc_remove(proc_entry);
 }
 
+static const struct rk_cmd_entry escalate_cmds[] = {
+	{ "e", cmd_escalate },
+};
+
 int rk_escalate_init(void)
 {
-	return rk_cmd_register("e", cmd_escalate);
+	return rk_cmds_register(escalate_cmds, ARRAY_SIZE(escalate_cmds));
 }

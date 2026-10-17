@@ -109,6 +109,8 @@ void seq_puts(struct seq_file *m, const char *s);
 ```
 $ rklings run l03
 root@vm:~# insmod rklings.ko
+root@vm:~# dmesg | tail -1
+rklings: loaded
 root@vm:~# cat /proc/rklings
 active
 root@vm:~# ls -l /proc/rklings
@@ -123,6 +125,7 @@ cat: /proc/rklings: No such file or directory
 ```
 $ rklings validate l03
   [+] builds at all fail points
+  [+] dmesg shows "rklings: loaded"
   [+] /proc/rklings exists after insmod
   [+] cat /proc/rklings returns "active"
   [+] permissions are 0444 (read-only)

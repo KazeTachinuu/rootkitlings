@@ -11,8 +11,7 @@
 #error "unknown RKLINGS_FAIL_POINT"
 #endif
 
-/* TODO: declare a module_param for capacity (unsigned int, default 32,
- * read-only). */
+// TODO: module_param for capacity (default 32, read-only)
 
 static struct rk_state *state;
 
@@ -23,15 +22,14 @@ static int __init rk_init(void)
 	if (RKLINGS_FAIL_POINT == RK_FAIL_PREFLIGHT)
 		return -ECANCELED;
 
-	/* TODO: create the private state with capacity, handle error with
-	 * IS_ERR/PTR_ERR. */
+	// TODO: create state, handle allocation failure
 
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
-	/* TODO: destroy the private state and NULL the pointer. */
+	// TODO: rk_exit (destroy state)
 }
 
 module_init(rk_init);

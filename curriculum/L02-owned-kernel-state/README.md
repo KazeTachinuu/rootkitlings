@@ -129,11 +129,15 @@ MODULE_PARM_DESC(capacity, "Maximum number of targets");
 ```
 $ rklings run l02
 root@vm:~# insmod rklings.ko
+root@vm:~# dmesg | tail -1
+rklings: loaded, capacity=32
 root@vm:~# cat /sys/module/rklings/parameters/capacity
 32
 root@vm:~# rmmod rklings
 
 root@vm:~# insmod rklings.ko capacity=128
+root@vm:~# dmesg | tail -1
+rklings: loaded, capacity=128
 root@vm:~# cat /sys/module/rklings/parameters/capacity
 128
 root@vm:~# rmmod rklings
@@ -144,6 +148,7 @@ root@vm:~# rmmod rklings
 ```
 $ rklings validate l02
   [+] builds at all fail points
+  [+] dmesg shows "rklings: loaded, capacity=32"
   [+] default capacity=32 visible in /sys/module
   [+] capacity=128 override works
   [+] FAIL_POINT=1: rejects load (preflight)
