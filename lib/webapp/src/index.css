@@ -1,0 +1,164 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  /* light mode: warm lavender base, white cards, dark violet borders */
+  --color-bg: #ede9f6;
+  --color-bg-2: #e2ddf0;
+  --color-main: #7c3aed;
+  --color-main-fg: #ffffff;
+  --color-secondary: #ffffff;
+  --color-fg: #1a1028;
+  --color-fg-2: #463960;
+  --color-fg-3: #8478a0;
+  --color-border: #1a1028;
+  --color-overlay: rgba(26, 16, 40, 0.8);
+  /* status: saturated, complement the violet family */
+  --color-green: #16a34a;
+  --color-red: #dc2626;
+  --color-amber: #d97706;
+  --color-blue: #2563eb;
+  --color-purple: #7c3aed;
+  /* neobrutalism tokens */
+  --radius: 5px;
+  --shadow-offset: 4px;
+  --font-body: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: var(--font-body);
+  font-weight: 500;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  margin: 0;
+}
+
+h1, h2, h3, h4, h5, h6 { font-weight: 700; }
+
+/* neobrutalism card: border + offset shadow */
+.nb-card {
+  background: var(--color-secondary);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0px 0px var(--color-border);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.nb-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px var(--color-border);
+}
+.nb-card-flat {
+  background: var(--color-secondary);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+/* neobrutalism button */
+.nb-btn {
+  background: var(--color-secondary);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0px 0px var(--color-border);
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.nb-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0px 0px var(--color-border);
+}
+.nb-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0px 0px 0px 0px var(--color-border);
+}
+.nb-btn:disabled, .nb-btn-main:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+  box-shadow: none;
+}
+.nb-btn-main {
+  background: var(--color-main);
+  color: var(--color-main-fg);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0px 0px var(--color-border);
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.nb-btn-main:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0px 0px var(--color-border);
+}
+.nb-btn-main:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0px 0px 0px 0px var(--color-border);
+}
+
+/* neobrutalism input */
+.nb-input {
+  background: var(--color-secondary);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  color: var(--color-fg);
+  outline: none;
+  transition: box-shadow 0.15s;
+}
+.nb-input:focus {
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0px 0px var(--color-border);
+}
+.nb-input::placeholder { color: var(--color-fg-3); }
+
+/* neobrutalism badge */
+.nb-badge {
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* status dot with pulse */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.pulse { animation: pulse-dot 2s ease-in-out infinite; }
+
+/* idle CTA float */
+@keyframes nb-float {
+  0%, 100% { transform: translateY(0) }
+  50% { transform: translateY(-6px) }
+}
+.nb-float { animation: nb-float 3s ease-in-out infinite; }
+
+/* selection */
+::selection { background: var(--color-main); color: var(--color-main-fg); }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--color-bg); }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: var(--radius); }
+
+/* toast animations */
+@keyframes toast-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes toast-out {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+.toast-enter { animation: toast-in 0.25s ease-out; }
+.toast-exit { animation: toast-out 0.2s ease-in forwards; }
