@@ -35,14 +35,21 @@ type Check struct {
 }
 
 type Catalog struct {
-	Root      string
-	Exercises []Exercise
-	ByID      map[string]*Exercise
+	Root         string
+	Exercises    []Exercise
+	ByID         map[string]*Exercise
+	ToolBinaries map[string]string // tool ID -> binary path relative to repo root
 }
 
 type courseToml struct {
-	ExerciseRoots []string `toml:"exercise_roots"`
-	RequiredRoute []string `toml:"required_route"`
+	ExerciseRoots []string   `toml:"exercise_roots"`
+	RequiredRoute []string   `toml:"required_route"`
+	Tools         []toolToml `toml:"tools"`
+}
+
+type toolToml struct {
+	ID     string `toml:"id"`
+	Binary string `toml:"binary"`
 }
 
 type exerciseToml struct {
@@ -83,8 +90,12 @@ func Load(root string) (*Catalog, error) {
 	}
 
 	cat := &Catalog{
-		Root: root,
-		ByID: make(map[string]*Exercise),
+		Root:         root,
+		ByID:         make(map[string]*Exercise),
+		ToolBinaries: make(map[string]string),
+	}
+	for _, t := range course.Tools {
+		cat.ToolBinaries[t.ID] = t.Binary
 	}
 
 	found := make(map[string]*Exercise)

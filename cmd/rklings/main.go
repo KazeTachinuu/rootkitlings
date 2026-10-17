@@ -197,11 +197,12 @@ func runCmd() *cobra.Command {
 			tui.Pass("VM ready (%.1fs)", v.BootTime().Seconds())
 
 			if koPath != "" {
-				if err := v.SCP(koPath, "/tmp/rklings.ko"); err != nil {
+				v.SSH("mkdir -p /rklings")
+				if err := v.SCP(koPath, "/rklings/rklings.ko"); err != nil {
 					tui.Fatal("SCP: %v", err)
 				}
 				if ex.PreloadModule {
-					if out, err := v.SSH("insmod /tmp/rklings.ko"); err != nil {
+					if out, err := v.SSH("insmod /rklings/rklings.ko"); err != nil {
 						tui.Warn("insmod: %s", out)
 					} else {
 						tui.Pass("module loaded")
@@ -229,7 +230,7 @@ func validateCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			cat, root := loadCatalog()
 			ex := findExercise(cat, args[0])
-			if err := validate.Run(root, ex); err != nil {
+			if err := validate.Run(root, ex, cat); err != nil {
 				tui.Fatal("%v", err)
 			}
 		},

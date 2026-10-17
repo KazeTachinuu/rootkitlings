@@ -28,7 +28,7 @@ func imagePath() (string, error) {
 	return p, nil
 }
 
-func Run(root string, ex *catalog.Exercise) error {
+func Run(root string, ex *catalog.Exercise, cat *catalog.Catalog) error {
 	image, err := imagePath()
 	if err != nil {
 		return err
@@ -73,7 +73,7 @@ func Run(root string, ex *catalog.Exercise) error {
 	defer v.Close()
 
 	// Prepare VM directories and support files for check scripts.
-	if _, err := v.SSH("mkdir -p /vm/checks /vm/tools"); err != nil {
+	if _, err := v.SSH("mkdir -p /vm/checks"); err != nil {
 		return fmt.Errorf("mkdir /vm: %w", err)
 	}
 
@@ -91,37 +91,42 @@ func Run(root string, ex *catalog.Exercise) error {
 
 	// Copy exercise-specific verification tools.
 	if len(ex.Tools) > 0 {
-		home, _ := os.UserHomeDir()
-		toolsDir := filepath.Join(home, ".rklings", "build", "tools")
-		for _, tool := range ex.Tools {
-			src := filepath.Join(toolsDir, tool)
-			dst := "/vm/tools/" + tool
+		for _, toolID := range ex.Tools {
+			binPath, ok := cat.ToolBinaries[toolID]
+			if !ok {
+				tui.Warn("unknown tool %s, skipping", toolID)
+				continue
+			}
+			src := filepath.Join(root, binPath)
+			if _, err := os.Stat(src); err != nil {
+				src = filepath.Join(root, ".rklings", "build", "tools", filepath.Base(binPath))
+			}
+			dst := "/usr/local/bin/" + filepath.Base(binPath)
 			if err := v.SCP(src, dst); err != nil {
-				return fmt.Errorf("SCP tool %s: %w", tool, err)
+				return fmt.Errorf("SCP tool %s: %w", toolID, err)
 			}
 			if _, err := v.SSH(fmt.Sprintf("chmod +x %s", dst)); err != nil {
-				return fmt.Errorf("chmod tool %s: %w", tool, err)
+				return fmt.Errorf("chmod tool %s: %w", toolID, err)
 			}
 		}
 	}
 
 	if koPath != "" {
-		if err := v.SCP(koPath, "/tmp/rklings.ko"); err != nil {
+		if _, err := v.SSH("mkdir -p /rklings"); err != nil {
+			return fmt.Errorf("mkdir /rklings: %w", err)
+		}
+		if err := v.SCP(koPath, "/rklings/rklings.ko"); err != nil {
 			return fmt.Errorf("SCP .ko failed: %w", err)
 		}
 		if ex.PreloadModule {
-			if out, err := v.SSH("insmod /tmp/rklings.ko"); err != nil {
+			if out, err := v.SSH("insmod /rklings/rklings.ko"); err != nil {
 				return fmt.Errorf("insmod failed: %s", out)
 			}
 		}
 	}
 
-	// Run VM checks as the exercise's designated user.
-	vmUser := ex.VMUser
-	if vmUser == "" {
-		vmUser = "root"
-	}
-
+	// Check scripts always run as root: they need insmod/rmmod/dmesg access.
+	// The scripts themselves use su/run_as for student-perspective tests.
 	for _, check := range ex.Checks {
 		if isHostCheck(check) {
 			continue
@@ -137,7 +142,7 @@ func Run(root string, ex *catalog.Exercise) error {
 			failed++
 			continue
 		}
-		out, err := v.SSHAs(vmUser, remotePath)
+		out, err := v.SSH(remotePath)
 		output := strings.TrimSpace(out)
 		if err != nil {
 			tui.Fail("%s: %s", check.Label, output)
