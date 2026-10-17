@@ -14,7 +14,7 @@ else
     _fail "expected OK, got: $resp"
 fi
 
-# Verify the mkdir was issued (dmesg should show status dispatch)
-assert_log "dispatch: cmd=status"
+# Verify the mkdir was issued (module prints "alive" for status)
+assert_log "rklings: alive"
 
 summary

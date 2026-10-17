@@ -332,6 +332,40 @@ assert_gt() {
     esac
 }
 
+# -- agent communication (L17-L19) ------------------------------------------
+# These talk to the relay server on the host via QEMU gateway.
+
+_RELAY_URL="${RELAY_URL:-http://10.0.2.2:4444}"
+
+wait_agent() {
+    local i resp
+    for i in $(seq 1 30); do
+        resp=$(curl -sf "$_RELAY_URL/wait" 2>/dev/null) && break
+        sleep 1
+    done
+    case "$resp" in
+        CONNECTED*) _ok "agent connected" ;;
+        *) _fail "agent not connected: $resp" ;;
+    esac
+}
+
+send_cmd() {
+    curl -sf -G --data-urlencode "q=$1" "$_RELAY_URL/cmd" 2>/dev/null
+}
+
+send_download() {
+    curl -sf -G --data-urlencode "path=$1" "$_RELAY_URL/download" 2>/dev/null
+}
+
+send_download_size() {
+    curl -sf -G --data-urlencode "path=$1" "$_RELAY_URL/download-size" 2>/dev/null
+}
+
+send_upload() {
+    local path="$1" payload="$2"
+    printf '%s' "$payload" | curl -sf -X POST --data-binary @- "$_RELAY_URL/upload?path=$path" 2>/dev/null
+}
+
 assert_contains() {
     local path="$1" expected="$2"
     local actual
