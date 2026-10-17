@@ -15,6 +15,7 @@ import (
 	"github.com/hugo/rootkitlings/internal/vm"
 )
 
+
 func imagePath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -70,6 +71,39 @@ func Run(root string, ex *catalog.Exercise) error {
 		return fmt.Errorf("VM boot failed: %w", err)
 	}
 	defer v.Close()
+
+	// Prepare VM directories and support files for check scripts.
+	if _, err := v.SSH("mkdir -p /vm/checks /vm/tools"); err != nil {
+		return fmt.Errorf("mkdir /vm: %w", err)
+	}
+
+	// Copy vm/ui.sh (sourced by lib.sh for colored markers).
+	uiSh := filepath.Join(root, "vm", "ui.sh")
+	if err := v.SCP(uiSh, "/vm/ui.sh"); err != nil {
+		return fmt.Errorf("SCP ui.sh: %w", err)
+	}
+
+	// Copy shared check library.
+	libSh := filepath.Join(root, "vm", "checks", "lib.sh")
+	if err := v.SCP(libSh, "/vm/checks/lib.sh"); err != nil {
+		return fmt.Errorf("SCP lib.sh: %w", err)
+	}
+
+	// Copy exercise-specific verification tools.
+	if len(ex.Tools) > 0 {
+		home, _ := os.UserHomeDir()
+		toolsDir := filepath.Join(home, ".rklings", "build", "tools")
+		for _, tool := range ex.Tools {
+			src := filepath.Join(toolsDir, tool)
+			dst := "/vm/tools/" + tool
+			if err := v.SCP(src, dst); err != nil {
+				return fmt.Errorf("SCP tool %s: %w", tool, err)
+			}
+			if _, err := v.SSH(fmt.Sprintf("chmod +x %s", dst)); err != nil {
+				return fmt.Errorf("chmod tool %s: %w", tool, err)
+			}
+		}
+	}
 
 	if koPath != "" {
 		if err := v.SCP(koPath, "/tmp/rklings.ko"); err != nil {

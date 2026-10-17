@@ -63,6 +63,12 @@ func EnsureBuildImage(runtime string) error {
 }
 
 func Build(ex *catalog.Exercise) (string, error) {
+	// Only kernel exercises (those with a Kbuild file) produce a .ko.
+	kbuildPath := filepath.Join(ex.Source, "Kbuild")
+	if _, err := os.Stat(kbuildPath); err != nil {
+		return "", nil
+	}
+
 	rt, err := DetectRuntime()
 	if err != nil {
 		return "", err

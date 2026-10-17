@@ -130,16 +130,27 @@ func runCmd() *cobra.Command {
 				ex = ex.WithSource(ex.Solution)
 			}
 
-			koPath, err := build.Build(ex)
-			if err != nil {
-				tui.Fatal("build: %v", err)
+			// D00 (deployment) has no .ko to build.
+			var koPath string
+			if ex.Kind != "deployment" {
+				var err error
+				koPath, err = build.Build(ex)
+				if err != nil {
+					tui.Fatal("build: %v", err)
+				}
 			}
 
 			home, err := os.UserHomeDir()
 			if err != nil {
 				tui.Fatal("home dir: %v", err)
 			}
-			imagePath := filepath.Join(home, ".rklings", "cache", isetup.VMImageName)
+
+			// D00 uses the 24.04 image; everything else uses the 26.04 image.
+			imageName := isetup.VMImageName
+			if ex.Kind == "deployment" {
+				imageName = isetup.D00ImageName
+			}
+			imagePath := filepath.Join(home, ".rklings", "cache", imageName)
 
 			tmpDir, err := os.MkdirTemp("", "rklings-run-")
 			if err != nil {
@@ -152,20 +163,32 @@ func runCmd() *cobra.Command {
 				vmUser = "root"
 			}
 
+			// D00 runs 24.04 with kernel 6.8.0-101.
+			kernelLabel := "7.0.0-38"
+			if ex.Kind == "deployment" {
+				kernelLabel = "6.8.0-101"
+			}
 			motd := fmt.Sprintf(
-				"%s: %s\nkernel 7.0.0-38 | user: %s | exit to teardown\n",
-				ex.ID, ex.Title, vmUser,
+				"%s: %s\nkernel %s | user: %s | exit to teardown\n",
+				ex.ID, ex.Title, kernelLabel, vmUser,
 			)
+
+			// D00 forwards port 8080 for the vulnerable service.
+			var extraFwd []string
+			if ex.Kind == "deployment" {
+				extraFwd = []string{"tcp::8080-:8080"}
+			}
 
 			// Always boot as root: SCP needs write access to /tmp and
 			// insmod requires root.  We switch to the exercise user for
 			// the interactive shell afterwards.
 			tui.Info("booting VM...")
 			v, err := vm.Boot(vm.BootOpts{
-				ImagePath:  imagePath,
-				OverlayDir: tmpDir,
-				User:       "root",
-				MOTD:       motd,
+				ImagePath:    imagePath,
+				OverlayDir:   tmpDir,
+				User:         "root",
+				MOTD:         motd,
+				ExtraPortFwd: extraFwd,
 			})
 			if err != nil {
 				tui.Fatal("VM boot: %v", err)

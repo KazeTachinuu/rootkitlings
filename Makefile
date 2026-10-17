@@ -28,8 +28,7 @@ GUEST_TOOLS := $(addprefix $(TOOL_OUT)/,$(GUEST_TOOL_NAMES))
 
 PREFIX ?= $(HOME)/.local
 
-.PHONY: all install uninstall help module clean compile-db doctor tools tool-output-directory
-.PHONY: test-checkers test-solutions validate validate-quick
+.PHONY: all install uninstall help module clean tools tool-output-directory
 
 .DEFAULT_GOAL := install
 
@@ -45,27 +44,19 @@ help:
 	@printf '%s\n' \
 		'Rklings maintainer targets:' \
 		'  tools           Build guest-side verification tools' \
-		'  clean           Remove generated verification tools' \
-		'  doctor          Check host dependencies' \
-		'  validate        Run the full repository validation' \
-		'  validate-quick  Run static validation only' \
-		'  test-checkers   Test exercise checkers against faulty implementations' \
-		'  test-solutions  Build and test reference solutions' \
-		'  compile-db      Generate compile_commands.json'
+		'  module          Build kernel module (MODULE_DIR required)' \
+		'  clean           Remove generated verification tools'
 
 module:
 	@test -n "$(MODULE_DIR)" || { echo 'MODULE_DIR is required' >&2; exit 2; }
-	@kdir="$(KDIR)"; \
-	if test -z "$$kdir"; then \
-		kdir="$$("$(CURDIR)/scripts/kernel" build-dir)" || exit; \
-	fi; \
-	if test -n "$(MODULE_OUT)"; then \
+	@test -n "$(KDIR)" || { echo 'KDIR is required' >&2; exit 2; }
+	@if test -n "$(MODULE_OUT)"; then \
 		set -- "MO=$(MODULE_OUT)"; \
 	else \
 		set --; \
 	fi; \
 	env -i PATH="$$PATH" LC_ALL=C LANG=C TZ=UTC \
-		make -C "$$kdir" M="$(MODULE_DIR)" W=1 ARCH=x86_64 CC=gcc HOSTCC=gcc \
+		make -C "$(KDIR)" M="$(MODULE_DIR)" W=1 ARCH=x86_64 CC=gcc HOSTCC=gcc \
 		RKLINGS_FAIL_POINT="$(RKLINGS_FAIL_POINT)" "$$@" modules
 
 tools: $(GUEST_TOOLS)
@@ -139,21 +130,3 @@ clean:
 	@test "$(TOOL_OUT)" = .rklings/build/tools || \
 		{ echo 'clean does not accept TOOL_OUT' >&2; exit 2; }
 	$(RM) $(GUEST_TOOLS)
-
-doctor:
-	@"$(CURDIR)/scripts/doctor"
-
-compile-db:
-	@"$(CURDIR)/scripts/compile-db"
-
-validate:
-	@"$(CURDIR)/scripts/validate"
-
-validate-quick:
-	@"$(CURDIR)/scripts/validate" --quick
-
-test-checkers:
-	@"$(CURDIR)/scripts/test-checkers"
-
-test-solutions:
-	@"$(CURDIR)/scripts/test-solutions"
