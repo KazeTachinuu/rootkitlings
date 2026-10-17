@@ -1,0 +1,20 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "ESCALATE command triggers privilege escalation"
+
+wait_agent
+
+# Send ESCALATE
+resp=$(send_cmd "ESCALATE")
+if echo "$resp" | grep -q "OK"; then
+    _ok "ESCALATE returned OK"
+else
+    _fail "expected OK, got: $resp"
+fi
+
+# Verify mkdir rklings.e was issued by checking dmesg
+assert_log "escalat"
+
+summary

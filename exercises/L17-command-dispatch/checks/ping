@@ -1,0 +1,17 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "PING command returns PONG"
+
+wait_agent
+
+# Send PING, expect PONG
+resp=$(send_cmd "PING")
+if echo "$resp" | grep -q "PONG"; then
+    _ok "PING returned PONG"
+else
+    _fail "expected PONG, got: $resp"
+fi
+
+summary

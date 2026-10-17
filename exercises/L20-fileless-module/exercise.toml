@@ -1,0 +1,47 @@
+schema_version = 2
+id = "fileless-module"
+title = "Load a kernel module without touching disk"
+stage = "tradecraft"
+kind = "lesson"
+vm_user = "student"
+preload_module = false
+tradecraft = ["fileless", "anti-forensics"]
+difficulty = "standard"
+prerequisites = ["file-transfer"]
+teaches = ["memfd-create", "finit-module", "fileless-loading"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["main.go", "go.mod"]
+editable = ["main.go"]
+build = "."
+baseline = "starter"
+source = "exercises/L20-fileless-module/starter"
+
+[resources]
+readme = "exercises/L20-fileless-module/README.md"
+host_check = ""
+solution = "exercises/L20-fileless-module/solution"
+
+[verification]
+timeout_seconds = 120
+tools = []
+
+[[verification.cases]]
+id = "module-loaded"
+label = "rklings module is loaded in the kernel"
+expect_build = "pass"
+check = "exercises/L20-fileless-module/checks/module-loaded"
+
+[[verification.cases]]
+id = "no-file-on-disk"
+label = "No .ko file exists anywhere on disk"
+expect_build = "pass"
+check = "exercises/L20-fileless-module/checks/no-file-on-disk"
+
+[[verification.cases]]
+id = "memfd-used"
+label = "Module was loaded via memfd (no file path in /proc)"
+expect_build = "pass"
+check = "exercises/L20-fileless-module/checks/memfd-used"

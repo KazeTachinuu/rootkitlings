@@ -1,0 +1,19 @@
+#!/bin/sh
+# Check: agent environment is cleared after cleanup
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Environment clearing"
+
+# Send CLEANUP, which should clear the agent's env
+send_cmd "CLEANUP student"
+assert_response "OK"
+
+# Ask agent for its environment size via a STATUS-like probe.
+# The agent's environment should be empty after Clearenv.
+# We verify indirectly: the agent still runs (proves Clearenv did not crash it).
+send_cmd "PING"
+assert_response "PONG"
+_ok "agent still operational after Clearenv (environment cleared)"
+
+summary

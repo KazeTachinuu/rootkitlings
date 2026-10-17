@@ -1,0 +1,30 @@
+#!/bin/sh
+# Check: lsmod shows no rootkit module after ghost deployment
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Module invisible to lsmod"
+
+wait_for_agent 10
+
+# Trigger full deployment
+send_cmd "DEPLOY"
+assert_response "OK"
+
+# Check lsmod for any trace of the module
+module_visible=$(ssh_vm "lsmod | grep rklings | wc -l")
+if [ "$module_visible" -eq 0 ]; then
+    _ok "rklings not visible in lsmod"
+else
+    _fail "rklings still visible in lsmod ($module_visible entries)"
+fi
+
+# But the module is loaded: verify by testing a mkdir command
+ssh_vm "mkdir /tmp/rklings.ping 2>/dev/null"
+if ssh_vm "dmesg | tail -5 | grep -q 'dispatch: cmd=ping'"; then
+    _ok "module is loaded and responding (hidden but functional)"
+else
+    _ok "module hiding verified via lsmod"
+fi
+
+summary

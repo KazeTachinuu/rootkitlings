@@ -1,0 +1,31 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Agent connects to server with TLS 1.3"
+
+# The lab server must be running on the host at 10.0.2.2:443.
+# Run the agent and capture its output.
+timeout 10 ./agent > /tmp/agent_output 2>&1
+ret=$?
+
+if [ "$ret" -eq 0 ]; then
+    _ok "agent exited cleanly"
+else
+    _fail "agent exited with code $ret"
+fi
+
+# Verify the agent received a response from the server
+if [ -s /tmp/agent_output ]; then
+    _ok "agent received data from server"
+else
+    _fail "agent produced no output, connection likely failed"
+fi
+
+# Check the host-side log for TLS 1.3
+assert_host_log "TLS 1.3"
+
+# Cleanup
+rm -f /tmp/agent_output
+
+summary

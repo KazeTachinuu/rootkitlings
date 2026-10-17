@@ -1,0 +1,16 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Server LIST command triggers mkdir rklings.list"
+
+assert_loaded rklings
+
+# Send LIST command via the host server
+send_host_cmd "LIST"
+sleep 1
+
+# Verify dmesg shows list dispatch (L14-era logging still active)
+assert_log "dispatch"
+
+summary

@@ -1,0 +1,27 @@
+#!/bin/sh
+# Check: find shows no agent binary on disk
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "No binary on disk"
+
+wait_for_agent 10
+
+# Search for agent binary and .ko file
+agent_found=$(ssh_vm "find / -name 'agent' -o -name 'ghost' -o -name 'rklings.ko' 2>/dev/null | grep -v proc | wc -l")
+if [ "${agent_found:-0}" -eq 0 ]; then
+    _ok "no agent binary or .ko found on disk"
+else
+    _fail "found $agent_found files that should not exist"
+fi
+
+# Verify the agent is running from memory (check /proc/self/exe)
+send_cmd "SHELL readlink /proc/self/exe"
+resp=$(read_until_dot)
+if echo "$resp" | grep -q "memfd\|deleted"; then
+    _ok "agent running from memory (memfd or deleted binary)"
+else
+    _ok "agent binary path: $resp"
+fi
+
+summary

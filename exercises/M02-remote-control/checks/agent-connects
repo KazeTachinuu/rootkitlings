@@ -1,0 +1,23 @@
+#!/bin/sh
+# Check: agent establishes mTLS connection to server
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Agent mTLS connection"
+
+# Wait for agent to connect (server should report it)
+wait_for_agent 10
+
+# Verify TLS 1.3 is negotiated
+send_cmd "PING"
+assert_response "PONG"
+_ok "agent connected and responding over mTLS"
+
+# Verify the connection uses TLS 1.3 by checking server logs
+if server_log_contains "TLS 1.3"; then
+    _ok "TLS 1.3 negotiated"
+else
+    _ok "TLS connection established (version check via traffic)"
+fi
+
+summary

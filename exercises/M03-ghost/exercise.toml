@@ -1,0 +1,77 @@
+schema_version = 2
+id = "ghost"
+title = "All tradecraft integrated, nothing visible"
+stage = "tradecraft"
+kind = "milestone"
+vm_user = "student"
+preload_module = false
+tradecraft = ["concealment", "anti-forensics", "evasion", "persistence"]
+difficulty = "advanced"
+prerequisites = ["anti-forensics"]
+teaches = ["full-tradecraft-integration", "operational-security", "defender-evasion"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["main.go", "go.mod"]
+editable = ["main.go"]
+build = "."
+baseline = "starter"
+source = "exercises/M03-ghost/starter"
+
+[resources]
+readme = "exercises/M03-ghost/README.md"
+host_check = ""
+solution = "exercises/M03-ghost/solution"
+
+[verification]
+timeout_seconds = 180
+tools = ["module-load-test", "mtls-agent-fixture"]
+
+[[verification.cases]]
+id = "no-module-visible"
+label = "lsmod shows no rootkit module"
+expect_build = "pass"
+check = "exercises/M03-ghost/checks/no-module-visible"
+
+[[verification.cases]]
+id = "no-process-visible"
+label = "ps shows no agent process"
+expect_build = "pass"
+check = "exercises/M03-ghost/checks/no-process-visible"
+
+[[verification.cases]]
+id = "no-port-visible"
+label = "ss shows no agent port"
+expect_build = "pass"
+check = "exercises/M03-ghost/checks/no-port-visible"
+
+[[verification.cases]]
+id = "no-file-visible"
+label = "find shows no agent binary on disk"
+expect_build = "pass"
+check = "exercises/M03-ghost/checks/no-file-visible"
+
+[[verification.cases]]
+id = "no-login-record"
+label = "last shows no login for session"
+expect_build = "pass"
+check = "exercises/M03-ghost/checks/no-login-record"
+
+[[verification.cases]]
+id = "no-core-dump"
+label = "Agent is not dumpable"
+expect_build = "pass"
+check = "exercises/M03-ghost/checks/no-core-dump"
+
+[[verification.cases]]
+id = "timestamps-clean"
+label = "No recent timestamps on dropped files"
+expect_build = "pass"
+check = "exercises/M03-ghost/checks/timestamps-clean"
+
+[[verification.cases]]
+id = "agent-operational"
+label = "Agent still responds to commands"
+expect_build = "pass"
+check = "exercises/M03-ghost/checks/agent-operational"

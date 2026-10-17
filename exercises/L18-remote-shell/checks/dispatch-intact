@@ -1,0 +1,17 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "PING still works alongside EXEC"
+
+wait_agent
+
+# Verify existing dispatch still works after adding EXEC
+resp=$(send_cmd "PING")
+if echo "$resp" | grep -q "PONG"; then
+    _ok "PING returned PONG"
+else
+    _fail "expected PONG, got: $resp"
+fi
+
+summary

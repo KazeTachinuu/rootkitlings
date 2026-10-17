@@ -1,0 +1,53 @@
+schema_version = 2
+id = "remote-shell"
+title = "Remote shell execution over mTLS"
+stage = "remote"
+kind = "lesson"
+vm_user = "root"
+preload_module = true
+tradecraft = ["c2", "execution"]
+difficulty = "easy"
+prerequisites = ["command-dispatch"]
+teaches = ["exec-command", "combined-output", "shell-wrapping"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["main.go", "go.mod"]
+editable = ["main.go"]
+build = "."
+baseline = "starter"
+source = "exercises/L18-remote-shell/starter"
+
+[resources]
+readme = "exercises/L18-remote-shell/README.md"
+host_check = ""
+solution = "exercises/L18-remote-shell/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["mtls-agent-test"]
+
+[[verification.cases]]
+id = "exec-id"
+label = "EXEC id returns uid=0"
+expect_build = "pass"
+check = "exercises/L18-remote-shell/checks/exec-id"
+
+[[verification.cases]]
+id = "exec-multiword"
+label = "EXEC handles pipes and redirects"
+expect_build = "pass"
+check = "exercises/L18-remote-shell/checks/exec-multiword"
+
+[[verification.cases]]
+id = "exec-error"
+label = "EXEC reports nonexistent command error"
+expect_build = "pass"
+check = "exercises/L18-remote-shell/checks/exec-error"
+
+[[verification.cases]]
+id = "dispatch-intact"
+label = "PING still works alongside EXEC"
+expect_build = "pass"
+check = "exercises/L18-remote-shell/checks/dispatch-intact"

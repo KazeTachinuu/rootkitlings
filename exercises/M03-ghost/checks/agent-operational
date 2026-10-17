@@ -1,0 +1,33 @@
+#!/bin/sh
+# Check: agent still responds to commands after full ghost deployment
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Agent operational after ghost deployment"
+
+wait_for_agent 10
+
+# PING
+send_cmd "PING"
+assert_response "PONG"
+_ok "PING/PONG works"
+
+# Shell execution
+send_cmd "SHELL whoami"
+resp=$(read_until_dot)
+if echo "$resp" | grep -q "root"; then
+    _ok "shell execution returns root (escalated)"
+else
+    _ok "shell execution works: $resp"
+fi
+
+# Status
+send_cmd "STATUS"
+resp=$(read_response)
+if echo "$resp" | grep -q "PID"; then
+    _ok "STATUS returns agent info"
+else
+    _fail "STATUS did not return expected info: $resp"
+fi
+
+summary

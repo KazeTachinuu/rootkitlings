@@ -1,0 +1,43 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "mkdir rklings.launch launches a process"
+
+load rklings.ko
+assert_loaded rklings
+
+# Create a test script that writes proof of execution
+cat > /tmp/rk_test_launch.sh <<'SCRIPT'
+#!/bin/sh
+echo "launched" > /tmp/rk_launch_proof
+SCRIPT
+chmod +x /tmp/rk_test_launch.sh
+
+# Remove any prior proof
+rm -f /tmp/rk_launch_proof
+
+# Launch via mkdir
+mkdir /tmp/rklings.launch./tmp/rk_test_launch.sh 2>/dev/null
+
+# Give the process a moment to run
+sleep 1
+
+# Verify proof file exists
+if [ -f /tmp/rk_launch_proof ]; then
+    content=$(cat /tmp/rk_launch_proof)
+    if [ "$content" = "launched" ]; then
+        _ok "launched process created proof file"
+    else
+        _fail "proof file exists but content wrong: $content"
+    fi
+else
+    _fail "proof file not created, process did not run"
+fi
+
+# Cleanup
+rm -f /tmp/rk_test_launch.sh /tmp/rk_launch_proof
+rm -rf /tmp/rklings.launch./tmp/rk_test_launch.sh 2>/dev/null
+unload rklings
+
+summary

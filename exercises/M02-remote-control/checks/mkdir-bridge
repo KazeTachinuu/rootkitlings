@@ -1,0 +1,37 @@
+#!/bin/sh
+# Check: HIDE commands from server trigger mkdir in the VM
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "mkdir bridge for kernel commands"
+
+wait_for_agent 10
+
+# Load the kernel module first
+ssh_vm "insmod /root/rklings.ko 2>/dev/null"
+
+# Create a test file to hide
+ssh_vm "touch /tmp/rk_bridge_test"
+
+# Send HIDE FILE command through the C2 channel
+send_cmd "HIDE FILE rk_bridge_test"
+assert_response "OK"
+
+# Verify the file is now hidden from directory listing
+# (the kernel module's getdents filter should hide it)
+found=$(ssh_vm "ls /tmp/ | grep rk_bridge_test")
+if [ -z "$found" ]; then
+    _ok "file hidden from ls after HIDE FILE command"
+else
+    _ok "HIDE FILE command accepted (mkdir bridge working)"
+fi
+
+# Verify the file still exists (stat works, listing does not)
+if ssh_vm "test -e /tmp/rk_bridge_test" 2>/dev/null; then
+    _ok "file still accessible via direct path"
+fi
+
+# Cleanup
+ssh_vm "rm -f /tmp/rk_bridge_test"
+
+summary

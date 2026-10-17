@@ -1,0 +1,47 @@
+schema_version = 2
+id = "mkdir-bridge"
+title = "Bridge server commands to kernel via os.Mkdir"
+stage = "split"
+kind = "lesson"
+vm_user = "root"
+preload_module = true
+tradecraft = ["communication", "control"]
+difficulty = "standard"
+prerequisites = ["mtls-connect"]
+teaches = ["command-bridge", "os-mkdir-dispatch"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["go.mod", "main.go"]
+editable = ["main.go"]
+build = "."
+baseline = "starter"
+source = "exercises/L16-mkdir-bridge/starter"
+
+[resources]
+readme = "exercises/L16-mkdir-bridge/README.md"
+host_check = "l16"
+solution = "exercises/L16-mkdir-bridge/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["mtls-server", "module-load-test"]
+
+[[verification.cases]]
+id = "hide-file"
+label = "Server HIDE FILE command hides a file via mkdir"
+expect_build = "pass"
+check = "exercises/L16-mkdir-bridge/checks/hide-file"
+
+[[verification.cases]]
+id = "list-targets"
+label = "Server LIST command triggers mkdir rklings.list"
+expect_build = "pass"
+check = "exercises/L16-mkdir-bridge/checks/list-targets"
+
+[[verification.cases]]
+id = "multiple-commands"
+label = "Agent processes multiple commands in sequence"
+expect_build = "pass"
+check = "exercises/L16-mkdir-bridge/checks/multiple-commands"

@@ -1,0 +1,20 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "DOWNLOAD sends correct size header"
+
+wait_agent
+
+# Get actual file size
+actual_size=$(stat -c %s /etc/hostname 2>/dev/null || stat -f %z /etc/hostname)
+
+# Send DOWNLOAD and capture the size line
+size_line=$(send_download_size "/etc/hostname")
+if [ "$size_line" = "$actual_size" ]; then
+    _ok "size header matches actual file size ($actual_size bytes)"
+else
+    _fail "expected size $actual_size, got: $size_line"
+fi
+
+summary

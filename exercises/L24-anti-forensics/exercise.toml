@@ -1,0 +1,59 @@
+schema_version = 2
+id = "anti-forensics"
+title = "Scrub timestamps, logins, and history"
+stage = "tradecraft"
+kind = "lesson"
+vm_user = "student"
+preload_module = true
+tradecraft = ["anti-forensics", "concealment"]
+difficulty = "standard"
+prerequisites = ["process-masquerade"]
+teaches = ["timestomping", "utmp-scrubbing", "history-clearing", "journal-tampering"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["main.go", "go.mod"]
+editable = ["main.go"]
+build = "."
+baseline = "starter"
+source = "exercises/L24-anti-forensics/starter"
+
+[resources]
+readme = "exercises/L24-anti-forensics/README.md"
+host_check = ""
+solution = "exercises/L24-anti-forensics/solution"
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "timestomp"
+label = "File timestamps match reference time"
+expect_build = "pass"
+check = "exercises/L24-anti-forensics/checks/timestomp"
+
+[[verification.cases]]
+id = "history-clear"
+label = "Shell history scrubbed"
+expect_build = "pass"
+check = "exercises/L24-anti-forensics/checks/history-clear"
+
+[[verification.cases]]
+id = "utmp-scrub"
+label = "No login record in utmp/wtmp"
+expect_build = "pass"
+check = "exercises/L24-anti-forensics/checks/utmp-scrub"
+
+[[verification.cases]]
+id = "env-clear"
+label = "Environment variables cleared"
+expect_build = "pass"
+check = "exercises/L24-anti-forensics/checks/env-clear"
+
+[[verification.cases]]
+id = "journal-tamper"
+label = "Journal entries suppressed"
+expect_build = "pass"
+check = "exercises/L24-anti-forensics/checks/journal-tamper"

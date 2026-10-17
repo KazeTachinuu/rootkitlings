@@ -1,0 +1,15 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Verify rklings module is loaded after fileless load"
+
+# The loader binary should have been run already by the test harness.
+# Check that the module is present in /proc/modules.
+if grep -q '^rklings ' /proc/modules; then
+    _ok "rklings module is loaded"
+else
+    _fail "rklings module is not loaded"
+fi
+
+summary

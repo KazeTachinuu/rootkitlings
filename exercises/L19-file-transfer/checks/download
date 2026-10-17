@@ -1,0 +1,20 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "DOWNLOAD /etc/hostname returns file contents"
+
+wait_agent
+
+# Get the actual hostname for comparison
+expected=$(cat /etc/hostname)
+
+# Send DOWNLOAD command, read size line then file bytes
+resp=$(send_download "/etc/hostname")
+if echo "$resp" | grep -q "$expected"; then
+    _ok "DOWNLOAD returned correct file contents"
+else
+    _fail "expected '$expected' in download, got: $resp"
+fi
+
+summary

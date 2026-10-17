@@ -1,0 +1,53 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Verify /proc/pid/exe shows (deleted) for agent"
+
+# Find the agent process and check its exe symlink.
+# A fileless exec from memfd shows "/memfd: (deleted)" or similar.
+found=false
+for pid_dir in /proc/[0-9]*; do
+    pid=$(basename "$pid_dir")
+    comm=$(cat "$pid_dir/comm" 2>/dev/null || true)
+    exe=$(readlink "$pid_dir/exe" 2>/dev/null || true)
+
+    # Match by comm name "agent" or by memfd exe link
+    case "$comm" in
+        agent)
+            case "$exe" in
+                *"(deleted)"*|*memfd:*)
+                    _ok "/proc/$pid/exe -> $exe"
+                    found=true
+                    break
+                    ;;
+                *)
+                    _fail "/proc/$pid/exe -> $exe (expected deleted/memfd)"
+                    found=true
+                    break
+                    ;;
+            esac
+            ;;
+    esac
+done
+
+if [ "$found" = false ]; then
+    # Fallback: check any process with memfd in exe
+    for pid_dir in /proc/[0-9]*; do
+        pid=$(basename "$pid_dir")
+        exe=$(readlink "$pid_dir/exe" 2>/dev/null || true)
+        case "$exe" in
+            *memfd:*"(deleted)"*)
+                _ok "/proc/$pid/exe -> $exe"
+                found=true
+                break
+                ;;
+        esac
+    done
+fi
+
+if [ "$found" = false ]; then
+    _fail "no process with (deleted) exe link found"
+fi
+
+summary

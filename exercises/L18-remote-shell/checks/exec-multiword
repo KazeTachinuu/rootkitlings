@@ -1,0 +1,25 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "EXEC handles pipes and redirects"
+
+wait_agent
+
+# Test pipe: echo hello | tr a-z A-Z should produce HELLO
+resp=$(send_cmd "EXEC echo hello | tr a-z A-Z")
+if echo "$resp" | grep -q "HELLO"; then
+    _ok "pipe command produced expected output"
+else
+    _fail "expected HELLO, got: $resp"
+fi
+
+# Test command with multiple words
+resp=$(send_cmd "EXEC cat /etc/hostname")
+if [ -n "$resp" ] && ! echo "$resp" | grep -q "ERR"; then
+    _ok "multi-word command returned output"
+else
+    _fail "multi-word command failed: $resp"
+fi
+
+summary

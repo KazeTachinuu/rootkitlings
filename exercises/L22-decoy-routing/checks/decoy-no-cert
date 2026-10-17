@@ -1,0 +1,24 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Client without cert receives decoy page"
+
+# Start the server in background
+start_server ./server &
+srv_pid=$!
+wait_for_port 443
+
+# Connect without any client certificate
+body=$(curl -sk https://127.0.0.1:443/ 2>/dev/null)
+
+if echo "$body" | grep -qi "welcome\|it works\|default"; then
+    _ok "no-cert client received decoy page"
+else
+    _fail "expected decoy page, got: $body"
+fi
+
+kill "$srv_pid" 2>/dev/null
+wait "$srv_pid" 2>/dev/null
+
+summary

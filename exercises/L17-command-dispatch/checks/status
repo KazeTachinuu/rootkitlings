@@ -1,0 +1,20 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "STATUS command triggers mkdir rklings.status"
+
+wait_agent
+
+# Send STATUS
+resp=$(send_cmd "STATUS")
+if echo "$resp" | grep -q "OK"; then
+    _ok "STATUS returned OK"
+else
+    _fail "expected OK, got: $resp"
+fi
+
+# Verify the mkdir was issued (dmesg should show status dispatch)
+assert_log "dispatch: cmd=status"
+
+summary

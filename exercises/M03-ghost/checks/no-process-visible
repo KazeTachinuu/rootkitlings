@@ -1,0 +1,26 @@
+#!/bin/sh
+# Check: ps shows no agent process (masqueraded as kworker)
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Process invisible to ps"
+
+wait_for_agent 10
+
+# The agent should be masquerading as [kworker/0:1]
+# and its PID should be hidden from getdents
+
+# Check for any process with "agent" in its name
+agent_visible=$(ssh_vm "ps aux | grep -v grep | grep -c 'agent'" 2>/dev/null)
+if [ "${agent_visible:-0}" -eq 0 ]; then
+    _ok "no 'agent' process visible in ps"
+else
+    _fail "agent process still visible in ps ($agent_visible entries)"
+fi
+
+# Verify the agent is still running by sending a command
+send_cmd "PING"
+assert_response "PONG"
+_ok "agent is running but not visible in ps"
+
+summary

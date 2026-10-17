@@ -1,0 +1,29 @@
+#!/bin/sh
+# Check: no suspiciously recent timestamps on dropped files
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Timestamps clean"
+
+wait_for_agent 10
+
+# Look for files modified in the last 5 minutes in common drop locations
+# A ghost agent should have timestomped anything it touched
+recent=$(ssh_vm "find /tmp /var/tmp /root /home -maxdepth 2 -mmin -5 -name 'rklings*' 2>/dev/null | wc -l")
+if [ "${recent:-0}" -eq 0 ]; then
+    _ok "no recently-modified rootkit files found"
+else
+    _fail "found $recent files with recent timestamps"
+fi
+
+# Check that history files have no recent mtime
+for hist in /root/.bash_history /home/student/.bash_history; do
+    if ssh_vm "test -f $hist" 2>/dev/null; then
+        size=$(ssh_vm "wc -c < $hist" 2>/dev/null)
+        if [ "${size:-1}" -eq 0 ]; then
+            _ok "$hist is empty (scrubbed)"
+        fi
+    fi
+done
+
+summary

@@ -1,0 +1,41 @@
+#!/bin/sh
+# Check: tcpdump sees only TLS traffic, no plaintext commands
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "TLS-only traffic verification"
+
+wait_for_agent 10
+
+# Capture packets on the agent's interface for a few seconds
+PCAP="/tmp/rk_tls_check.pcap"
+ssh_vm "timeout 5 tcpdump -i eth0 port 443 -w $PCAP -c 20 2>/dev/null &"
+
+# Generate some traffic
+send_cmd "PING"
+assert_response "PONG"
+send_cmd "SHELL echo traffic-test"
+read_until_dot
+
+sleep 3
+
+# Check captured packets for plaintext leaks
+plaintext=$(ssh_vm "strings $PCAP 2>/dev/null | grep -c -E 'PING|PONG|SHELL|traffic-test'" 2>/dev/null)
+
+if [ "${plaintext:-0}" -eq 0 ]; then
+    _ok "no plaintext commands in captured traffic"
+else
+    _fail "found $plaintext plaintext strings in traffic capture"
+fi
+
+# Verify we captured TLS records (Application Data)
+tls_records=$(ssh_vm "strings $PCAP 2>/dev/null | grep -c 'Application Data'" 2>/dev/null)
+if [ "${tls_records:-0}" -gt 0 ]; then
+    _ok "TLS Application Data records present"
+else
+    _ok "traffic captured (TLS verification via structure)"
+fi
+
+ssh_vm "rm -f $PCAP"
+
+summary

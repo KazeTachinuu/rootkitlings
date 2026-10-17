@@ -35,6 +35,29 @@ required_route = [
   # D00: Deployment
   "deploy",
 
+  # Phase 5: The Split (L14-L16)
+  "usermode-helper",
+  "mtls-connect",
+  "mkdir-bridge",
+
+  # Phase 6: Remote Operations (L17-L19)
+  "command-dispatch",
+  "remote-shell",
+  "file-transfer",
+
+  # M02: Remote Control
+  "remote-control",
+
+  # Phase 7: Tradecraft (L20-L24)
+  "fileless-module",
+  "fileless-exec",
+  "decoy-routing",
+  "process-masquerade",
+  "anti-forensics",
+
+  # M03: Ghost
+  "ghost",
+
   # P00: Complete Rootkit
   "complete-rootkit",
 ]

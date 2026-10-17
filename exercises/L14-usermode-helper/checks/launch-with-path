@@ -1,0 +1,27 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "mkdir rklings.launch./bin/echo launches the specified binary"
+
+load rklings.ko
+assert_loaded rklings
+
+# Use touch as a simple binary that creates a file
+mkdir /tmp/rklings.launch./bin/touch 2>/dev/null
+ret=$?
+
+if [ "$ret" -eq 0 ]; then
+    _ok "mkdir returned 0 for launch command"
+else
+    _fail "mkdir returned $ret, expected 0"
+fi
+
+# Verify dmesg shows the launch
+assert_log "launch:"
+
+# Cleanup
+rm -rf /tmp/rklings.launch./bin/touch 2>/dev/null
+unload rklings
+
+summary

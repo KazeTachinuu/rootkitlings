@@ -1,0 +1,40 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Server HIDE FILE command hides a file via mkdir"
+
+assert_loaded rklings
+
+# Create a test file
+echo "hidden content" > /tmp/target_file.txt
+
+# Verify the file is visible before hiding
+if ls /tmp/ | grep -q "target_file.txt"; then
+    _ok "target_file.txt visible before hide"
+else
+    _fail "target_file.txt not visible before hide (setup error)"
+fi
+
+# Send HIDE FILE command via the host server to the agent
+send_host_cmd "HIDE FILE target_file.txt"
+sleep 2
+
+# Verify the file is hidden from ls
+if ls /tmp/ | grep -q "target_file.txt"; then
+    _fail "target_file.txt still visible after HIDE FILE command"
+else
+    _ok "target_file.txt hidden from ls"
+fi
+
+# Verify the file still exists (readable by direct path)
+if cat /tmp/target_file.txt | grep -q "hidden content"; then
+    _ok "hidden file still readable via cat"
+else
+    _fail "hidden file not readable, may have been deleted"
+fi
+
+# Cleanup
+rm -f /tmp/target_file.txt
+
+summary

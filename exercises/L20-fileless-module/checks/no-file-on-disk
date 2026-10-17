@@ -1,0 +1,17 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Verify no .ko file on disk"
+
+# Search the entire filesystem for any rklings .ko file.
+# A proper fileless load leaves nothing.
+ko_files=$(find / -name 'rklings.ko' -o -name 'rklings.ko.*' 2>/dev/null)
+
+if [ -z "$ko_files" ]; then
+    _ok "no rklings.ko file found on disk"
+else
+    _fail "found .ko file on disk: $ko_files"
+fi
+
+summary

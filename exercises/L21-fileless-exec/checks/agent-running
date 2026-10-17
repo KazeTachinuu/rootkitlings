@@ -1,0 +1,30 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Verify agent process is running"
+
+# Look for a process with the name "agent" (argv[0] from unix.Exec).
+# pgrep matches against the process name.
+if pgrep -x agent > /dev/null 2>&1; then
+    _ok "agent process is running"
+else
+    # Also check if any process has /memfd: in its exe link
+    found=false
+    for pid_dir in /proc/[0-9]*; do
+        exe=$(readlink "$pid_dir/exe" 2>/dev/null || true)
+        case "$exe" in
+            */memfd:*|*memfd:*)
+                found=true
+                break
+                ;;
+        esac
+    done
+    if [ "$found" = true ]; then
+        _ok "agent process running (memfd-backed)"
+    else
+        _fail "no agent process found"
+    fi
+fi
+
+summary

@@ -1,0 +1,23 @@
+#!/bin/sh
+# Check: ss shows no agent port
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Port invisible to ss"
+
+wait_for_agent 10
+
+# Check ss for the agent's connection port
+port_visible=$(ssh_vm "ss -tlnp 2>/dev/null | grep -c ':443'" 2>/dev/null)
+if [ "${port_visible:-0}" -eq 0 ]; then
+    _ok "port 443 not visible in ss output"
+else
+    _fail "port 443 still visible in ss ($port_visible entries)"
+fi
+
+# Verify connection still works
+send_cmd "PING"
+assert_response "PONG"
+_ok "connection active but port hidden from ss"
+
+summary

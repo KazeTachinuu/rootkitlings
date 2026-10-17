@@ -1,0 +1,17 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "EXEC reports error for nonexistent command"
+
+wait_agent
+
+# Run a command that will fail
+resp=$(send_cmd "EXEC /nonexistent/binary 2>&1")
+if echo "$resp" | grep -q "ERR\|not found\|No such file"; then
+    _ok "error reported for bad command"
+else
+    _fail "expected error indication, got: $resp"
+fi
+
+summary

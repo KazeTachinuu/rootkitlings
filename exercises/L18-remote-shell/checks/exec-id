@@ -1,0 +1,17 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "EXEC id returns uid=0"
+
+wait_agent
+
+# Send EXEC id, expect uid=0 in output
+resp=$(send_cmd "EXEC id")
+if echo "$resp" | grep -q "uid=0"; then
+    _ok "EXEC id returned uid=0"
+else
+    _fail "expected uid=0 in output, got: $resp"
+fi
+
+summary
