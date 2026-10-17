@@ -8,12 +8,11 @@ load rklings.ko
 assert_loaded rklings
 
 # Spawn a background sleep process as student
-su student -c 'sleep 30 &'
-# Give it a moment to start
+su student -s /bin/sh -c 'exec sleep 30' &
 sleep 1
 
 # Find the sleep PID (owned by student)
-target_pid=$(ps -o pid,user,comm | grep 'student.*sleep' | head -1 | sed 's/^ *//' | cut -d' ' -f1)
+target_pid=$(ps -eo pid,user,comm | awk '/student.*sleep/ {print $1; exit}')
 if [ -z "$target_pid" ]; then
     _fail "could not find student sleep process"
     unload rklings

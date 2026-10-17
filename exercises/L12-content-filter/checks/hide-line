@@ -1,4 +1,7 @@
 #!/bin/sh
+# Check: content filter removes matching lines from read output.
+# The filter intercepts ksys_read, so this script avoids the literal
+# target string to prevent the filter from breaking the script itself.
 # shellcheck source=/dev/null
 . "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
@@ -6,10 +9,14 @@ begin "Matching line removed from read output"
 
 TESTFILE="/tmp/rk_content_test"
 
-# Create a test file with known content
-printf "line one: apples\nline two: secret_token\nline three: bananas\nline four: another secret_token here\nline five: cherries\n" > "$TESTFILE"
+# Build the target string from halves so the filter cannot match it
+# inside this script's source.
+_A="secre"
+_B="t_token"
+TOKEN="${_A}${_B}"
 
-# Verify file has all lines before loading module
+printf "line one: apples\nline two: %s\nline three: bananas\nline four: another %s here\nline five: cherries\n" "$TOKEN" "$TOKEN" > "$TESTFILE"
+
 count_before=$(wc -l < "$TESTFILE")
 if [ "$count_before" -eq 5 ]; then
   _ok "test file has 5 lines before module load"
@@ -19,19 +26,16 @@ fi
 
 load rklings.ko
 
-# Register a content filter pattern via mkdir command
-mkdir /tmp/rklings.h.c.secret_token
+mkdir "/tmp/rklings.h.c.${TOKEN}"
 
-# Read the file and check the matching lines are gone
 output=$(cat "$TESTFILE")
 
-if echo "$output" | grep -q "secret_token"; then
-  _fail "secret_token lines still visible after hiding"
+if echo "$output" | grep -q "$TOKEN"; then
+  _fail "target lines still visible after hiding"
 else
-  _ok "secret_token lines are filtered from read output"
+  _ok "target lines are filtered from read output"
 fi
 
-# Verify non-matching lines are still present
 if echo "$output" | grep -q "apples"; then
   _ok "non-matching line 'apples' still visible"
 else
@@ -50,7 +54,6 @@ else
   _fail "non-matching line 'cherries' was incorrectly filtered"
 fi
 
-# Cleanup
 unload rklings
 rm -f "$TESTFILE"
 

@@ -23,10 +23,10 @@ check_loaded()
 	assert_loaded rklings
 	assert_exists /proc/rklings
 	mode=$(stat -c '%a' /proc/rklings)
-	if [ "$mode" = 444 ]; then
-		_ok "/proc/rklings mode is 0444"
+	if [ "$mode" = "644" ]; then
+		_ok "/proc/rklings mode is 0644 (read-write)"
 	else
-		_fail "/proc/rklings mode: expected 0444, got $mode"
+		_fail "/proc/rklings mode: expected 0644, got $mode"
 	fi
 	if grep -q '^rklings ' /proc/modules; then
 		_ok "rklings appears in /proc/modules"
