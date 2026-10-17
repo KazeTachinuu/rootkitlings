@@ -1,7 +1,7 @@
 schema_version = 2
 revision = "2026.10-operational-milestones"
 default_module_artifact = "rklings.ko"
-exercise_roots = ["curriculum"]
+exercise_roots = ["exercises"]
 
 required_route = [
   # Foundations (L00-L04)
