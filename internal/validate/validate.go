@@ -9,6 +9,7 @@ import (
 
 	"github.com/hugo/rootkitlings/internal/build"
 	"github.com/hugo/rootkitlings/internal/catalog"
+	"github.com/hugo/rootkitlings/internal/setup"
 	"github.com/hugo/rootkitlings/internal/state"
 	"github.com/hugo/rootkitlings/internal/tui"
 	"github.com/hugo/rootkitlings/internal/vm"
@@ -19,7 +20,7 @@ func imagePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	p := filepath.Join(home, ".rklings", "cache", "ubuntu-26.04-minimal-cloudimg-amd64.img")
+	p := filepath.Join(home, ".rklings", "cache", setup.VMImageName)
 	if _, err := os.Stat(p); err != nil {
 		return "", fmt.Errorf("VM image not found at %s, run \"rklings setup\" first", p)
 	}
@@ -59,6 +60,7 @@ func Run(root string, ex *catalog.Exercise) error {
 	}
 	defer os.RemoveAll(tmpDir)
 
+	// Always boot as root: SCP and insmod require it.
 	v, err := vm.Boot(vm.BootOpts{
 		ImagePath:  image,
 		OverlayDir: tmpDir,
@@ -73,26 +75,35 @@ func Run(root string, ex *catalog.Exercise) error {
 		if err := v.SCP(koPath, "/tmp/rklings.ko"); err != nil {
 			return fmt.Errorf("SCP .ko failed: %w", err)
 		}
-		if out, err := v.SSH("insmod /tmp/rklings.ko"); err != nil {
-			return fmt.Errorf("insmod failed: %s", out)
+		if ex.PreloadModule {
+			if out, err := v.SSH("insmod /tmp/rklings.ko"); err != nil {
+				return fmt.Errorf("insmod failed: %s", out)
+			}
 		}
+	}
+
+	// Run VM checks as the exercise's designated user.
+	vmUser := ex.VMUser
+	if vmUser == "" {
+		vmUser = "root"
 	}
 
 	for _, check := range ex.Checks {
 		if isHostCheck(check) {
 			continue
 		}
-		if err := v.SCP(check.Script, "/tmp/check"); err != nil {
+		remotePath := fmt.Sprintf("/tmp/check-%s", check.ID)
+		if err := v.SCP(check.Script, remotePath); err != nil {
 			tui.Fail("%s: failed to copy check script", check.Label)
 			failed++
 			continue
 		}
-		if _, err := v.SSH("chmod +x /tmp/check"); err != nil {
+		if _, err := v.SSH(fmt.Sprintf("chmod +x %s", remotePath)); err != nil {
 			tui.Fail("%s: chmod failed", check.Label)
 			failed++
 			continue
 		}
-		out, err := v.SSH("/tmp/check")
+		out, err := v.SSHAs(vmUser, remotePath)
 		output := strings.TrimSpace(out)
 		if err != nil {
 			tui.Fail("%s: %s", check.Label, output)

@@ -8,7 +8,7 @@ import (
 
 	"github.com/hugo/rootkitlings/internal/build"
 	"github.com/hugo/rootkitlings/internal/catalog"
-	"github.com/hugo/rootkitlings/internal/setup"
+	isetup "github.com/hugo/rootkitlings/internal/setup"
 	"github.com/hugo/rootkitlings/internal/state"
 	"github.com/hugo/rootkitlings/internal/tui"
 	"github.com/hugo/rootkitlings/internal/validate"
@@ -80,7 +80,7 @@ func setupCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			root := findRoot()
-			if err := setup.Run(root); err != nil {
+			if err := isetup.Run(root); err != nil {
 				tui.Fatal("%v", err)
 			}
 		},
@@ -88,13 +88,20 @@ func setupCmd() *cobra.Command {
 }
 
 func buildCmd() *cobra.Command {
-	return &cobra.Command{
+	var useRef bool
+	c := &cobra.Command{
 		Use:   "build <exercise>",
 		Short: "Build exercise kernel module",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			cat, _ := loadCatalog()
 			ex := findExercise(cat, args[0])
+			if useRef {
+				if ex.Solution == "" {
+					tui.Fatal("no reference solution for %s", ex.ID)
+				}
+				ex = ex.WithSource(ex.Solution)
+			}
 			koPath, err := build.Build(ex)
 			if err != nil {
 				tui.Fatal("%v", err)
@@ -102,16 +109,26 @@ func buildCmd() *cobra.Command {
 			tui.Pass("%s", koPath)
 		},
 	}
+	c.Flags().BoolVar(&useRef, "reference", false, "build against the reference solution")
+	return c
 }
 
 func runCmd() *cobra.Command {
-	return &cobra.Command{
+	var useRef bool
+	c := &cobra.Command{
 		Use:   "run <exercise>",
 		Short: "Build, boot VM, and open interactive shell",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			cat, _ := loadCatalog()
 			ex := findExercise(cat, args[0])
+
+			if useRef {
+				if ex.Solution == "" {
+					tui.Fatal("no reference solution for %s", ex.ID)
+				}
+				ex = ex.WithSource(ex.Solution)
+			}
 
 			koPath, err := build.Build(ex)
 			if err != nil {
@@ -122,7 +139,7 @@ func runCmd() *cobra.Command {
 			if err != nil {
 				tui.Fatal("home dir: %v", err)
 			}
-			imagePath := filepath.Join(home, ".rklings", "cache", "ubuntu-26.04-minimal-cloudimg-amd64.img")
+			imagePath := filepath.Join(home, ".rklings", "cache", isetup.VMImageName)
 
 			tmpDir, err := os.MkdirTemp("", "rklings-run-")
 			if err != nil {
@@ -130,22 +147,37 @@ func runCmd() *cobra.Command {
 			}
 			defer os.RemoveAll(tmpDir)
 
+			vmUser := ex.VMUser
+			if vmUser == "" {
+				vmUser = "root"
+			}
+
+			motd := fmt.Sprintf(
+				"%s: %s\nkernel 7.0.0-38 | user: %s | exit to teardown\n",
+				ex.ID, ex.Title, vmUser,
+			)
+
+			// Always boot as root: SCP needs write access to /tmp and
+			// insmod requires root.  We switch to the exercise user for
+			// the interactive shell afterwards.
 			tui.Info("booting VM...")
 			v, err := vm.Boot(vm.BootOpts{
 				ImagePath:  imagePath,
 				OverlayDir: tmpDir,
 				User:       "root",
+				MOTD:       motd,
 			})
 			if err != nil {
 				tui.Fatal("VM boot: %v", err)
 			}
 			defer v.Close()
+			tui.Pass("VM ready (%.1fs)", v.BootTime().Seconds())
 
 			if koPath != "" {
 				if err := v.SCP(koPath, "/tmp/rklings.ko"); err != nil {
 					tui.Fatal("SCP: %v", err)
 				}
-				if ex.Kind == "lesson" || ex.Kind == "milestone" {
+				if ex.PreloadModule {
 					if out, err := v.SSH("insmod /tmp/rklings.ko"); err != nil {
 						tui.Warn("insmod: %s", out)
 					} else {
@@ -154,12 +186,16 @@ func runCmd() *cobra.Command {
 				}
 			}
 
-			tui.Info("opening shell...")
+			// Switch to the exercise user for the interactive shell.
+			v.SetUser(vmUser)
+
 			if err := v.Shell(); err != nil {
 				tui.Warn("shell exited: %v", err)
 			}
 		},
 	}
+	c.Flags().BoolVar(&useRef, "reference", false, "build against the reference solution")
+	return c
 }
 
 func validateCmd() *cobra.Command {

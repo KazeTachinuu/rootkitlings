@@ -26,12 +26,20 @@ GUEST_TOOL_NAMES := \
 	task_attribution_test
 GUEST_TOOLS := $(addprefix $(TOOL_OUT)/,$(GUEST_TOOL_NAMES))
 
-.PHONY: all help module clean compile-db doctor tools tool-output-directory
+PREFIX ?= $(HOME)/.local
+
+.PHONY: all install uninstall help module clean compile-db doctor tools tool-output-directory
 .PHONY: test-checkers test-solutions validate validate-quick
 
-.DEFAULT_GOAL := help
+.DEFAULT_GOAL := install
 
-all: help
+all: install
+
+install:
+	go build -o $(PREFIX)/bin/rklings ./cmd/rklings/
+
+uninstall:
+	rm -f $(PREFIX)/bin/rklings
 
 help:
 	@printf '%s\n' \

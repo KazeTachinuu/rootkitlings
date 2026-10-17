@@ -12,15 +12,20 @@ type Exercise struct {
 	ID            string
 	Title         string
 	Dir           string // full path to exercise dir
-	Kind          string // "lesson" or "milestone"
+	Kind          string // "lesson", "milestone", or "final-project"
+	Stage         string // e.g. "module-core", "escalation", "concealment"
 	Difficulty    string
 	Prerequisites []string
-	Source        string // workspace.source path
-	Solution      string // resources.solution path
-	Readme        string // resources.readme path
-	Hint          string // resources.hint path
+	Tradecraft    []string // e.g. ["privilege", "concealment"]
+	VMUser        string   // "root" or "student"
+	PreloadModule bool     // insmod before giving shell
+	Source        string   // workspace.source path
+	Solution      string   // resources.solution path
+	Readme        string   // resources.readme path
+	Hint          string   // resources.hint path
 	Checks        []Check
-	Timeout       int // verification.timeout_seconds
+	Tools         []string // verification.tools (e.g. "module-load-test")
+	Timeout       int      // verification.timeout_seconds
 }
 
 type Check struct {
@@ -41,11 +46,16 @@ type courseToml struct {
 }
 
 type exerciseToml struct {
+	SchemaVersion int      `toml:"schema_version"`
 	ID            string   `toml:"id"`
 	Title         string   `toml:"title"`
+	Stage         string   `toml:"stage"`
 	Kind          string   `toml:"kind"`
+	Tradecraft    []string `toml:"tradecraft"`
 	Difficulty    string   `toml:"difficulty"`
 	Prerequisites []string `toml:"prerequisites"`
+	VMUser        string   `toml:"vm_user"`
+	PreloadModule bool     `toml:"preload_module"`
 	Workspace     struct {
 		Source string `toml:"source"`
 	} `toml:"workspace"`
@@ -55,7 +65,8 @@ type exerciseToml struct {
 		Solution string `toml:"solution"`
 	} `toml:"resources"`
 	Verification struct {
-		Timeout int `toml:"timeout_seconds"`
+		Timeout int      `toml:"timeout_seconds"`
+		Tools   []string `toml:"tools"`
 		Cases   []struct {
 			ID    string `toml:"id"`
 			Label string `toml:"label"`
@@ -95,17 +106,28 @@ func Load(root string) (*Catalog, error) {
 			if _, err := toml.DecodeFile(tomlPath, &et); err != nil {
 				return nil, fmt.Errorf("%s: %w", tomlPath, err)
 			}
+			// Apply defaults for fields that may be absent from the toml.
+			vmUser := et.VMUser
+			if vmUser == "" {
+				vmUser = "root"
+			}
+
 			ex := &Exercise{
 				ID:            et.ID,
 				Title:         et.Title,
 				Dir:           filepath.Join(absRoot, e.Name()),
 				Kind:          et.Kind,
+				Stage:         et.Stage,
 				Difficulty:    et.Difficulty,
 				Prerequisites: et.Prerequisites,
+				Tradecraft:    et.Tradecraft,
+				VMUser:        vmUser,
+				PreloadModule: et.PreloadModule,
 				Source:        filepath.Join(root, et.Workspace.Source),
 				Solution:      filepath.Join(root, et.Resources.Solution),
 				Readme:        filepath.Join(root, et.Resources.Readme),
 				Hint:          filepath.Join(root, et.Resources.Hint),
+				Tools:         et.Verification.Tools,
 				Timeout:       et.Verification.Timeout,
 			}
 			for _, c := range et.Verification.Cases {
@@ -134,14 +156,22 @@ func (c *Catalog) Find(name string) *Exercise {
 	if ex, ok := c.ByID[name]; ok {
 		return ex
 	}
-	// Try matching by directory prefix (e.g., "L00" or "l00")
+	// Try matching by directory prefix (e.g., "L00" matches "L00-module-build-lifecycle").
+	// The directory name format is "<PREFIX>-<slug>", so we check whether the
+	// base name starts with <name> followed by a hyphen (case-insensitive).
 	for i := range c.Exercises {
 		base := filepath.Base(c.Exercises[i].Dir)
-		if len(name) >= 3 && len(base) >= 3 && equalFold(base[:3], name[:min(3, len(name))]) {
+		if len(name) > 0 && len(base) > len(name) && base[len(name)] == '-' && equalFold(base[:len(name)], name) {
 			return &c.Exercises[i]
 		}
 	}
 	return nil
+}
+
+func (e *Exercise) WithSource(src string) *Exercise {
+	copy := *e
+	copy.Source = src
+	return &copy
 }
 
 func equalFold(a, b string) bool {

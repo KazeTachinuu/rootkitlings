@@ -17,19 +17,24 @@ type BootOpts struct {
 	SSHPort      int
 	User         string
 	ExtraPortFwd []string
+	MOTD         string
 }
 
 type VM struct {
-	sshPort int
-	user    string
-	keyPath string
-	cmd     *exec.Cmd
-	overlay string
-	seedISO string
-	tempDir string
+	sshPort    int
+	user       string
+	keyPath    string
+	cmd        *exec.Cmd
+	overlay    string
+	tempDir    string
+	consoleLog string
+	logFile    *os.File
+	bootTime   time.Duration
 }
 
 func Boot(opts BootOpts) (*VM, error) {
+	start := time.Now()
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("home dir: %w", err)
@@ -57,7 +62,7 @@ func Boot(opts BootOpts) (*VM, error) {
 		return nil, fmt.Errorf("create overlay: %s: %w", out, err)
 	}
 
-	seedISO, tempDir, err := createSeedISO(keyPath + ".pub")
+	seedISO, tempDir, err := createSeedISO(keyPath+".pub", opts.MOTD)
 	if err != nil {
 		os.Remove(overlay)
 		return nil, fmt.Errorf("seed ISO: %w", err)
@@ -68,40 +73,84 @@ func Boot(opts BootOpts) (*VM, error) {
 		netdev += "," + fwd
 	}
 
-	cmd := exec.Command("qemu-system-x86_64",
-		"-m", "512", "-smp", "2", "-nographic",
-		"-drive", fmt.Sprintf("file=%s,format=qcow2", overlay),
-		"-drive", fmt.Sprintf("file=%s,format=raw", seedISO),
+	qemuArgs := []string{
+		"-m", "1024", "-smp", "2", "-nographic",
+		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio", overlay),
+		"-cdrom", seedISO,
 		"-netdev", netdev,
 		"-device", "virtio-net-pci,netdev=net0",
-		"-serial", "mon:stdio",
-	)
+	}
+	if _, err := os.Stat("/dev/kvm"); err == nil {
+		qemuArgs = append([]string{"-enable-kvm", "-cpu", "host"}, qemuArgs...)
+	}
+
+	cmd := exec.Command("qemu-system-x86_64", qemuArgs...)
+
+	logPath := filepath.Join(opts.OverlayDir, "console.log")
+	logFile, err := os.Create(logPath)
+	if err != nil {
+		os.Remove(overlay)
+		os.RemoveAll(tempDir)
+		return nil, fmt.Errorf("create console log: %w", err)
+	}
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
 
 	if err := cmd.Start(); err != nil {
+		logFile.Close()
 		os.Remove(overlay)
 		os.RemoveAll(tempDir)
 		return nil, fmt.Errorf("start qemu: %w", err)
 	}
 
 	v := &VM{
-		sshPort: port,
-		user:    user,
-		keyPath: keyPath,
-		cmd:     cmd,
-		overlay: overlay,
-		seedISO: seedISO,
-		tempDir: tempDir,
+		sshPort:    port,
+		user:       user,
+		keyPath:    keyPath,
+		cmd:        cmd,
+		overlay:    overlay,
+		tempDir:    tempDir,
+		consoleLog: logPath,
+		logFile:    logFile,
 	}
 
 	if err := v.waitSSH(); err != nil {
 		v.Close()
-		return nil, err
+		return nil, fmt.Errorf("%w (console log: %s)", err, logPath)
 	}
+	v.bootTime = time.Since(start)
 
 	return v, nil
 }
 
-func createSeedISO(pubKeyPath string) (isoPath, tempDir string, err error) {
+func (v *VM) BootTime() time.Duration { return v.bootTime }
+func (v *VM) ConsoleLog() string      { return v.consoleLog }
+
+// SetUser changes the SSH user for subsequent SSH, SCP, and Shell calls.
+func (v *VM) SetUser(user string) { v.user = user }
+
+// SSHAs runs a command over SSH as the specified user, regardless of the
+// VM's current default user.
+func (v *VM) SSHAs(user, cmd string) (string, error) {
+	args := v.sshArgs(fmt.Sprintf("%s@localhost", user), cmd)
+	out, err := exec.Command("ssh", args...).CombinedOutput()
+	return string(out), err
+}
+
+// --- cloud-init ---
+
+const profileScript = `export TERM="${TERM:-xterm-256color}"
+alias ls='ls --color=auto'
+alias grep='grep --color=auto'
+alias dmesg='dmesg --color=auto'
+if [ "$(id -u)" -eq 0 ]; then
+  PS1='\[\e[1;31m\]root@rklings\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]# '
+else
+  PS1='\[\e[1;32m\]\u@rklings\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]$ '
+fi
+`
+
+func createSeedISO(pubKeyPath, motd string) (isoPath, tempDir string, err error) {
 	pubKey, err := os.ReadFile(pubKeyPath)
 	if err != nil {
 		return "", "", fmt.Errorf("read SSH pubkey: %w", err)
@@ -118,40 +167,64 @@ func createSeedISO(pubKeyPath string) (isoPath, tempDir string, err error) {
 		return "", "", err
 	}
 
-	userData := fmt.Sprintf(`#cloud-config
-users:
-  - name: root
-    lock_passwd: false
-    ssh_authorized_keys:
-      - %s
-  - name: student
-    uid: 1000
-    shell: /bin/bash
-    sudo: []
-    ssh_authorized_keys:
-      - %s
-`, strings.TrimSpace(string(pubKey)), strings.TrimSpace(string(pubKey)))
+	key := strings.TrimSpace(string(pubKey))
+	var ud strings.Builder
+	fmt.Fprintf(&ud, "#cloud-config\n")
+	fmt.Fprintf(&ud, "users:\n")
+	fmt.Fprintf(&ud, "  - name: root\n    lock_passwd: false\n    ssh_authorized_keys:\n      - %s\n", key)
+	fmt.Fprintf(&ud, "  - name: student\n    uid: 1000\n    shell: /bin/bash\n    sudo: []\n    ssh_authorized_keys:\n      - %s\n", key)
+	fmt.Fprintf(&ud, "write_files:\n")
+	fmt.Fprintf(&ud, "  - path: /etc/profile.d/rklings.sh\n    content: |\n")
+	for _, line := range strings.Split(profileScript, "\n") {
+		if line == "" {
+			fmt.Fprintf(&ud, "\n")
+		} else {
+			fmt.Fprintf(&ud, "      %s\n", line)
+		}
+	}
+	if motd != "" {
+		fmt.Fprintf(&ud, "  - path: /etc/motd\n    content: |\n")
+		for _, line := range strings.Split(motd, "\n") {
+			if line == "" {
+				fmt.Fprintf(&ud, "\n")
+			} else {
+				fmt.Fprintf(&ud, "      %s\n", line)
+			}
+		}
+	}
 
-	if err := os.WriteFile(filepath.Join(tempDir, "user-data"), []byte(userData), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tempDir, "user-data"), []byte(ud.String()), 0644); err != nil {
 		os.RemoveAll(tempDir)
 		return "", "", err
 	}
 
 	isoPath = filepath.Join(tempDir, "seed.iso")
-
-	out, err := exec.Command("mkisofs",
-		"-output", isoPath, "-volid", "cidata", "-joliet", "-rock", tempDir).CombinedOutput()
-	if err != nil {
-		out, err = exec.Command("genisoimage",
-			"-output", isoPath, "-volid", "cidata", "-joliet", "-rock", tempDir).CombinedOutput()
-		if err != nil {
-			os.RemoveAll(tempDir)
-			return "", "", fmt.Errorf("create seed ISO: %s: %w", out, err)
-		}
+	if err := mkisofs(isoPath, tempDir); err != nil {
+		os.RemoveAll(tempDir)
+		return "", "", err
 	}
 
 	return isoPath, tempDir, nil
 }
+
+func mkisofs(isoPath, srcDir string) error {
+	for _, tool := range []string{"mkisofs", "genisoimage", "xorriso"} {
+		var cmd *exec.Cmd
+		if tool == "xorriso" {
+			cmd = exec.Command(tool, "-as", "mkisofs", "-output", isoPath, "-volid", "cidata", "-joliet", "-rock", srcDir)
+		} else {
+			cmd = exec.Command(tool, "-output", isoPath, "-volid", "cidata", "-joliet", "-rock", srcDir)
+		}
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			return nil
+		}
+		_ = out
+	}
+	return fmt.Errorf("no ISO tool found (need mkisofs, genisoimage, or xorriso)")
+}
+
+// --- SSH ---
 
 func (v *VM) sshArgs(extra ...string) []string {
 	args := []string{
@@ -161,8 +234,7 @@ func (v *VM) sshArgs(extra ...string) []string {
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "LogLevel=ERROR",
 	}
-	args = append(args, extra...)
-	return args
+	return append(args, extra...)
 }
 
 func (v *VM) SSH(cmd string) (string, error) {
@@ -189,7 +261,9 @@ func (v *VM) SCP(localPath, remotePath string) error {
 }
 
 func (v *VM) Shell() error {
-	args := v.sshArgs("-t", fmt.Sprintf("%s@localhost", v.user))
+	args := v.sshArgs("-t", fmt.Sprintf("%s@localhost", v.user),
+		"TERM=xterm-256color exec bash -l",
+	)
 	cmd := exec.Command("ssh", args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -201,6 +275,9 @@ func (v *VM) Close() error {
 	if v.cmd != nil && v.cmd.Process != nil {
 		v.cmd.Process.Kill()
 		v.cmd.Wait()
+	}
+	if v.logFile != nil {
+		v.logFile.Close()
 	}
 	os.Remove(v.overlay)
 	if v.tempDir != "" {

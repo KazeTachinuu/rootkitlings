@@ -16,12 +16,15 @@ const (
 )
 
 func DetectRuntime() (string, error) {
-	for _, rt := range []string{"docker", "podman"} {
+	for _, rt := range []string{"podman", "docker"} {
 		if _, err := exec.LookPath(rt); err == nil {
-			return rt, nil
+			// Verify the runtime is actually usable
+			if exec.Command(rt, "info").Run() == nil {
+				return rt, nil
+			}
 		}
 	}
-	return "", fmt.Errorf("neither docker nor podman found in PATH")
+	return "", fmt.Errorf("neither docker nor podman found (or accessible) in PATH")
 }
 
 func EnsureBuildImage(runtime string) error {
@@ -87,12 +90,11 @@ func Build(ex *catalog.Exercise) (string, error) {
 		buildImage,
 		"sh", "-c", shellCmd,
 	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		os.Stderr.Write(out)
 		os.RemoveAll(outDir)
-		tui.Fail("build failed: %s", ex.ID)
 		return "", fmt.Errorf("build %s: %w", ex.ID, err)
 	}
 

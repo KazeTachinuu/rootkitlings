@@ -4,66 +4,38 @@ default_module_artifact = "rklings.ko"
 exercise_roots = ["exercises"]
 
 required_route = [
-  # Foundations (L00-L04)
+  # Phase 1: Foundation (L00-L04)
   "module-build-lifecycle",
   "precise-init-failure",
   "owned-kernel-state",
   "proc-publication",
   "proc-read-contract",
 
-  # Interception (L05-L09)
+  # Phase 2: Escalation (L05-L07)
   "mkdir-reaction",
   "mkdir-escalation",
   "pid-escalation",
+
+  # Phase 3: Interception (L08-L09)
   "kprobe-revealed",
   "command-dispatcher",
 
-  # M00: persistence + module cloak
+  # M00: Persistence + Stealth
   "persistence-stealth",
 
-  # Concealment (L10-L13)
+  # Phase 4: Concealment (L10-L13)
   "target-list",
   "dirent-filter",
   "content-filter",
   "port-filter",
 
-  # M01: full local control
+  # M01: Covert Local Control
   "local-control",
 
-  # Network (L14-L17)
-  "kernel-socket",
-  "kernel-thread",
-  "root-shell-spawn",
-  "shell-redirect",
+  # D00: Deployment
+  "deploy",
 
-  # M02: callback shell
-  "callback-shell",
-
-  # Crypto (L18-L21)
-  "message-framing",
-  "aead-encrypt",
-  "secure-envelope",
-  "key-provisioning",
-
-  # M03: encrypted channel
-  "secure-channel",
-
-  # Operations (L22-L24)
-  "shell-timeout",
-  "file-download",
-  "command-parser",
-
-  # M04: remote control
-  "remote-control",
-
-  # Protocol & OPSEC (L25-L26)
-  "full-protocol",
-  "auto-opsec",
-
-  # M05: full operations
-  "full-operations",
-
-  # Final project
+  # P00: Complete Rootkit
   "complete-rootkit",
 ]
 

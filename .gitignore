@@ -17,6 +17,7 @@ __pycache__/
 
 # Go build output
 /bin/
+/rklings
 
 # Editor/OS
 .DS_Store

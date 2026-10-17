@@ -60,6 +60,10 @@ func Run(root string) error {
 		return err
 	}
 
+	if err := ensureVMImage(filepath.Join(base, "cache")); err != nil {
+		return err
+	}
+
 	fmt.Println()
 	tui.Pass("Ready.")
 	return nil
@@ -81,16 +85,16 @@ func checkDeps() []dep {
 		deps = append(deps, dep{"Go", false, "", ""})
 	}
 
-	// Docker or Podman (need one)
-	path, ver = findCommand("docker", "podman")
+	// Podman or Docker (need one)
+	path, ver = findCommand("podman", "docker")
 	if path != "" {
-		name := "Docker"
-		if strings.Contains(path, "podman") {
-			name = "Podman"
+		name := "Podman"
+		if strings.Contains(path, "docker") {
+			name = "Docker"
 		}
 		deps = append(deps, dep{name, true, parseGenericVersion(ver), path})
 	} else {
-		deps = append(deps, dep{"Docker", false, "", ""})
+		deps = append(deps, dep{"Podman", false, "", ""})
 	}
 
 	// QEMU >= 8.0
@@ -353,6 +357,36 @@ func ensureServerCert(dir string) error {
 		return fmt.Errorf("mkcert: %w", err)
 	}
 	tui.Pass("Server cert (mkcert) %s", crtPath)
+	return nil
+}
+
+const VMImageName = "ubuntu-26.04-minimal-cloudimg-amd64.img"
+const vmImageURL = "https://cloud-images.ubuntu.com/minimal/releases/resolute/release/" + VMImageName
+
+const D00ImageName = "ubuntu-24.04-minimal-cloudimg-amd64.img"
+const d00ImageURL = "https://cloud-images.ubuntu.com/minimal/releases/noble/release/" + D00ImageName
+
+func ensureVMImage(cacheDir string) error {
+	for _, img := range []struct{ name, url string }{
+		{VMImageName, vmImageURL},
+		{D00ImageName, d00ImageURL},
+	} {
+		imgPath := filepath.Join(cacheDir, img.name)
+		if _, err := os.Stat(imgPath); err == nil {
+			tui.Pass("VM image            %s", img.name)
+			continue
+		}
+		tui.Info("downloading %s...", img.name)
+		cmd := exec.Command("curl", "-L", "-#", "-o", imgPath, img.url)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			os.Remove(imgPath)
+			tui.Fail("VM image download: %s", img.name)
+			return fmt.Errorf("download %s: %w", img.name, err)
+		}
+		tui.Pass("VM image            %s", img.name)
+	}
 	return nil
 }
 
