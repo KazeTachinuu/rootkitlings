@@ -11,7 +11,7 @@ begin "Socket connect"
 PORT=${1:?usage: socket-connect <port> [insmod-args...]}
 shift
 
-ifconfig lo 127.0.0.1 up 2>/dev/null
+ip link set lo up 2>/dev/null
 
 RECV=/tmp/rklings-recv
 : > "$RECV"

@@ -2,50 +2,37 @@
 # shellcheck source=/dev/null
 . "${RKLINGS_LIB:-/vm/checks/lib.sh}"
 
-begin "Hidden port vanishes from netstat output"
+begin "Hidden port vanishes from /proc/net/tcp"
 
-# Ensure loopback is up for network operations
-ifconfig lo 127.0.0.1 up
+ip link set lo up
 
-# Start a TCP listener on port 31337
 nc -l -p 31337 &
 NC_PID=$!
 sleep 1
 
-# Verify port is visible before module load
-if netstat -tln | grep -q ":31337 "; then
-  _ok "port 31337 visible before module load"
+# 31337 = 0x7A69
+if grep -qi ":7A69 " /proc/net/tcp; then
+  _ok "port 31337 visible in /proc/net/tcp before module load"
 else
   _fail "port 31337 not visible before module load (listener may have failed)"
 fi
 
 load rklings.ko
 
-# Verify port is still visible before hide command
-if netstat -tln | grep -q ":31337 "; then
+if grep -qi ":7A69 " /proc/net/tcp; then
   _ok "port 31337 still visible after module load (no hide yet)"
 else
   _fail "port 31337 disappeared after module load without hide command"
 fi
 
-# Hide port 31337
 mkdir /tmp/rklings.h.p.31337
 
-# Verify port is now hidden
-if netstat -tln | grep -q ":31337 "; then
-  _fail "port 31337 still visible after hide command"
-else
-  _ok "port 31337 hidden from netstat after hide command"
-fi
-
-# Also check /proc/net/tcp directly
-if cat /proc/net/tcp | grep -qi ":7A69 "; then
-  _fail "port 31337 (hex 7A69) still in /proc/net/tcp"
+if grep -qi ":7A69 " /proc/net/tcp; then
+  _fail "port 31337 (hex 7A69) still in /proc/net/tcp after hide"
 else
   _ok "port 31337 hidden from /proc/net/tcp"
 fi
 
-# Cleanup
 kill $NC_PID 2>/dev/null
 wait $NC_PID 2>/dev/null
 unload rklings

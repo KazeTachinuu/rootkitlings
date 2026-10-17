@@ -4,24 +4,22 @@
 
 begin "Non-targeted ports remain visible"
 
-# Ensure loopback is up
-ifconfig lo 127.0.0.1 up
+ip link set lo up
 
-# Start two listeners on different ports
+# 31337 = 0x7A69, 31338 = 0x7A6A
 nc -l -p 31337 &
 NC1_PID=$!
 nc -l -p 31338 &
 NC2_PID=$!
 sleep 1
 
-# Verify both ports are visible before module
-if netstat -tln | grep -q ":31337 "; then
+if grep -qi ":7A69 " /proc/net/tcp; then
   _ok "port 31337 visible before module load"
 else
   _fail "port 31337 not visible (listener failed)"
 fi
 
-if netstat -tln | grep -q ":31338 "; then
+if grep -qi ":7A6A " /proc/net/tcp; then
   _ok "port 31338 visible before module load"
 else
   _fail "port 31338 not visible (listener failed)"
@@ -29,24 +27,20 @@ fi
 
 load rklings.ko
 
-# Hide only port 31337
 mkdir /tmp/rklings.h.p.31337
 
-# Port 31337 should be hidden
-if netstat -tln | grep -q ":31337 "; then
+if grep -qi ":7A69 " /proc/net/tcp; then
   _fail "port 31337 still visible after hide command"
 else
   _ok "port 31337 is hidden as expected"
 fi
 
-# Port 31338 should still be visible
-if netstat -tln | grep -q ":31338 "; then
+if grep -qi ":7A6A " /proc/net/tcp; then
   _ok "non-targeted port 31338 remains visible"
 else
   _fail "non-targeted port 31338 was incorrectly hidden"
 fi
 
-# Cleanup
 kill $NC1_PID 2>/dev/null
 kill $NC2_PID 2>/dev/null
 wait $NC1_PID 2>/dev/null

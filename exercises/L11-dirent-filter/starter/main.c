@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/types.h>
 #include <linux/dirent.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
@@ -7,7 +8,6 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
-#include <linux/types.h>
 #include <linux/uaccess.h>
 
 #define RK_PREFIX     "rklings."
