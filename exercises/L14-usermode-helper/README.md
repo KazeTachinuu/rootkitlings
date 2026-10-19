@@ -1,11 +1,37 @@
 # L14: Usermode Helper
 
+Add a `launch` control that starts an absolute executable path as root from the
+kernel.
+You will prove it by launching a script that creates `/tmp/proof`.
+
 M01 gave you a complete local rootkit.
 Every command requires typing mkdir in a shell on the target.
 That means you need shell access first, and you type every command by hand.
 
 The kernel can launch programs on its own.
 If the kernel can start an agent binary, you never need to type another command.
+
+## Workspace
+
+The exercise carries the M01 module forward and adds one editable component:
+
+```text
+exercises/L14-usermode-helper
+├── Kbuild
+├── core
+│   ├── dispatch.c
+│   ├── escalation.c
+│   ├── filter.c
+│   ├── init.c
+│   ├── launch.c
+│   ├── module.c
+│   └── target.c
+└── include
+    └── rootkit.h
+```
+
+The dispatcher and existing controls are provided.
+Implement only the launch handler and its registration.
 
 ## call_usermodehelper
 
@@ -38,6 +64,7 @@ int call_usermodehelper(const char *path,
 ```
 
 `wait` controls blocking behavior:
+
 - `UMH_WAIT_EXEC`: return after exec (not after the process exits).
   The process runs in the background.
 - `UMH_WAIT_PROC`: block until the process exits.
@@ -73,14 +100,15 @@ rklings.launch./tmp/agent    -> launch "/tmp/agent"
 rklings.launch./bin/echo     -> launch "/bin/echo"
 ```
 
-## You write
+## Implement it
 
-`main.c` (~100 lines added to M01 dispatcher base):
+`core/launch.c` (one focused handler added to the complete M01 base):
 
-- `cmd_launch(const char *arg)`: validate path starts with "/", build argv/envp, call_usermodehelper
-- Register "launch" in the command table
+- `cmd_launch(const char *arg)`: validate path starts with "/", build argv/envp,
+  call_usermodehelper
+- `rk_launch_init()`: register `launch` in the command registry
 
-## API
+## Useful interfaces
 
 ```c
 #include <linux/umh.h>
@@ -96,15 +124,16 @@ UMH_NO_WAIT     // fire and forget
 ## Test it
 
 ```
-$ rklings run l14
-root@vm:~# insmod rklings.ko
-root@vm:~# echo '#!/bin/sh' > /tmp/test.sh && echo 'echo launched > /tmp/proof' >> /tmp/test.sh
-root@vm:~# chmod +x /tmp/test.sh
-root@vm:~# mkdir rklings.launch./tmp/test.sh && echo "exit: $?"
+$ ./rklings run L14
+root@victim:~# insmod /rklings/rklings.ko
+root@victim:~# printf '%s\n' '#!/bin/sh' \
+  'echo launched > /tmp/proof' > /tmp/test.sh
+root@victim:~# chmod +x /tmp/test.sh
+root@victim:~# mkdir rklings.launch./tmp/test.sh && echo "exit: $?"
 exit: 0
-root@vm:~# cat /tmp/proof
+root@victim:~# cat /tmp/proof
 launched
-root@vm:~# dmesg | tail -2
+root@victim:~# dmesg | tail -2
 rklings: launch: /tmp/test.sh
 rklings: launch: ret=0
 ```
@@ -113,14 +142,14 @@ The process runs as root (kernel context).
 Its parent is kthreadd (PID 2), not the shell.
 
 ```
-root@vm:~# ps -eo pid,ppid,comm | grep test
+root@victim:~# ps -eo pid,ppid,comm | grep test
   412     2 test.sh
 ```
 
 ## Validate
 
 ```
-$ rklings validate l14
+$ ./rklings validate L14
   [+] module loads
   [+] mkdir rklings.launch./tmp/test.sh spawns process
   [+] launched process created /tmp/proof
@@ -131,5 +160,6 @@ $ rklings validate l14
 
 ## Next
 
-The kernel can launch a binary.
-L15 builds that binary: a Go agent that connects home over mTLS.
+The module can start a userspace program, but that program cannot reach an
+operator yet.
+L15 builds an authenticated callback so the target can connect to your server.

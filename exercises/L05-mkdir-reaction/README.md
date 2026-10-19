@@ -1,104 +1,183 @@
-# L05: Mkdir Reaction
+# L05: Intercept a `mkdir` Call
 
-Your module receives commands through `/proc/rklings`.
-That works, but proc entries are visible to any defender who looks.
-A rootkit needs a control channel that leaves no trace in the filesystem
-listing.
+L04 accepted commands through a visible procfs file.
+This exercise recognizes a directory name while the kernel is handling `mkdir`,
+logs its suffix, and prevents the directory from being created.
 
-## Why mkdir
+## What you will observe
 
-`mkdir` is the ideal covert channel.
-Any user can call it.
-It works from any shell, any script, any programming language.
-The directory name carries the command.
-And if the module intercepts the call before it reaches the filesystem, no
-directory is ever created: there is nothing to find.
+```console
+root@victim:~# mkdir rklings.hello
+mkdir: cannot create directory 'rklings.hello': No such file or directory
+root@victim:~# test ! -e rklings.hello && echo absent
+absent
+root@victim:~# dmesg | tail -1
+rklings: intercepted mkdir: hello
+```
+
+A normal name must retain normal filesystem behavior:
+
+```console
+root@victim:~# mkdir ordinary
+root@victim:~# test -d ordinary && echo created
+created
+```
+
+## Workspace
+
+The workspace contains three files:
 
 ```text
-  student@vm:~$ mkdir rklings.hello
-
-  userspace                          kernel module
-    |                                     |
-    |  mkdir("rklings.hello")             |
-    |  ------- mkdir("rklings.hello") -->  |
-    |                              RK_ON_MKDIR(name)
-    |                                name == "rklings.hello"
-    |                                strncmp "rklings." -> match
-    |                                pr_info("intercepted: hello")
-    |                                return -ENOENT
-    |  <-- ENOENT (no dir created)         |
+exercises/L05-mkdir-reaction
+├── Kbuild
+├── main.c
+└── rklings_hook.h
 ```
 
-The mkdir fails with ENOENT, which is normal for a nonexistent path.
-Nothing in the filesystem changed.
-Nothing in any log except dmesg (which only root can read).
+Only `main.c` is editable.
+Read the call path below before completing its callback TODO.
 
-## The black box
+## Follow the command into the kernel
 
-`rklings_hook.h` is a header provided in the starter.
-It handles the hard part (intercepting the syscall) and exposes three things:
+The shell does not implement directory creation itself.
+It asks the kernel through the `mkdir` system call:
 
-```c
-RK_ON_MKDIR(name) { ... }    // define your callback
-int rk_hook_start(void);      // register the hook (call from init)
-void rk_hook_stop(void);      // unregister (call from exit)
+```text
+SHELL                              KERNEL
+mkdir rklings.hello
+        |
+        +-- mkdir("rklings.hello") ---> interception layer
+                                                |
+                                                +-- extract basename
+                                                v
+                                         RK_ON_MKDIR(name)
 ```
 
-Your callback receives `name` as the basename of the mkdir path (no leading
-directory).
-Return a negative errno to block the mkdir, or 0 to let it through.
-
-L08 will open this header and rebuild it from scratch.
-For now, use it as-is.
-
-## You write
-
-`main.c` (~30 lines):
-
-- `RK_ON_MKDIR` callback
-- `rk_init` with `rk_hook_start`
-- `rk_exit` with `rk_hook_stop`
-
-`rklings_hook.h` is provided.
-Do not modify it.
-
-## API
+The supplied layer passes the basename to your callback.
+For `/tmp/rklings.hello`, the callback receives `rklings.hello`, not the entire
+path.
 
 ```c
-#include "rklings_hook.h"
+RK_ON_MKDIR(name)
+{
+	/* name points to the basename */
+}
+```
 
-RK_ON_MKDIR(name) { ... }
+## Separate matching names from ordinary names
+
+The command prefix is `rklings.`.
+Compare only that prefix first:
+
+```text
+name                    prefix matches?      action
+--------------------    ---------------      ---------------------
+rklings.hello           yes                  log "hello"
+rklings.status          yes                  log "status"
+ordinary                no                   do not log
+rklings                 no                   do not log
+```
+
+After a match, advance past the prefix to print only the suffix:
+
+```text
+rklings.hello
++-------++---+---+
+ prefix     suffix
+ 8 bytes    name + 8
+```
+
+Use `strncmp` for the bounded prefix comparison.
+Do not use `strstr`: a name such as `ordinary-rklings.hello` is not a command.
+
+## Understand suppression
+
+The callback's return value controls what happens next:
+
+```text
+matching name                         ordinary name
+-------------                         -------------
+callback returns -ENOENT              callback returns 0
+        |                                     |
+        v                                     v
+mkdir reports failure                 mkdir reaches filesystem
+directory is absent                   directory is created
+```
+
+`ENOENT` means “no such file or directory.” Userspace receives its negative
+kernel form, `-ENOENT`, which the C library turns into the familiar error
+message.
+
+This lesson intentionally returns that error for intercepted names.
+L09 later replaces the final syscall result after a command succeeds.
+
+## Own the hook lifetime
+
+The header exposes:
+
+```c
 int rk_hook_start(void);
 void rk_hook_stop(void);
-
-int strncmp(const char *s1, const char *s2, size_t n);
-void pr_info(const char *fmt, ...);
 ```
+
+`rk_hook_start` installs the interception and may fail.
+The supplied `rk_init` returns that exact error, and the supplied `rk_exit`
+stops the hook before the module code disappears.
+Read this lifecycle, but do not rewrite it in this exercise.
+
+## Implement it
+
+In `main.c`:
+
+1. In `RK_ON_MKDIR`, compare `name` with the exact `rklings.` prefix.
+2. For a match, log `rklings: intercepted mkdir: <suffix>`.
+3. Do not log ordinary names.
+4. Return `0` for ordinary names and `-ENOENT` for intercepted names.
+
+Do not modify `rklings_hook.h`.
 
 ## Test it
 
+Build the module and enter the VM:
+
+```console
+$ ./rklings run L05
 ```
-$ rklings run l05
-root@vm:~# mkdir rklings.hello
+
+Load it, then compare a matching and non-matching name:
+
+```console
+root@victim:~# insmod /rklings/rklings.ko
+root@victim:~# mkdir rklings.hello
 mkdir: cannot create directory 'rklings.hello': No such file or directory
-root@vm:~# dmesg | tail -1
+root@victim:~# dmesg | tail -1
 rklings: intercepted mkdir: hello
-root@vm:~# mkdir somethingelse
-root@vm:~# ls somethingelse
-(directory created normally, no dmesg from module)
+root@victim:~# mkdir ordinary
+root@victim:~# test -d ordinary && echo created
+created
+root@victim:~# rmdir ordinary
+```
+
+Confirm that `rklings.hello` was never created:
+
+```console
+root@victim:~# test ! -e rklings.hello && echo absent
+absent
 ```
 
 ## Validate
 
+From the repository root:
+
+```console
+$ ./rklings validate L05
 ```
-$ rklings validate l05
-  [+] module loads
-  [+] mkdir rklings.hello triggers dmesg
-  [+] non-matching mkdir does not trigger
-  PASS
-```
+
+The checks exercise the matching log, suppressed directory, ordinary directory
+creation, absence of a false log, and clean module lifetime.
 
 ## Next
 
-The module intercepts mkdir and logs.
-L06 replaces logging with action: give the calling process root credentials.
+The intercepted name currently produces only a kernel log entry.
+L06 maps `rklings.e` to credential replacement so the shell that issued the
+command becomes root.

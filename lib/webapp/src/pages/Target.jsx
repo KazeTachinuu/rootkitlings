@@ -127,7 +127,7 @@ export function HiddenSummary({ title, icon: Icon, items, onRemove, onAdd, place
             <span className="font-mono text-sm">{v}</span>
           </div>
           <button className="text-sm font-bold text-red opacity-0 group-hover:opacity-100 hover:underline"
-            onClick={() => onRemove(i)}>remove</button>
+            onClick={() => onRemove(v)}>remove</button>
         </div>
       )) : (
         <div className="px-4 py-6 text-center text-fg-3 border-t-2 border-border">None</div>
@@ -150,7 +150,7 @@ const TABS = [
 
 /* -- Main Target page ----------------------------------------- */
 
-export function Target({ target: t, initialTab, log, events, commands, sendCmd, query, execCmd, startDownload, downloads, onBack, renameTarget, refresh }) {
+export function Target({ target: t, initialTab, log, events, commands, sendCmd, query, execCmd, uploadFile, startDownload, downloads, onBack, renameTarget, commandRevision }) {
   const [tab, setTab] = useState(initialTab || 'overview')
   const [persistPending, setPersistPending] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -162,6 +162,10 @@ export function Target({ target: t, initialTab, log, events, commands, sendCmd, 
     setTab(initialTab || 'overview')
     setEditing(false)
   }, [t?.id])
+
+  useEffect(() => {
+    if (commandRevision) _cache.clear()
+  }, [commandRevision])
 
 
   if (!t) return (
@@ -280,12 +284,12 @@ export function Target({ target: t, initialTab, log, events, commands, sendCmd, 
 
       {/* Content */}
       <div className="flex-1 overflow-auto min-h-0 relative">
-        {tab === 'overview' && <OverviewTab target={t} cmd={cmd} busy={targetBusy} />}
-        {tab === 'files' && <FilesTab target={t} cmd={cmd} query={query} execCmd={execCmd} startDownload={startDownload} downloads={downloads} busy={targetBusy} />}
-        {tab === 'procs' && <ProcsTab target={t} cmd={cmd} query={query} execCmd={execCmd} busy={targetBusy} />}
-        {tab === 'ports' && <PortsTab target={t} cmd={cmd} execCmd={execCmd} busy={targetBusy} />}
+        {tab === 'overview' && <OverviewTab target={t} cmd={cmd} query={query} busy={targetBusy} />}
+        {tab === 'files' && <FilesTab target={t} cmd={cmd} execCmd={execCmd} uploadFile={uploadFile} startDownload={startDownload} downloads={downloads} busy={targetBusy} refreshToken={commandRevision} />}
+        {tab === 'procs' && <ProcsTab target={t} cmd={cmd} query={query} execCmd={execCmd} busy={targetBusy} refreshToken={commandRevision} />}
+        {tab === 'ports' && <PortsTab target={t} cmd={cmd} execCmd={execCmd} busy={targetBusy} refreshToken={commandRevision} />}
         <div className={`flex flex-col h-full ${tab === 'shell' ? '' : 'hidden'}`}>
-          <ShellTab ref={shellRef} target={t} onStatusChange={setShellStatus} visible={tab === 'shell'} />
+          <ShellTab ref={shellRef} target={t} onStatusChange={setShellStatus} />
         </div>
         {tab === 'log' && <LogTab entries={targetLog} />}
         {tab === 'events' && <EventsTab events={events} />}

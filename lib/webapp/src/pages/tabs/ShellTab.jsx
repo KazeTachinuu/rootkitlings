@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHand
 import { SquareTerminal, Network } from 'lucide-react'
 import { wsUrl, API_HOST } from '../../api'
 
-export const ShellTab = forwardRef(function ShellTab({ target: t, onStatusChange, visible }, ref) {
+export const ShellTab = forwardRef(function ShellTab({ target: t, onStatusChange }, ref) {
   const termRef = useRef(null)
   const wsRef = useRef(null)
   const xtermRef = useRef(null)
@@ -37,7 +37,13 @@ export const ShellTab = forwardRef(function ShellTab({ target: t, onStatusChange
     term.onData((data) => {
       if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(data)
     })
-    const ro = new ResizeObserver(() => fitAddon.fit())
+    const sendSize = () => {
+      fitAddon.fit()
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+      }
+    }
+    const ro = new ResizeObserver(sendSize)
     ro.observe(termRef.current)
     term._ro = ro
   }, [])
@@ -56,6 +62,7 @@ export const ShellTab = forwardRef(function ShellTab({ target: t, onStatusChange
         const msg = JSON.parse(e.data)
         if (msg.type === 'ready') {
           setStatus('connected')
+          ws.send(JSON.stringify({ type: 'resize', cols: xtermRef.current.cols, rows: xtermRef.current.rows }))
           if (xtermRef.current) xtermRef.current.focus()
         } else if (msg.type === 'error') {
           const isBusy = (msg.msg || '').toLowerCase().includes('busy')
@@ -138,8 +145,8 @@ export const ShellTab = forwardRef(function ShellTab({ target: t, onStatusChange
         <div className="flex-1 flex items-center justify-center h-full">
           <div className="px-8 py-10 max-w-md w-full">
             <div className="text-center mb-8">
-              <div className="text-lg font-bold">Reverse Shell</div>
-              <div className="text-xs text-fg-3 mt-1">Encrypted PTY channel via SHELL callback</div>
+              <div className="text-lg font-bold">Interactive Shell</div>
+              <div className="text-xs text-fg-3 mt-1">Persistent guest PTY over the encrypted control channel</div>
             </div>
 
             <div className="border-2 border-border rounded-[var(--radius)] bg-bg-2 shadow-[4px_4px_0px_0px_var(--color-border)] p-4 mb-8">
@@ -159,7 +166,7 @@ export const ShellTab = forwardRef(function ShellTab({ target: t, onStatusChange
                     <line x1="0" y1="12" x2="46" y2="12" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" />
                     <polygon points="46,7 56,12 46,17" fill="currentColor" />
                   </svg>
-                  <span className="text-[8px] font-bold uppercase tracking-widest text-fg-3 mt-0.5">pty</span>
+                  <span className="text-[8px] font-bold uppercase tracking-widest text-fg-3 mt-0.5">PTY</span>
                 </div>
 
                 <div className="flex-1 min-w-0 border-2 border-border rounded-[var(--radius)] bg-bg p-3">

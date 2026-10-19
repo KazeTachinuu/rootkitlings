@@ -1,0 +1,28 @@
+#!/bin/sh
+# Check: no suspiciously recent timestamps on dropped files
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Timestamps clean"
+
+wait_agent
+
+# Look for files modified in the last 5 minutes in common drop locations
+resp=$(send_cmd "SHELL find /tmp /var/tmp /root /home -maxdepth 2 -mmin -5 -name 'rklings*' 2>/dev/null | wc -l")
+count=$(printf '%s\n' "$resp" | awk '/^[0-9]+$/{n=$1} END{print n+0}')
+if [ "${count:-0}" -eq 0 ]; then
+    _ok "no recently-modified rootkit files found"
+else
+    _fail "found $count files with recent timestamps"
+fi
+
+# Check that history files have no recent content
+for hist in /root/.bash_history /home/student/.bash_history; do
+    resp=$(send_cmd "SHELL wc -c < $hist 2>/dev/null || echo 0")
+    size=$(echo "$resp" | tr -dc '0-9')
+    if [ "${size:-1}" -eq 0 ]; then
+        _ok "$hist is empty (scrubbed)"
+    fi
+done
+
+summary

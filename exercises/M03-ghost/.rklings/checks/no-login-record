@@ -1,0 +1,28 @@
+#!/bin/sh
+# Check: last shows no login record for the session
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "No login records"
+
+wait_agent
+
+# Check utmp (current logins) via agent
+resp=$(send_cmd "SHELL who | grep student | wc -l")
+count=$(echo "$resp" | tr -dc '0-9')
+if [ "${count:-0}" -eq 0 ]; then
+    _ok "no student entry in who (utmp clean)"
+else
+    _fail "student still appears in who ($count entries)"
+fi
+
+# Check wtmp (login history) via agent
+resp=$(send_cmd "SHELL last -f /var/log/wtmp 2>/dev/null | grep student | wc -l")
+count=$(echo "$resp" | tr -dc '0-9')
+if [ "${count:-0}" -eq 0 ]; then
+    _ok "no student entry in last (wtmp clean)"
+else
+    _fail "student still appears in last ($count entries)"
+fi
+
+summary

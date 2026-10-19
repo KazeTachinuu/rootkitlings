@@ -1,0 +1,19 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Process is not dumpable and core dumps disabled"
+
+assert_loaded rklings
+
+security=$(RKLINGS_REPORT_SECURITY=1 ./agent)
+case "$security" in
+    *dumpable=0*) _ok "PR_GET_DUMPABLE reports 0" ;;
+    *) _fail "process remains dumpable: $security" ;;
+esac
+case "$security" in
+    *core=0*) _ok "RLIMIT_CORE is zero" ;;
+    *) _fail "core dump limit is not zero: $security" ;;
+esac
+
+summary

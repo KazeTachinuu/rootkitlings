@@ -1,0 +1,20 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Persistent PTY shell"
+wait_agent
+
+send_cmd "PTY START" >/dev/null
+send_cmd "PTY INPUT Y2QgL3RtcAo=" >/dev/null
+reply=$(send_cmd "PTY INPUT cHdkCg==")
+encoded=${reply#DATA }
+output=$(printf '%s' "$encoded" | base64 -d 2>/dev/null || true)
+
+case "$output" in
+    *"/tmp"*) _ok "PTY preserved working directory across input frames" ;;
+    *) _fail "PTY did not preserve shell state: $output" ;;
+esac
+
+send_cmd "PTY CLOSE" >/dev/null
+summary

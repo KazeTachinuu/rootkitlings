@@ -1,0 +1,40 @@
+#!/bin/sh
+# Check: shell history files are truncated
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "History scrubbing"
+
+wait_agent
+
+# Create a fake history file with content
+HIST="/home/student/.bash_history"
+{
+	echo "whoami"
+	echo "id"
+	echo "cat /etc/shadow"
+} >> "$HIST"
+
+if [ -s "$HIST" ]; then
+    _ok "history file has content before cleanup"
+else
+    _fail "history file was already empty"
+fi
+
+# Send CLEANUP command
+resp=$(send_cmd "CLEANUP student")
+if echo "$resp" | grep -qi "ok\|done"; then
+    _ok "CLEANUP accepted"
+else
+    _fail "CLEANUP failed: $resp"
+fi
+
+# Check that history is now empty
+if [ ! -s "$HIST" ]; then
+    _ok "history file empty after cleanup"
+else
+    size=$(wc -c < "$HIST")
+    _fail "history file still has $size bytes"
+fi
+
+summary

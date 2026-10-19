@@ -54,7 +54,7 @@ It accepts an executable filename or a repository-relative path under
 `vm/tools/`:
 
 ```sh
-./vm/boot --tool netfilter_udp_test path/to/module.ko
+./vm/boot --tool module_load_test path/to/module.ko
 ```
 
 Requested tools are built first and copied to `/bin` in the guest.

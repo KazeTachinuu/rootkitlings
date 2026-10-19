@@ -5,6 +5,11 @@
 # shellcheck source=scripts/lib/ui.sh
 . "${RKLINGS_UI:-/vm/ui.sh}"
 
+if [ -f /vm/checks/server-addr ]; then
+    RKLINGS_SERVER_ADDR=$(cat /vm/checks/server-addr)
+    export RKLINGS_SERVER_ADDR
+fi
+
 # -- marker output ----------------------------------------------------------
 
 _pass=0
@@ -234,13 +239,6 @@ load_fail() {
     fi
 }
 
-load_errno() {
-    local module="$1" expected="$2" parameters="${3-}"
-
-    _show_command module_load_params "$module" "$expected" "$parameters"
-    module_load_params "$module" "$expected" "$parameters"
-}
-
 write_param() {
     local mod="$1" param="$2" value="$3"
     local path="/sys/module/$mod/parameters/$param" quoted_path quoted_value
@@ -336,12 +334,16 @@ assert_gt() {
 # These talk to the relay server on the host via QEMU gateway.
 
 _RELAY_URL="${RELAY_URL:-http://10.0.2.2:4444}"
+if [ -f /vm/checks/relay-url ]; then
+    _RELAY_URL=$(cat /vm/checks/relay-url)
+fi
 
 wait_agent() {
-    local i resp
-    for i in $(seq 1 30); do
+    local attempt=1 resp
+    while [ "$attempt" -le 30 ]; do
         resp=$(curl -sf "$_RELAY_URL/wait" 2>/dev/null) && break
         sleep 1
+        attempt=$((attempt + 1))
     done
     case "$resp" in
         CONNECTED*) _ok "agent connected" ;;
@@ -378,4 +380,36 @@ assert_contains() {
             _fail "$path: missing '$expected', got '$actual'"
             ;;
     esac
+}
+
+# -- host-side process management (L22+) -------------------------------------
+
+start_server() {
+    "$@" > /tmp/rklings_server.log 2>&1 &
+    _server_pid=$!
+}
+
+wait_for_port() {
+    local port="$1" timeout="${2:-10}" attempt=1
+    while [ "$attempt" -le "$timeout" ]; do
+        if ss -tlnp 2>/dev/null | grep -q ":${port} \|:${port}$"; then
+            return 0
+        fi
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+    _fail "port $port not listening after ${timeout}s"
+    return 1
+}
+
+wait_for_connection() {
+    local port="$1" timeout="${2:-10}" attempt=1
+    while [ "$attempt" -le "$timeout" ]; do
+        if ss -tnp 2>/dev/null | grep -q ":${port} \|:${port}$"; then
+            return 0
+        fi
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+    return 1
 }

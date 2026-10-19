@@ -1,51 +1,102 @@
+PREFIX ?= $(CURDIR)/.rklings
 KDIR ?=
 MODULE_DIR ?=
 MODULE_OUT ?=
-TOOL_OUT ?= .rklings/build/tools
+TOOL_OUT ?= $(CURDIR)/.rklings/build/tools
 RKLINGS_FAIL_POINT ?= 0
+
 GUEST_TOOL_NAMES := \
-	agent_fixture \
-	cat \
-	cred_trigger_test \
-	credential_snapshot_test \
-	getdents64_test \
-	module_load_params \
 	mkdir_escalation_test \
 	module_load_test \
-	netfilter_udp_test \
-	packet_classifier_test \
-	packet_mutation_test \
 	proc_read_test \
-	proc_write_test \
-	read_result_test \
-	run_as \
-	rmdir_telemetry_test \
-	secure_agent_fixture \
-	socket_owner_fixture \
-	status_field_test \
-	task_attribution_test
+	secure_agent_fixture
 GUEST_TOOLS := $(addprefix $(TOOL_OUT)/,$(GUEST_TOOL_NAMES))
+READMES := README.md CLAUDE.md DEPENDENCIES.md $(shell find exercises lib product vm \
+	-path '*/node_modules' -prune \
+	-o -name README.md -type f -print | sort)
+WEB_STAMP := lib/webapp/node_modules/.package-lock.json
+DOCS_STAMP := node_modules/.package-lock.json
 
-PREFIX ?= $(HOME)/.local
+.DEFAULT_GOAL := build
 
-.PHONY: all install uninstall help module clean tools tool-output-directory
+.PHONY: build install uninstall test acceptance check web tools module clean help \
+	compile-db tool-output-directory format-docs lint-docs lint-shell lint-format
 
-.DEFAULT_GOAL := install
+build:
+	go build -o rklings ./cmd/rklings
 
-all: install
+compile-db: build
+	./rklings compile-db
 
 install:
-	go build -o $(PREFIX)/bin/rklings ./cmd/rklings/
+	mkdir -p $(PREFIX)/bin
+	go build -o $(PREFIX)/bin/rklings ./cmd/rklings
 
 uninstall:
-	rm -f $(PREFIX)/bin/rklings
+	$(RM) $(PREFIX)/bin/rklings
 
-help:
-	@printf '%s\n' \
-		'Rklings maintainer targets:' \
-		'  tools           Build guest-side verification tools' \
-		'  module          Build kernel module (MODULE_DIR required)' \
-		'  clean           Remove generated verification tools'
+test:
+	go test ./...
+	go vet ./...
+	cd product/operator && go test ./... && go vet ./...
+
+acceptance: build
+	./rklings validate --all
+
+$(WEB_STAMP): lib/webapp/package.json lib/webapp/package-lock.json
+	npm --prefix lib/webapp ci
+
+web: $(WEB_STAMP)
+	npm --prefix lib/webapp run lint
+	npm --prefix lib/webapp run build
+
+check: test lint-format lint-shell lint-docs web
+	git diff --check
+
+lint-format:
+	@test -z "$$(gofmt -l cmd internal product vm/fixtures)" || \
+		{ gofmt -l cmd internal product vm/fixtures; exit 1; }
+
+lint-shell:
+	@find exercises vm -type f \( -path '*/checks/*' -o -name '*.sh' \) \
+		-exec sh -n {} \;
+
+$(DOCS_STAMP): package.json package-lock.json
+	npm ci
+
+format-docs: $(DOCS_STAMP)
+	node scripts/workspace-trees.mjs $(READMES)
+	npm run format:docs -- $(READMES)
+
+lint-docs: $(DOCS_STAMP)
+	npm run check:docs -- $(READMES)
+	npx --yes markdownlint-cli2@0.23.3 $(READMES)
+	node scripts/workspace-trees.mjs --check $(READMES)
+	node --test scripts/check-diagrams.test.mjs
+	node scripts/check-diagrams.mjs $(READMES)
+
+tools: $(GUEST_TOOLS)
+
+tool-output-directory:
+	@test -n "$(strip $(TOOL_OUT))" && test "$(TOOL_OUT)" != / || \
+		{ echo 'TOOL_OUT must name a directory' >&2; exit 2; }
+	mkdir -p "$(TOOL_OUT)"
+
+$(TOOL_OUT)/mkdir_escalation_test: vm/tools/mkdir_escalation_test.c \
+	| tool-output-directory
+	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
+
+$(TOOL_OUT)/module_load_test: vm/tools/module_load_test.c \
+	| tool-output-directory
+	$(CC) -static -o $@ $<
+
+$(TOOL_OUT)/proc_read_test: vm/tools/proc_read_test.c \
+	| tool-output-directory
+	$(CC) -static -o $@ $<
+
+$(TOOL_OUT)/secure_agent_fixture: vm/tools/secure_agent_fixture.c \
+	| tool-output-directory
+	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
 
 module:
 	@test -n "$(MODULE_DIR)" || { echo 'MODULE_DIR is required' >&2; exit 2; }
@@ -56,77 +107,27 @@ module:
 		set --; \
 	fi; \
 	env -i PATH="$$PATH" LC_ALL=C LANG=C TZ=UTC \
-		make -C "$(KDIR)" M="$(MODULE_DIR)" W=1 ARCH=x86_64 CC=gcc HOSTCC=gcc \
-		RKLINGS_FAIL_POINT="$(RKLINGS_FAIL_POINT)" "$$@" modules
-
-tools: $(GUEST_TOOLS)
-
-tool-output-directory:
-	@test -n "$(strip $(TOOL_OUT))" && test "$(TOOL_OUT)" != / || \
-		{ echo 'TOOL_OUT must name a directory' >&2; exit 2; }
-	mkdir -p "$(TOOL_OUT)"
-
-$(TOOL_OUT)/agent_fixture: vm/tools/agent_fixture.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
-
-$(TOOL_OUT)/cat: vm/tools/cat.c | tool-output-directory
-	$(CC) -static -o $@ $<
-
-$(TOOL_OUT)/cred_trigger_test: vm/tools/cred_trigger_test.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
-
-$(TOOL_OUT)/credential_snapshot_test: vm/tools/credential_snapshot_test.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
-
-$(TOOL_OUT)/getdents64_test: vm/tools/getdents64_test.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
-
-$(TOOL_OUT)/mkdir_escalation_test: vm/tools/mkdir_escalation_test.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
-
-$(TOOL_OUT)/module_load_params: vm/tools/module_load_params.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
-
-$(TOOL_OUT)/module_load_test: vm/tools/module_load_test.c | tool-output-directory
-	$(CC) -static -o $@ $<
-
-$(TOOL_OUT)/netfilter_udp_test: vm/tools/netfilter_udp_test.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -pthread -static -o $@ $<
-
-$(TOOL_OUT)/packet_classifier_test: vm/tools/packet_classifier_test.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -O2 -static -o $@ $<
-
-$(TOOL_OUT)/packet_mutation_test: vm/tools/packet_mutation_test.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -O2 -static -o $@ $<
-
-$(TOOL_OUT)/proc_read_test: vm/tools/proc_read_test.c | tool-output-directory
-	$(CC) -static -o $@ $<
-
-$(TOOL_OUT)/proc_write_test: vm/tools/proc_write_test.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
-
-$(TOOL_OUT)/read_result_test: vm/tools/read_result_test.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -pthread -static -o $@ $<
-
-$(TOOL_OUT)/run_as: vm/tools/run_as.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
-
-$(TOOL_OUT)/rmdir_telemetry_test: vm/tools/rmdir_telemetry_test.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
-
-$(TOOL_OUT)/secure_agent_fixture: vm/tools/secure_agent_fixture.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
-
-$(TOOL_OUT)/socket_owner_fixture: vm/tools/socket_owner_fixture.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pedantic -static -o $@ $<
-
-$(TOOL_OUT)/status_field_test: vm/tools/status_field_test.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -static -o $@ $<
-
-$(TOOL_OUT)/task_attribution_test: vm/tools/task_attribution_test.c | tool-output-directory
-	$(CC) -std=c11 -Wall -Wextra -Werror -pthread -static -o $@ $<
+		make -C "$(KDIR)" M="$(MODULE_DIR)" W=1 ARCH=x86_64 \
+		CC=gcc HOSTCC=gcc RKLINGS_FAIL_POINT="$(RKLINGS_FAIL_POINT)" \
+		"$$@" modules
 
 clean:
-	@test "$(TOOL_OUT)" = .rklings/build/tools || \
+	@test "$(TOOL_OUT)" = "$(CURDIR)/.rklings/build/tools" || \
 		{ echo 'clean does not accept TOOL_OUT' >&2; exit 2; }
-	$(RM) $(GUEST_TOOLS)
+	$(RM) rklings $(GUEST_TOOLS)
+
+help:
+	@printf '%s\n' \
+		'Rootkitlings targets:' \
+		'  build        Build ./rklings' \
+		'  install      Install under PREFIX (default: .rklings)' \
+		'  test         Run Go tests and static analysis' \
+		'  acceptance   Validate all references with automatic concurrency' \
+		'  web          Lint and build the operator dashboard' \
+		'  check        Run all repository checks' \
+		'  tools        Build the declared guest verification tools' \
+		'  compile-db   Generate editor compile commands' \
+		'  module       Build MODULE_DIR against KDIR' \
+		'  format-docs  Format README files at 80 columns' \
+		'  lint-docs    Lint README files' \
+		'  clean        Remove local CLI and guest-tool binaries'

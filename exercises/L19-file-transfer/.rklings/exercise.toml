@@ -1,0 +1,62 @@
+schema_version = 2
+id = "file-transfer"
+title = "File transfer over mTLS"
+stage = "remote"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["c2", "exfiltration", "staging"]
+difficulty = "standard"
+prerequisites = ["remote-shell"]
+teaches = ["size-then-bytes", "io-limitreader", "file-io"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["main.go", "go.mod"]
+editable = ["main.go"]
+build = "."
+
+[build]
+module_from = "local-control"
+
+
+[run]
+stage = ["kernel", "agent"]
+load = ["kernel"]
+agent = "background"
+
+[serve]
+kind = "lab"
+commands = ["PING", "STATUS", "SHELL", "DOWNLOAD", "UPLOAD"]
+transfer = true
+
+[verification]
+load_kernel = true
+timeout_seconds = 120
+tools = []
+runtime = "background"
+harness = true
+
+[[verification.cases]]
+id = "download"
+label = "DOWNLOAD /etc/hostname returns file contents"
+expect_build = "pass"
+check = "exercises/L19-file-transfer/.rklings/checks/download"
+
+[[verification.cases]]
+id = "upload"
+label = "UPLOAD writes file with correct contents"
+expect_build = "pass"
+check = "exercises/L19-file-transfer/.rklings/checks/upload"
+
+[[verification.cases]]
+id = "download-size"
+label = "DOWNLOAD sends correct size header"
+expect_build = "pass"
+check = "exercises/L19-file-transfer/.rklings/checks/download-size"
+
+[[verification.cases]]
+id = "dispatch-intact"
+label = "PING and SHELL still work alongside file transfer"
+expect_build = "pass"
+check = "exercises/L19-file-transfer/.rklings/checks/dispatch-intact"

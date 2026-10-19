@@ -28,6 +28,7 @@ func Fail(msg string, args ...any)    { fmt.Printf("  "+c(red, "[-]")+" "+msg+"\
 func Warn(msg string, args ...any)    { fmt.Printf("  "+c(yellow, "[!]")+" "+msg+"\n", args...) }
 func Info(msg string, args ...any)    { fmt.Printf("  "+c(cyan, "[*]")+" "+msg+"\n", args...) }
 func Pending(msg string, args ...any) { fmt.Printf("  "+c(dim, "[ ]")+" "+msg+"\n", args...) }
+func Detail(msg string, args ...any)  { fmt.Printf("      "+c(dim, msg)+"\n", args...) }
 
 func Fatal(msg string, args ...any) {
 	Fail(msg, args...)

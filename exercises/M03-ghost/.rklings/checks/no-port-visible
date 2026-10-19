@@ -1,0 +1,37 @@
+#!/bin/sh
+# Check: ss shows no agent port
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Port invisible to ss"
+
+wait_agent
+
+status=$(send_cmd "STATUS")
+port=$(printf '%s\n' "$status" | sed -n 's/.*PORT=\([0-9][0-9]*\).*/\1/p')
+hex=$(printf '%04X' "$port")
+resp=$(send_cmd "SHELL cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '{print \$2}' | grep -ci :$hex || true")
+count=$(printf '%s\n' "$resp" | awk '/^[0-9]+$/{n=$1} END{print n+0}')
+if [ "${count:-0}" -eq 0 ]; then
+    _ok "callback port hidden from procfs TCP tables"
+else
+    _fail "callback port still visible in procfs ($count entries)"
+fi
+
+resp=$(send_cmd "SHELL ss -ltnH 'sport = :$port' | wc -l")
+count=$(printf '%s\n' "$resp" | awk '/^[0-9]+$/{n=$1} END{print n+0}')
+if [ "${count:-0}" -eq 0 ]; then
+    _ok "callback port hidden from ss"
+else
+    _fail "callback port still visible through sock_diag ($count entries)"
+fi
+
+# Verify connection still works
+resp=$(send_cmd "PING")
+if echo "$resp" | grep -q "PONG"; then
+    _ok "connection active while socket listings are filtered"
+else
+    _fail "agent not responding: $resp"
+fi
+
+summary

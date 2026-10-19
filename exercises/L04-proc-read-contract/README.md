@@ -1,122 +1,210 @@
-# L04: Proc Write Handler
+# L04: Control Live State through Procfs
 
-Your proc file is read-only.
-A rootkit needs to receive commands, not just report status.
-Writing to `/proc/rklings` will let userspace control the module with nothing
-more than `echo`.
+L03 published a read-only status file.
+This exercise lets a shell write `0` or `1` to the same path and change the
+state reported by subsequent reads.
 
-## copy_from_user
+```console
+root@victim:~# cat /proc/rklings
+active=1
+root@victim:~# printf '0\n' > /proc/rklings
+root@victim:~# cat /proc/rklings
+active=0
+```
 
-Userspace and kernel memory are separate address spaces.
-The kernel must copy data across the boundary explicitly:
+The implementation is short, but it crosses an important safety boundary:
+`proc_write` receives an address owned by a userspace process, not ordinary
+kernel memory.
+
+## Workspace
+
+The workspace already provides:
+
+- the state object and its `active` getter and setter;
+- the read callback that prints `active=0` or `active=1`;
+- the `proc_ops` table;
+- publication of `/proc/rklings` with mode `0644`; and
+- the complete state and procfs lifecycle from L03.
+
+Only `rk_proc_write` in `interface/proc.c` contains a TODO.
+Read the write path and buffer rules below before implementing it.
+
+## Follow one write
+
+The shell redirection opens `/proc/rklings` and asks the kernel to write bytes
+to it:
+
+```text
+printf '0\n' > /proc/rklings
+        |
+        | userspace buffer contains:  '0' '\n'
+        v
+rk_proc_write(file, ubuf, count=2, position)
+        |
+        +-- copy at most 3 bytes into a 4-byte kernel buffer
+        +-- append '\0'
+        +-- first byte is '0'
+        +-- rk_state_set_active(proc_state, false)
+        |
+        v
+return count=2
+        |
+        v
+printf sees a successful complete write
+```
+
+The following `cat` takes the separate read path:
+
+```text
+cat /proc/rklings
+        |
+        v
+rk_status_show()
+        |
+        +-- rk_state_is_active(proc_state) == false
+        v
+active=0
+```
+
+The write callback changes state; it does not construct the read response.
+
+## Respect the userspace boundary
+
+The callback parameter is declared `const char __user *ubuf`. `__user` documents
+that the address belongs to the calling process:
+
+```text
+userspace                              kernel space
+---------                              ------------
+ubuf ----- cannot dereference safely ------X
+     +---- copy_from_user(...) -----------> local buf
+```
+
+Userspace may supply an invalid or unmapped address.
+Reading `ubuf[0]` directly can fault inside the kernel.
+Use `copy_from_user`, check its result, and return `-EFAULT` when the copy is
+incomplete.
 
 ```c
 if (copy_from_user(buf, ubuf, len))
 	return -EFAULT;
 ```
 
-`__user` marks a pointer as userspace.
-`copy_from_user` returns 0 on success, nonzero on fault.
-Always check: a malicious process can pass an unmapped address.
+Unlike most C success conventions, `copy_from_user` returns the number of bytes
+it could not copy.
+Zero therefore means the complete copy succeeded.
 
-## proc_ops
+## Bound and terminate the input
 
-A writable proc entry needs the full `proc_ops` struct instead of
-`proc_create_single`:
+The local buffer has four bytes:
 
 ```c
-static const struct proc_ops rk_proc_ops = {
-	.proc_open    = rk_proc_open,
-	.proc_read    = seq_read,
-	.proc_write   = rk_proc_write,
-	.proc_lseek   = seq_lseek,
-	.proc_release = single_release,
-};
-
-proc_create("rklings", 0644, NULL, &rk_proc_ops);
+char buf[4];
 ```
 
-Permission `0644`: owner writes, everyone reads.
-`proc_open` uses `single_open` to wire seq_file for reads.
-`proc_write` handles input.
+Never copy `count` bytes without checking its size.
+The caller controls `count`, so it may be much larger than the local array.
+
+```c
+len = min(count, sizeof(buf) - 1);
+```
+
+Reserving one byte lets you add a C string terminator safely:
 
 ```text
-  echo "1" > /proc/rklings
-       |
-       v
-  rk_proc_write(ubuf, count)
-       |
-       v
-  copy_from_user --> buf[0]=='1' --> set_active(true)
-       |
-       v
-  return count
-
-  cat /proc/rklings --> rk_status_show --> "active=1\n"
+input:  '1' '\n'                     local buf[4]
+                                        +-----+-----+------+-----+
+copy two bytes -----------------------> | '1' | '\n'| '\0' |  ?  |
+                                        +-----+-----+------+-----+
+                                                       ^
+                                            appended by the kernel code
 ```
 
-## The trap
+This exercise needs only the first byte, but explicit termination keeps the
+buffer safe for normal string operations and makes its contract clear.
 
-If `copy_from_user` fails and you use `buf` anyway, you read uninitialized
-kernel stack.
-On a hardened kernel this is a fatal fault.
+## Return a precise result
 
-## You write
+The callback accepts two commands:
 
-`interface/proc.c` (~10 lines, starter provides proc_ops and proc_create):
+| First byte    | Action                | Return value     |
+| ------------- | --------------------- | ---------------- |
+| `0`           | Set inactive          | Original `count` |
+| `1`           | Set active            | Original `count` |
+| Anything else | Leave state unchanged | `-EINVAL`        |
+| Copy fault    | Leave state unchanged | `-EFAULT`        |
 
-- `rk_proc_write` body: `copy_from_user`, parse "1"/"0", call `rk_state_set_active`
+Returning the original `count` tells userspace that the complete submitted write
+was handled.
+Returning only the bounded `len` would incorrectly report a partial write.
 
-## API
+Reject invalid input before changing state.
+After `printf 'x\n' > /proc/rklings` fails, the previous active value must
+remain intact.
 
-```c
-void rk_state_set_active(struct rk_state *state, bool active);
+## Implement it
 
-unsigned long copy_from_user(void *to, const void __user *from,
-    unsigned long n);
-struct proc_dir_entry *proc_create(const char *name, umode_t mode,
-    struct proc_dir_entry *parent, const struct proc_ops *ops);
-int single_open(struct file *file,
-    int (*show)(struct seq_file *, void *), void *data);
-```
+In `rk_proc_write`:
+
+1. Declare a four-byte kernel buffer and a bounded length.
+2. Copy at most `sizeof(buf) - 1` bytes from `ubuf`.
+3. Return `-EFAULT` if any requested byte in that bounded copy fails.
+4. Append a null terminator.
+5. Set state to false for `0` and true for `1`.
+6. Return `-EINVAL` for any other first byte without changing state.
+7. Return the original `count` after a valid command.
+
+The surrounding lifecycle code is inherited and must remain intact.
 
 ## Test it
 
+After completing the implementation, build it and enter the VM:
+
+```console
+$ ./rklings run L04
 ```
-$ rklings run l04
-root@vm:~# insmod rklings.ko
-root@vm:~# dmesg | tail -1
-rklings: loaded
-root@vm:~# cat /proc/rklings
+
+Inside the VM:
+
+```console
+root@victim:~# insmod /rklings/rklings.ko
+root@victim:~# cat /proc/rklings
 active=1
-root@vm:~# echo 0 > /proc/rklings
-root@vm:~# cat /proc/rklings
+root@victim:~# printf '0\n' > /proc/rklings
+root@victim:~# cat /proc/rklings
 active=0
-root@vm:~# echo 1 > /proc/rklings
-root@vm:~# cat /proc/rklings
+root@victim:~# printf '1\n' > /proc/rklings
+root@victim:~# cat /proc/rklings
 active=1
-root@vm:~# echo x > /proc/rklings
-bash: echo: write error: Invalid argument
+root@victim:~# printf 'x\n' > /proc/rklings
+-bash: printf: write error: Invalid argument
+root@victim:~# cat /proc/rklings
+active=1
+```
+
+Unload the module and confirm the interface disappears:
+
+```console
+root@victim:~# rmmod rklings
+root@victim:~# test ! -e /proc/rklings && echo absent
+absent
 ```
 
 ## Validate
 
+From the repository root:
+
+```console
+$ ./rklings validate L04
 ```
-$ rklings validate l04
-  [+] builds at all fail points
-  [+] dmesg shows "rklings: loaded"
-  [+] /proc/rklings permissions are 0644
-  [+] cat shows active=1 after load
-  [+] echo 0 sets active=0
-  [+] echo 1 restores active=1
-  [+] echo x returns -EINVAL
-  [+] rmmod removes proc entry cleanly
-  PASS
-```
+
+The validator checks the `0644` interface, both state transitions, rejection of
+invalid input without a state change, bounded reads while the entry is open, all
+inherited failure paths, and clean unload.
 
 ## Next
 
-Your module takes commands through proc, but proc is visible to any defender who
-looks.
-L05 introduces a covert channel: intercepting mkdir so the module reacts to
-`mkdir rklings.something` with no visible interface.
+The module now accepts commands, but `/proc/rklings` permanently advertises the
+control interface.
+L05 carries a command in an ordinary `mkdir` call and prevents the requested
+directory from appearing.

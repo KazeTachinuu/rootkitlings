@@ -1,32 +1,20 @@
 package vm
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/KazeTachinuu/rootkitlings/internal/project"
 )
 
 const D00KernelVersion = "6.8.0-101-generic"
 const d00SnapshotURL = "https://snapshot.ubuntu.com/ubuntu/20260301T000000Z/"
 
-const d00VulnService = `#!/usr/bin/env python3
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import subprocess, urllib.parse
-
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-        host = qs.get("host", ["localhost"])[0]
-        out = subprocess.run(f"ping -c1 -W1 {host}", shell=True,
-                             capture_output=True, text=True)
-        self.send_response(200)
-        self.send_header("Content-Type", "text/plain")
-        self.end_headers()
-        self.wfile.write(f"Status check: {host}\n{out.stdout}{out.stderr}".encode())
-
-HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
-`
+//go:embed assets/d00-server.py
+var d00VulnService string
 
 const d00ServiceUnit = `[Unit]
 Description=Status check service
@@ -42,6 +30,24 @@ Restart=always
 WantedBy=multi-user.target
 `
 
+const d00Check = `#!/bin/sh
+set -eu
+failed=0
+check() {
+    if "$@"; then printf '[+] %s\n' "$*"; else printf '[-] %s\n' "$*"; failed=1; fi
+}
+check systemctl is-active --quiet status-check.service
+check test "$(id -u)" -eq 0
+before=$(dmesg | grep -c 'rklings: pong' || true)
+rm -rf /tmp/rklings.ping
+mkdir /tmp/rklings.ping
+after=$(dmesg | grep -c 'rklings: pong' || true)
+rmdir /tmp/rklings.ping
+check test "$after" -gt "$before"
+check sh -c "! lsmod | grep -q '^rklings '"
+exit "$failed"
+`
+
 // CreateD00SeedISO builds a cloud-init ISO for the D00 deployment target.
 // It installs a pre-patch kernel (6.8.0-101) vulnerable to CVE-2026-31431
 // and a command-injection HTTP service on port 8080.
@@ -51,7 +57,7 @@ func CreateD00SeedISO(pubKeyPath string) (isoPath, tempDir string, err error) {
 		return "", "", fmt.Errorf("read SSH pubkey: %w", err)
 	}
 
-	tempDir, err = os.MkdirTemp("", "rklings-d00-seed-")
+	tempDir, err = project.TempDir("d00-seed-")
 	if err != nil {
 		return "", "", err
 	}
@@ -67,7 +73,7 @@ func CreateD00SeedISO(pubKeyPath string) (isoPath, tempDir string, err error) {
 	fmt.Fprintf(&ud, "#cloud-config\n")
 	fmt.Fprintf(&ud, "users:\n")
 	fmt.Fprintf(&ud, "  - name: root\n    lock_passwd: false\n    ssh_authorized_keys:\n      - %s\n", key)
-	fmt.Fprintf(&ud, "  - name: student\n    uid: 1000\n    shell: /bin/bash\n    sudo: []\n    ssh_authorized_keys:\n      - %s\n", key)
+	fmt.Fprintf(&ud, "  - name: student\n    uid: 1000\n    shell: /bin/bash\n    sudo: []\n")
 
 	fmt.Fprintf(&ud, "package_update: false\n")
 	fmt.Fprintf(&ud, "apt:\n")
@@ -91,6 +97,15 @@ func CreateD00SeedISO(pubKeyPath string) (isoPath, tempDir string, err error) {
 
 	fmt.Fprintf(&ud, "  - path: /etc/systemd/system/status-check.service\n    content: |\n")
 	for _, line := range strings.Split(d00ServiceUnit, "\n") {
+		if line == "" {
+			fmt.Fprintf(&ud, "\n")
+		} else {
+			fmt.Fprintf(&ud, "      %s\n", line)
+		}
+	}
+
+	fmt.Fprintf(&ud, "  - path: /usr/local/bin/d00-check\n    permissions: '0755'\n    content: |\n")
+	for _, line := range strings.Split(d00Check, "\n") {
 		if line == "" {
 			fmt.Fprintf(&ud, "\n")
 		} else {

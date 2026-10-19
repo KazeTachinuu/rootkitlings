@@ -1,23 +1,42 @@
 # L19: File Transfer
 
+Transfer arbitrary bytes without base64 or command-output parsing.
+You will download a guest file, upload a new one, then read the uploaded bytes
+back through the shell handler.
+
 L18 gives you remote shell execution.
 But shell output is text.
-You need to move binary files: exfiltrate a database, upload a tool, grab SSH keys.
-This exercise adds DOWNLOAD and UPLOAD commands using a size-then-bytes protocol.
+You need to move binary files: exfiltrate a database, upload a tool, grab SSH
+keys.
+This exercise adds DOWNLOAD and UPLOAD commands using a size-then-bytes
+protocol.
+
+## Workspace
+
+```text
+exercises/L19-file-transfer
+├── go.mod
+└── main.go
+```
+
+Only `main.go` is editable.
+The command loop already uses one `bufio.Reader`; both line parsing and upload
+payload reads must continue through that same buffer.
 
 ## Size-then-bytes
 
 The same pattern as HTTP Content-Length and SCP.
 Before sending file data, send the size as a decimal number on its own line.
-The receiver reads that line, parses the number, then reads exactly that many bytes.
+The receiver reads that line, parses the number, then reads exactly that many
+bytes.
 
 ```text
   DOWNLOAD /etc/hostname
   ---
   Server reads:
 
-  "12\n"              <- size line (decimal bytes, newline-terminated)
-  "rklings-vm\n"      <- exactly 12 bytes of file data
+  "7\n"               <- size line (decimal bytes, newline-terminated)
+  "victim\n"          <- exactly 7 bytes of file data
 
   UPLOAD /tmp/payload 5
   ---
@@ -28,13 +47,14 @@ The receiver reads that line, parses the number, then reads exactly that many by
 ```
 
 No base64, no encoding.
-TLS handles framing and integrity.
-`io.LimitReader` prevents reading past the boundary.
+TLS handles framing and integrity. `io.LimitReader` prevents reading past the
+boundary.
 
 ## DOWNLOAD
 
 The server sends `DOWNLOAD <path>`.
-The agent opens the file, gets its size with `os.Stat`, writes the size line, then copies the file bytes.
+The agent opens the file, gets its size with `os.Stat`, writes the size line,
+then copies the file bytes.
 
 ```text
   Server                         Agent
@@ -52,7 +72,8 @@ If the file does not exist, respond with `ERR` and no size line.
 ## UPLOAD
 
 The server sends `UPLOAD <path> <size>`, then immediately sends the raw bytes.
-The agent parses the path and size from the command, creates the file, and reads exactly size bytes into it.
+The agent parses the path and size from the command, creates the file, and reads
+exactly size bytes into it.
 
 ```text
   Server                         Agent
@@ -69,15 +90,16 @@ are read.
 This is critical: without it, the agent would consume the next command line as
 file data.
 
-## You write
+## Implement it
 
-`main.go` (~130 lines):
+Complete `main.go`:
 
-- Everything from L18 (mTLS, dispatch, EXEC)
+- Everything from L18 (mTLS, dispatch, SHELL)
 - `handleDownload`: os.Open, Stat for size, write size line, io.Copy
-- `handleUpload`: parse path and size from arg, os.Create, io.Copy with LimitReader
+- `handleUpload`: parse path and size from arg, os.Create, io.Copy with
+  LimitReader
 
-## API
+## Useful interfaces
 
 ```go
 import "io"
@@ -94,12 +116,13 @@ f, err := os.Create(path)
 io.Copy(f, r)
 ```
 
-## The trap
+## Failure to avoid
 
-UPLOAD size is part of the command line, not a separate line.
-`UPLOAD /tmp/x 13` means: path is `/tmp/x`, size is `13`.
+UPLOAD size is part of the command line, not a separate line. `UPLOAD /tmp/x 13`
+means: path is `/tmp/x`, size is `13`.
 Parse both from the arg string before reading bytes.
-If you read a line to get the size, you have already consumed part of the file data.
+If you read a line to get the size, you have already consumed part of the file
+data.
 
 Also: `bufio.Scanner` buffers ahead.
 After the scanner reads the UPLOAD command line, the file bytes are already in
@@ -110,34 +133,53 @@ command lines instead of a scanner.
 
 ## Test it
 
-```
-$ rklings run l19
+`rklings serve L19` starts this exercise's live transfer panel at
+`http://127.0.0.1:8080`.
+Sizes and downloaded bytes come from the guest agent.
+
+```sh
+./rklings serve L19
 ```
 
-The lab server shows download and upload buttons.
+In another host terminal:
+
+```sh
+./rklings run L19
+```
+
+Open `http://127.0.0.1:8080`.
+Use the download control with `/etc/hostname` and verify the returned byte count
+and content.
+
+For upload, choose a local file, set its guest destination to `/tmp/marker`, and
+submit it.
+Use the shell control to read the uploaded file back from the guest.
 
 ```
 server> DOWNLOAD /etc/hostname
-[received 12 bytes: "rklings-vm\n"]
+[received 7 bytes: "victim\n"]
 server> UPLOAD /tmp/marker 11
 [sent: "hello world"]
-server> EXEC cat /tmp/marker
+server> SHELL cat /tmp/marker
 agent:  hello world
 ```
 
+Stop `run` and `serve` with `Ctrl+C` when finished.
+
 ## Validate
 
-```
-$ rklings validate l19
+```sh
+./rklings validate L19
   [+] agent connects over mTLS
   [+] DOWNLOAD /etc/hostname returns correct contents
   [+] DOWNLOAD sends correct size header
   [+] UPLOAD writes file with correct contents
-  [+] PING and EXEC still work
+  [+] PING and SHELL still work
   PASS
 ```
 
 ## Next
 
-You have a complete remote operations agent: dispatch, shell, file transfer.
-M02 integrates everything into a full C2 with an operator TUI.
+The protocol now supports commands, execution, and file transfer.
+M02 brings those operations together in the terminal and browser operator so you
+can control a live target from one place.

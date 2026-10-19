@@ -1,0 +1,61 @@
+schema_version = 2
+id = "command-dispatch"
+title = "Command dispatch over mTLS"
+stage = "remote"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["c2", "dispatch"]
+difficulty = "standard"
+prerequisites = ["mkdir-bridge"]
+teaches = ["bufio-scanner", "handler-map", "text-protocol"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["main.go", "go.mod"]
+editable = ["main.go"]
+build = "."
+
+[build]
+module_from = "local-control"
+
+
+[run]
+stage = ["kernel", "agent"]
+load = ["kernel"]
+agent = "background"
+
+[serve]
+kind = "lab"
+commands = ["PING", "STATUS", "HIDE FILE", "PERSIST", "ESCALATE"]
+
+[verification]
+load_kernel = true
+timeout_seconds = 120
+tools = []
+runtime = "background"
+harness = true
+
+[[verification.cases]]
+id = "ping"
+label = "Server sends PING, agent responds PONG"
+expect_build = "pass"
+check = "exercises/L17-command-dispatch/.rklings/checks/ping"
+
+[[verification.cases]]
+id = "status"
+label = "Server sends STATUS, agent responds with state"
+expect_build = "pass"
+check = "exercises/L17-command-dispatch/.rklings/checks/status"
+
+[[verification.cases]]
+id = "hide-file"
+label = "Server sends HIDE FILE x, file hidden from ls"
+expect_build = "pass"
+check = "exercises/L17-command-dispatch/.rklings/checks/hide-file"
+
+[[verification.cases]]
+id = "escalate"
+label = "Server sends ESCALATE, agent gains root"
+expect_build = "pass"
+check = "exercises/L17-command-dispatch/.rklings/checks/escalate"

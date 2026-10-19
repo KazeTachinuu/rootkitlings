@@ -1,0 +1,26 @@
+#!/bin/sh
+# Check: operator commands reach agent and return results
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Command dispatch"
+
+wait_agent
+
+# PING
+resp=$(send_cmd "PING")
+if echo "$resp" | grep -q "PONG"; then
+    _ok "PING/PONG works"
+else
+    _fail "expected PONG, got: $resp"
+fi
+
+# STATUS
+resp=$(send_cmd "STATUS")
+if echo "$resp" | grep -qi "pid\|alive\|ok"; then
+    _ok "STATUS returns agent info"
+else
+    _fail "STATUS did not return expected fields: $resp"
+fi
+
+summary

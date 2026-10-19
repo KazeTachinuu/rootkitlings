@@ -15,7 +15,7 @@ export default function App() {
 }
 
 function Shell() {
-  const { targets, events, commands, log, connected, sendCmd, query, execCmd, downloadFile, refresh, renameTarget, watchTarget } = useWs()
+  const { targets, events, commands, log, connected, commandRevision, sendCmd, query, execCmd, downloadFile, uploadFile, refresh, renameTarget, watchTarget } = useWs()
   const { toast } = useToast()
   const [page, setPage] = useState({ view: 'home', targetId: null })
   const [collapsed, setCollapsed] = useState(false)
@@ -166,7 +166,7 @@ function Shell() {
               }} />
           )}
           {page.view === 'target' && (
-            <Target target={selectedTarget} initialTab={page.initialTab} log={log} events={events} commands={commands} sendCmd={sendCmdWithToast} query={query} execCmd={execCmd} startDownload={startDownload} downloads={downloads} onBack={() => navigate('#/')} renameTarget={renameTarget} refresh={refresh} />
+            <Target target={selectedTarget} initialTab={page.initialTab} log={log} events={events} commands={commands} sendCmd={sendCmdWithToast} query={query} execCmd={execCmd} uploadFile={uploadFile} startDownload={startDownload} downloads={downloads} onBack={() => navigate('#/')} renameTarget={renameTarget} refresh={refresh} commandRevision={commandRevision} />
           )}
           {page.view === 'events' && (
             <Events events={events} onRefresh={refresh} />

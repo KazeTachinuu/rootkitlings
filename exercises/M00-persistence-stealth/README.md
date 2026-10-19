@@ -3,11 +3,45 @@
 Your module works until reboot, and anyone can see it in `lsmod`.
 Fix both.
 
+## What you will observe
+
+One control installs the module for the next boot; another removes its published
+list entry without unloading its code:
+
+```console
+root@victim:~# mkdir rklings.persist
+root@victim:~# mkdir rklings.h.m
+root@victim:~# grep '^rklings ' /proc/modules
+root@victim:~# mkdir rklings.ping
+mkdir: File exists
+```
+
+The empty module lookup and successful control response show two different
+facts: the module is hidden from that inventory and is still executing.
+
+## Workspace
+
+```text
+exercises/M00-persistence-stealth
+├── Kbuild
+└── main.c
+```
+
+`Kbuild` is complete.
+Implement the lifecycle, persistence, concealment, and command paths in
+`main.c`.
+
 ## Persistence
 
-systemd reads every `.conf` file in `/etc/modules-load.d/` at boot and loads the
-named modules.
-Writing "rklings" to that directory makes the module survive reboot:
+systemd reads every `.conf` file in `/etc/modules-load.d/` at boot and asks
+`modprobe` to load each named module.
+Two pieces are therefore required:
+
+1. `rklings.ko` must be installed below `/lib/modules/$(uname -r)/` and indexed
+   by `depmod`.
+2. `/etc/modules-load.d/rklings.conf` must contain `rklings`.
+
+The exercise command owns the second piece:
 
 ```c
 static int rk_persist(void)
@@ -30,15 +64,16 @@ That matches the 8 bytes in `"rklings\n"` (7 characters plus newline), so the
 newline is written but the NUL is not.
 
 `filp_open` opens a file from kernel context (no userspace fd table).
-`kernel_write` writes without copy_from_user.
-`O_TRUNC` replaces existing content.
+`kernel_write` writes without `copy_from_user`. `O_TRUNC` replaces existing
+content.
 Unpersist writes an empty file to the same path.
+The validator installs the built module and runs `depmod` before rebooting.
 
 ## Module hiding
 
-The kernel tracks loaded modules in a doubly-linked list.
-`lsmod` iterates this list.
-Removing your node makes the module invisible:
+The kernel tracks loaded modules in a doubly-linked list. `lsmod` iterates this
+list.
+Removing the node omits the module from those published lists:
 
 ```c
 void rk_module_hide(void)
@@ -53,9 +88,9 @@ void rk_module_unhide(void)
 }
 ```
 
-`THIS_MODULE` is a pointer to the current module's `struct module`.
-`list_del` removes the node from the list.
-`saved_prev` remembers the insertion point so `list_add` can restore it.
+`THIS_MODULE` is a pointer to the current module's `struct module`. `list_del`
+removes the node from the list. `saved_prev` remembers the insertion point so
+`list_add` can restore it.
 The module still runs, it just disappears from `lsmod` and `/proc/modules`.
 
 ## Multi-file split
@@ -85,21 +120,21 @@ Each file registers only its own commands via `rk_cmd_register`:
 ## Command dispatch
 
 `rk_cmd_register(key, handler)` adds entries to a static array.
-`rk_dispatch(name)` strips the `"rklings."`
-prefix, then finds the longest matching key.
-`"persist"` matches `"persist"` exactly.
-`"e.1234"` matches `"e"` with arg `"1234"`.
+`rk_dispatch(name)` strips the `"rklings."` prefix, then finds the longest
+matching key. `"persist"` matches `"persist"` exactly. `"e.1234"` matches `"e"`
+with arg `"1234"`.
 
-## You write
+## Implement it
 
-`main.c`, ~250 lines (starter provides dispatch + escalation from L09):
+The workspace provides the dispatcher and escalation path from L09.
+Complete `main.c`:
 
 - `rk_persist()` and `rk_unpersist()` using filp_open + kernel_write
 - `rk_module_hide()` and `rk_module_unhide()` using list_del/list_add
 - Four command handlers registered via `rk_cmd_register`
 - Everything in one file (the solution refactors into multi-file for M01)
 
-## API
+## Useful interfaces
 
 ```c
 // Command registration (dispatch.c)
@@ -126,24 +161,30 @@ int rk_module_cmds_init(void);  // registers persist, unpersist, h.m, u.m
 
 8 mkdir commands:
 
-| Command | Owner |
-|---------|-------|
-| `rklings.e` / `rklings.e.<pid>` | cred.c |
-| `rklings.ping` | init.c |
-| `rklings.status` | init.c |
-| `rklings.persist` | module.c |
-| `rklings.unpersist` | module.c |
-| `rklings.h.m` | module.c |
-| `rklings.u.m` | module.c |
+| Command                         | Owner    |
+| ------------------------------- | -------- |
+| `rklings.e` / `rklings.e.<pid>` | cred.c   |
+| `rklings.ping`                  | init.c   |
+| `rklings.status`                | init.c   |
+| `rklings.persist`               | module.c |
+| `rklings.unpersist`             | module.c |
+| `rklings.h.m`                   | module.c |
+| `rklings.u.m`                   | module.c |
 
 ## Test it
 
 ```
-$ rklings run m00
+$ ./rklings run M00
 root@vm:~# insmod rklings.ko
+root@vm:~# install -D -m 0644 rklings.ko \
+  /lib/modules/$(uname -r)/extra/rklings.ko
+root@vm:~# depmod -a
 root@vm:~# mkdir rklings.persist
 root@vm:~# cat /etc/modules-load.d/rklings.conf
 rklings
+root@vm:~# reboot
+root@vm:~# grep rklings /proc/modules
+rklings 16384 0 - Live 0x0000000000000000 (OE)
 root@vm:~# mkdir rklings.h.m
 root@vm:~# lsmod | grep rklings
 (no output)
@@ -158,10 +199,14 @@ root@vm:~# cat /etc/modules-load.d/rklings.conf
 ## Validate
 
 ```
-$ rklings validate m00
+$ ./rklings validate M00
   [+] module loaded
   [+] persist writes /etc/modules-load.d/rklings.conf
+  [*] rebooting guest...
+  [+] module loaded automatically after reboot
   [+] unpersist clears conf file
+  [*] rebooting guest...
+  [+] module remains absent after reboot
   [+] module hidden from lsmod
   [+] module unhidden, visible again
   [+] escalation still works
@@ -169,7 +214,11 @@ $ rklings validate m00
   PASS
 ```
 
+Validation uses the same VM overlay across both reboots.
+It proves boot behavior, not merely the presence of a configuration file.
+
 ## Next
 
-L10 builds the thread-safe target list that tracks what to hide from ls, ps,
-cat, and ss.
+The module can survive reboot and disappear from `lsmod`, but the files,
+processes, text, and ports associated with it remain visible.
+L10 starts a shared list of the specific items that later lessons will hide.

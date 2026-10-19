@@ -1,0 +1,36 @@
+#!/bin/sh
+
+set -eu
+
+rk="rklin$(printf gs)"
+probe="${rk}_probe"
+touch "/$probe"
+trap 'rm -f "/$probe"' EXIT
+
+mkdir "/tmp/${rk}.u.f.${rk}"
+mkdir "/tmp/${rk}.u.f.${rk}"
+if ! ls / | grep -qx "$rk"; then
+	printf 'named unhide did not restore /%s\n' "$rk" >&2
+	exit 1
+fi
+if ! ls / | grep -qx "$probe"; then
+	printf 'named unhide did not restore prefix match /%s\n' "$probe" >&2
+	exit 1
+fi
+mkdir "/tmp/${rk}.h.f.${rk}"
+if ls / | grep -qx "$rk"; then
+	printf 'failed to restore default file concealment\n' >&2
+	exit 1
+fi
+if ls / | grep -qx "$probe"; then
+	printf 'file prefix concealment did not hide /%s\n' "$probe" >&2
+	exit 1
+fi
+for entry in $(ls -1 /); do
+	if [ ! -e "/$entry" ]; then
+		printf 'directory filter returned a corrupt entry: %s\n' "$entry" >&2
+		exit 1
+	fi
+done
+
+printf 'named unhide is operational and idempotent\n'

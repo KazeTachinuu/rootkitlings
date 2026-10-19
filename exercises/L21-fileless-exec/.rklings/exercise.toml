@@ -1,0 +1,51 @@
+schema_version = 2
+id = "fileless-exec"
+title = "Execute a binary without writing it to disk"
+stage = "tradecraft"
+kind = "lesson"
+vm_user = "student"
+tradecraft = ["fileless", "anti-forensics"]
+difficulty = "standard"
+prerequisites = ["fileless-module"]
+teaches = ["memfd-exec", "proc-self-fd", "fileless-execution"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["main.go", "go.mod", "go.sum"]
+editable = ["main.go"]
+build = "."
+
+[build]
+embed_fixture = "vm/fixtures/fileless-agent/main.go"
+embed_fixture_as = "agent"
+
+[run]
+stage = ["agent"]
+agent = "background"
+remove_artifact = true
+
+
+[verification]
+timeout_seconds = 120
+tools = []
+runtime = "background"
+remove_artifact = true
+
+[[verification.cases]]
+id = "agent-running"
+label = "Agent process is running"
+expect_build = "pass"
+check = "exercises/L21-fileless-exec/.rklings/checks/agent-running"
+
+[[verification.cases]]
+id = "no-binary-on-disk"
+label = "No agent binary exists on disk"
+expect_build = "pass"
+check = "exercises/L21-fileless-exec/.rklings/checks/no-binary-on-disk"
+
+[[verification.cases]]
+id = "exe-deleted"
+label = "/proc/pid/exe shows (deleted)"
+expect_build = "pass"
+check = "exercises/L21-fileless-exec/.rklings/checks/exe-deleted"

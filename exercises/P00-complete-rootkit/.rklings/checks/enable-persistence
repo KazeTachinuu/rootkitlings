@@ -1,0 +1,25 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Enable durable agent persistence"
+wait_agent
+
+before=$(curl -sf "$_RELAY_URL/connections" | sed '/^$/d' | wc -l)
+printf '%s\n' "$before" > /root/p00-connections-before-reboot
+
+resp=$(send_cmd "PERSIST")
+case "$resp" in
+    OK*) _ok "PERSIST installed durable mode" ;;
+    *) _fail "PERSIST failed: $resp" ;;
+esac
+
+assert_exists /usr/lib/.rklings/rklings_agent
+assert_exists /etc/systemd/system/rklings-agent.service
+if systemctl is-enabled --quiet rklings-agent.service; then
+    _ok "agent service enabled for boot"
+else
+    _fail "agent service is not enabled"
+fi
+
+summary

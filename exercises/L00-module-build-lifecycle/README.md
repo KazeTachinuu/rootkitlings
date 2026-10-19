@@ -1,173 +1,207 @@
-# L00: Module Init
+# L00: Build, Load, and Unload a Kernel Module
 
-Before you can hide, you need to exist in the kernel.
+This first exercise takes one small C file through the complete kernel-module
+lifecycle.
+You will build `rklings.ko`, load it into a disposable VM, observe it in the
+running kernel, unload it, and confirm that it left cleanly.
 
-A kernel module is code that loads into the running kernel at runtime.
-No recompilation, no reboot.
-`insmod` drops it in, `rmmod` pulls it out.
-Drivers use this mechanism.
-So do rootkits.
-
-Unlike userspace programs, a module shares the kernel's address space and runs
-with full kernel privileges.
-A bug does not segfault your process.
-It panics the machine.
-Everything in this course runs inside a disposable QEMU guest for exactly that
-reason.
-
-## How it gets built
-
-You write C.
-The kernel build system (`Kbuild`) compiles it into a loadable kernel object
-(`.ko`):
+## What you will observe
 
 ```text
-  source                      runtime
-
-  core/main.c                 insmod rklings.ko
-       |                           |
-       | Kbuild                    v
-       v                      rk_init() --> return 0
-  core/main.o                      |
-       |                      module is resident
-       | link                      |
-       v                      rmmod rklings
-  rklings.ko                       |
-                                   v
-                              rk_exit()
-                                   |
-                              module removed
+HOST                               DISPOSABLE VM
++-------------+                    +----------------------------+
+| core/main.c |                    | running kernel             |
++------+------+                    |                            |
+       | Kbuild                    | insmod                     |
+       v                           |   +-- rk_init()            |
++-------------+   stage            |       +-- resident         |
+| rklings.ko  | -----------------> |                            |
++-------------+                    | rmmod                      |
+                                   |   +-- rk_exit()            |
+                                   |       +-- removed          |
+                                   +----------------------------+
 ```
 
-Your `Kbuild` file tells the build system what to produce:
+`rklings.ko` is a loadable kernel object.
+Unlike an ordinary program, it has no `main` function and does not run as a
+separate process.
+Its code becomes part of the running kernel until it is unloaded.
+
+A mistake in a userspace program normally crashes that process.
+A mistake in kernel code can crash the whole operating system, so the runner
+uses a disposable QEMU guest rather than your host kernel.
+
+## Workspace
+
+Open the two editable files:
+
+```text
+exercises/L00-module-build-lifecycle
+├── Kbuild
+└── core
+    └── main.c
+```
+
+Read the following sections before completing the TODOs.
+The runner will later build these files on the host and stage `rklings.ko` in a
+guest whose kernel matches the build environment.
+
+## Build the module
+
+The kernel build system is called Kbuild.
+This exercise needs two declarations:
 
 ```make
 obj-m += rklings.o
 rklings-y := core/main.o
 ```
 
-`obj-m` says "build rklings.ko as a loadable module."
-`rklings-y` lists the object files that go into it.
+Read them from top to bottom:
 
-## How it runs
+```text
+core/main.c
+    | compile
+    v
+core/main.o
+    | link as rklings.o
+    v
+rklings.ko
+```
 
-There is no `main()`.
-The kernel calls two callbacks you register:
+`obj-m` names the loadable module. `rklings-y` lists the object files linked
+into it.
+Later exercises add more objects to the same list.
+
+## Define its lifetime
+
+The kernel calls one function when the module enters and another when it leaves:
 
 ```c
 static int __init rk_init(void)
 {
+	pr_info("rklings: loaded\n");
 	return 0;
 }
 
 static void __exit rk_exit(void)
 {
+	pr_info("rklings: unloaded\n");
 }
 
 module_init(rk_init);
 module_exit(rk_exit);
 ```
 
-`rk_init` runs when the module loads.
-Return 0 means success.
-Return a negative errno and the kernel rejects the load entirely: the module is
-never installed and `rk_exit` is never called.
+`module_init` and `module_exit` register the callbacks.
+They do not call them immediately.
 
-`rk_exit` runs when the module unloads.
-Everything you set up in init, you tear down here.
-The kernel may discard `__init`-marked code after init returns, so exit cannot
-call init functions.
+```text
+insmod rklings.ko
+        |
+        v
+     rk_init()
+        |
+        +-- returns 0 ------ module remains loaded
+        |
+        +-- returns -errno - load fails; rk_exit() is not called
 
-Two metadata macros round it out:
-
-```c
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Rklings kernel module");
+rmmod rklings
+        |
+        v
+     rk_exit()
+        |
+        +-- release everything acquired by rk_init()
 ```
 
-Without `GPL`, the kernel taints itself and some symbols become unavailable.
-`modinfo rklings.ko` reads these fields without loading.
+`__init` tells the kernel that it may discard the initialization code after a
+successful load. `__exit` marks code used only during unload.
 
-## Logging from kernel space
+## Observe kernel messages
 
-There is no `printf` in the kernel.
-The kernel has its own log buffer that `dmesg` reads.
-`pr_info` writes a message to that buffer:
+Kernel code cannot use the C library or `printf`. `pr_info` writes to the kernel
+log instead:
 
 ```c
-#include <linux/printk.h>
-
 pr_info("rklings: loaded\n");
 ```
 
-`pr_info` works like `printf`: format string, optional arguments, explicit `\n`.
-The output goes to the kernel ring buffer, visible with `dmesg`.
-This is the only way your module can tell you it ran.
+`dmesg` reads that log from the shell.
+The explicit newline completes the message.
 
-## You write
-
-`Kbuild` (~2 lines):
-
-- declare the module and its source
-
-`core/main.c` (~21 lines):
-
-- `rk_init` with pr_info on load
-- `rk_exit` with pr_info on unload
-- license
-- description
-
-## API
+The module also needs metadata:
 
 ```c
-#include <linux/init.h>       // __init, __exit
-#include <linux/module.h>     // module_init, module_exit, MODULE_LICENSE
-#include <linux/printk.h>     // pr_info
-
-static int __init rk_init(void);     // return 0 = loaded
-static void __exit rk_exit(void);    // clean up everything
-
-pr_info("format string\n", ...);     // kernel printf, writes to dmesg
-
-module_init(rk_init);
-module_exit(rk_exit);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Rklings kernel module");
 ```
 
+`modinfo` can inspect these fields without loading the module.
+The validator requires these exact values.
+
+## Implement it
+
+In `Kbuild`:
+
+1. Build a module named `rklings`.
+2. Link only `core/main.o` into it.
+
+In `core/main.c`:
+
+1. Log `rklings: loaded` and return success from `rk_init`.
+2. Log `rklings: unloaded` from `rk_exit`.
+3. Register both callbacks.
+4. Declare the GPL license and required description.
+
 ## Test it
 
+After completing the implementation, build it and enter the VM:
+
+```console
+$ ./rklings run L00
 ```
-$ rklings run l00
-root@vm:~# insmod rklings.ko
-root@vm:~# dmesg | tail -1
+
+Inside the VM, load the staged module and inspect all three observable results:
+
+```console
+root@victim:~# insmod /rklings/rklings.ko
+root@victim:~# dmesg | tail -1
 rklings: loaded
-root@vm:~# lsmod | grep rklings
-rklings 12288 0
-root@vm:~# rmmod rklings
-root@vm:~# dmesg | tail -1
-rklings: unloaded
-root@vm:~# lsmod | grep rklings
-(no output)
+root@victim:~# grep '^rklings ' /proc/modules
+rklings 12288 0 - Live 0x0000000000000000 (O)
+root@victim:~# test -d /sys/module/rklings && echo present
+present
 ```
+
+The address and flags in `/proc/modules` vary by kernel.
+The important result is that the `rklings` entry exists.
+
+Unload it and prove both inventories and the lifecycle message changed:
+
+```console
+root@victim:~# rmmod rklings
+root@victim:~# dmesg | tail -1
+rklings: unloaded
+root@victim:~# grep '^rklings ' /proc/modules
+root@victim:~# test ! -e /sys/module/rklings && echo absent
+absent
+```
+
+An empty `grep` result is expected after unload.
+Load and unload it once more to catch lifecycle state that was not cleaned up.
 
 ## Validate
 
+Leave the VM, then run:
+
+```console
+$ ./rklings validate L00
 ```
-$ rklings validate l00
-  [+] rklings.ko builds without warnings
-  [+] modinfo shows LICENSE=GPL
-  [+] insmod succeeds, /proc/modules lists rklings
-  [+] dmesg shows "rklings: loaded"
-  [+] /sys/module/rklings exists
-  [+] rmmod succeeds, dmesg shows "rklings: unloaded"
-  [+] reload succeeds (clean lifecycle)
-  PASS
-```
+
+The validator checks the Kbuild composition, metadata, load and unload messages,
+`/proc/modules`, `/sys/module/rklings`, and a second complete cycle.
 
 ## Next
 
-Your module enters and leaves the kernel cleanly, but it has no way to fail
-gracefully.
-L01 adds goto cleanup chains so init can back out when an allocation fails,
-freeing only what was actually created.
+The module can enter and leave the kernel when initialization succeeds.
+L01 forces initialization to fail at controlled points and makes each partial
+setup clean up only the resources it already owns.

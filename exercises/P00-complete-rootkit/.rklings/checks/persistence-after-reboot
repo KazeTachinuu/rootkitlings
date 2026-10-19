@@ -1,0 +1,46 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Verify durable mode after a real reboot"
+
+before=$(cat /root/p00-connections-before-reboot)
+after=$before
+attempt=0
+while [ "$attempt" -lt 30 ]; do
+    after=$(curl -sf "$_RELAY_URL/connections" | sed '/^$/d' | wc -l)
+    [ "$after" -gt "$before" ] && break
+    attempt=$((attempt + 1))
+    sleep 1
+done
+if [ "$after" -gt "$before" ]; then
+    _ok "agent established a new callback after reboot"
+else
+    _fail "agent did not reconnect after reboot"
+fi
+
+if systemctl is-active --quiet rklings-agent.service; then
+    _ok "persisted agent service is active"
+else
+	systemctl status --no-pager rklings-agent.service >&2 || true
+    _fail "persisted agent service is not active"
+fi
+assert_exists /usr/lib/.rklings/rklings_agent
+assert_exists /sys/module/rklings
+assert_absent /rklings/rklings.ko
+
+resp=$(send_cmd "PING")
+case "$resp" in
+    PONG*) _ok "restarted agent responds to PING" ;;
+    *) _fail "restarted agent did not respond: $resp" ;;
+esac
+
+resp=$(send_cmd "UNPERSIST")
+case "$resp" in
+    OK*) _ok "UNPERSIST removed durable mode" ;;
+    *) _fail "UNPERSIST failed: $resp" ;;
+esac
+assert_absent /usr/lib/.rklings/rklings_agent
+assert_absent /etc/systemd/system/rklings-agent.service
+
+summary

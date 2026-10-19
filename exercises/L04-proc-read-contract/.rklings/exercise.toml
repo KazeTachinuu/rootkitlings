@@ -1,0 +1,71 @@
+schema_version = 2
+id = "proc-read-contract"
+title = "Control live module state through procfs"
+stage = "control-execution"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["control", "detection"]
+difficulty = "standard"
+prerequisites = ["proc-publication"]
+teaches = ["proc-write", "bounded-user-copy", "state-control"]
+requires = ["proc-entry", "component-ownership", "proc-publication-lifetime"]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interface/proc.c"]
+editable = ["core/main.c", "core/state.c", "include/rootkit.h", "interface/proc.c"]
+build = "."
+
+[run]
+stage = ["kernel"]
+
+
+[verification]
+base_case = "normal-read"
+timeout_seconds = 120
+tools = ["module-load-test", "proc-read-test"]
+
+[[verification.cases]]
+id = "normal-read"
+label = "Bounded procfs control"
+expect_build = "pass"
+check = "exercises/L04-proc-read-contract/.rklings/checks/success-check"
+
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "preflight-rejection"
+label = "Preflight rejection"
+expect_build = "pass"
+check = "exercises/L03-proc-publication/.rklings/checks/failure-ecanceled-check"
+
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "1"
+
+[[verification.cases]]
+id = "allocation-rejection"
+label = "State allocation rejection"
+expect_build = "pass"
+check = "exercises/L03-proc-publication/.rklings/checks/failure-enomem-check"
+
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "2"
+
+[[verification.cases]]
+id = "publication-rollback"
+label = "Publication rollback"
+expect_build = "pass"
+check = "exercises/L03-proc-publication/.rklings/checks/failure-after-state-check"
+
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "3"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+build_output_contains = "unknown RKLINGS_FAIL_POINT"
+
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "99"

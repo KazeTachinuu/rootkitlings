@@ -1,0 +1,49 @@
+schema_version = 2
+id = "command-dispatcher"
+title = "Build a command dispatcher with kretprobe"
+stage = "interception"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["interception", "control"]
+difficulty = "standard"
+prerequisites = ["kprobe-revealed"]
+teaches = ["kretprobe-pattern", "entry-return-probe", "command-dispatch"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+
+[run]
+stage = ["kernel"]
+
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test", "mkdir-escalation-test"]
+
+[[verification.cases]]
+id = "ping"
+label = "mkdir rklings.ping logs to dmesg"
+expect_build = "pass"
+check = "exercises/L09-command-dispatcher/.rklings/checks/ping"
+
+[[verification.cases]]
+id = "status"
+label = "mkdir rklings.status prints state"
+expect_build = "pass"
+check = "exercises/L09-command-dispatcher/.rklings/checks/status"
+
+[[verification.cases]]
+id = "escalation"
+label = "rklings.e still grants root"
+expect_build = "pass"
+check = "exercises/L09-command-dispatcher/.rklings/checks/escalation"
+
+[[verification.cases]]
+id = "return-value"
+label = "Intercepted mkdir returns 0, not ENOENT"
+expect_build = "pass"
+check = "exercises/L09-command-dispatcher/.rklings/checks/return-value"

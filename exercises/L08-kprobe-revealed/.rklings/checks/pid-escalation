@@ -1,0 +1,34 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "PID-targeted escalation via kprobe"
+
+load rklings.ko
+assert_loaded rklings
+
+# Spawn a background sleep as student
+su student -s /bin/sh -c 'exec sleep 30' &
+sleep 1
+
+# Find the sleep PID
+target_pid=$(ps -eo pid,user,comm | awk '/student.*sleep/ {print $1; exit}')
+if [ -z "$target_pid" ]; then
+    _fail "could not find student sleep process"
+    unload rklings
+    summary
+fi
+
+_ok "found target process at pid $target_pid"
+
+# Target that PID via mkdir rklings.e.PID
+mkdir "/tmp/rklings.e.$target_pid" 2>/dev/null
+
+assert_log "mkdir e.$target_pid"
+
+# Cleanup
+rm -rf "/tmp/rklings.e.$target_pid" 2>/dev/null
+kill "$target_pid" 2>/dev/null
+unload rklings
+
+summary

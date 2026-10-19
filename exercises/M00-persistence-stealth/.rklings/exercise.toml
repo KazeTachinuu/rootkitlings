@@ -1,0 +1,75 @@
+schema_version = 2
+id = "persistence-stealth"
+title = "Persist across reboot and hide from lsmod"
+stage = "persistence"
+kind = "milestone"
+vm_user = "root"
+tradecraft = ["persistence", "concealment"]
+difficulty = "standard"
+prerequisites = ["command-dispatcher"]
+teaches = ["module-persistence", "module-cloaking", "filp-kernel-write"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+
+[run]
+stage = ["kernel"]
+
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test", "mkdir-escalation-test"]
+
+[[verification.cases]]
+id = "persist"
+label = "mkdir rklings.persist creates /etc/modules-load.d/rklings.conf"
+expect_build = "pass"
+check = "exercises/M00-persistence-stealth/.rklings/checks/persist"
+reboot_after = true
+
+[[verification.cases]]
+id = "persisted-after-reboot"
+label = "Module loads automatically after a real reboot"
+expect_build = "pass"
+check = "exercises/M00-persistence-stealth/.rklings/checks/persisted-after-reboot"
+
+[[verification.cases]]
+id = "unpersist"
+label = "mkdir rklings.unpersist removes the conf file"
+expect_build = "pass"
+check = "exercises/M00-persistence-stealth/.rklings/checks/unpersist"
+reboot_after = true
+
+[[verification.cases]]
+id = "unpersisted-after-reboot"
+label = "Module remains absent after unpersist and reboot"
+expect_build = "pass"
+check = "exercises/M00-persistence-stealth/.rklings/checks/unpersisted-after-reboot"
+
+[[verification.cases]]
+id = "hide-module"
+label = "mkdir rklings.h.m hides from lsmod"
+expect_build = "pass"
+check = "exercises/M00-persistence-stealth/.rklings/checks/hide-module"
+
+[[verification.cases]]
+id = "unhide-module"
+label = "mkdir rklings.u.m restores in lsmod"
+expect_build = "pass"
+check = "exercises/M00-persistence-stealth/.rklings/checks/unhide-module"
+
+[[verification.cases]]
+id = "escalation"
+label = "rklings.e still works"
+expect_build = "pass"
+check = "exercises/M00-persistence-stealth/.rklings/checks/escalation"
+
+[[verification.cases]]
+id = "dispatcher"
+label = "ping and status commands still work"
+expect_build = "pass"
+check = "exercises/M00-persistence-stealth/.rklings/checks/dispatcher"

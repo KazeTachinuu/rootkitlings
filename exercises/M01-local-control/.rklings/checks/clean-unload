@@ -1,0 +1,29 @@
+#!/bin/sh
+# Check: Module loads, performs operations, then unloads cleanly
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Clean unload after operations"
+
+load rklings.ko
+assert_loaded rklings
+
+# Perform a mix of operations
+mkdir /tmp/rklings.e 2>/dev/null
+mkdir /tmp/rklings.h.f.testfile 2>/dev/null
+mkdir /tmp/rklings.h.i.12345 2>/dev/null
+mkdir /tmp/rklings.h.c.secretword 2>/dev/null
+mkdir /tmp/rklings.h.p.8888 2>/dev/null
+
+# Now unload
+unload rklings
+assert_absent /sys/module/rklings
+
+# Cleanup temp dirs
+rmdir /tmp/rklings.e 2>/dev/null
+rmdir /tmp/rklings.h.f.testfile 2>/dev/null
+rmdir /tmp/rklings.h.i.12345 2>/dev/null
+rmdir /tmp/rklings.h.c.secretword 2>/dev/null
+rmdir /tmp/rklings.h.p.8888 2>/dev/null
+
+summary

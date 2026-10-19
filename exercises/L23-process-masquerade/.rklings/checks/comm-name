@@ -1,0 +1,34 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Process comm is [kworker/0:1]"
+
+assert_loaded rklings
+
+# Start agent in background
+RKLINGS_SERVER_ADDR=127.0.0.1:1 ./agent &
+agent_pid=$!
+sleep 2
+
+# Check /proc/pid/comm for the masqueraded name
+comm=$(cat "/proc/$agent_pid/comm" 2>/dev/null)
+
+if [ "$comm" = "[kworker/0:1]" ]; then
+    _ok "process comm is [kworker/0:1]"
+else
+    _fail "expected [kworker/0:1] in /proc/pid/comm, got: $comm"
+fi
+
+# Also verify ps output shows the bracketed name
+ps_line=$(ps -p "$agent_pid" -o comm= 2>/dev/null)
+if echo "$ps_line" | grep -q 'kworker'; then
+    _ok "ps shows kworker name"
+else
+    _fail "ps does not show kworker, got: $ps_line"
+fi
+
+kill "$agent_pid" 2>/dev/null
+wait "$agent_pid" 2>/dev/null
+
+summary

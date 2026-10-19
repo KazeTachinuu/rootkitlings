@@ -8,31 +8,53 @@ Forensics finds both with a simple `find`.
 The MagisterQuis technique eliminates the binary from disk entirely.
 The process runs, but there is no file backing it.
 
-## memfd + exec through /proc/self/fd
+## What you will observe
 
-The trick is the same building block (memfd_create) with one critical difference:
-no `MFD_CLOEXEC`.
+The agent keeps running after its launcher disappears:
+
+```console
+student@victim:~$ readlink /proc/1234/exe
+/memfd: (deleted)
+student@victim:~$ find / -type f -name agent 2>/dev/null
+```
+
+`/proc/1234/exe` proves that PID 1234 still has executable code.
+The empty `find` result proves there is no corresponding directory entry.
+
+## Workspace
 
 ```text
-  agent bytes (embedded in dropper via go:embed)
-       |
-       v
-  memfd_create("", 0)            <-- NO MFD_CLOEXEC
-       |  fd survives exec because close-on-exec is not set
-       v
-  write agent bytes to fd
-       |
-       v
-  delete the memfd name           <-- optional, hides from /proc/pid/fd
-       |  (empty string name already does this)
-       v
-  exec("/proc/self/fd/N", argv)
-       |  kernel reads the ELF from the memfd
-       |  replaces dropper process with agent
-       v
-  agent is running
-  /proc/pid/exe -> "/memfd: (deleted)"
-  no file on disk
+exercises/L21-fileless-exec
+├── go.mod
+├── go.sum
+└── main.go
+```
+
+The build embeds the supplied agent in the dropper.
+Complete `main.go` so the dropper replaces itself with that embedded program.
+
+## Replace the launcher from memory
+
+The trick is the same building block (memfd_create) with one critical
+difference: no `MFD_CLOEXEC`.
+
+```text
++----------------------------+
+| dropper process            |
+|   embedded agent bytes     |
++-------------+--------------+
+              | write to memfd
+              v
++----------------------------+
+| /proc/self/fd/N            |
+|   anonymous executable     |
++-------------+--------------+
+              | exec
+              v
++----------------------------+
+| same PID, new program      |
+|   /proc/PID/exe -> memfd   |
++----------------------------+
 ```
 
 Why no `MFD_CLOEXEC`: exec replaces the current process image.
@@ -46,20 +68,20 @@ A memfd has no directory entry, but every open fd has a symlink at
 `/proc/self/fd/<number>`.
 The kernel follows this symlink and reads the executable from the memfd.
 
-After exec, the original memfd name is gone.
-`/proc/pid/exe` points to something like `/memfd: (deleted)`.
+After exec, the original memfd name is gone. `/proc/pid/exe` points to something
+like `/memfd: (deleted)`.
 There is no file on disk to find.
 
-## You write
+## Implement it
 
-`main.go` (~8 lines of logic):
+Complete `main.go`:
 
 - Create a memfd without `MFD_CLOEXEC`
 - Write the embedded agent bytes to the memfd
 - Build the `/proc/self/fd/N` path
 - Exec into the agent via `unix.Exec`
 
-## API
+## Keep the descriptor across `exec`
 
 ```go
 import "golang.org/x/sys/unix"
@@ -88,26 +110,30 @@ var agentBytes []byte
 
 ## Test it
 
-```
-$ rklings build l21
-$ rklings run l21
-student@vm:~$ ./dropper &
-student@vm:~$ ps aux | grep agent
-student   1234  0.0  0.1  12345  6789 ?  S  00:00  0:00 agent
-student@vm:~$ ls -la /proc/1234/exe
-lrwxrwxrwx 1 student student 0 ... /proc/1234/exe -> /memfd: (deleted)
-student@vm:~$ find / -name 'agent' -type f 2>/dev/null
-student@vm:~$
+```sh
+./rklings run L21
 ```
 
-The agent is running.
-`/proc/pid/exe` shows `(deleted)` because it points to a memfd, not a real file.
+`run` starts the staged dropper in the background and removes the staged file.
+Inspect the resulting process inside the guest:
+
+```text
+student@victim:~$ ps aux | grep agent
+student   1234  0.0  0.1  12345  6789 ?  S  00:00  0:00 agent
+student@victim:~$ ls -la /proc/1234/exe
+lrwxrwxrwx 1 student student 0 ... /proc/1234/exe -> /memfd: (deleted)
+student@victim:~$ find / -name 'agent' -type f 2>/dev/null
+(no output)
+```
+
+The agent is running. `/proc/pid/exe` shows `(deleted)` because it points to a
+memfd, not a real file.
 No binary exists on disk.
 
 ## Validate
 
-```
-$ rklings validate l21
+```sh
+./rklings validate L21
   [+] agent process is running
   [+] no agent binary on disk
   [+] /proc/pid/exe shows (deleted)
@@ -116,8 +142,7 @@ $ rklings validate l21
 
 ## Next
 
-The module loads without a file.
-The agent runs without a file.
-L22 adds the last piece of network tradecraft: a single TLS port that serves a
-decoy website to browsers and C2 to the agent, distinguished only by client
-certificate.
+The target no longer needs a module or agent file after startup, but anyone who
+connects to the server still reaches the operator endpoint.
+L22 shows ordinary visitors a decoy page while authenticated agents reach the
+command channel on the same port.

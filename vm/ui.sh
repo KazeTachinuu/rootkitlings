@@ -3,7 +3,7 @@
 # Sourced by vm/checks/lib.sh and vm/init.
 
 if [ -n "${NO_COLOR:-}" ]; then
-    _green= _red= _cyan= _yellow= _blue= _dim= _bold= _reset=
+    _green=''; _red=''; _cyan=''; _yellow=''; _blue=''; _dim=''; _bold=''; _reset=''
 else
     _green='\033[32m'  _red='\033[31m'    _cyan='\033[36m'
     _yellow='\033[33m' _blue='\033[34m'   _dim='\033[2m'

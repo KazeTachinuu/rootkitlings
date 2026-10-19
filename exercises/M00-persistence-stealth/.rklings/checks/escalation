@@ -1,0 +1,25 @@
+#!/bin/sh
+# Check: mkdir rklings.e escalates to root
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Credential escalation via mkdir rklings.e"
+
+load rklings.ko
+assert_loaded rklings
+
+# Make the trigger and credential observation in the same unprivileged process.
+uid=$(cd /tmp && su student -c 'mkdir rklings.e 2>/dev/null; id -u')
+if [ "$uid" = "0" ]; then
+    _ok "student process has uid 0 after escalation"
+else
+    _fail "student process remained uid $uid after escalation"
+fi
+
+# Cleanup
+rmdir /tmp/rklings.e 2>/dev/null
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

@@ -1,0 +1,93 @@
+schema_version = 2
+id = "remote-control"
+title = "Integrated remote operator and mTLS agent"
+stage = "remote"
+kind = "milestone"
+vm_user = "root"
+tradecraft = ["control", "network", "crypto"]
+difficulty = "advanced"
+prerequisites = ["file-transfer"]
+teaches = ["c2-architecture", "operator-tui", "full-remote-dispatch"]
+requires = []
+
+[workspace]
+mode = "project"
+files = [
+    "go.mod",
+    "go.sum",
+    "cmd/agent/main.go",
+    "cmd/server/main.go",
+    "cmd/server/tui.go",
+    "cmd/server/web.go",
+]
+editable = [
+    "cmd/agent/main.go",
+    "cmd/server/main.go",
+    "cmd/server/tui.go",
+    "cmd/server/web.go",
+]
+build = "."
+
+[build]
+server_dir = "."
+module_from = "local-control"
+
+[run]
+stage = ["kernel", "agent"]
+load = ["kernel"]
+agent = "background"
+
+
+[serve]
+kind = "operator"
+commands = ["PING", "STATUS", "INFO", "SHELL", "PTY", "DOWNLOAD", "UPLOAD", "HIDE", "UNHIDE", "PERSIST", "ESCALATE"]
+transfer = true
+
+[verification]
+load_kernel = true
+timeout_seconds = 180
+tools = ["module-load-test"]
+runtime = "background"
+harness = true
+
+[[verification.cases]]
+id = "agent-connects"
+label = "Agent establishes mTLS connection to server"
+expect_build = "pass"
+check = "exercises/M02-remote-control/.rklings/checks/agent-connects"
+
+[[verification.cases]]
+id = "command-dispatch"
+label = "Operator commands reach agent and return results"
+expect_build = "pass"
+check = "exercises/M02-remote-control/.rklings/checks/command-dispatch"
+
+[[verification.cases]]
+id = "shell-exec"
+label = "Remote shell execution works"
+expect_build = "pass"
+check = "exercises/M02-remote-control/.rklings/checks/shell-exec"
+
+[[verification.cases]]
+id = "pty-shell"
+label = "Interactive PTY preserves shell state"
+expect_build = "pass"
+check = "exercises/M02-remote-control/.rklings/checks/pty-shell"
+
+[[verification.cases]]
+id = "file-transfer"
+label = "File download works over mTLS"
+expect_build = "pass"
+check = "exercises/M02-remote-control/.rklings/checks/file-transfer"
+
+[[verification.cases]]
+id = "tls-only"
+label = "tcpdump sees only TLS traffic on port 8443"
+expect_build = "pass"
+check = "exercises/M02-remote-control/.rklings/checks/tls-only"
+
+[[verification.cases]]
+id = "mkdir-bridge"
+label = "Server HIDE commands trigger mkdir in VM"
+expect_build = "pass"
+check = "exercises/M02-remote-control/.rklings/checks/mkdir-bridge"

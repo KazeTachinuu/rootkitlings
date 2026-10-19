@@ -1,8 +1,25 @@
 # L17: Command Dispatch
 
-L16 proved the agent can drive the kernel module through mkdir.
-But it only ran a hardcoded sequence.
-A real agent reads commands from the operator and dispatches them.
+Turn the one-purpose bridge into a request/response agent.
+Each received line selects one handler, and every handler returns an explicit
+protocol response.
+
+L16 proved the agent can drive the kernel module through `mkdir`, but it only
+ran a fixed sequence.
+This exercise reads commands from the operator and routes each command to a
+handler.
+
+## Workspace
+
+```text
+exercises/L17-command-dispatch
+├── go.mod
+└── main.go
+```
+
+Only `main.go` is editable.
+The TLS setup and mkdir helper are provided; implement the handler type, table,
+handlers, and loop in that order.
 
 ## Protocol
 
@@ -32,7 +49,8 @@ Newline-delimited plaintext over mTLS.
 ## Handler map
 
 A map of command names to handler functions.
-Each handler receives the argument string (everything after the first space) and the connection, and returns an error.
+Each handler receives the argument string (everything after the first space) and
+the connection, and returns an error.
 
 ```go
 type handler func(conn net.Conn, arg string) error
@@ -46,34 +64,35 @@ var handlers = map[string]handler{
 }
 ```
 
-The dispatch loop reads one line, splits on the first space to get the command and argument, looks up the handler, and calls it.
+The dispatch loop reads one line, splits on the first space to get the command
+and argument, looks up the handler, and calls it.
 Unknown commands get an "ERR unknown command" response.
 
 ## Commands
 
-| Command | Argument | mkdir | Response |
-|---------|----------|-------|----------|
-| PING | (none) | (none) | PONG |
-| STATUS | (none) | rklings.status | OK |
-| HIDE FILE name | name | rklings.h.f.name | OK |
-| HIDE PID pid | pid | rklings.h.i.pid | OK |
-| HIDE PORT port | port | rklings.h.p.port | OK |
-| PERSIST | (none) | rklings.persist | OK |
-| ESCALATE | (none) | rklings.e | OK |
-| QUIT | (none) | (none) | (close) |
+| Command        | Argument | mkdir            | Response |
+| -------------- | -------- | ---------------- | -------- |
+| PING           | (none)   | (none)           | PONG     |
+| STATUS         | (none)   | rklings.status   | OK       |
+| HIDE FILE name | name     | rklings.h.f.name | OK       |
+| HIDE PID pid   | pid      | rklings.h.i.pid  | OK       |
+| HIDE PORT port | port     | rklings.h.p.port | OK       |
+| PERSIST        | (none)   | rklings.persist  | OK       |
+| ESCALATE       | (none)   | rklings.e        | OK       |
+| QUIT           | (none)   | (none)           | (close)  |
 
 HIDE takes a subcommand (FILE, PID, PORT) as its first argument word.
 
-## You write
+## Implement it
 
-`main.go` (~90 lines):
+Complete `main.go`:
 
 - mTLS dial and connection setup (from L15)
 - `bufio.Scanner` read loop over the TLS connection
 - Handler map with dispatch logic
 - Handlers for PING, STATUS, HIDE, PERSIST, ESCALATE, QUIT
 
-## API
+## Useful interfaces
 
 ```go
 import "bufio"
@@ -93,12 +112,25 @@ os.Mkdir("rklings.h.f."+name, 0755)
 
 ## Test it
 
-```
-$ rklings run l17
+`rklings serve L17` starts this exercise's live server and scoped command panel
+at `http://127.0.0.1:8080`.
+Every log entry is traffic exchanged with the agent running in the disposable
+guest.
+
+```sh
+./rklings serve L17
 ```
 
-The lab server opens a panel where you type commands.
-The agent connects and waits for input.
+In another host terminal:
+
+```sh
+./rklings run L17
+```
+
+Open `http://127.0.0.1:8080`.
+The panel sends only the commands introduced by this exercise, and its log shows
+the real replies from the guest agent.
+Create `secret.txt` in the guest before sending the hide command.
 
 ```
 server> PING
@@ -107,14 +139,15 @@ server> STATUS
 agent:  OK
 server> HIDE FILE secret.txt
 agent:  OK
-root@vm:~# ls    (secret.txt hidden)
-server> QUIT
+root@victim:~# ls    (secret.txt hidden)
 ```
+
+Stop `run` and `serve` with `Ctrl+C` when finished.
 
 ## Validate
 
-```
-$ rklings validate l17
+```sh
+./rklings validate L17
   [+] agent connects over mTLS
   [+] PING returns PONG
   [+] STATUS triggers mkdir rklings.status
@@ -125,5 +158,6 @@ $ rklings validate l17
 
 ## Next
 
-The agent dispatches commands.
-L18 adds one more handler: EXEC, which runs shell commands and returns the output.
+The operator can invoke the built-in controls, but cannot run an arbitrary
+command on the target.
+L18 adds remote command execution and returns its output.

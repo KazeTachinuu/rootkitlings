@@ -1,0 +1,20 @@
+#!/bin/sh
+# Check: agent process is not dumpable
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Not dumpable"
+
+wait_agent
+
+resp=$(send_cmd "STATUS")
+case "$resp" in
+    *DUMPABLE=0*) _ok "PR_GET_DUMPABLE reports 0" ;;
+    *) _fail "agent remains dumpable: $resp" ;;
+esac
+case "$resp" in
+    *CORE=0*) _ok "RLIMIT_CORE is zero" ;;
+    *) _fail "RLIMIT_CORE is not zero: $resp" ;;
+esac
+
+summary

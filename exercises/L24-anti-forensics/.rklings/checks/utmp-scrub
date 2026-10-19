@@ -1,0 +1,42 @@
+#!/bin/sh
+# Check: login records scrubbed from utmp and wtmp
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "utmp/wtmp scrubbing"
+
+wait_agent
+
+# Append controlled records. The scrubber's contract is byte-level removal of
+# records whose ut_user field begins at byte 44 in a 384-byte amd64 record.
+fixture=$(mktemp)
+dd if=/dev/zero of="$fixture" bs=384 count=1 status=none
+printf student | dd of="$fixture" bs=1 seek=44 conv=notrunc status=none
+for records in /var/run/utmp /var/log/wtmp; do
+    touch "$records"
+    cat "$fixture" >> "$records"
+    if grep -aq student "$records"; then
+        _ok "fixture present in $records before cleanup"
+    else
+        _fail "could not create fixture in $records"
+    fi
+done
+rm -f "$fixture"
+
+# Send CLEANUP to trigger scrubbing
+resp=$(send_cmd "CLEANUP student")
+if echo "$resp" | grep -qi "ok\|done"; then
+    _ok "CLEANUP accepted"
+else
+    _fail "CLEANUP failed: $resp"
+fi
+
+for records in /var/run/utmp /var/log/wtmp; do
+    if grep -aq student "$records"; then
+        _fail "student fixture remains in $records"
+    else
+        _ok "student fixture removed from $records"
+    fi
+done
+
+summary

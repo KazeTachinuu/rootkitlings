@@ -1,13 +1,20 @@
 package setup
 
 import (
-	"crypto/ed25519"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"math/big"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,7 +23,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hugo/rootkitlings/internal/tui"
+	"github.com/KazeTachinuu/rootkitlings/internal/build"
+	"github.com/KazeTachinuu/rootkitlings/internal/project"
+	"github.com/KazeTachinuu/rootkitlings/internal/tui"
 )
 
 type dep struct {
@@ -26,12 +35,11 @@ type dep struct {
 	path    string
 }
 
-func Run(root string) error {
-	home, err := os.UserHomeDir()
+func Run(root, serverName string) error {
+	base, err := project.DataDir()
 	if err != nil {
-		return fmt.Errorf("cannot find home directory: %w", err)
+		return fmt.Errorf("resolve project data directory: %w", err)
 	}
-	base := filepath.Join(home, ".rklings")
 
 	deps := checkDeps()
 	missing := printDeps(deps)
@@ -55,28 +63,47 @@ func Run(root string) error {
 	if err := ensureCA(filepath.Join(base, "certs")); err != nil {
 		return err
 	}
+	if err := ensureAgentCert(filepath.Join(base, "certs")); err != nil {
+		return err
+	}
 
-	if err := ensureServerCert(filepath.Join(base, "certs")); err != nil {
+	if err := ensureServerCert(filepath.Join(base, "certs"), serverName); err != nil {
 		return err
 	}
 
 	if err := ensureVMImage(filepath.Join(base, "cache")); err != nil {
 		return err
 	}
+	runtimeName, err := build.DetectRuntime()
+	if err != nil {
+		return err
+	}
+	if err := build.EnsureBuildImage(runtimeName); err != nil {
+		return err
+	}
+	if err := build.EnsureGuestTools(root); err != nil {
+		return err
+	}
+	count, err := build.CompileDatabase(root)
+	if err != nil {
+		return fmt.Errorf("generate compile database: %w", err)
+	}
+	tui.Pass("compile_commands.json (%d C sources)", count)
 
 	fmt.Println()
 	tui.Pass("Ready.")
+	tui.Info("next: ./rklings list")
 	return nil
 }
 
 func checkDeps() []dep {
 	var deps []dep
 
-	// Go >= 1.22
+	// Match the framework module's declared toolchain.
 	path, ver := findCommand("go")
 	if path != "" {
 		goVer := parseGoVersion(ver)
-		if compareVersions(goVer, "1.22") >= 0 {
+		if compareVersions(goVer, "1.27") >= 0 {
 			deps = append(deps, dep{"Go", true, goVer, path})
 		} else {
 			deps = append(deps, dep{"Go", false, goVer, path})
@@ -110,12 +137,25 @@ func checkDeps() []dep {
 		deps = append(deps, dep{"QEMU", false, "", ""})
 	}
 
-	// mkcert
-	path, ver = findCommand("mkcert")
-	if path != "" {
-		deps = append(deps, dep{"mkcert", true, parseGenericVersion(ver), path})
-	} else {
-		deps = append(deps, dep{"mkcert", false, "", ""})
+	for _, required := range []struct {
+		label string
+		names []string
+	}{
+		{"qemu-img", []string{"qemu-img"}},
+		{"SSH client", []string{"ssh"}},
+		{"SCP", []string{"scp"}},
+		{"ssh-keygen", []string{"ssh-keygen"}},
+		{"curl", []string{"curl"}},
+		{"ISO builder", []string{"xorriso", "genisoimage", "mkisofs"}},
+	} {
+		found := ""
+		for _, name := range required.names {
+			if candidate, err := exec.LookPath(name); err == nil {
+				found = candidate
+				break
+			}
+		}
+		deps = append(deps, dep{required.label, found != "", "", found})
 	}
 
 	return deps
@@ -174,7 +214,7 @@ func printInstallInstructions(deps []dep) {
 		}
 		switch d.name {
 		case "Go":
-			fmt.Println("  Go (>= 1.22):")
+			fmt.Println("  Go (>= 1.27):")
 			printPerPlatform(
 				"brew install go",
 				"sudo apt install golang-go",
@@ -194,13 +234,8 @@ func printInstallInstructions(deps []dep) {
 				"sudo apt install qemu-system-x86",
 				"sudo pacman -S qemu-full",
 			)
-		case "mkcert":
-			fmt.Println("  mkcert:")
-			printPerPlatform(
-				"brew install mkcert",
-				"go install filippo.io/mkcert@latest",
-				"sudo pacman -S mkcert",
-			)
+		default:
+			fmt.Printf("  %s: install it with your system package manager.\n\n", d.name)
 		}
 	}
 }
@@ -283,16 +318,14 @@ func ensureCA(dir string) error {
 	keyPath := filepath.Join(dir, "ca.key")
 	crtPath := filepath.Join(dir, "ca.crt")
 
-	if _, err := os.Stat(keyPath); err == nil {
-		if _, err := os.Stat(crtPath); err == nil {
-			tui.Pass("rklings CA          %s", crtPath)
-			return nil
-		}
+	if certificateUsesP256(crtPath) && keyPairMatches(crtPath, keyPath) {
+		tui.Pass("rklings CA          %s", crtPath)
+		return nil
 	}
 
 	tui.Info("Generating rklings CA...")
 
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return fmt.Errorf("generate CA key: %w", err)
 	}
@@ -312,7 +345,8 @@ func ensureCA(dir string) error {
 		IsCA:                  true,
 	}
 
-	certDER, err := x509.CreateCertificate(rand.Reader, template, template, pub, priv)
+	certDER, err := x509.CreateCertificate(
+		rand.Reader, template, template, &priv.PublicKey, priv)
 	if err != nil {
 		return fmt.Errorf("create CA cert: %w", err)
 	}
@@ -333,30 +367,178 @@ func ensureCA(dir string) error {
 	return nil
 }
 
-func ensureServerCert(dir string) error {
-	keyPath := filepath.Join(dir, "server.key")
-	crtPath := filepath.Join(dir, "server.crt")
-
-	if _, err := os.Stat(keyPath); err == nil {
-		if _, err := os.Stat(crtPath); err == nil {
-			tui.Pass("Server cert (mkcert) %s", crtPath)
-			return nil
+func ensureAgentCert(dir string) error {
+	keyPath := filepath.Join(dir, "agent.key")
+	crtPath := filepath.Join(dir, "agent.crt")
+	caCertPEM, err := os.ReadFile(filepath.Join(dir, "ca.crt"))
+	if err != nil {
+		return fmt.Errorf("read CA certificate: %w", err)
+	}
+	caKeyPEM, err := os.ReadFile(filepath.Join(dir, "ca.key"))
+	if err != nil {
+		return fmt.Errorf("read CA key: %w", err)
+	}
+	certBlock, _ := pem.Decode(caCertPEM)
+	keyBlock, _ := pem.Decode(caKeyPEM)
+	if certBlock == nil || keyBlock == nil {
+		return fmt.Errorf("parse CA credentials")
+	}
+	caCert, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		return fmt.Errorf("parse CA certificate: %w", err)
+	}
+	if existing, readErr := os.ReadFile(crtPath); readErr == nil {
+		if block, _ := pem.Decode(existing); block != nil {
+			cert, parseErr := x509.ParseCertificate(block.Bytes)
+			if parseErr == nil && certificateIsP256(cert) &&
+				cert.CheckSignatureFrom(caCert) == nil &&
+				keyPairMatches(crtPath, keyPath) {
+				tui.Pass("Agent certificate    %s", crtPath)
+				return nil
+			}
 		}
 	}
-
-	tui.Info("Generating server cert via mkcert...")
-	cmd := exec.Command("mkcert",
-		"-key-file", keyPath,
-		"-cert-file", crtPath,
-		"localhost", "127.0.0.1", "10.0.2.2",
-	)
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	if err := cmd.Run(); err != nil {
-		tui.Fail("Server cert generation failed")
-		return fmt.Errorf("mkcert: %w", err)
+	caKey, err := x509.ParsePKCS8PrivateKey(keyBlock.Bytes)
+	if err != nil {
+		return fmt.Errorf("parse CA key: %w", err)
 	}
-	tui.Pass("Server cert (mkcert) %s", crtPath)
+
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return fmt.Errorf("generate agent key: %w", err)
+	}
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return fmt.Errorf("generate agent serial: %w", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: serial,
+		Subject:      pkix.Name{CommonName: "agent-local"},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	certDER, err := x509.CreateCertificate(
+		rand.Reader, template, caCert, &priv.PublicKey, caKey)
+	if err != nil {
+		return fmt.Errorf("sign agent certificate: %w", err)
+	}
+	keyDER, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		return fmt.Errorf("marshal agent key: %w", err)
+	}
+	if err := writePEM(keyPath, "PRIVATE KEY", keyDER, 0600); err != nil {
+		return err
+	}
+	if err := writePEM(crtPath, "CERTIFICATE", certDER, 0644); err != nil {
+		return err
+	}
+	tui.Pass("Agent certificate    %s", crtPath)
+	return nil
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func certificateUsesP256(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return false
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	return err == nil && certificateIsP256(cert)
+}
+
+func certificateIsP256(cert *x509.Certificate) bool {
+	key, ok := cert.PublicKey.(*ecdsa.PublicKey)
+	return ok && key.Curve == elliptic.P256()
+}
+
+func keyPairMatches(certPath, keyPath string) bool {
+	_, err := tls.LoadX509KeyPair(certPath, keyPath)
+	return err == nil
+}
+
+func ensureServerCert(dir, serverName string) error {
+	if serverName == "" {
+		serverName = "localhost"
+	}
+	keyPath := filepath.Join(dir, "server.key")
+	crtPath := filepath.Join(dir, "server.crt")
+	caCertPEM, err := os.ReadFile(filepath.Join(dir, "ca.crt"))
+	if err != nil {
+		return fmt.Errorf("read CA certificate: %w", err)
+	}
+	caKeyPEM, err := os.ReadFile(filepath.Join(dir, "ca.key"))
+	if err != nil {
+		return fmt.Errorf("read CA key: %w", err)
+	}
+	certBlock, _ := pem.Decode(caCertPEM)
+	keyBlock, _ := pem.Decode(caKeyPEM)
+	if certBlock == nil || keyBlock == nil {
+		return fmt.Errorf("parse CA credentials")
+	}
+	caCert, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		return fmt.Errorf("parse CA certificate: %w", err)
+	}
+	if existing, readErr := os.ReadFile(crtPath); readErr == nil {
+		if block, _ := pem.Decode(existing); block != nil {
+			if cert, parseErr := x509.ParseCertificate(block.Bytes); parseErr == nil &&
+				certificateIsP256(cert) && cert.CheckSignatureFrom(caCert) == nil &&
+				cert.VerifyHostname(serverName) == nil &&
+				keyPairMatches(crtPath, keyPath) {
+				tui.Pass("Server certificate   %s", crtPath)
+				return nil
+			}
+		}
+	}
+	caKey, err := x509.ParsePKCS8PrivateKey(keyBlock.Bytes)
+	if err != nil {
+		return fmt.Errorf("parse CA key: %w", err)
+	}
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return fmt.Errorf("generate server key: %w", err)
+	}
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return fmt.Errorf("generate server serial: %w", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: serial, Subject: pkix.Name{CommonName: "rootkitlings-server"},
+		NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames: []string{"localhost"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("10.0.2.2")},
+	}
+	if ip := net.ParseIP(serverName); ip != nil {
+		template.IPAddresses = append(template.IPAddresses, ip)
+	} else if serverName != "localhost" {
+		template.DNSNames = append(template.DNSNames, serverName)
+	}
+	certDER, err := x509.CreateCertificate(
+		rand.Reader, template, caCert, &priv.PublicKey, caKey)
+	if err != nil {
+		return fmt.Errorf("sign server certificate: %w", err)
+	}
+	keyDER, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		return fmt.Errorf("marshal server key: %w", err)
+	}
+	if err := writePEM(keyPath, "PRIVATE KEY", keyDER, 0600); err != nil {
+		return err
+	}
+	if err := writePEM(crtPath, "CERTIFICATE", certDER, 0644); err != nil {
+		return err
+	}
+	tui.Pass("Server certificate   %s", crtPath)
 	return nil
 }
 
@@ -373,8 +555,11 @@ func ensureVMImage(cacheDir string) error {
 	} {
 		imgPath := filepath.Join(cacheDir, img.name)
 		if _, err := os.Stat(imgPath); err == nil {
-			tui.Pass("VM image            %s", img.name)
-			continue
+			if err := verifyImage(imgPath, img.url); err == nil {
+				tui.Pass("VM image            %s", img.name)
+				continue
+			}
+			_ = os.Remove(imgPath)
 		}
 		tui.Info("downloading %s...", img.name)
 		cmd := exec.Command("curl", "-L", "-#", "-o", imgPath, img.url)
@@ -385,7 +570,54 @@ func ensureVMImage(cacheDir string) error {
 			tui.Fail("VM image download: %s", img.name)
 			return fmt.Errorf("download %s: %w", img.name, err)
 		}
+		if err := verifyImage(imgPath, img.url); err != nil {
+			_ = os.Remove(imgPath)
+			return fmt.Errorf("verify %s: %w", img.name, err)
+		}
 		tui.Pass("VM image            %s", img.name)
+	}
+	return nil
+}
+
+func verifyImage(path, imageURL string) error {
+	base := imageURL[:strings.LastIndex(imageURL, "/")+1]
+	client := &http.Client{Timeout: 30 * time.Second}
+	response, err := client.Get(base + "SHA256SUMS")
+	if err != nil {
+		return fmt.Errorf("download SHA256SUMS: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("download SHA256SUMS: %s", response.Status)
+	}
+	sums, err := io.ReadAll(io.LimitReader(response.Body, 2<<20))
+	if err != nil {
+		return fmt.Errorf("read SHA256SUMS: %w", err)
+	}
+	name := filepath.Base(path)
+	want := ""
+	for _, line := range strings.Split(string(sums), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && strings.TrimPrefix(fields[1], "*") == name {
+			want = fields[0]
+			break
+		}
+	}
+	if _, err := hex.DecodeString(want); err != nil || len(want) != sha256.Size*2 {
+		return fmt.Errorf("no valid checksum for %s", name)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return err
+	}
+	got := hex.EncodeToString(hash.Sum(nil))
+	if got != want {
+		return fmt.Errorf("SHA-256 mismatch: got %s, want %s", got, want)
 	}
 	return nil
 }

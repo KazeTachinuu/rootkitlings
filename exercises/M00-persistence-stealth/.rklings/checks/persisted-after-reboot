@@ -1,0 +1,11 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Module persistence after a real reboot"
+
+assert_loaded rklings
+assert_exists /etc/modules-load.d/rklings.conf
+assert_exists "/lib/modules/$(uname -r)/extra/rklings.ko"
+
+summary

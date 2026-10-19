@@ -1,0 +1,77 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../scripts/lesson-env"
+
+die() { printf '[-] %s\n' "$*" >&2; exit 1; }
+
+ROOT=$RKLINGS_ROOT
+
+(( $# == 2 )) || die "usage: ${0##*/} WORKSPACE STARTING_SNAPSHOT"
+workspace=$(realpath -e -- "$1") || die "workspace not found: $1"
+baseline=$(realpath -e -- "$2") || die "starting snapshot not found: $2"
+for pair in "workspace:$workspace" "starting snapshot:$baseline"; do
+	label=${pair%%:*}; directory=${pair#*:}
+	[[ -d $directory && ! -L $directory ]] || die "$label must be a real directory"
+	for path in Kbuild core/main.c; do
+		[[ -f $directory/$path && ! -L $directory/$path ]] || die "$label is missing regular file: $path"
+	done
+done
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-precise-init-failure-check.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+
+copy_tree()
+{
+	local source=$1 destination=$2
+	mkdir -p "$destination/core"
+	cp -p "$source/Kbuild" "$destination/Kbuild"
+	cp -p "$source/core/main.c" "$destination/core/main.c"
+}
+
+build_variant()
+{
+	local source=$1 name=$2 point=$3
+	local destination=$scratch/$name log=$scratch/$name.log
+	copy_tree "$source" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+		RKLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
+		cat "$log" >&2
+		die "$name build failed"
+	fi
+	if grep -q 'warning:' "$log"; then cat "$log" >&2; die "$name builds with warnings"; fi
+	[[ -f $destination/rklings.ko ]] || die "$name did not produce rklings.ko"
+}
+
+build_variant "$baseline" baseline 0
+build_variant "$workspace" success 0
+build_variant "$workspace" rejected 1
+
+for field in license description; do
+	[[ $(modinfo -F "$field" "$scratch/success/rklings.ko") == \
+		$(modinfo -F "$field" "$scratch/baseline/rklings.ko") ]] ||
+		die "the inherited module $field changed"
+done
+unknown=$scratch/unknown
+copy_tree "$workspace" "$unknown"
+if make -s -C "$KDIR" M="$unknown" W=1 RKLINGS_FAIL_POINT=99 \
+	modules >"$scratch/unknown.log" 2>&1; then
+	die "unknown failure-point value compiled successfully"
+fi
+printf '[+] inherited metadata and build-time failure selection verified\n'
+
+run_guest()
+{
+	local check=$1 module=$2 output
+	shift 2
+	if ! output=$("$ROOT/vm/boot" --check "$check" "$@" "$module" 2>&1); then
+		printf '%s\n' "$output" >&2
+		die "disposable guest did not complete"
+	fi
+	printf '%s\n' "$output"
+}
+
+run_guest "$HERE/failed-guest-check" "$scratch/rejected/rklings.ko" \
+	--tool vm/tools/module_load_test
+run_guest "$HERE/../../../L00-module-build-lifecycle/.rklings/checks/module-lifecycle-check" "$scratch/success/rklings.ko"

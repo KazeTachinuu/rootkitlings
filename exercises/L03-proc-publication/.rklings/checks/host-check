@@ -1,0 +1,84 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+die() { printf '[-] %s\n' "$*" >&2; exit 1; }
+
+(( $# == 2 )) || die "usage: ${0##*/} BUILD_DIR ARTIFACT_PATH"
+build_dir=$(realpath -e -- "$1" 2>/dev/null) || die "build directory not found: $1"
+artifact=$(realpath -e -- "$2" 2>/dev/null) || die "artifact not found: $2"
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+support=$HERE/../../../L00-module-build-lifecycle/.rklings/fixtures/host/include
+
+[[ -d $build_dir && ! -L $build_dir ]] || die "build directory must be a real directory"
+[[ -f $artifact && ! -L $artifact ]] || die "artifact must be a regular file"
+[[ $artifact == "$build_dir/rklings.ko" ]] ||
+	die "expected artifact at: $build_dir/rklings.ko"
+
+for path in core/main.o core/state.o interface/proc.o include/rootkit.h; do
+	[[ -f $build_dir/$path && ! -L $build_dir/$path ]] ||
+		die "build output is missing regular file: $path"
+done
+
+command -v modinfo >/dev/null || die "modinfo is required"
+command -v nm >/dev/null || die "nm is required"
+command -v "${CC:-cc}" >/dev/null || die "C compiler is required"
+[[ $(modinfo -F license "$artifact") == GPL ]] || die "module license must be GPL"
+[[ $(modinfo -F description "$artifact") == 'Rklings kernel module' ]] ||
+	die "module description must be: Rklings kernel module"
+
+for symbol in rk_state_create rk_state_destroy; do
+	nm "$build_dir/core/state.o" | grep -Eq "[[:space:]]T[[:space:]]+$symbol$" ||
+		die "core/state.o must define $symbol"
+done
+
+state_undefined=$(nm -u "$build_dir/core/state.o")
+grep -Eq '[[:space:]](__kmalloc|__kmalloc_cache_noprof|kmalloc_caches|kmalloc_noprof)$' \
+	<<< "$state_undefined" || die "core/state.o has no kernel allocation dependency"
+grep -Eq '[[:space:]]kfree$' <<< "$state_undefined" ||
+	die "core/state.o has no kfree dependency"
+for object in core/main.o interface/proc.o; do
+	undefined=$(nm -u "$build_dir/$object")
+	if grep -Eq '[[:space:]](__kmalloc|__kmalloc_cache_noprof|kmalloc_noprof|kfree|kvfree|vfree)$' \
+		<<< "$undefined"; then
+		die "$object must not allocate or free module state"
+	fi
+done
+
+for symbol in rk_proc_publish rk_proc_unpublish; do
+	nm "$build_dir/interface/proc.o" | grep -Eq "[[:space:]]T[[:space:]]+$symbol$" ||
+		die "interface/proc.o must define $symbol"
+done
+
+proc_undefined=$(nm -u "$build_dir/interface/proc.o")
+grep -Eq '[[:space:]]proc_create_single_data$' <<< "$proc_undefined" ||
+	die "interface/proc.o has no proc_create_single dependency"
+grep -Eq '[[:space:]]proc_remove$' <<< "$proc_undefined" ||
+	die "interface/proc.o has no proc_remove dependency"
+for object in core/main.o core/state.o; do
+	undefined=$(nm -u "$build_dir/$object")
+	if grep -Eq '[[:space:]]proc_(create|create_single_data|remove)$' \
+		<<< "$undefined"; then
+		die "$object must not publish or remove the proc entry"
+	fi
+done
+
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-proc-publication-host.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+cflags=(-std=c11 -Wall -Wextra -Werror -Wno-unused-parameter
+	"-fsanitize=address,undefined" -fno-omit-frame-pointer
+	-I"$support" -I"$build_dir/include")
+
+for point in 0 1; do
+	"${CC:-cc}" "${cflags[@]}" -DRKLINGS_FAIL_POINT=$point \
+		"$HERE/../.rklings/fixtures/host/main_test.c" "$build_dir/core/main.c" \
+		-o "$scratch/main-$point"
+	"$scratch/main-$point"
+done
+for point in 0 3; do
+	"${CC:-cc}" "${cflags[@]}" -DRKLINGS_FAIL_POINT=$point \
+		"$HERE/../.rklings/fixtures/host/proc_test.c" "$build_dir/interface/proc.c" \
+		-o "$scratch/proc-$point"
+	"$scratch/proc-$point"
+done
+
+printf '[+] component boundaries, procfs behavior, and lifecycle order verified\n'

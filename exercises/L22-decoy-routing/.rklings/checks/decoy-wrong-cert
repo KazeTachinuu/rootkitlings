@@ -1,0 +1,28 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+# shellcheck disable=SC2154 # _server_pid is set by start_server in lib.sh.
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Client with wrong cert receives decoy page"
+
+# Start the server in background
+start_server ./server
+wait_for_port 443
+
+# Generate a valid TLS certificate that is deliberately outside the course CA.
+openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=outsider \
+    -keyout /tmp/wrong.key -out /tmp/wrong.crt -days 1 >/dev/null 2>&1
+
+# Connect with a self-signed cert (not from rklings CA)
+body=$(curl -sk --cert /tmp/wrong.crt --key /tmp/wrong.key https://127.0.0.1:443/ 2>/dev/null)
+
+if echo "$body" | grep -qi "heroic administrator"; then
+    _ok "wrong-cert client received decoy page"
+else
+    _fail "expected decoy page with wrong cert, got: $body"
+fi
+
+kill "$_server_pid" 2>/dev/null
+wait "$_server_pid" 2>/dev/null
+
+summary

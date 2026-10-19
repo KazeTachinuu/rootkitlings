@@ -1,0 +1,29 @@
+#!/bin/sh
+
+set -eu
+
+rk="rklin$(printf gs)"
+su -s /bin/sh student -c 'exec sleep 60' &
+pid=$!
+trap 'kill "$pid" 2>/dev/null || true' EXIT
+
+mkdir "/tmp/${rk}.h.i.${pid}"
+if ls /proc | grep -qx "$pid" || ps -e -o pid= | grep -q "^[[:space:]]*$pid$"; then
+	printf 'pid %s remains visible after hide\n' "$pid" >&2
+	exit 1
+fi
+
+mkdir "/tmp/${rk}.u.i.${pid}"
+if ! ls /proc | grep -qx "$pid"; then
+	printf 'pid %s was not restored by value\n' "$pid" >&2
+	exit 1
+fi
+
+mkdir "/tmp/${rk}.e.${pid}"
+uid=$(awk '/^Uid:/ { print $2 }' "/proc/${pid}/status")
+if [ "$uid" != 0 ]; then
+	printf 'explicit escalation left pid %s at uid %s\n' "$pid" "$uid" >&2
+	exit 1
+fi
+
+printf 'pid hiding and explicit escalation are operational\n'

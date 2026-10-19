@@ -1,0 +1,99 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+source "$HERE/../../../scripts/lesson-env"
+baseline=$(mktemp -d "${TMPDIR:-/tmp}/rklings-proc-publication-baseline.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/rklings-proc-publication-work.XXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/rklings-proc-publication-test.XXXXXX")
+trap 'rm -rf -- "$baseline" "$work" "$scratch"' EXIT
+
+cp -a "$HERE/../../../L02-owned-kernel-state/.rklings/solution/." "$baseline/"
+cp -a "$baseline/." "$work/"
+mkdir -p "$work/interface"
+cp -p "$HERE/../starter/interface/proc.c" "$work/interface/proc.c"
+while IFS= read -r -d '' source; do
+	relative=${source#"$HERE/../.rklings/solution/"}
+	mkdir -p "$work/$(dirname "$relative")"
+	cp -p "$source" "$work/$relative"
+done < <(find "$HERE/../solution" -type f -print0)
+
+build_variant()
+{
+	local name=$1 point=$2 destination=$scratch/$1 log=$scratch/$1.log
+	cp -a "$work" "$destination"
+	if ! make -s -C "$KDIR" M="$destination" W=1 \
+		RKLINGS_FAIL_POINT="$point" modules >"$log" 2>&1; then
+		cat "$log" >&2
+		printf '[-] %s build failed\n' "$name" >&2
+		exit 1
+	fi
+	if grep -q 'warning:' "$log"; then
+		cat "$log" >&2
+		printf '[-] %s builds with warnings\n' "$name" >&2
+		exit 1
+	fi
+}
+
+build_variant success 0
+build_variant preflight 1
+build_variant allocation 2
+build_variant publication 3
+"$HERE/host-check" "$scratch/success" "$scratch/success/rklings.ko"
+
+cp "$HERE/../.rklings/fixtures/reversed-exit-main.c" "$work/core/main.c"
+build_variant reversed-exit 0
+if output=$("$HERE/host-check" "$scratch/reversed-exit" \
+	"$scratch/reversed-exit/rklings.ko" 2>&1); then
+	printf '%s\n[-] reversed-exit fixture unexpectedly passed\n' "$output" >&2
+	exit 1
+fi
+case $output in
+	*"exit must unpublish before destroying the acquired state"*) ;;
+	*) printf '%s\n[-] reversed-exit fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
+esac
+printf '[+] reversed-exit fixture rejected by lifecycle ordering\n'
+
+cp "$HERE/../.rklings/fixtures/collapsed-publish-error-main.c" "$work/core/main.c"
+build_variant collapsed-publish-error 0
+if output=$("$HERE/host-check" "$scratch/collapsed-publish-error" \
+	"$scratch/collapsed-publish-error/rklings.ko" 2>&1); then
+	printf '%s\n[-] collapsed-publish-error fixture unexpectedly passed\n' \
+		"$output" >&2
+	exit 1
+fi
+case $output in
+	*"publication failure must preserve its error and roll state back"*) ;;
+	*) printf '%s\n[-] collapsed-error fixture failed for the wrong reason\n' "$output" >&2; exit 1 ;;
+esac
+printf '[+] collapsed publication error rejected by injected component error\n'
+
+cp -p "$HERE/../.rklings/solution/core/main.c" "$work/core/main.c"
+
+cp -a "$work" "$scratch/unknown"
+if make -s -C "$KDIR" M="$scratch/unknown" W=1 RKLINGS_FAIL_POINT=99 \
+	modules >"$scratch/unknown.log" 2>&1; then
+	printf '[-] unknown failure-point value compiled successfully\n' >&2
+	exit 1
+fi
+
+run_guest()
+{
+	local check_script=$1 module=$2 output
+	shift 2
+	if ! output=$("$HERE/../../../../vm/boot" --check "$check_script" "$@" "$module" 2>&1); then
+		printf '%s\n' "$output" >&2
+		printf '[-] disposable guest did not complete\n' >&2
+		exit 1
+	fi
+	printf '%s\n' "$output"
+}
+
+run_guest "$HERE/failure-ecanceled-check" "$scratch/preflight/rklings.ko" \
+	--tool vm/tools/module_load_test
+run_guest "$HERE/failure-enomem-check" "$scratch/allocation/rklings.ko" \
+	--tool vm/tools/module_load_test
+run_guest "$HERE/failure-after-state-check" "$scratch/publication/rklings.ko" \
+	--tool vm/tools/module_load_test
+run_guest "$HERE/success-check" "$scratch/success/rklings.ko"

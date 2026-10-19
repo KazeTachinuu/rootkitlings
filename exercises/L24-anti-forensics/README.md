@@ -1,12 +1,39 @@
 # L24: Anti-Forensics
 
-L23 made your process invisible to ps and resistant to core dumps.
-But the agent still leaves traces everywhere: file timestamps betray when you
-touched them, login records show your session, shell history logs your commands,
-and the systemd journal records everything.
-An analyst running stat, last, history, or journalctl finds you in seconds.
+L23 changes the process name and prevents core dumps, but deployment still
+changes timestamps, login records, shell history, and the system journal.
+This exercise identifies and modifies those specific local records.
 
-## Five forensic traces, five scrubs
+## What you will observe
+
+You will issue one cleanup command, then inspect each affected record directly:
+
+```console
+root@victim:~# last | grep student
+root@victim:~# test ! -s /home/student/.bash_history && echo empty
+empty
+root@victim:~# stat -c %Y /tmp/testfile /etc/hostname
+1760000000
+1760000000
+```
+
+An empty login lookup, an empty history file, and equal timestamps demonstrate
+three separate changes.
+None of them proves that every independent record has disappeared.
+
+## Workspace
+
+```text
+exercises/L24-anti-forensics
+├── go.mod
+└── main.go
+```
+
+Complete the cleanup functions and the `CLEANUP` command path in `main.go`.
+Perform all tests only in the disposable guest because these operations alter
+local audit records.
+
+## Map each record to its cleanup
 
 ```text
   Trace                  Tool that finds it    Scrub technique
@@ -20,11 +47,10 @@ An analyst running stat, last, history, or journalctl finds you in seconds.
 
 ## Timestomping
 
-`stat` shows three timestamps: atime (last read), mtime (last write),
-ctime (last metadata change).
+`stat` shows three timestamps: atime (last read), mtime (last write), ctime
+(last metadata change).
 An attacker who drops a file at 3 AM on a server with no nighttime activity
-stands out.
-`os.Chtimes` sets atime and mtime to any value you choose.
+stands out. `os.Chtimes` sets atime and mtime to any value you choose.
 The standard technique: copy the timestamp of a nearby legitimate file, so your
 file blends into the directory listing sorted by time.
 
@@ -47,7 +73,7 @@ This is a known limitation.
 
 `last` and `who` read binary records from `/var/run/utmp` (current logins) and
 `/var/log/wtmp` (login history).
-Each record is a fixed-size `utmp` struct (384 bytes on Linux).
+Each record is a 384-byte `utmp` struct in the course's amd64 guest.
 To scrub: read the file, walk records, zero out entries matching your username
 or terminal, write back.
 
@@ -74,17 +100,20 @@ Write the modified buffer back.
 systemd-journal records everything: logins, sudo, SSH, service starts.
 `journalctl --since "1 hour ago"` shows your activity.
 Two approaches:
+
 1. `journalctl --vacuum-time=1s` (requires root, deletes archived journals)
-2. Rotate the active journal with `systemctl kill --signal=SIGUSR2 systemd-journald`
+2. Rotate the active journal with
+   `systemctl kill --signal=SIGUSR2 systemd-journald`
 
 With the rootkit loaded, escalate first, then vacuum.
 
-## You write
+## Implement it
 
-`main.go` (~120 lines):
+Complete `main.go`:
 
 - `timestomp(target, reference string)`: copy mtime from reference to target
-- `clearHistory()`: truncate common history files
+- `clearHistory(username)`: truncate root, current-user, and requested-user
+  history files
 - `scrubUtmp(username string)`: remove login records from utmp and wtmp
 - `tamperJournal()`: vacuum and rotate journal
 - `cleanup()`: orchestrate all scrubs, clear environment
@@ -92,7 +121,7 @@ With the rootkit loaded, escalate first, then vacuum.
 The agent connects over mTLS, receives a CLEANUP command, and runs all
 anti-forensics routines.
 
-## API
+## Useful interfaces
 
 ```go
 // Timestomping
@@ -125,31 +154,33 @@ os.Clearenv()
 
 ## Test it
 
-```
-$ rklings run l24
-student@vm:~$ # Create a test file and check its timestamp
-student@vm:~$ touch /tmp/testfile
-student@vm:~$ stat /tmp/testfile | grep Modify
-Modify: 2026-10-17 03:14:00.000000000 +0000
+Run the validator against a disposable guest:
 
-student@vm:~$ # After agent runs CLEANUP:
-student@vm:~$ stat /tmp/testfile | grep Modify
+```sh
+./rklings validate L24
+```
+
+It creates the evidence, sends commands over the real mTLS connection, then
+inspects the guest state directly:
+
+```text
+root@victim:~# stat /tmp/testfile | grep Modify
 Modify: 2026-01-15 09:22:00.000000000 +0000
 
-student@vm:~$ last | grep student
+root@victim:~# last | grep student
 (no output)
 
-student@vm:~$ cat ~/.bash_history
+root@victim:~# cat /home/student/.bash_history
 (empty)
 
-student@vm:~$ journalctl --since "1 hour ago" 2>&1 | head -1
+root@victim:~# journalctl --since "1 hour ago" 2>&1 | head -1
 -- No entries --
 ```
 
 ## Validate
 
-```
-$ rklings validate l24
+```sh
+./rklings validate L24
   [+] agent connects over mTLS
   [+] file timestamp matches reference
   [+] no login record for student in utmp
@@ -162,6 +193,6 @@ $ rklings validate l24
 
 ## Next
 
-M03 integrates all tradecraft (L20 through L24) into a single ghost agent.
-Run every defender tool.
-Find nothing.
+The cleanup controls work separately.
+M03 runs them as one ordered deployment and checks that the agent remains
+controllable afterward.

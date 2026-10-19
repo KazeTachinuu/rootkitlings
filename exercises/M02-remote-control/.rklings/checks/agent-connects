@@ -1,0 +1,19 @@
+#!/bin/sh
+# Check: agent establishes mTLS connection to server
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Agent mTLS connection"
+
+# Wait for agent to connect via relay
+wait_agent
+
+# Verify agent responds to commands
+resp=$(send_cmd "PING")
+if echo "$resp" | grep -q "PONG"; then
+    _ok "agent connected and responding over mTLS"
+else
+    _fail "expected PONG, got: $resp"
+fi
+
+summary

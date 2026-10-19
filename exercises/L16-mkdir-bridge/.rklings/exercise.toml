@@ -1,0 +1,55 @@
+schema_version = 2
+id = "mkdir-bridge"
+title = "Bridge server commands to kernel via os.Mkdir"
+stage = "split"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["communication", "control"]
+difficulty = "standard"
+prerequisites = ["mtls-connect"]
+teaches = ["command-bridge", "os-mkdir-dispatch", "in-memory-state-query"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["go.mod", "go.sum", "main.go"]
+editable = ["main.go"]
+build = "."
+
+[build]
+module_from = "local-control"
+
+
+[run]
+stage = ["kernel", "agent"]
+load = ["kernel"]
+agent = "background"
+
+[serve]
+kind = "lab"
+commands = ["INFO", "PING", "STATUS", "HIDE FILE", "HIDE PID", "HIDE PORT"]
+
+[verification]
+load_kernel = true
+timeout_seconds = 120
+tools = ["module-load-test"]
+runtime = "background"
+harness = true
+
+[[verification.cases]]
+id = "hide-file"
+label = "Server HIDE FILE command hides a file via mkdir"
+expect_build = "pass"
+check = "exercises/L16-mkdir-bridge/.rklings/checks/hide-file"
+
+[[verification.cases]]
+id = "list-targets"
+label = "INFO returns the kernel's in-memory target ledger"
+expect_build = "pass"
+check = "exercises/L16-mkdir-bridge/.rklings/checks/list-targets"
+
+[[verification.cases]]
+id = "multiple-commands"
+label = "Agent processes multiple commands in sequence"
+expect_build = "pass"
+check = "exercises/L16-mkdir-bridge/.rklings/checks/multiple-commands"

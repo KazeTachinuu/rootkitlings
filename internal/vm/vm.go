@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"math/big"
@@ -8,7 +9,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/KazeTachinuu/rootkitlings/internal/project"
 )
 
 type BootOpts struct {
@@ -18,6 +22,8 @@ type BootOpts struct {
 	User         string
 	ExtraPortFwd []string
 	MOTD         string
+	D00          bool
+	BootTimeout  time.Duration
 }
 
 type VM struct {
@@ -30,16 +36,18 @@ type VM struct {
 	consoleLog string
 	logFile    *os.File
 	bootTime   time.Duration
+	closeOnce  sync.Once
+	closeErr   error
 }
 
 func Boot(opts BootOpts) (*VM, error) {
 	start := time.Now()
 
-	home, err := os.UserHomeDir()
+	dataDir, err := project.DataDir()
 	if err != nil {
-		return nil, fmt.Errorf("home dir: %w", err)
+		return nil, fmt.Errorf("project data directory: %w", err)
 	}
-	keyPath := filepath.Join(home, ".rklings", "ssh", "id_ed25519")
+	keyPath := filepath.Join(dataDir, "ssh", "id_ed25519")
 
 	port := opts.SSHPort
 	if port == 0 {
@@ -62,7 +70,12 @@ func Boot(opts BootOpts) (*VM, error) {
 		return nil, fmt.Errorf("create overlay: %s: %w", out, err)
 	}
 
-	seedISO, tempDir, err := createSeedISO(keyPath+".pub", opts.MOTD)
+	var seedISO, tempDir string
+	if opts.D00 {
+		seedISO, tempDir, err = CreateD00SeedISO(keyPath + ".pub")
+	} else {
+		seedISO, tempDir, err = createSeedISO(keyPath+".pub", opts.MOTD)
+	}
 	if err != nil {
 		os.Remove(overlay)
 		return nil, fmt.Errorf("seed ISO: %w", err)
@@ -70,7 +83,7 @@ func Boot(opts BootOpts) (*VM, error) {
 
 	netdev := fmt.Sprintf("user,id=net0,hostfwd=tcp::%d-:22", port)
 	for _, fwd := range opts.ExtraPortFwd {
-		netdev += "," + fwd
+		netdev += ",hostfwd=" + fwd
 	}
 
 	qemuArgs := []string{
@@ -114,7 +127,11 @@ func Boot(opts BootOpts) (*VM, error) {
 		logFile:    logFile,
 	}
 
-	if err := v.waitSSH(); err != nil {
+	timeout := opts.BootTimeout
+	if timeout == 0 {
+		timeout = 60 * time.Second
+	}
+	if err := v.waitSSH(timeout); err != nil {
 		v.Close()
 		return nil, fmt.Errorf("%w (console log: %s)", err, logPath)
 	}
@@ -125,6 +142,44 @@ func Boot(opts BootOpts) (*VM, error) {
 
 func (v *VM) BootTime() time.Duration { return v.bootTime }
 func (v *VM) ConsoleLog() string      { return v.consoleLog }
+func (v *VM) SSHPort() int            { return v.sshPort }
+
+// WaitD00 waits through first-boot package installation and the deliberate
+// reboot used to select the pinned deployment-lab kernel.
+func (v *VM) WaitD00() error {
+	deadline := time.Now().Add(8 * time.Minute)
+	for time.Now().Before(deadline) {
+		out, err := v.SSH("test -f /var/lib/cloud/instance/boot-finished && systemctl is-active --quiet status-check.service && printf ready")
+		if err == nil && strings.TrimSpace(out) == "ready" {
+			return nil
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("D00 provisioning did not finish within 8 minutes")
+}
+
+// Reboot restarts the guest and waits until the existing SSH forward is ready
+// again. The QEMU process and overlay remain the same.
+func (v *VM) Reboot(timeout time.Duration) error {
+	if timeout == 0 {
+		timeout = 2 * time.Minute
+	}
+	bootID, err := v.SSH("cat /proc/sys/kernel/random/boot_id")
+	if err != nil {
+		return fmt.Errorf("read boot ID: %w", err)
+	}
+	bootID = strings.TrimSpace(bootID)
+	_, _ = v.SSH("nohup sh -c 'sleep 1; reboot' >/dev/null 2>&1 &")
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		current, currentErr := v.SSH("cat /proc/sys/kernel/random/boot_id")
+		if currentErr == nil && strings.TrimSpace(current) != bootID {
+			return nil
+		}
+		time.Sleep(time.Second)
+	}
+	return fmt.Errorf("guest boot ID did not change after %s", timeout)
+}
 
 // SetUser changes the SSH user for subsequent SSH, SCP, and Shell calls.
 func (v *VM) SetUser(user string) { v.user = user }
@@ -144,9 +199,9 @@ alias ls='ls --color=auto'
 alias grep='grep --color=auto'
 alias dmesg='dmesg --color=auto'
 if [ "$(id -u)" -eq 0 ]; then
-  PS1='\[\e[1;31m\]root@rklings\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]# '
+  PS1='\[\e[1;31m\]root@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]# '
 else
-  PS1='\[\e[1;32m\]\u@rklings\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]$ '
+  PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]$ '
 fi
 `
 
@@ -156,18 +211,25 @@ func createSeedISO(pubKeyPath, motd string) (isoPath, tempDir string, err error)
 		return "", "", fmt.Errorf("read SSH pubkey: %w", err)
 	}
 
-	tempDir, err = os.MkdirTemp("", "rklings-seed-")
+	tempDir, err = project.TempDir("seed-")
 	if err != nil {
 		return "", "", err
 	}
 
-	metaData := "instance-id: rklings\nlocal-hostname: rklings\n"
+	metaData := "instance-id: victim\nlocal-hostname: victim\n"
 	if err := os.WriteFile(filepath.Join(tempDir, "meta-data"), []byte(metaData), 0644); err != nil {
 		os.RemoveAll(tempDir)
 		return "", "", err
 	}
 
-	key := strings.TrimSpace(string(pubKey))
+	keyFields := strings.Fields(string(pubKey))
+	if len(keyFields) < 2 {
+		os.RemoveAll(tempDir)
+		return "", "", fmt.Errorf("invalid SSH public key")
+	}
+	// Authorized-key comments are not part of the key. Omitting them also
+	// prevents content-filter exercises from accidentally hiding the key line.
+	key := keyFields[0] + " " + keyFields[1]
 	var ud strings.Builder
 	fmt.Fprintf(&ud, "#cloud-config\n")
 	fmt.Fprintf(&ud, "users:\n")
@@ -261,33 +323,56 @@ func (v *VM) SCP(localPath, remotePath string) error {
 }
 
 func (v *VM) Shell() error {
-	args := v.sshArgs("-t", fmt.Sprintf("%s@localhost", v.user),
-		"TERM=xterm-256color exec bash -l",
-	)
-	cmd := exec.Command("ssh", args...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return v.ShellContext(context.Background())
+}
+
+// ShellContext attaches an interactive shell whose SSH process is terminated
+// when the caller is interrupted. The caller's deferred VM cleanup can then
+// run normally instead of leaving QEMU and its overlay behind.
+func (v *VM) ShellContext(ctx context.Context) error {
+	for {
+		args := v.sshArgs("-t", fmt.Sprintf("%s@localhost", v.user),
+			"TERM=xterm-256color bash -il; exit 0",
+		)
+		cmd := exec.CommandContext(ctx, "ssh", args...)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err == nil || ctx.Err() != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stderr, "\n  [*] shell disconnected; waiting for VM...")
+		if waitErr := v.waitSSH(90 * time.Second); waitErr != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stderr, "  [+] VM ready; reconnecting shell")
+	}
 }
 
 func (v *VM) Close() error {
-	if v.cmd != nil && v.cmd.Process != nil {
-		v.cmd.Process.Kill()
-		v.cmd.Wait()
-	}
-	if v.logFile != nil {
-		v.logFile.Close()
-	}
-	os.Remove(v.overlay)
-	if v.tempDir != "" {
-		os.RemoveAll(v.tempDir)
-	}
-	return nil
+	v.closeOnce.Do(func() {
+		if v.cmd != nil && v.cmd.Process != nil {
+			_ = v.cmd.Process.Kill()
+			_ = v.cmd.Wait()
+		}
+		if v.logFile != nil {
+			_ = v.logFile.Close()
+		}
+		if err := os.Remove(v.overlay); err != nil && !os.IsNotExist(err) {
+			v.closeErr = err
+		}
+		if v.tempDir != "" {
+			if err := os.RemoveAll(v.tempDir); err != nil && v.closeErr == nil {
+				v.closeErr = err
+			}
+		}
+	})
+	return v.closeErr
 }
 
-func (v *VM) waitSSH() error {
-	deadline := time.Now().Add(60 * time.Second)
+func (v *VM) waitSSH(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		args := v.sshArgs(
 			"-o", "ConnectTimeout=2",
@@ -299,5 +384,5 @@ func (v *VM) waitSSH() error {
 		}
 		time.Sleep(2 * time.Second)
 	}
-	return fmt.Errorf("SSH not available after 60s on port %d", v.sshPort)
+	return fmt.Errorf("SSH not available after %s on port %d", timeout, v.sshPort)
 }

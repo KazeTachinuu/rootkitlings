@@ -1,0 +1,23 @@
+#!/bin/sh
+
+set -eu
+
+rk="rklin$(printf gs)"
+sample=/tmp/p00-content-filter
+
+printf '%s\nvisible\n' "$rk" > "$sample"
+if grep -q "$rk" "$sample"; then
+	printf 'regular-file content was not filtered\n' >&2
+	exit 1
+fi
+if ! grep -q '^visible$' "$sample"; then
+	printf 'regular-file filtering damaged unrelated content\n' >&2
+	exit 1
+fi
+actual=$(printf '%s\n' "$rk" | { IFS= read -r line; printf '%s' "$line"; })
+if [ "$actual" != "$rk" ]; then
+	printf 'content filter modified a pipe stream\n' >&2
+	exit 1
+fi
+
+printf 'content filtering preserves non-file streams\n'

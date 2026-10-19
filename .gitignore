@@ -27,10 +27,11 @@ __pycache__/
 *~
 
 # Learner state and workspaces
-.rklings/
+/.rklings/
 /work/
 
 # Tool artifacts
+node_modules/
 .playwright-mcp/
 .superpowers/
 docs/superpowers/

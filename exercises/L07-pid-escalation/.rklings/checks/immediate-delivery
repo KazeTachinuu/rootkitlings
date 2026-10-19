@@ -1,0 +1,19 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Immediate PID credential replacement"
+
+load rklings.ko
+assert_loaded rklings
+
+uid=$(su student -c 'mkdir_escalation_test --self-target /tmp/rklings.e')
+if [ "$uid" = "0" ]; then
+	_ok "explicit PID received real root credentials immediately"
+else
+	_fail "expected uid 0 immediately, got uid=$uid"
+fi
+
+rm -rf /tmp/rklings.e.* 2>/dev/null
+unload rklings
+summary

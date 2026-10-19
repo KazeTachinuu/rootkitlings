@@ -1,0 +1,45 @@
+schema_version = 2
+id = "mtls-connect"
+title = "Go agent with mTLS callback"
+stage = "split"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["communication", "encryption"]
+difficulty = "standard"
+prerequisites = ["usermode-helper"]
+teaches = ["mtls-handshake", "go-embed", "tls-config"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["go.mod", "main.go"]
+editable = ["main.go"]
+build = "."
+
+
+[run]
+stage = ["agent"]
+agent = "background"
+
+[serve]
+kind = "lab"
+handshake_only = true
+welcome = "WELCOME rootkitlings"
+
+[verification]
+timeout_seconds = 120
+tools = []
+runtime = "checks"
+harness = true
+
+[[verification.cases]]
+id = "tls-connect"
+label = "Agent connects to server with TLS 1.3"
+expect_build = "pass"
+check = "exercises/L15-mtls-connect/.rklings/checks/tls-connect"
+
+[[verification.cases]]
+id = "client-cert"
+label = "Server receives valid client certificate"
+expect_build = "pass"
+check = "exercises/L15-mtls-connect/.rklings/checks/client-cert"

@@ -1,0 +1,34 @@
+schema_version = 2
+id = "deploy"
+title = "Deploy a rootkit against a live target"
+stage = "deployment"
+kind = "deployment"
+vm_user = "student"
+tradecraft = ["lifecycle", "privilege", "persistence"]
+difficulty = "advanced"
+prerequisites = ["local-control"]
+teaches = ["initial-access", "privilege-escalation", "deployment"]
+requires = []
+
+[workspace]
+mode = "project"
+files = []
+editable = []
+build = "."
+
+[build]
+module_from = "local-control"
+
+[run]
+stage = ["kernel"]
+
+
+[verification]
+timeout_seconds = 180
+tools = []
+
+[[verification.cases]]
+id = "lab-provisioned"
+label = "Deployment target is provisioned"
+expect_build = "pass"
+check = "exercises/D00-deploy/.rklings/checks/lab-provisioned"

@@ -241,7 +241,7 @@ build_rootfs()
 	install -D -m 0644 -- "$terminfo" \
 		"$ROOTFS/usr/share/terminfo/x/xterm-256color"
 	printf '%s\n' \
-		"PS1='root@rklings:\\w# '" \
+		"PS1='root@\\h:\\w# '" \
 		"unset HISTFILE" \
 		"bind 'set enable-bracketed-paste off' 2>/dev/null || true" \
 		> "$ROOTFS/etc/rklings.bashrc"

@@ -1,0 +1,47 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Callback interval varies between connections"
+
+assert_loaded rklings
+
+# Start agent in background and record timestamps of its connection attempts.
+# The agent auto-reconnects with jitter, so intervals should differ.
+RKLINGS_BASE_DELAY=1s RKLINGS_JITTER_MAX=2s ./agent &
+agent_pid=$!
+
+count=0
+for _ in $(seq 1 15); do
+    timestamps=$(curl -sf "$_RELAY_URL/connections" 2>/dev/null || true)
+    count=$(printf '%s\n' "$timestamps" | sed '/^$/d' | wc -l)
+    [ "$count" -ge 3 ] && break
+    sleep 1
+done
+
+if [ "$count" -lt 3 ]; then
+    _fail "did not receive 3 connections within timeout"
+    kill "$agent_pid" 2>/dev/null
+    wait "$agent_pid" 2>/dev/null
+    summary
+fi
+
+# Parse timestamps and check that intervals differ
+t1=$(printf '%s\n' "$timestamps" | sed -n '1p')
+t2=$(printf '%s\n' "$timestamps" | sed -n '2p')
+t3=$(printf '%s\n' "$timestamps" | sed -n '3p')
+
+d1=$((t2 - t1))
+d2=$((t3 - t2))
+
+# If both intervals are identical, jitter is not working
+if [ "$d1" -eq "$d2" ]; then
+    _fail "intervals are identical ($d1 ns), jitter not working"
+else
+    _ok "intervals differ (${d1}ns vs ${d2}ns), jitter active"
+fi
+
+kill "$agent_pid" 2>/dev/null
+wait "$agent_pid" 2>/dev/null
+
+summary

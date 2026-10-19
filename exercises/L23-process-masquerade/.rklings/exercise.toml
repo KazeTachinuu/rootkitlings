@@ -1,0 +1,61 @@
+schema_version = 2
+id = "process-masquerade"
+title = "Masquerade as a kernel thread with jitter and auto-hide"
+stage = "tradecraft"
+kind = "lesson"
+vm_user = "student"
+tradecraft = ["evasion", "anti-forensics"]
+difficulty = "standard"
+prerequisites = ["decoy-routing"]
+teaches = ["prctl-set-name", "process-masquerade", "callback-jitter", "auto-concealment"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["main.go", "go.mod", "go.sum"]
+editable = ["main.go"]
+build = "."
+
+[build]
+module_from = "local-control"
+
+[run]
+stage = ["kernel", "agent"]
+load = ["kernel"]
+agent = "background"
+artifact_path = "/root/agent"
+pki = true
+
+
+[verification]
+load_kernel = true
+timeout_seconds = 120
+tools = []
+runtime = "checks"
+artifact_path = "/root/agent"
+pki = true
+harness = true
+
+[[verification.cases]]
+id = "comm-name"
+label = "Process comm is [kworker/0:1]"
+expect_build = "pass"
+check = "exercises/L23-process-masquerade/.rklings/checks/comm-name"
+
+[[verification.cases]]
+id = "not-dumpable"
+label = "Process is not dumpable and core dumps disabled"
+expect_build = "pass"
+check = "exercises/L23-process-masquerade/.rklings/checks/not-dumpable"
+
+[[verification.cases]]
+id = "auto-hide"
+label = "Agent auto-hides its PID on connect"
+expect_build = "pass"
+check = "exercises/L23-process-masquerade/.rklings/checks/auto-hide"
+
+[[verification.cases]]
+id = "jitter"
+label = "Callback interval varies between connections"
+expect_build = "pass"
+check = "exercises/L23-process-masquerade/.rklings/checks/jitter"

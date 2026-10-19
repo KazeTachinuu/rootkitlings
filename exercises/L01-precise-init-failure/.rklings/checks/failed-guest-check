@@ -1,0 +1,30 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Precise failed initialization"
+
+assert_inventory_absent()
+{
+	assert_absent /sys/module/rklings
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings appears in /proc/modules"
+	else
+		_ok "rklings is absent from /proc/modules"
+	fi
+}
+
+assert_inventory_absent
+
+attempt=1
+while [ "$attempt" -le 2 ]; do
+	if output=$(module_load_test "${RKLINGS_DIR:-/rklings}/rklings.ko" 12 2>&1); then
+		_ok "attempt $attempt returned ENOMEM"
+	else
+		_fail "attempt $attempt did not return ENOMEM: $output"
+	fi
+	assert_inventory_absent
+	attempt=$((attempt + 1))
+done
+
+summary

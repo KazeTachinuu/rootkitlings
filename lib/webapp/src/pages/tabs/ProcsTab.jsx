@@ -1,13 +1,14 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Activity, Eye, EyeOff, Zap, Plus } from 'lucide-react'
 import { Th } from '../../components/Th'
 import { useSnapshot, SnapshotBar, EmptySnapshotCta } from '../Target'
 
 const PS_CMD = "for d in /proc/[0-9]*; do u=$(stat -c %u \"$d\" 2>/dev/null); cat \"$d/stat\" 2>/dev/null | sed \"s/^/$u /\"; done"
 
-export function ProcsTab({ target: t, cmd, query, execCmd, busy }) {
+export function ProcsTab({ target: t, cmd, query, execCmd, busy, refreshToken }) {
   const snap = useSnapshot(`procs:${t.id}`)
   const [filter, setFilter] = useState('')
+  const [visibility, setVisibility] = useState('all')
   const [escPid, setEscPid] = useState('')
   const [escStatus, setEscStatus] = useState(null)
   const [hideVal, setHideVal] = useState('')
@@ -28,6 +29,11 @@ export function ProcsTab({ target: t, cmd, query, execCmd, busy }) {
       }
     })
   }, [execCmd, t.id, snap])
+  const captureRef = useRef(capture)
+  captureRef.current = capture
+  useEffect(() => {
+    if (t.online && !busy) captureRef.current()
+  }, [t.id, t.online, busy, refreshToken])
 
   const doEscalate = useCallback((pid) => {
     setEscStatus('pending')
@@ -39,13 +45,16 @@ export function ProcsTab({ target: t, cmd, query, execCmd, busy }) {
   }, [query, t.id, capture])
 
   const procs = snap.data || []
-  const filtered = filter
+  const matching = filter
     ? procs.filter(p => p.comm.includes(filter) || p.pid === filter || p.ppid === filter || p.uid === filter)
     : procs
+  const filtered = matching.filter(p => visibility === 'all' ||
+    (visibility === 'hidden') === hiddenPids.includes(p.pid))
 
   // hidden pids not in scan results
   const scannedPids = new Set(procs.map(p => p.pid))
-  const extraHidden = hiddenPids.filter(p => !scannedPids.has(p))
+  const extraHidden = visibility === 'visible' ? [] : hiddenPids.filter(p =>
+    !scannedPids.has(p) && (!filter || p.includes(filter)))
 
   if (!snap.time && !snap.loading)
     return <EmptySnapshotCta icon={Activity} title="Processes"
@@ -56,6 +65,13 @@ export function ProcsTab({ target: t, cmd, query, execCmd, busy }) {
     <div className="flex flex-col h-full">
       <SnapshotBar title="Processes" icon={Activity} count={procs.length} hiddenCount={hiddenPids.length}
         time={snap.time} loading={snap.loading} onSnapshot={capture} online={t.online && !busy}>
+        <div className="flex border-2 border-border bg-bg ml-2">
+          {['all', 'visible', 'hidden'].map(value => (
+            <button key={value} type="button"
+              className={`px-2.5 py-1 text-xs font-bold capitalize border-r border-border last:border-r-0 ${visibility === value ? 'bg-main text-main-fg' : 'hover:bg-secondary'}`}
+              onClick={() => setVisibility(value)}>{value}</button>
+          ))}
+        </div>
         <input className="nb-input px-3 py-1.5 text-sm w-40 ml-2" placeholder="filter..."
           value={filter} onChange={e => setFilter(e.target.value)} />
       </SnapshotBar>
@@ -102,8 +118,7 @@ export function ProcsTab({ target: t, cmd, query, execCmd, busy }) {
                         title={isHidden ? 'Unhide PID' : 'Hide PID'}
                         onClick={() => {
                           if (isHidden) {
-                            const idx = hiddenPids.indexOf(p.pid)
-                            if (idx >= 0) cmd(`UNHIDE PID ${idx}`)
+                            cmd(`UNHIDE PID ${p.pid}`)
                           } else {
                             cmd(`HIDE PID ${p.pid}`)
                           }
@@ -122,7 +137,7 @@ export function ProcsTab({ target: t, cmd, query, execCmd, busy }) {
                   <td className="px-4 py-2 font-mono text-fg-3">-</td>
                   <td className="px-4 py-2 text-right">
                     <button className="p-1 text-green opacity-100" title="Unhide PID"
-                      onClick={() => { const idx = hiddenPids.indexOf(pid); if (idx >= 0) cmd(`UNHIDE PID ${idx}`) }}>
+                      onClick={() => cmd(`UNHIDE PID ${pid}`)}>
                       <Eye size={14} />
                     </button>
                   </td>

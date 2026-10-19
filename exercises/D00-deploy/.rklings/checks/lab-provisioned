@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+. /vm/checks/lib.sh
+
+begin "D00 target provisioned"
+id student >/dev/null 2>&1 || _fail "student user missing"
+if test -s /home/student/.ssh/authorized_keys; then
+    _fail "student must not have an authorized SSH key"
+fi
+systemctl is-active --quiet status-check.service || _fail "status service is not active"
+command -v d00-check >/dev/null 2>&1 || _fail "d00-check missing"
+command -v getent >/dev/null 2>&1 || _fail "getent missing"
+curl -fsS 'http://127.0.0.1:8080/?host=localhost' | grep -q 'localhost' ||
+    _fail "status service cannot run its health check"
+curl -fsS -H 'Accept: text/html' 'http://127.0.0.1:8080/' |
+    grep -q '<title>Target status</title>' || _fail "browser page missing"
+curl -fsS 'http://127.0.0.1:8080/?host=%3Bid' |
+    grep -q 'uid=1000(student)' || _fail "command injection is not operational"
+_ok "HTTP-only student entry point and command injection are operational"
+summary

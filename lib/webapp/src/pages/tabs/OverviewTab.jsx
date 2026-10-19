@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Activity, FileText, Network, Search, Eye } from 'lucide-react'
 
 function Section({ title, children }) {
@@ -18,7 +19,10 @@ function InfoRow({ label, value, color }) {
   )
 }
 
-export function OverviewTab({ target: t, cmd, busy }) {
+export function OverviewTab({ target: t, cmd, query, busy }) {
+  const [selected, setSelected] = useState([])
+  const [restoring, setRestoring] = useState(false)
+  const [restoreError, setRestoreError] = useState('')
   const hidden = {
     file: (t.hidden?.file || []).length,
     pid: (t.hidden?.pid || []).length,
@@ -26,25 +30,63 @@ export function OverviewTab({ target: t, cmd, busy }) {
     content: (t.hidden?.content || []).length,
   }
   const total = hidden.file + hidden.pid + hidden.port + hidden.content
+  const categories = [
+    { key: 'file', label: 'Files', icon: FileText, items: t.hidden?.file || [], unhide: 'UNHIDE FILE' },
+    { key: 'pid', label: 'PIDs', icon: Activity, items: t.hidden?.pid || [], unhide: 'UNHIDE PID' },
+    { key: 'port', label: 'Ports', icon: Network, items: t.hidden?.port || [], unhide: 'UNHIDE PORT' },
+    { key: 'content', label: 'Content', icon: Search, items: t.hidden?.content || [], unhide: 'UNHIDE CONTENT' },
+  ]
+  const entries = categories.flatMap(category => category.items.map(item => ({
+    key: `${category.key}\0${item}`, item, command: `${category.unhide} ${item}`,
+  })))
+
+  useEffect(() => {
+    const valid = new Set(entries.map(entry => entry.key))
+    setSelected(current => current.filter(key => valid.has(key)))
+  }, [t.hidden])
+
+  const toggleSelected = key => setSelected(current =>
+    current.includes(key) ? current.filter(value => value !== key) : [...current, key])
+
+  const restoreSelected = async () => {
+    const chosen = entries.filter(entry => selected.includes(entry.key))
+    if (!chosen.length || !window.confirm(`Restore ${chosen.length} selected item${chosen.length === 1 ? '' : 's'}?`)) return
+    setRestoring(true)
+    setRestoreError('')
+    const failed = []
+    for (const entry of chosen) {
+      const result = await query(entry.command, t.id)
+      if (!result.ok) failed.push(entry.key)
+    }
+    setSelected(failed)
+    setRestoring(false)
+    if (failed.length) setRestoreError(`${failed.length} item${failed.length === 1 ? '' : 's'} could not be restored.`)
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 h-full">
       <div className="border-b-2 lg:border-b-0 lg:border-r-2 border-border p-5 overflow-auto">
         <Section title={<>Hidden <span className="nb-badge bg-main text-main-fg ml-1">{total}</span></>}>
           {total > 0 && (
-            <button className="nb-btn px-3 py-1.5 text-xs text-red mb-3" onClick={() => cmd('UNHIDE ALL')} disabled={!t.online || busy}>
-              Unhide All
-            </button>
+            <div className="flex items-center gap-2 mb-3">
+              <button className="nb-btn px-3 py-1.5 text-xs"
+                onClick={() => setSelected(selected.length === entries.length ? [] : entries.map(entry => entry.key))}
+                disabled={restoring}>
+                {selected.length === entries.length ? 'Clear selection' : 'Select all'}
+              </button>
+              {selected.length > 0 && (
+                <button className="nb-btn px-3 py-1.5 text-xs text-red"
+                  onClick={restoreSelected} disabled={!t.online || busy || restoring}>
+                  {restoring ? 'Restoring...' : `Restore selected (${selected.length})`}
+                </button>
+              )}
+            </div>
           )}
+          {restoreError && <div className="text-xs font-bold text-red mb-3">{restoreError}</div>}
           {total === 0 && (
             <div className="text-sm text-fg-3 py-4">Nothing hidden yet. Use the Processes, Ports, or Files tabs to hide items.</div>
           )}
-          {[
-            { key: 'file', label: 'Files', icon: FileText, items: t.hidden?.file || [], unhidCmd: 'UNHIDE FILE' },
-            { key: 'pid', label: 'PIDs', icon: Activity, items: t.hidden?.pid || [], unhidCmd: 'UNHIDE PID' },
-            { key: 'port', label: 'Ports', icon: Network, items: t.hidden?.port || [], unhidCmd: 'UNHIDE PORT' },
-            { key: 'content', label: 'Content', icon: Search, items: t.hidden?.content || [], unhidCmd: 'UNHIDE CONTENT' },
-          ].filter(c => c.items.length > 0).map(cat => (
+          {categories.filter(c => c.items.length > 0).map(cat => (
             <div key={cat.key} className="mb-3">
               <div className="flex items-center gap-1.5 mb-1.5">
                 <cat.icon size={12} className="text-fg-3" />
@@ -54,11 +96,15 @@ export function OverviewTab({ target: t, cmd, busy }) {
               <div className="space-y-0.5">
                 {cat.items.map((item, i) => (
                   <div key={i} className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-[var(--radius)] bg-secondary border border-border group">
-                    <span className="font-mono text-xs truncate">{item}</span>
+                    <label className="flex items-center gap-2 min-w-0 cursor-pointer">
+                      <input type="checkbox" checked={selected.includes(`${cat.key}\0${item}`)}
+                        onChange={() => toggleSelected(`${cat.key}\0${item}`)} disabled={restoring} />
+                      <span className="font-mono text-xs truncate">{item}</span>
+                    </label>
                     <button
                       className="p-0.5 text-fg-3 hover:text-red opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                       title={`Unhide ${item}`}
-                      onClick={() => cmd(`${cat.unhidCmd} ${i}`)}
+                      onClick={() => cmd(`${cat.unhide} ${item}`)}
                       disabled={!t.online || busy}
                     >
                       <Eye size={12} />

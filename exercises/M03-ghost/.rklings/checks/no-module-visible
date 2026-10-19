@@ -1,0 +1,28 @@
+#!/bin/sh
+# Check: lsmod shows no rootkit module after ghost deployment
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Module invisible to lsmod"
+
+wait_agent
+
+# Check lsmod for any trace of the module via agent
+resp=$(send_cmd "SHELL lsmod | grep rklings | wc -l")
+count=$(echo "$resp" | tr -dc '0-9')
+if [ "${count:-0}" -eq 0 ]; then
+    _ok "rklings not visible in lsmod"
+else
+    _fail "rklings still visible in lsmod ($count entries)"
+fi
+
+# Module-list cloaking removes the list entry but leaves the loaded module's
+# sysfs object available for this controlled verification.
+resp=$(send_cmd "SHELL test -d /sys/module/rklings && echo loaded")
+if echo "$resp" | grep -q '^loaded$'; then
+    _ok "hidden module remains loaded in the kernel"
+else
+    _fail "could not prove the hidden module is operational: $resp"
+fi
+
+summary

@@ -1,7 +1,23 @@
 # L15: mTLS Callback
 
+Build the first userspace agent.
+It must authenticate the server, present its own certificate, receive one real
+message, and exit.
+
 L14 showed the kernel launching a userspace binary.
 Now you build that binary: a Go agent that phones home over mTLS.
+
+## Workspace
+
+```text
+exercises/L15-mtls-connect
+├── go.mod
+└── main.go
+```
+
+Only `main.go` is editable. `rklings build` injects the generated CA and agent
+key pair into the temporary build context, so certificate files do not appear
+beside your source.
 
 ## Mutual TLS
 
@@ -25,14 +41,16 @@ No valid cert, no connection.
 ```
 
 The agent embeds three files at compile time:
+
 - `ca.crt`: the rklings CA certificate (to verify the server)
-- `client.crt`: the agent's own certificate (signed by rklings CA)
-- `client.key`: the agent's private key
+- `agent.crt`: the agent's own certificate (signed by rklings CA)
+- `agent.key`: the agent's private key
 
 ## go:embed
 
 Go's `embed` directive bakes files into the binary at compile time.
-No file I/O at runtime. The binary IS the credential.
+No file I/O at runtime.
+The binary IS the credential.
 
 ```go
 import _ "embed"
@@ -40,11 +58,11 @@ import _ "embed"
 //go:embed certs/ca.crt
 var caCert []byte
 
-//go:embed certs/client.crt
-var clientCert []byte
+//go:embed certs/agent.crt
+var agentCert []byte
 
-//go:embed certs/client.key
-var clientKey []byte
+//go:embed certs/agent.key
+var agentKey []byte
 ```
 
 The `//go:embed` comment must appear directly above the variable.
@@ -53,9 +71,10 @@ No blank line between the directive and the var declaration.
 ## tls.Config
 
 The agent's TLS configuration needs three things:
+
 1. A certificate pool containing the CA cert (to verify the server).
 2. The client's own certificate pair (to present to the server).
-3. TLS 1.3 minimum (the only version worth using).
+3. TLS 1.3 as the minimum accepted version.
 
 ```go
 pool := x509.NewCertPool()
@@ -72,27 +91,29 @@ cfg := &tls.Config{
 
 ## The connection
 
-The agent connects to the server at 10.0.2.2:443.
+The agent connects to the rootless lab server at `10.0.2.2:8443`.
 That is the QEMU default gateway: the host machine from the VM's perspective.
 
 ```go
-conn, err := tls.Dial("tcp", "10.0.2.2:443", cfg)
+conn, err := tls.Dial("tcp", "10.0.2.2:8443", cfg)
 ```
 
+If the server is not running yet, the reference pattern retries instead of
+exiting permanently.
 After connecting, the agent reads one line from the server and prints it.
 Then it closes the connection and exits.
 L17 adds a command loop.
 
-## You write
+## Implement it
 
-`main.go` (~60 lines):
+Complete `main.go`:
 
-- go:embed variables for ca.crt, client.crt, client.key
+- go:embed variables for ca.crt, agent.crt, agent.key
 - Build tls.Config with RootCAs, Certificates, MinVersion
-- tls.Dial to 10.0.2.2:443
+- tls.Dial to 10.0.2.2:8443
 - Read one line, print it, close
 
-## API
+## Useful interfaces
 
 ```go
 import (
@@ -120,36 +141,39 @@ cfg := &tls.Config{
 }
 
 // Connect
-conn, err := tls.Dial("tcp", "10.0.2.2:443", cfg)
+conn, err := tls.Dial("tcp", "10.0.2.2:8443", cfg)
 defer conn.Close()
 ```
 
 ## Test it
 
-```
-$ rklings run l15
+In one host terminal, start the mTLS lab server:
+
+```sh
+./rklings serve L15
 ```
 
-The lab server starts on the host, listening on :443 with mTLS.
-The agent binary is built with embedded certs and copied to the VM.
+In another, build and boot the target:
 
-```
-root@vm:~# ./agent
-connected to 10.0.2.2:443
-server: WELCOME
+```sh
+./rklings run L15
 ```
 
-The lab server's web panel at http://localhost:8080 shows the connection:
+`run` builds the agent with embedded credentials, stages it in the VM, and
+starts it in the background.
+Open `http://127.0.0.1:8080`.
+The panel reports live values from the agent connection:
 
-```
-[+] TLS 1.3 connection from 10.0.2.2
-[+] Client cert: CN=agent-abc123, issuer=rklings CA
-```
+- connection state and peer address
+- TLS version and cipher suite
+- verified client certificate name
+
+Stop `run` and `serve` with `Ctrl+C` when finished.
 
 ## Validate
 
-```
-$ rklings validate l15
+```sh
+./rklings validate L15
   [+] agent binary builds
   [+] agent connects to mTLS server
   [+] TLS 1.3 negotiated
@@ -159,6 +183,5 @@ $ rklings validate l15
 
 ## Next
 
-The agent connects.
-L16 makes it useful: translating server commands into mkdir calls
-that the kernel module understands.
+The target and server now have an authenticated connection.
+L16 uses that connection to trigger the kernel controls remotely.
