@@ -2,6 +2,7 @@
 
 ## Mission
 
+L10 gave the module a target list, but adding a name changes nothing visible.
 This exercise makes a file and a running process disappear from ordinary
 listings.
 

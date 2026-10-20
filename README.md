@@ -6,7 +6,7 @@ Rootkitlings is a practical course in kernel modules, local control, agent
 design, authenticated callbacks, operator tooling, and tradecraft.
 It assumes no previous kernel-development or rootkit knowledge.
 You learn each mechanism by building and proving it in a disposable QEMU
-guest—never in the host kernel.
+guest, never in the host kernel.
 
 ```text
 25 lessons > 1 agent qualification > 4 milestones
@@ -223,9 +223,10 @@ Deployment remains explicit inside the guest.
 | `serve EXERCISE`    | Start its independent host server or operator        |
 | `validate EXERCISE` | Verify in a clean guest, then tear it down           |
 | `complete D00`      | Record active-guest deployment evidence              |
-| `status`            | Show course progress                                 |
 | `solution EXERCISE` | Show the reference solution                          |
 | `reset EXERCISE`    | Restore its declared learner files                   |
+| `compile-db`        | Regenerate `compile_commands.json`                   |
+| `ssh NAME [USER]`   | Open a shell in a named running guest                |
 
 Validation checks editable files before building.
 Remaining `TODO` markers are reported with their file and line, so an untouched
