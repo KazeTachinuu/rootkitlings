@@ -1,0 +1,41 @@
+schema_version = 2
+id = "kernel-module"
+title = "Build, load, and unload a kernel module"
+stage = "module-core"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["lifecycle", "detection"]
+difficulty = "standard"
+prerequisites = []
+teaches = ["host-guest-kernel-boundary", "module-lifecycle", "module-build", "module-inspection"]
+requires = []
+supplied = [
+  "pinned kernel headers and compiler toolchain",
+  "disposable QEMU guest with a kernel matching the build environment",
+  "module license and description",
+  "lifecycle validator",
+]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "core/main.c"]
+editable = ["Kbuild", "core/main.c"]
+build = "."
+
+[run]
+stage = ["kernel"]
+
+
+[verification]
+base_case = "normal-lifecycle"
+timeout_seconds = 120
+tools = []
+
+[[verification.cases]]
+id = "normal-lifecycle"
+label = "Normal load and unload"
+expect_build = "pass"
+check = "exercises/L00-kernel-module/.rklings/checks/module-lifecycle-check"
+
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "0"

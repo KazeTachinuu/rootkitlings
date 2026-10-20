@@ -1,0 +1,25 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Exact command gives its calling shell root credentials"
+
+command_path=/home/student/rklings.e
+rm -rf "$command_path"
+load rklings.ko
+
+result=$(su student -c \
+    'cd /home/student && mkdir rklings.e; printf "%s %s" "$?" "$(id -u)"')
+
+if [ "$result" = "0 0" ]; then
+    _ok "command succeeded and calling shell has uid 0"
+else
+    _fail "expected command status 0 and shell uid 0, got '$result'"
+fi
+
+assert_absent "$command_path"
+assert_log "rklings: escalated pid"
+
+unload rklings
+assert_absent /sys/module/rklings
+summary

@@ -1,5 +1,7 @@
 # M02: Remote Control
 
+## Mission
+
 L15 through L19 built the pieces: mTLS transport, mkdir bridge, command
 dispatch, shell execution, file transfer.
 M02 assembles them into one remote-control system.
@@ -32,6 +34,12 @@ exercises/M02-remote-control
 ├── go.mod
 └── go.sum
 ```
+
+The starter and reference use the same protocol, dependencies, PTY package,
+standard-library terminal loop, and browser dashboard. `tui.go` and `web.go` are
+complete course-supplied operator surfaces: read them to understand their calls,
+but do not recreate them.
+The editable integration seams are `cmd/agent/main.go` and `cmd/server/main.go`.
 
 Complete both ends of the protocol.
 The agent owns target-side execution; the server owns connections, target
@@ -149,34 +157,29 @@ M02: persistent guest PTY -> framed input/output -> browser terminal
 
 ## Implement it
 
-Two binaries:
+M02 is an integration milestone, not a rewrite of L15–L19.
+Complete exactly three seams:
 
-`cmd/agent/main.go`:
+1. In `cmd/server/main.go`, build the server-side TLS 1.3 listener that requires
+   and verifies the agent certificate.
+2. In `cmd/server/main.go`, serialize each operator exchange and decode the
+   existing one-line, dot-terminated, and size-then-bytes response forms.
+3. In `cmd/agent/main.go`, implement the PTY lifecycle: start, input, resize,
+   output, and close.
 
-- mTLS dial with embedded certs
-- Command dispatch loop (bufio.Scanner)
-- Handlers: PING, STATUS, SHELL, PTY, DOWNLOAD, UPLOAD, HIDE, PERSIST, ESCALATE
-- mkdir bridge for kernel commands
+Already supplied and declared as black boxes:
 
-`cmd/server/main.go`:
+- reconnecting agent loop and L17–L19 command handlers;
+- target-state and mkdir-control handlers;
+- terminal command parser;
+- built browser dashboard and WebSocket relay;
+- upload relay, snapshots, and event history.
 
-- mTLS listener (server cert + client CA verification)
-- Accept agent connection, store reference
-- Start TUI and webapp goroutines
+The milestone asks you to connect these components without corrupting their
+shared stream.
+It does not ask you to reproduce the product operator.
 
-`cmd/server/tui.go`:
-
-- standard-library input loop and command parsing
-- Each TUI command sends protocol line to agent, reads response
-- clear success and error output
-
-**cmd/server/web.go**:
-
-- serve the built React dashboard on `127.0.0.1:8080`
-- `/ws` for state, commands, snapshots, and downloads
-- `/shell` bridges xterm input and resize events to the guest PTY
-
-## Useful interfaces
+### Interfaces used here
 
 ```go
 // Agent: mTLS dial

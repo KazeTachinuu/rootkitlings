@@ -407,13 +407,22 @@ func RunCase(root string, ex *catalog.Exercise, cat *catalog.Catalog, caseID str
 		if _, err := v.SSH("chmod 0700 " + artifactPath); err != nil {
 			return fmt.Errorf("chmod agent: %w", err)
 		}
+		if ex.VMUser != "" && ex.VMUser != "root" {
+			if _, err := v.SSH("chown " + ex.VMUser + ":" + ex.VMUser + " " + artifactPath); err != nil {
+				return fmt.Errorf("assign artifact to %s: %w", ex.VMUser, err)
+			}
+		}
 		env := ""
 		if ex.Harness {
 			env = "env RKLINGS_SERVER_ADDR=" + labAgentAddr + " "
 		}
+		runtimeUser := ex.VMUser
+		if runtimeUser == "" {
+			runtimeUser = "root"
+		}
 		switch ex.Runtime {
 		case "once":
-			if out, err := v.SSH(env + artifactPath); err != nil {
+			if out, err := v.SSHAs(runtimeUser, env+artifactPath); err != nil {
 				return fmt.Errorf("run exercise artifact: %s: %w", out, err)
 			}
 		case "background":
@@ -424,7 +433,7 @@ func RunCase(root string, ex *catalog.Exercise, cat *catalog.Catalog, caseID str
 					"; if ! kill -0 $pid 2>/dev/null; then cat " + logPath +
 					"; exit 1; fi; rm -f " + logPath
 			}
-			if out, err := v.SSH(startAgent); err != nil {
+			if out, err := v.SSHAs(runtimeUser, startAgent); err != nil {
 				return fmt.Errorf("start lesson agent: %s: %w", out, err)
 			}
 		}
@@ -493,7 +502,11 @@ func RunCase(root string, ex *catalog.Exercise, cat *catalog.Catalog, caseID str
 }
 
 func shouldMarkProgress(ex *catalog.Exercise) bool {
-	return !ex.Reference && os.Getenv("RKLINGS_NO_PROGRESS") == ""
+	// Deployment work happens in the interactive guest started by `run`.
+	// This validator boots another guest and can prove only that the fixture is
+	// ready, not that the learner gained access or deployed the module.
+	return !ex.Reference && ex.Kind != "deployment" &&
+		os.Getenv("RKLINGS_NO_PROGRESS") == ""
 }
 
 func isCaseArtifactDir(dataDir, artifact string) bool {

@@ -1,5 +1,7 @@
 # L13: Port Filter
 
+## Mission
+
 Hide one listening TCP port from `/proc/net/tcp` without closing its socket.
 After hiding port 4444, connecting to it must still work even though the procfs
 row is gone.
@@ -8,6 +10,13 @@ L11 and L12 hide data by copying the buffer, removing entries, and writing it
 back.
 Port hiding uses a cleaner technique: rewind the seq_file write cursor so the
 line is never emitted.
+
+## What you will observe
+
+A listener on the selected port continues accepting connections while its row
+disappears from both IPv4 and IPv6 procfs tables.
+Removing the target makes the same socket visible again; unrelated ports never
+disappear.
 
 ## Workspace
 
@@ -80,7 +89,7 @@ unsigned short sport = ntohs(inet->inet_sport);
 `inet_sport` is in network byte order. `ntohs` converts to host order.
 Compare the port number (as a string) against the target list.
 
-## Failure to avoid
+## Protect the header row
 
 The first call to `tcp4_seq_show` passes `SEQ_START_TOKEN` (`(void *)1`) as the
 sock pointer.
@@ -110,7 +119,7 @@ Complete `main.c`:
 - mkdir dispatcher for `h.p`/`u.p` commands
 - One target list: `port_targets`
 
-## Useful interfaces
+### Interfaces used here
 
 ```c
 #include <net/inet_sock.h>     // inet_sk, inet_sport

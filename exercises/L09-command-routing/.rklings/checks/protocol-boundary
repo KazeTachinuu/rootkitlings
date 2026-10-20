@@ -1,0 +1,48 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Exact command boundary"
+
+load rklings.ko
+assert_loaded rklings
+
+if mkdir ordinary; then
+    _ok "ordinary mkdir still creates a directory"
+else
+    _fail "ordinary mkdir failed"
+fi
+assert_exists ordinary
+rmdir ordinary
+
+for name in rklings. rklings.unknown rklings.ping.extra \
+    rklings.status.extra rklings.e.invalid rklings.e.0; do
+    if mkdir "$name" >/dev/null 2>&1; then
+        _fail "$name unexpectedly succeeded"
+    else
+        _ok "$name was rejected"
+    fi
+    assert_absent "$name"
+done
+
+su student -s /bin/sh -c 'exec sleep 30' &
+sleep 1
+target_pid=$(ps -eo pid,user,comm | awk '$2 == "student" && $3 == "sleep" {print $1; exit}')
+if [ -z "$target_pid" ]; then
+    _fail "could not start the student target"
+    unload rklings
+    summary
+fi
+
+mkdir "rklings.e.$target_pid"
+uids=$(awk '/^Uid:/ {print $2 " " $3 " " $4 " " $5}' "/proc/$target_pid/status")
+if [ "$uids" = "0 0 0 0" ]; then
+    _ok "e.PID dispatched to the supplied escalation function"
+else
+    _fail "explicit target user IDs were not replaced: $uids"
+fi
+assert_absent "rklings.e.$target_pid"
+
+kill "$target_pid" 2>/dev/null || true
+unload rklings
+summary

@@ -24,6 +24,20 @@ func TestValidSSHUser(t *testing.T) {
 	}
 }
 
+func TestReadableConceptPreservesTechnicalNames(t *testing.T) {
+	for input, want := range map[string]string{
+		"server-mtls":     "Server mTLS",
+		"pty-lifecycle":   "PTY Lifecycle",
+		"tcp-streams":     "TCP Streams",
+		"io-limitreader":  "I/O LimitReader",
+		"memfd-execution": "memfd Execution",
+	} {
+		if got := readableConcept(input); got != want {
+			t.Errorf("readableConcept(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestResetWorkspaceRestoresOnlyLearnerFiles(t *testing.T) {
 	root := t.TempDir()
 	exerciseDir := filepath.Join(root, "exercises", "L00")
@@ -59,6 +73,22 @@ func TestResetWorkspaceRestoresOnlyLearnerFiles(t *testing.T) {
 	}
 	assertContent(t, learner, "learner\n")
 	assertContent(t, internal, "keep\n")
+}
+
+func TestValidD00ReceiptRequiresEveryOperationalCheckpoint(t *testing.T) {
+	valid := "root=0\nmodule=operational\nconcealed=yes\n"
+	if !validD00Receipt(valid) {
+		t.Fatal("complete D00 receipt was rejected")
+	}
+	for _, invalid := range []string{
+		"root=1000\nmodule=operational\nconcealed=yes\n",
+		"root=0\nconcealed=yes\n",
+		"root=0\nmodule=operational\nconcealed=no\n",
+	} {
+		if validD00Receipt(invalid) {
+			t.Fatalf("invalid D00 receipt accepted: %q", invalid)
+		}
+	}
 }
 
 func TestSolutionFilesUsesReferenceLayout(t *testing.T) {

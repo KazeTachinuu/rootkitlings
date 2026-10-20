@@ -379,6 +379,22 @@ func BuildCourseAgent(ex *catalog.Exercise, cat *catalog.Catalog, kernelArtifact
 }
 
 func buildAgent(ex *catalog.Exercise, assets map[string]string) (string, error) {
+	scriptPath := filepath.Join(ex.Source, "agent.sh")
+	if _, err := os.Stat(scriptPath); err == nil {
+		outDir, _, err := outputDir(ex.ID, false)
+		if err != nil {
+			return "", err
+		}
+		outPath := filepath.Join(outDir, "agent")
+		if err := publishArtifact(scriptPath, outPath); err != nil {
+			return "", fmt.Errorf("publish script agent: %w", err)
+		}
+		if err := os.Chmod(outPath, 0700); err != nil {
+			return "", fmt.Errorf("make script agent executable: %w", err)
+		}
+		tui.Pass("built %s", outPath)
+		return outPath, nil
+	}
 	if _, err := os.Stat(filepath.Join(ex.Source, "go.mod")); err != nil {
 		return "", nil
 	}

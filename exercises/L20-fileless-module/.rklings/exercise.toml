@@ -6,7 +6,7 @@ kind = "lesson"
 vm_user = "root"
 tradecraft = ["fileless", "anti-forensics"]
 difficulty = "standard"
-prerequisites = ["file-transfer"]
+prerequisites = ["remote-control"]
 teaches = ["memfd-create", "finit-module", "fileless-loading"]
 requires = []
 

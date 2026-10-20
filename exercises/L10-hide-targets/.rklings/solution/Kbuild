@@ -1,0 +1,2 @@
+obj-m += rklings.o
+rklings-y := main.o rklings_target.o

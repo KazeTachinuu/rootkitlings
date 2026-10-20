@@ -1,13 +1,23 @@
 # L17: Command Dispatch
 
+## Mission
+
 Turn the one-purpose bridge into a request/response agent.
 Each received line selects one handler, and every handler returns an explicit
 protocol response.
 
-L16 proved the agent can drive the kernel module through `mkdir`, but it only
-ran a fixed sequence.
-This exercise reads commands from the operator and routes each command to a
-handler.
+L16 proved the agent can read repeated commands and drive the kernel module, but
+its conditionals directly couple protocol strings to actions.
+This exercise introduces a reusable handler table and a uniform response
+contract.
+
+## What you will observe
+
+One persistent mTLS connection carries several independent requests.
+Each line selects exactly one handler, produces an explicit response, and leaves
+the stream aligned for the next request.
+Unknown or malformed commands fail without silently invoking a different
+operation.
 
 ## Workspace
 
@@ -92,7 +102,7 @@ Complete `main.go`:
 - Handler map with dispatch logic
 - Handlers for PING, STATUS, HIDE, PERSIST, ESCALATE, QUIT
 
-## Useful interfaces
+### Interfaces used here
 
 ```go
 import "bufio"

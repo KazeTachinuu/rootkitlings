@@ -6,7 +6,7 @@ kind = "lesson"
 vm_user = "root"
 tradecraft = ["communication", "encryption"]
 difficulty = "standard"
-prerequisites = ["usermode-helper"]
+prerequisites = ["agent-qualification"]
 teaches = ["mtls-handshake", "go-embed", "tls-config"]
 requires = []
 

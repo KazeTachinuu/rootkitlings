@@ -4,6 +4,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,7 +35,8 @@ static int load_expected(const char *path, unsigned char **data, size_t *length)
 		if (count < 0) {
 			if (errno == EINTR)
 				continue;
-			fprintf(stderr, "proc_read_test: read expected file %s: %s\n",
+			fprintf(stderr,
+				"proc_read_test: read expected file %s: %s\n",
 				path, strerror(errno));
 			close(fd);
 			free(contents);
@@ -43,9 +45,10 @@ static int load_expected(const char *path, unsigned char **data, size_t *length)
 		if (count == 0)
 			break;
 		if ((size_t)count > MAX_EXPECTED_SIZE - used) {
-			fprintf(stderr,
-				"proc_read_test: expected file exceeds %u bytes\n",
-				MAX_EXPECTED_SIZE);
+			fprintf(
+			    stderr,
+			    "proc_read_test: expected file exceeds %u bytes\n",
+			    MAX_EXPECTED_SIZE);
 			close(fd);
 			free(contents);
 			return -1;
@@ -59,7 +62,8 @@ static int load_expected(const char *path, unsigned char **data, size_t *length)
 			grown = realloc(contents, next);
 			if (grown == NULL) {
 				fprintf(stderr,
-					"proc_read_test: allocate expected content: %s\n",
+					"proc_read_test: allocate expected "
+					"content: %s\n",
 					strerror(errno));
 				close(fd);
 				free(contents);
@@ -86,11 +90,12 @@ static int load_expected(const char *path, unsigned char **data, size_t *length)
 static int verify_reads(int fd, const unsigned char *expected,
 			size_t expected_length, const char *phase)
 {
-	static const size_t first_pattern[] = { 1, 3, 2, 7, 4, 11 };
-	static const size_t second_pattern[] = { 5, 2, 9, 1, 13, 3 };
+	static const size_t first_pattern[] = {1, 3, 2, 7, 4, 11};
+	static const size_t second_pattern[] = {5, 2, 9, 1, 13, 3};
 	unsigned char buffer[17];
 	const size_t *pattern = first_pattern;
-	size_t pattern_length = sizeof(first_pattern) / sizeof(first_pattern[0]);
+	size_t pattern_length =
+	    sizeof(first_pattern) / sizeof(first_pattern[0]);
 	size_t offset = 0;
 	size_t step = 0;
 	int pass;
@@ -107,31 +112,38 @@ static int verify_reads(int fd, const unsigned char *expected,
 				count = read(fd, buffer, requested);
 			} while (count < 0 && errno == EINTR);
 			if (count < 0) {
-				fprintf(stderr, "proc_read_test: %s read at byte %zu: %s\n",
-					phase, offset, strerror(errno));
+				fprintf(
+				    stderr,
+				    "proc_read_test: %s read at byte %zu: %s\n",
+				    phase, offset, strerror(errno));
 				return -1;
 			}
 			if (count == 0) {
 				fprintf(stderr,
-					"proc_read_test: %s reached EOF at byte %zu, expected %zu bytes\n",
+					"proc_read_test: %s reached EOF at "
+					"byte %zu, expected %zu bytes\n",
 					phase, offset, expected_length);
 				return -1;
 			}
 			if ((size_t)count > requested) {
 				fprintf(stderr,
-					"proc_read_test: %s read returned %zd bytes for a %zu-byte request\n",
+					"proc_read_test: %s read returned %zd "
+					"bytes for a %zu-byte request\n",
 					phase, count, requested);
 				return -1;
 			}
 			if ((size_t)count > remaining) {
 				fprintf(stderr,
-					"proc_read_test: %s returned content beyond the expected %zu bytes\n",
+					"proc_read_test: %s returned content "
+					"beyond the expected %zu bytes\n",
 					phase, expected_length);
 				return -1;
 			}
-			if (memcmp(buffer, expected + offset, (size_t)count) != 0) {
+			if (memcmp(buffer, expected + offset, (size_t)count) !=
+			    0) {
 				fprintf(stderr,
-					"proc_read_test: %s content differs at or after byte %zu\n",
+					"proc_read_test: %s content differs at "
+					"or after byte %zu\n",
 					phase, offset);
 				return -1;
 			}
@@ -143,16 +155,19 @@ static int verify_reads(int fd, const unsigned char *expected,
 			ssize_t count;
 
 			do {
-				count = read(fd, buffer, step == 0 ? sizeof(buffer) : 1);
+				count = read(fd, buffer,
+					     step == 0 ? sizeof(buffer) : 1);
 			} while (count < 0 && errno == EINTR);
 			if (count < 0) {
-				fprintf(stderr, "proc_read_test: %s EOF read: %s\n",
+				fprintf(stderr,
+					"proc_read_test: %s EOF read: %s\n",
 					phase, strerror(errno));
 				return -1;
 			}
 			if (count != 0) {
 				fprintf(stderr,
-					"proc_read_test: %s returned %zd extra byte%s after EOF\n",
+					"proc_read_test: %s returned %zd extra "
+					"byte%s after EOF\n",
 					phase, count, count == 1 ? "" : "s");
 				return -1;
 			}
@@ -160,13 +175,14 @@ static int verify_reads(int fd, const unsigned char *expected,
 
 		if (pass == 0) {
 			if (lseek(fd, 0, SEEK_SET) != 0) {
-				fprintf(stderr, "proc_read_test: %s rewind: %s\n",
+				fprintf(stderr,
+					"proc_read_test: %s rewind: %s\n",
 					phase, strerror(errno));
 				return -1;
 			}
 			pattern = second_pattern;
-			pattern_length = sizeof(second_pattern) /
-					 sizeof(second_pattern[0]);
+			pattern_length =
+			    sizeof(second_pattern) / sizeof(second_pattern[0]);
 			offset = 0;
 			step = 0;
 		}
@@ -183,8 +199,8 @@ static int verify_path(const char *path, const unsigned char *expected,
 
 	fd = open(path, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
-		fprintf(stderr, "proc_read_test: open %s during %s: %s\n",
-			path, phase, strerror(errno));
+		fprintf(stderr, "proc_read_test: open %s during %s: %s\n", path,
+			phase, strerror(errno));
 		return -1;
 	}
 	result = verify_reads(fd, expected, expected_length, phase);
@@ -210,7 +226,8 @@ static int verify_write_rejected(const char *path)
 		count = write(fd, &probe, sizeof(probe));
 	} while (count < 0 && errno == EINTR);
 	if (close(fd) < 0) {
-		fprintf(stderr, "proc_read_test: close write descriptor for %s: %s\n",
+		fprintf(stderr,
+			"proc_read_test: close write descriptor for %s: %s\n",
 			path, strerror(errno));
 		return -1;
 	}
@@ -218,6 +235,38 @@ static int verify_write_rejected(const char *path)
 		fprintf(stderr,
 			"proc_read_test: %s accepted a write of %zd byte%s\n",
 			path, count, count == 1 ? "" : "s");
+		return -1;
+	}
+	return 0;
+}
+
+static int verify_faulting_write(const char *path)
+{
+	ssize_t count;
+	int fd;
+	int write_error;
+
+	fd = open(path, O_WRONLY | O_CLOEXEC);
+	if (fd < 0) {
+		fprintf(stderr,
+			"proc_read_test: open %s for faulting write: %s\n",
+			path, strerror(errno));
+		return -1;
+	}
+	errno = 0;
+	count = syscall(SYS_write, fd, (const void *)(uintptr_t)1, 1);
+	write_error = errno;
+	if (close(fd) < 0) {
+		fprintf(stderr,
+			"proc_read_test: close faulting write descriptor: %s\n",
+			strerror(errno));
+		return -1;
+	}
+	if (count != -1 || write_error != EFAULT) {
+		fprintf(stderr,
+			"proc_read_test: invalid userspace address returned "
+			"%zd (%s), expected EFAULT\n",
+			count, strerror(write_error));
 		return -1;
 	}
 	return 0;
@@ -239,18 +288,21 @@ static int consume_prefix(int fd, const unsigned char *expected,
 			count = read(fd, buffer, requested);
 		} while (count < 0 && errno == EINTR);
 		if (count < 0) {
-			fprintf(stderr, "proc_read_test: held-descriptor prefix read: %s\n",
-				strerror(errno));
+			fprintf(
+			    stderr,
+			    "proc_read_test: held-descriptor prefix read: %s\n",
+			    strerror(errno));
 			return -1;
 		}
 		if (count == 0) {
-			fprintf(stderr,
-				"proc_read_test: held descriptor reached EOF before its prefix\n");
+			fprintf(stderr, "proc_read_test: held descriptor "
+					"reached EOF before its prefix\n");
 			return -1;
 		}
 		if (memcmp(buffer, expected + offset, (size_t)count) != 0) {
 			fprintf(stderr,
-				"proc_read_test: held-descriptor prefix differs at or after byte %zu\n",
+				"proc_read_test: held-descriptor prefix "
+				"differs at or after byte %zu\n",
 				offset);
 			return -1;
 		}
@@ -270,7 +322,8 @@ static int verify_unload(const char *path, const char *module,
 
 	fd = open(path, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
-		fprintf(stderr, "proc_read_test: open held descriptor for %s: %s\n",
+		fprintf(stderr,
+			"proc_read_test: open held descriptor for %s: %s\n",
 			path, strerror(errno));
 		return -1;
 	}
@@ -288,7 +341,8 @@ static int verify_unload(const char *path, const char *module,
 	} while (count < 0 && errno == EINTR);
 	if (count > 0) {
 		fprintf(stderr,
-			"proc_read_test: stale descriptor returned %zd byte%s after unloading %s\n",
+			"proc_read_test: stale descriptor returned %zd byte%s "
+			"after unloading %s\n",
 			count, count == 1 ? "" : "s", module);
 		goto out;
 	}
@@ -296,7 +350,8 @@ static int verify_unload(const char *path, const char *module,
 
 out:
 	if (close(fd) < 0) {
-		fprintf(stderr, "proc_read_test: close held descriptor for %s: %s\n",
+		fprintf(stderr,
+			"proc_read_test: close held descriptor for %s: %s\n",
 			path, strerror(errno));
 		return -1;
 	}
@@ -309,26 +364,39 @@ int main(int argc, char **argv)
 	size_t expected_length;
 	const char *module = NULL;
 	const char *path;
+	int test_faulting_write = 0;
 	int result = 1;
 
-	if (argc != 3 && argc != 4) {
-		fprintf(stderr, "usage: %s PATH EXPECTED_FILE [MODULE]\n", argv[0]);
+	if (argc < 3 || argc > 5) {
+		fprintf(stderr,
+			"usage: %s PATH EXPECTED_FILE [MODULE [fault-write]]\n",
+			argv[0]);
 		return 2;
 	}
 	path = argv[1];
-	if (argc == 4)
+	if (argc >= 4)
 		module = argv[3];
+	if (argc == 5) {
+		if (strcmp(argv[4], "fault-write") != 0) {
+			fprintf(stderr, "proc_read_test: unknown mode %s\n",
+				argv[4]);
+			return 2;
+		}
+		test_faulting_write = 1;
+	}
 
 	if (load_expected(argv[2], &expected, &expected_length) < 0)
 		return 2;
 	if (module != NULL && expected_length < 2) {
-		fprintf(stderr,
-			"proc_read_test: unload verification needs at least two expected bytes\n");
+		fprintf(stderr, "proc_read_test: unload verification needs at "
+				"least two expected bytes\n");
 		free(expected);
 		return 2;
 	}
 
 	if (verify_path(path, expected, expected_length, "initial read") < 0)
+		goto out;
+	if (test_faulting_write && verify_faulting_write(path) < 0)
 		goto out;
 	if (verify_write_rejected(path) < 0)
 		goto out;

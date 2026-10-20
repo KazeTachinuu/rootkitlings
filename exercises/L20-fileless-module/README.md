@@ -1,5 +1,7 @@
 # L20: Fileless Module Loading
 
+## Mission
+
 L19 transferred files over TLS, but the `.ko` landed on disk.
 This exercise embeds the module in the agent, places its bytes in a
 memory-backed file, and asks the kernel to load it from that descriptor.

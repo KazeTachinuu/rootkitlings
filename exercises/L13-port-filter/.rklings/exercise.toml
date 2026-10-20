@@ -6,7 +6,7 @@ kind = "lesson"
 vm_user = "student"
 tradecraft = ["concealment"]
 difficulty = "standard"
-prerequisites = ["command-dispatcher", "target-list"]
+prerequisites = ["command-routing", "hide-targets"]
 teaches = ["seq-file-interception", "tcp-port-hiding"]
 requires = []
 

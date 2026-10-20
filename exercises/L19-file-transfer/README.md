@@ -1,5 +1,7 @@
 # L19: File Transfer
 
+## Mission
+
 Transfer arbitrary bytes without base64 or command-output parsing.
 You will download a guest file, upload a new one, then read the uploaded bytes
 back through the shell handler.
@@ -10,6 +12,13 @@ You need to move binary files: exfiltrate a database, upload a tool, grab SSH
 keys.
 This exercise adds DOWNLOAD and UPLOAD commands using a size-then-bytes
 protocol.
+
+## What you will observe
+
+A download announces its exact byte count before sending raw file data.
+An upload consumes exactly its declared count from the existing buffered stream,
+writes those bytes to disk, and leaves the following command intact.
+Text commands and binary transfers continue to share one mTLS connection.
 
 ## Workspace
 
@@ -99,7 +108,7 @@ Complete `main.go`:
 - `handleUpload`: parse path and size from arg, os.Create, io.Copy with
   LimitReader
 
-## Useful interfaces
+### Interfaces used here
 
 ```go
 import "io"
@@ -116,7 +125,7 @@ f, err := os.Create(path)
 io.Copy(f, r)
 ```
 
-## Failure to avoid
+## Preserve buffered upload bytes
 
 UPLOAD size is part of the command line, not a separate line. `UPLOAD /tmp/x 13`
 means: path is `/tmp/x`, size is `13`.

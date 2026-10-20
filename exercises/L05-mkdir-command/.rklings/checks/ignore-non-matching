@@ -1,0 +1,27 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Non-matching mkdir passes through"
+
+load rklings.ko
+
+for path in ordinary rklings ordinary-rklings.hello; do
+    if mkdir "$path"; then
+        _ok "ordinary mkdir succeeded: $path"
+    else
+        _fail "ordinary mkdir failed: $path"
+    fi
+    assert_exists "$path"
+done
+
+if dmesg | grep -Fq "rklings: intercepted mkdir:"; then
+    _fail "non-matching names produced an intercept log"
+else
+    _ok "non-matching names produced no intercept log"
+fi
+
+rmdir ordinary rklings ordinary-rklings.hello
+unload rklings
+assert_absent /sys/module/rklings
+summary

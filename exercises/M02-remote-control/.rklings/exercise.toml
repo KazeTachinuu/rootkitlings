@@ -7,7 +7,7 @@ vm_user = "root"
 tradecraft = ["control", "network", "crypto"]
 difficulty = "advanced"
 prerequisites = ["file-transfer"]
-teaches = ["c2-architecture", "operator-tui", "full-remote-dispatch"]
+teaches = ["server-mtls", "serialized-exchange", "pty-lifecycle", "operator-relay"]
 requires = []
 
 [workspace]
@@ -23,8 +23,6 @@ files = [
 editable = [
     "cmd/agent/main.go",
     "cmd/server/main.go",
-    "cmd/server/tui.go",
-    "cmd/server/web.go",
 ]
 build = "."
 

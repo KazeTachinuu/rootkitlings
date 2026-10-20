@@ -1,0 +1,57 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Module lifecycle"
+dmesg -C
+
+assert_log_contains()
+{
+	message=$1
+	if dmesg | grep -Fq "$message"; then
+		_ok "kernel log contains: $message"
+	else
+		_fail "kernel log is missing: $message"
+	fi
+}
+
+assert_inventory_present()
+{
+	if grep -q '^rklings ' /proc/modules; then
+		_ok "rklings is present in /proc/modules"
+	else
+		_fail "rklings is absent from /proc/modules"
+	fi
+}
+
+assert_inventory_absent()
+{
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings remains in /proc/modules"
+	else
+		_ok "rklings is absent from /proc/modules"
+	fi
+}
+
+assert_absent /sys/module/rklings
+assert_inventory_absent
+
+load rklings.ko
+assert_loaded rklings
+assert_inventory_present
+assert_log_contains "rklings: loaded"
+
+unload rklings
+assert_absent /sys/module/rklings
+assert_inventory_absent
+assert_log_contains "rklings: unloaded"
+
+load rklings.ko
+assert_loaded rklings
+assert_inventory_present
+
+unload rklings
+assert_absent /sys/module/rklings
+assert_inventory_absent
+
+summary

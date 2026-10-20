@@ -1,6 +1,6 @@
 #!/bin/sh
-# Colorized output helpers for the BusyBox guest.
-# Sourced by vm/checks/lib.sh and vm/init.
+# Colorized output helpers for validation guests.
+# Sourced by vm/checks/lib.sh.
 
 if [ -n "${NO_COLOR:-}" ]; then
     _green=''; _red=''; _cyan=''; _yellow=''; _blue=''; _dim=''; _bold=''; _reset=''

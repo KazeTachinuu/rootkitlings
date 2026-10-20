@@ -1,5 +1,7 @@
 # L22: Decoy Routing
 
+## Mission
+
 L21 removed the agent's directory entry, but the server still answers every
 connection the same way.
 This exercise uses a client certificate to separate the operator protocol from

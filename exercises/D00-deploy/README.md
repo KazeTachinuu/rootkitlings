@@ -1,9 +1,13 @@
 # D00: Deploy
 
+## Mission
+
 D00 begins outside the target.
 The only initial entry point is a vulnerable HTTP service.
 Your job is to turn command injection into a root shell, transfer the module you
 built in M01, load it, and verify its control interface.
+
+## What you will observe
 
 ```text
 HOST                                      TARGET VM
@@ -20,14 +24,18 @@ HOST                                      TARGET VM
            +- Copy Fail > root > transfer > load -------+
 ```
 
-## Starting position
+## Workspace
 
 The guest runs Ubuntu 24.04 with kernel 6.8.0-101-generic. Its status service
 passes the `host` query parameter to `getent hosts` through a shell.
 The service runs as `student` without sudo.
 
 QEMU maps the guest service to `http://127.0.0.1:8088` on the host.
-SSH access is disabled, and the module is not staged in the guest.
+The supported learner SSH entry is sealed, and the module is not staged in the
+guest.
+The runner retains a private root management channel so `./rklings complete D00`
+can inspect the final receipt; `rklings ssh` does not expose that channel, and
+it is not part of the exercise path.
 The runner builds these files on the host and prints their directory:
 
 ```text
@@ -98,13 +106,14 @@ curl -fO http://10.0.2.2:9000/rklings.ko
 insmod /tmp/rklings.ko
 mkdir /tmp/rklings.h.m
 d00-check
+./rklings complete D00
 ```
 
 `10.0.2.2` is the QEMU user-network address of the host. `d00-check` exercises
 the loaded module and verifies that it is concealed while its control plane
 still responds.
 
-## Run and validate
+## Test it
 
 ```sh
 ./rklings run D00
@@ -123,13 +132,25 @@ In another terminal:
 
 ```sh
 curl 'http://127.0.0.1:8088/?host=localhost'
+```
+
+The response proves that the deliberately vulnerable service is reachable.
+Use that service—not learner SSH—to complete the three operational steps above.
+
+## Validate
+
+```sh
 ./rklings validate D00
 ```
 
-`rklings validate D00` checks that the isolated target and vulnerable service
-are correctly provisioned.
-It does not perform the intrusion.
-After deployment, run `d00-check` inside the root shell to validate the module.
+`rklings validate D00` checks only that the isolated target and vulnerable
+service are correctly provisioned.
+It deliberately does not mark D00 complete: provisioning is not evidence that
+you performed the intrusion.
+After deployment, run `d00-check` inside the root shell, then run
+`./rklings complete D00` on the host while the lab is still active.
+Completion is recorded only when the runner finds the root-owned success receipt
+in that same guest.
 
 ## Success criteria
 

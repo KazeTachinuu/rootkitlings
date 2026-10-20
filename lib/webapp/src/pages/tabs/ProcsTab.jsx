@@ -22,7 +22,7 @@ export function ProcsTab({ target: t, cmd, query, execCmd, busy, refreshToken })
           const m = line.match(/^(\d+)\s+(\d+)\s+\((.+?)\)\s+(\S+)\s+(\d+)/)
           if (!m) return null
           return { uid: m[1], pid: m[2], comm: m[3], stat: m[4], ppid: m[5] }
-        }).filter(Boolean)
+        }).filter(Boolean).sort((a, b) => Number(a.pid) - Number(b.pid))
         snap.set(parsed)
       } else {
         snap.fail(r.output || 'failed')
@@ -55,6 +55,7 @@ export function ProcsTab({ target: t, cmd, query, execCmd, busy, refreshToken })
   const scannedPids = new Set(procs.map(p => p.pid))
   const extraHidden = visibility === 'visible' ? [] : hiddenPids.filter(p =>
     !scannedPids.has(p) && (!filter || p.includes(filter)))
+    .sort((a, b) => Number(a) - Number(b))
 
   if (!snap.time && !snap.loading)
     return <EmptySnapshotCta icon={Activity} title="Processes"

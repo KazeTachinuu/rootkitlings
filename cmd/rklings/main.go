@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -43,6 +44,7 @@ func main() {
 
 	root.AddCommand(
 		listCmd(),
+		infoCmd(),
 		setupCmd(),
 		compileDBCmd(),
 		buildCmd(),
@@ -50,13 +52,112 @@ func main() {
 		sshCmd(),
 		serveCmd(),
 		validateCmd(),
-		statusCmd(),
+		completeCmd(),
 		solutionCmd(),
 		resetCmd(),
 	)
 
 	if err := root.ExecuteContext(ctx); err != nil {
 		os.Exit(1)
+	}
+}
+
+func infoCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "info <exercise>",
+		Short: "Show the executable learning contract for an exercise",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			cat, _ := loadCatalog()
+			ex := findExercise(cat, args[0])
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "%s: %s\n", ex.Code, ex.Title)
+			var prerequisites []string
+			for _, prerequisite := range ex.Prerequisites {
+				prior := cat.Find(prerequisite)
+				if prior == nil {
+					prerequisites = append(prerequisites, prerequisite)
+				} else {
+					prerequisites = append(prerequisites,
+						fmt.Sprintf("%s — %s", prior.Code, prior.Title))
+				}
+			}
+			printContractList(out, "Prerequisite", prerequisites)
+			mechanisms := make([]string, 0, len(ex.Teaches))
+			for _, concept := range ex.Teaches {
+				label := cat.ConceptLabels[concept]
+				if label == "" {
+					label = readableConcept(concept)
+				}
+				mechanisms = append(mechanisms, label)
+			}
+			printContractList(out, "New mechanisms", mechanisms)
+			editable := make(map[string]bool, len(ex.EditableFiles))
+			for _, file := range ex.EditableFiles {
+				editable[filepath.Clean(file)] = true
+			}
+			supplied := append([]string(nil), ex.Supplied...)
+			for _, file := range ex.WorkspaceFiles {
+				if !editable[filepath.Clean(file)] {
+					supplied = append(supplied, file)
+				}
+			}
+			printContractList(out, "Edit", ex.EditableFiles)
+			printContractList(out, "Supplied", supplied)
+			var proofs []string
+			for _, check := range ex.Checks {
+				proofs = append(proofs, check.Label)
+			}
+			printContractList(out, "Proof", proofs)
+			if len(ex.CompletionProofs) != 0 {
+				printContractList(out, "Completion proof", ex.CompletionProofs)
+			}
+		},
+	}
+}
+
+func readableConcept(concept string) string {
+	special := map[string]string{
+		"bufio-scanner":       "bufio.Scanner",
+		"call-usermodehelper": "call_usermodehelper",
+		"exec-command":        "exec.Command",
+		"finit-module":        "finit_module",
+		"go-embed":            "Go embed",
+		"io-limitreader":      "I/O LimitReader",
+		"memfd-create":        "memfd_create",
+		"os-mkdir-dispatch":   "OS mkdir Dispatch",
+		"prctl-set-name":      "prctl Set Name",
+		"proc-self-fd":        "/proc/self/fd",
+		"tls-config":          "tls.Config",
+	}
+	if label := special[concept]; label != "" {
+		return label
+	}
+	words := strings.Split(concept, "-")
+	acronyms := map[string]string{
+		"bufio": "bufio", "exec": "exec", "finit": "finit", "go": "Go",
+		"io": "I/O", "memfd": "memfd", "mtls": "mTLS", "os": "OS",
+		"pid": "PID", "prctl": "prctl", "proc": "procfs", "pty": "PTY",
+		"tcp": "TCP", "tls": "TLS", "utmp": "utmp/wtmp",
+	}
+	for i, word := range words {
+		if replacement := acronyms[word]; replacement != "" {
+			words[i] = replacement
+			continue
+		}
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	return strings.Join(words, " ")
+}
+
+func printContractList(out io.Writer, label string, values []string) {
+	if len(values) == 0 {
+		fmt.Fprintf(out, "%s: none\n", label)
+		return
+	}
+	fmt.Fprintf(out, "%s:\n", label)
+	for _, value := range values {
+		fmt.Fprintf(out, "  - %s\n", value)
 	}
 }
 
@@ -141,17 +242,30 @@ func listCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, _ []string) {
 			cat, _ := loadCatalog()
-			out := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
+			output := cmd.OutOrStdout()
+			out := tabwriter.NewWriter(output, 0, 4, 2, ' ', 0)
 			progress := state.Load()
+			completed := 0
+			next := ""
 			fmt.Fprintln(out, "CODE\tSTATUS\tTITLE")
 			for _, exercise := range cat.Exercises {
-				status := "-"
+				status := "locked"
 				if progress.IsDone(exercise.ID) {
 					status = "done"
+					completed++
+				} else if next == "" {
+					status = "next"
+					next = exercise.Code
 				}
 				fmt.Fprintf(out, "%s\t%s\t%s\n", exercise.Code, status, exercise.Title)
 			}
 			_ = out.Flush()
+			fmt.Fprintf(output, "\nProgress: %d/%d\n", completed, len(cat.Exercises))
+			if next == "" {
+				fmt.Fprintln(output, "Course complete.")
+			} else {
+				fmt.Fprintf(output, "Next: ./rklings info %s\n", next)
+			}
 		},
 	}
 }
@@ -221,6 +335,8 @@ func buildCmd() *cobra.Command {
 					tui.Fatal("no reference solution for %s", ex.ID)
 				}
 				ex = ex.WithReference()
+			} else {
+				requirePrerequisites(ex)
 			}
 			if err := validate.CheckWorkspace(root, ex); err != nil {
 				tui.Fatal("%v", err)
@@ -253,6 +369,20 @@ func buildCmd() *cobra.Command {
 	return c
 }
 
+func requirePrerequisites(ex *catalog.Exercise) {
+	progress := state.Load()
+	var missing []string
+	for _, prerequisite := range ex.Prerequisites {
+		if !progress.IsDone(prerequisite) {
+			missing = append(missing, prerequisite)
+		}
+	}
+	if len(missing) != 0 {
+		tui.Fatal("complete prerequisite(s) before %s: %s",
+			ex.Code, strings.Join(missing, ", "))
+	}
+}
+
 func runCmd() *cobra.Command {
 	var useRef bool
 	var instanceName string
@@ -272,6 +402,8 @@ func runCmd() *cobra.Command {
 					tui.Fatal("no reference solution for %s", ex.ID)
 				}
 				ex = ex.WithReference()
+			} else {
+				requirePrerequisites(ex)
 			}
 			if err := validate.CheckWorkspace(root, ex); err != nil {
 				tui.Fatal("%v", err)
@@ -449,6 +581,11 @@ func runCmd() *cobra.Command {
 				if _, err := v.SSH("chmod 0700 " + artifactPath); err != nil {
 					failRun("prepare agent: %v", err)
 				}
+				if vmUser != "root" {
+					if _, err := v.SSH("chown " + vmUser + ":" + vmUser + " " + artifactPath); err != nil {
+						failRun("assign agent to %s: %v", vmUser, err)
+					}
+				}
 				if ex.ServeKind == "standalone" {
 					tui.Pass("server staged at %s", artifactPath)
 				} else {
@@ -461,7 +598,7 @@ func runCmd() *cobra.Command {
 				runtimeMode := ex.RunAgent
 				switch runtimeMode {
 				case "once":
-					if out, err := v.SSH(env + artifactPath); err != nil {
+					if out, err := v.SSHAs(vmUser, env+artifactPath); err != nil {
 						failRun("run agent: %v: %s", err, out)
 					}
 					tui.Pass("exercise artifact completed")
@@ -474,7 +611,7 @@ func runCmd() *cobra.Command {
 					if ex.RunRemove {
 						startAgent += " pid=$!; sleep 1; rm -f " + artifactPath + "; kill -0 $pid"
 					}
-					if out, err := v.SSH(startAgent); err != nil {
+					if out, err := v.SSHAs(vmUser, startAgent); err != nil {
 						failRun("start lesson agent: %v: %s", err, out)
 					}
 					if ex.RunRemove {
@@ -502,10 +639,10 @@ func runCmd() *cobra.Command {
 			}
 
 			if ex.Kind == "deployment" {
-				if out, err := v.SSHAs("root", "rm -f /root/.ssh/authorized_keys /home/student/.ssh/authorized_keys"); err != nil {
+				if out, err := v.SSHAs("root", "rm -f /home/student/.ssh/authorized_keys"); err != nil {
 					failRun("seal deployment target: %v: %s", err, out)
 				}
-				tui.Pass("target sealed; initial access is HTTP only")
+				tui.Pass("learner entry sealed; supported initial access is HTTP only")
 				tui.Info("transfer the host module only after gaining a shell")
 				tui.Info("target running; press Ctrl+C to stop")
 				<-cmd.Context().Done()
@@ -520,6 +657,49 @@ func runCmd() *cobra.Command {
 	c.Flags().BoolVar(&useRef, "reference", false, "build against the reference solution")
 	c.Flags().StringVar(&instanceName, "name", "", "name this VM and operator target")
 	return c
+}
+
+func completeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "complete D00",
+		Short: "Record a completed operational deployment lab",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			cat, _ := loadCatalog()
+			ex := findExercise(cat, args[0])
+			if ex.Kind != "deployment" {
+				tui.Fatal("complete is only required for operational deployment labs")
+			}
+			lab, err := state.FindLab("")
+			if err != nil || lab.Exercise != ex.Code {
+				tui.Fatal("no active %s lab found", ex.Code)
+			}
+			sshArgs := []string{"-i", lab.KeyPath, "-p", strconv.Itoa(lab.SSHPort),
+				"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+				"-o", "LogLevel=ERROR", "root@localhost",
+				"test -s /var/lib/rklings/d00-complete && cat /var/lib/rklings/d00-complete"}
+			out, err := exec.CommandContext(cmd.Context(), "ssh", sshArgs...).CombinedOutput()
+			if err != nil || !validD00Receipt(string(out)) {
+				tui.Fatal("D00 has no valid completion receipt; run d00-check from the gained root shell")
+			}
+			if err := state.Load().MarkDone(ex.ID); err != nil {
+				tui.Fatal("save progress: %v", err)
+			}
+			tui.Pass("completed %s from active deployment evidence", ex.Code)
+		},
+	}
+}
+
+func validD00Receipt(receipt string) bool {
+	fields := make(map[string]string)
+	for _, line := range strings.Split(receipt, "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if ok {
+			fields[key] = value
+		}
+	}
+	return fields["root"] == "0" && fields["module"] == "operational" &&
+		fields["concealed"] == "yes"
 }
 
 func validInstanceName(name string) bool {
@@ -569,6 +749,8 @@ func validateCmd() *cobra.Command {
 					tui.Fatal("no reference solution for %s", ex.ID)
 				}
 				ex = ex.WithReference()
+			} else {
+				requirePrerequisites(ex)
 			}
 			if err := validate.RunCase(root, ex, cat, caseID); err != nil {
 				tui.Fatal("%v", err)
@@ -656,8 +838,13 @@ func validationWorkers() int {
 	if workers < 1 {
 		workers = 1
 	}
-	if workers > 4 {
-		workers = 4
+	// Validation guests each reserve 1 GiB and two vCPUs. Four concurrent
+	// guests make long kernel and reboot checks intermittently lose SSH even
+	// on otherwise capable hosts, turning a passing reference into a flaky
+	// acceptance run. Two keeps useful parallelism without oversubscribing the
+	// lab machinery.
+	if workers > 2 {
+		workers = 2
 	}
 	data, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
@@ -683,50 +870,14 @@ func validationWorkers() int {
 	return workers
 }
 
-func statusCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "status",
-		Short: "Show exercise progress",
-		Args:  cobra.NoArgs,
-		Run: func(cmd *cobra.Command, args []string) {
-			cat, _ := loadCatalog()
-			prog := state.Load()
-			completed := 0
-			next := ""
-			for _, ex := range cat.Exercises {
-				if prog.IsDone(ex.ID) {
-					completed++
-					tui.Pass("%s  %s", ex.Code, ex.Title)
-				} else {
-					tui.Pending("%s  %s", ex.Code, ex.Title)
-					if next == "" {
-						next = ex.Code
-					}
-				}
-			}
-			fmt.Printf("\n  %d/%d complete\n", completed, len(cat.Exercises))
-			if next != "" {
-				fmt.Printf("  [*] next: ./rklings run %s\n", next)
-			} else {
-				fmt.Println("  [+] course complete")
-			}
-		},
-	}
-}
-
 func solutionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "solution <exercise>",
-		Short: "Show reference solution (requires prior validation)",
+		Short: "Show the reference solution",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			cat, _ := loadCatalog()
 			ex := findExercise(cat, args[0])
-			prog := state.Load()
-
-			if !prog.IsDone(ex.ID) {
-				tui.Fatal("validate %s first before viewing the solution", ex.ID)
-			}
 
 			files, err := solutionFiles(ex.Solution)
 			if err != nil {

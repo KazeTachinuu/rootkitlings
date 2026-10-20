@@ -1,5 +1,7 @@
 # L14: Usermode Helper
 
+## Mission
+
 Add a `launch` control that starts an absolute executable path as root from the
 kernel.
 You will prove it by launching a script that creates `/tmp/proof`.
@@ -10,6 +12,13 @@ That means you need shell access first, and you type every command by hand.
 
 The kernel can launch programs on its own.
 If the kernel can start an agent binary, you never need to type another command.
+
+## What you will observe
+
+Creating `rklings.launch.<absolute-path>` returns through the intercepted mkdir
+call while a kernel work item starts that path as a separate root process.
+The proof file appears only when the userspace program actually executes;
+existing ping and escalation controls must continue to work.
 
 ## Workspace
 
@@ -108,7 +117,7 @@ rklings.launch./bin/echo     -> launch "/bin/echo"
   call_usermodehelper
 - `rk_launch_init()`: register `launch` in the command registry
 
-## Useful interfaces
+### Interfaces used here
 
 ```c
 #include <linux/umh.h>
@@ -162,4 +171,6 @@ $ ./rklings validate L14
 
 The module can start a userspace program, but that program cannot reach an
 operator yet.
-L15 builds an authenticated callback so the target can connect to your server.
+G00 qualifies the Go and stream-I/O mechanics used by that program.
+L15 then builds an authenticated callback so the target can connect to your
+server.

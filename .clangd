@@ -1,6 +1,5 @@
 CompileFlags:
   Remove:
-    - -DCC_USING_FENTRY
     - -fconserve-stack
     - -fdiagnostics-show-context=*
     - -fmin-function-alignment=*

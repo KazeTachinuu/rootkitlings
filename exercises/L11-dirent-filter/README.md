@@ -1,5 +1,7 @@
 # L11: Hide Files and Processes from Listings
 
+## Mission
+
 This exercise makes a file and a running process disappear from ordinary
 listings.
 
@@ -41,7 +43,7 @@ $ kill -0 1234
 An empty `grep` result means the name is hidden.
 Successful `cat` and `kill -0` commands prove the targets still exist.
 
-## What is already provided
+## Workspace
 
 The workspace already intercepts `mkdir` and recognizes four commands:
 

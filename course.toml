@@ -4,27 +4,27 @@ default_module_artifact = "rklings.ko"
 exercise_roots = ["exercises"]
 
 required_route = [
-  # Phase 1: Foundation (L00-L04)
-  "module-build-lifecycle",
-  "precise-init-failure",
-  "owned-kernel-state",
-  "proc-publication",
-  "proc-read-contract",
+  # Phase 1: Kernel foundation (L00-L04)
+  "kernel-module",
+  "load-cleanup",
+  "module-state",
+  "proc-status",
+  "proc-control",
 
   # Phase 2: Escalation (L05-L07)
-  "mkdir-reaction",
-  "mkdir-escalation",
-  "pid-escalation",
+  "mkdir-command",
+  "shell-root",
+  "process-root",
 
   # Phase 3: Interception (L08-L09)
-  "kprobe-revealed",
-  "command-dispatcher",
+  "mkdir-hook",
+  "command-routing",
 
   # M00: Persistence + Stealth
   "persistence-stealth",
 
   # Phase 4: Concealment (L10-L13)
-  "target-list",
+  "hide-targets",
   "dirent-filter",
   "content-filter",
   "port-filter",
@@ -37,6 +37,7 @@ required_route = [
 
   # Phase 5: The Split (L14-L16)
   "usermode-helper",
+  "agent-qualification",
   "mtls-connect",
   "mkdir-bridge",
 
@@ -118,49 +119,9 @@ id = "secure-agent-fixture"
 binary = "vm/tools/secure_agent_fixture"
 source = "vm/tools/secure_agent_fixture.c"
 
-[[assumptions]]
-concept = "c-functions-and-errors"
-competency = "Read small C functions, control flow, return values, and compiler diagnostics."
-
-[[assumptions]]
-concept = "shell-and-paths"
-competency = "Run commands, navigate paths, and edit files in a POSIX-like shell."
-
-[[assumptions]]
-concept = "host-guest-kernel-boundary"
-competency = "Distinguish the host from the disposable guest and userspace from kernel space."
-
-[[assumptions]]
-concept = "c-preprocessor"
-competency = "Read macro calls, compile-time definitions, conditional compilation, and #error."
-
-[[assumptions]]
-concept = "c-pointers-and-structs"
-competency = "Work with pointers, NULL, structures, arrays, and function declarations."
-
-[[assumptions]]
-concept = "linux-process-basics"
-competency = "Recognize processes, threads, PIDs, signals, and the current executing task."
-
-[[assumptions]]
-concept = "linux-identity-basics"
-competency = "Distinguish users, groups, real and effective IDs, and user namespaces."
-
-[[assumptions]]
-concept = "ipv4-packet-basics"
-competency = "Recognize an IPv4 header and distinguish ICMP, TCP, and UDP payloads."
-
-[[assumptions]]
-concept = "transport-endpoint-basics"
-competency = "Recognize addresses, ports, stream sockets, and datagram sockets."
-
-[[assumptions]]
-concept = "linux-file-permission-basics"
-competency = "Understand paths, ownership, permission bits, and file descriptors."
-
 [[sections]]
 id = "module-core"
-label = "Module lifecycle and procfs"
+label = "Kernel foundation: module lifecycle and procfs"
 
 [[sections]]
 id = "control-execution"
@@ -521,10 +482,6 @@ label = "Secure Channel Integration"
 [[concepts]]
 id = "seq-file-interception"
 label = "Seq File Interception"
-
-[[concepts]]
-id = "shell-and-paths"
-label = "Shell And Paths"
 
 [[concepts]]
 id = "shell-slot"

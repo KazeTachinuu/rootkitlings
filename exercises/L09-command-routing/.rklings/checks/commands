@@ -1,0 +1,27 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Ping and status command dispatch"
+
+load rklings.ko
+assert_loaded rklings
+
+if mkdir rklings.ping; then
+    _ok "ping command returned success"
+else
+    _fail "ping command returned failure"
+fi
+assert_absent rklings.ping
+assert_log "rklings: pong"
+
+if mkdir rklings.status; then
+    _ok "status command returned success"
+else
+    _fail "status command returned failure"
+fi
+assert_absent rklings.status
+assert_log "rklings: alive, escalations=0"
+
+unload rklings
+summary

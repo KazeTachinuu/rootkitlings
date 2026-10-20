@@ -1,5 +1,7 @@
 # L21: Fileless Agent Execution
 
+## Mission
+
 L20 loaded a kernel module without writing a .ko to disk.
 But the loader binary itself was a file.
 And any agent binary you deploy is a file too.
@@ -57,11 +59,13 @@ difference: no `MFD_CLOEXEC`.
 +----------------------------+
 ```
 
-Why no `MFD_CLOEXEC`: exec replaces the current process image.
-Close-on-exec flags cause the kernel to close the fd before the new process
-starts.
-But exec needs to read the ELF from that fd.
-If the fd is closed, exec fails with ENOENT.
+Why this exercise omits `MFD_CLOEXEC`: execution is requested through the
+`/proc/self/fd/N` pathname.
+Keeping the descriptor open avoids depending on the exact point at which that
+pathname is resolved relative to close-on-exec processing and leaves the new
+image with the backing descriptor.
+This is a deliberate lifetime choice, not a general rule that every executable
+memfd must survive `exec`.
 
 Why `/proc/self/fd/N`: exec needs a path.
 A memfd has no directory entry, but every open fd has a symlink at

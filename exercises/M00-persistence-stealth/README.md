@@ -1,5 +1,7 @@
 # M00: Persistence and Stealth
 
+## Mission
+
 Your module works until reboot, and anyone can see it in `lsmod`.
 Fix both.
 
@@ -24,12 +26,18 @@ facts: the module is hidden from that inventory and is still executing.
 ```text
 exercises/M00-persistence-stealth
 ├── Kbuild
-└── main.c
+├── core
+│   ├── cred.c
+│   ├── dispatch.c
+│   ├── init.c
+│   └── module.c
+└── include
+    └── rootkit.h
 ```
 
-`Kbuild` is complete.
-Implement the lifecycle, persistence, concealment, and command paths in
-`main.c`.
+The lifecycle, dispatcher, and escalation subsystem are supplied from L09.
+Only `core/module.c` is editable: persistence and module-list visibility are the
+new mechanisms.
 
 ## Persistence
 
@@ -93,10 +101,11 @@ removes the node from the list. `saved_prev` remembers the insertion point so
 `list_add` can restore it.
 The module still runs, it just disappears from `lsmod` and `/proc/modules`.
 
-## Multi-file split
+## Integration boundary
 
-This is your first multi-file kernel module.
-The L09 monolith splits into subsystems, each in its own file:
+The learner and reference workspaces use the same multi-file layout.
+Each subsystem exposes a small registration contract, so M00 adds one component
+without reproducing the dispatcher or escalation mechanism:
 
 ```text
   mkdir rklings.persist
@@ -126,15 +135,14 @@ with arg `"1234"`.
 
 ## Implement it
 
-The workspace provides the dispatcher and escalation path from L09.
-Complete `main.c`:
+The workspace provides the dispatcher, lifecycle, and escalation path from L09.
+Complete `core/module.c`:
 
 - `rk_persist()` and `rk_unpersist()` using filp_open + kernel_write
 - `rk_module_hide()` and `rk_module_unhide()` using list_del/list_add
-- Four command handlers registered via `rk_cmd_register`
-- Everything in one file (the solution refactors into multi-file for M01)
+- Four supplied command handlers registered through `rk_cmds_register`
 
-## Useful interfaces
+### Interfaces used here
 
 ```c
 // Command registration (dispatch.c)

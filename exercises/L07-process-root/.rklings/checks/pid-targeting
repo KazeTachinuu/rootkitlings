@@ -1,0 +1,40 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "PID targeting via mkdir rklings.e.PID"
+
+load rklings.ko
+assert_loaded rklings
+
+su student -s /bin/sh -c 'exec sleep 30' &
+sleep 1
+
+target_pid=$(ps -eo pid,user,comm | awk '/student.*sleep/ {print $1; exit}')
+if [ -z "$target_pid" ]; then
+    _fail "could not find student sleep process"
+    unload rklings
+    summary
+fi
+
+_ok "found target sleep process at pid $target_pid"
+
+if mkdir "rklings.e.$target_pid" && [ ! -e "rklings.e.$target_pid" ]; then
+    _ok "explicit PID command succeeded without creating a directory"
+else
+    _fail "explicit PID command failed or created a directory"
+fi
+
+uids=$(awk '/^Uid:/ {print $2, $3, $4, $5}' "/proc/$target_pid/status")
+if [ "$uids" = "0 0 0 0" ]; then
+    _ok "target process immediately exposes root credentials"
+else
+    _fail "expected target UIDs '0 0 0 0', got '$uids'"
+fi
+
+assert_log "rklings: escalated pid $target_pid to root"
+
+kill "$target_pid" 2>/dev/null
+unload rklings
+
+summary

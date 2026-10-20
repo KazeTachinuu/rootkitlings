@@ -1,11 +1,21 @@
 # L18: Remote Shell
 
+## Mission
+
 Add a `SHELL` request that runs one command and returns its combined output and
 exit failure over the authenticated connection.
 
 L17 dispatches commands that map to mkdir calls.
 But an operator needs to run arbitrary shell commands on the target.
 One new handler adds remote execution.
+
+## What you will observe
+
+`SHELL id` returns root identity, shell pipelines and redirections retain their
+normal meaning, and a nonexistent command returns its diagnostic without
+breaking the connection.
+A line containing only `.` terminates every response so the next request starts
+at a known boundary.
 
 ## Workspace
 
@@ -44,27 +54,18 @@ The response is the raw command output followed by a line containing only `.`.
 That terminator lets the server read multiline output without guessing where it
 ends.
 
-## The five lines
+## Response algorithm
 
-```go
-func handleShell(conn net.Conn, arg string) error {
-    out, err := exec.Command("sh", "-c", arg).CombinedOutput()
-    if err != nil {
-        fmt.Fprintf(conn, "ERR %v\n", err)
-    }
-    if len(out) > 0 {
-        conn.Write(out)
-        if out[len(out)-1] != '\n' {
-            fmt.Fprintln(conn)
-        }
-    }
-    _, err = fmt.Fprintln(conn, ".")
-    return err
-}
-```
+Implement the response in this order without copying a completed handler:
 
-The handler preserves combined output and reports command failures.
-The agent is a relay between the TLS connection and the target shell.
+1. execute `/bin/sh -c <argument>` and retain combined stdout and stderr;
+2. report a nonzero exit without discarding any captured output;
+3. write every output byte, adding a newline only when the output lacks one;
+4. write a line containing only `.` even for empty output or failure; and
+5. return transport errors separately from the command's exit status.
+
+The terminator is mandatory: omitting it desynchronizes the next command on the
+same connection.
 
 ## Implement it
 
@@ -74,7 +75,7 @@ Complete `main.go`:
 - One new entry in the handler map: SHELL
 - `handleShell`: exec.Command, CombinedOutput, write result to conn
 
-## Useful interfaces
+### Interfaces used here
 
 ```go
 import "os/exec"

@@ -1,5 +1,7 @@
 # L16: mkdir Bridge
 
+## Mission
+
 Translate authenticated operator commands into the module's mkdir control names,
 then use the same channel to read its live in-memory state.
 The agent remains userspace-only; the provided M01 module performs the kernel
@@ -9,6 +11,13 @@ L15 connects the agent to the server.
 But it just reads one line and exits.
 The kernel module listens for mkdir commands.
 The agent needs to translate server instructions into mkdir calls.
+
+## What you will observe
+
+An authenticated `HIDE FILE` command crosses from the host server into the Go
+agent, becomes a mkdir control name, and changes what the guest can list.
+An `INFO` command travels through the same syscall and returns the module's live
+target ledger; several commands must work on one connection.
 
 ## Workspace
 
@@ -93,6 +102,11 @@ Most control names only need a success or error result. `rklings.info` is
 bidirectional: the agent passes a writable pathname buffer, and the module
 replaces its contents with a snapshot of the state it already keeps in memory.
 
+This bidirectional `info` handler is a declared course-supplied extension in the
+completed M01 module; earlier lessons did not ask you to invent it.
+Its kernel implementation lives in M01's supplied `core/dispatch.c`.
+Your work in L16 is the userspace caller and response handling.
+
 ```text
 before syscall              after syscall
 +----------------------+    +-----------------------------+
@@ -130,12 +144,12 @@ for scanner.Scan() {
 
 Complete `main.go`:
 
-- mTLS setup (reuse the provided L15 pattern)
+- Supplied mTLS connection setup carried forward from L15; do not rewrite it
 - `translate(line string) string`: map server command to mkdir name
 - `queryKernelState()`: issue `rklings.info` with a writable buffer
 - Command loop: read lines, translate, os.Mkdir
 
-## Useful interfaces
+### Interfaces used here
 
 ```go
 import "os"

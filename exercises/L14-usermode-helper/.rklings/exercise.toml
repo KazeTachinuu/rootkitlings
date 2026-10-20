@@ -6,7 +6,7 @@ kind = "lesson"
 vm_user = "root"
 tradecraft = ["execution", "control"]
 difficulty = "standard"
-prerequisites = ["local-control"]
+prerequisites = ["deploy"]
 teaches = ["call-usermodehelper", "kernel-exec"]
 requires = []
 

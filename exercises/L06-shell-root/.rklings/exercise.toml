@@ -1,0 +1,48 @@
+schema_version = 2
+id = "shell-root"
+title = "Give the calling shell root"
+stage = "escalation"
+kind = "lesson"
+vm_user = "student"
+tradecraft = ["privilege"]
+difficulty = "standard"
+prerequisites = ["mkdir-command"]
+teaches = ["parent-process-targeting", "privilege-escalation"]
+requires = [
+  "mkdir-interception",
+  "errno-propagation",
+]
+supplied = [
+  "mkdir and mkdirat syscall interception",
+  "safe userspace pathname copy and basename extraction",
+  "hook registration and teardown",
+  "rootkit-specific credential replacement for a selected PID",
+]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c", "rklings_hook.h", "rklings_creds.h"]
+editable = ["main.c"]
+build = "."
+
+[run]
+stage = ["kernel"]
+load = ["kernel"]
+
+
+[verification]
+load_kernel = true
+timeout_seconds = 120
+tools = ["module-load-test", "mkdir-escalation-test"]
+
+[[verification.cases]]
+id = "escalation"
+label = "Exact command gives its calling shell root credentials"
+expect_build = "pass"
+check = "exercises/L06-shell-root/.rklings/checks/escalation"
+
+[[verification.cases]]
+id = "non-matching"
+label = "Other names keep their normal behavior"
+expect_build = "pass"
+check = "exercises/L06-shell-root/.rklings/checks/non-matching"

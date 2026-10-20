@@ -13,7 +13,7 @@ requires = []
 [workspace]
 mode = "project"
 files = ["Kbuild", "include/rootkit.h", "core/init.c", "core/target.c", "core/escalation.c", "core/dispatch.c", "core/module.c", "core/filter.c"]
-editable = ["core/init.c", "core/dispatch.c", "core/escalation.c", "core/module.c", "core/target.c", "core/filter.c"]
+editable = ["core/init.c"]
 build = "."
 
 [run]

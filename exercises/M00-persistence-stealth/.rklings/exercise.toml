@@ -6,14 +6,14 @@ kind = "milestone"
 vm_user = "root"
 tradecraft = ["persistence", "concealment"]
 difficulty = "standard"
-prerequisites = ["command-dispatcher"]
+prerequisites = ["command-routing"]
 teaches = ["module-persistence", "module-cloaking", "filp-kernel-write"]
 requires = []
 
 [workspace]
 mode = "project"
-files = ["Kbuild", "main.c"]
-editable = ["main.c"]
+files = ["Kbuild", "include/rootkit.h", "core/init.c", "core/dispatch.c", "core/cred.c", "core/module.c"]
+editable = ["core/module.c"]
 build = "."
 
 [run]

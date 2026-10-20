@@ -1,0 +1,67 @@
+schema_version = 2
+id = "command-routing"
+title = "Route multiple mkdir commands"
+stage = "interception"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["interception", "control"]
+difficulty = "standard"
+prerequisites = ["mkdir-hook"]
+teaches = [
+  "command-handler-interface",
+  "function-pointer-command-table",
+  "exact-command-dispatch",
+]
+requires = [
+  "kretprobe-entry-and-return",
+  "userspace-pathname-copy",
+  "pid-targeting",
+  "errno-propagation",
+]
+supplied = [
+  "mkdir and mkdirat kretprobe interception",
+  "PID lookup and credential replacement",
+  "thread-safe successful-escalation counter",
+  "module lifecycle and probe ownership",
+]
+
+[workspace]
+mode = "project"
+files = [
+  "Kbuild",
+  "main.c",
+  "rklings_command.c",
+  "rklings_command.h",
+  "rklings_escalation.c",
+  "rklings_escalation.h",
+  "rklings_hook.h",
+]
+editable = ["rklings_command.c"]
+build = "."
+
+[run]
+stage = ["kernel"]
+load = ["kernel"]
+
+[verification]
+load_kernel = true
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "commands"
+label = "Ping and status commands succeed without directories"
+expect_build = "pass"
+check = "exercises/L09-command-routing/.rklings/checks/commands"
+
+[[verification.cases]]
+id = "escalation"
+label = "Escalation dispatch preserves success and status"
+expect_build = "pass"
+check = "exercises/L09-command-routing/.rklings/checks/escalation"
+
+[[verification.cases]]
+id = "protocol-boundary"
+label = "Exact dispatch rejects malformed commands and preserves mkdir"
+expect_build = "pass"
+check = "exercises/L09-command-routing/.rklings/checks/protocol-boundary"

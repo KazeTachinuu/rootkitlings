@@ -4,10 +4,13 @@ Build a Linux kernel rootkit one mechanism at a time.
 
 Rootkitlings is a practical course in kernel modules, local control, agent
 design, authenticated callbacks, operator tooling, and tradecraft.
-Every exercise runs inside a disposable QEMU guest—not in the host kernel.
+It assumes no previous kernel-development or rootkit knowledge.
+You learn each mechanism by building and proving it in a disposable QEMU
+guest—never in the host kernel.
 
 ```text
-25 lessons  >  4 milestones  >  1 deployment lab  >  1 final project
+25 lessons > 1 agent qualification > 4 milestones
+           > 1 deployment lab > 1 operational final
 ```
 
 ## Requirements
@@ -38,17 +41,55 @@ A DNS deployment uses a course server certificate generated for that hostname.
 ```sh
 ./rklings setup
 ./rklings list
+./rklings info L00
+```
+
+## First exercise
+
+L00 is the first contact with the course and with kernel development.
+There is no terminology-only warm-up: you edit a real module, build it, load it
+in a disposable guest, inspect its evidence, and unload it.
+
+First prepare the toolchain and VM:
+
+```sh
+./rklings setup
+./rklings list
 ```
 
 Open
-[L00: Build, Load, and Unload a Kernel Module](exercises/L00-module-build-lifecycle/README.md).
-Follow
-the exercise, edit `Kbuild` and `core/main.c`, then run:
+[L00: Build, Load, and Unload a Kernel Module](exercises/L00-kernel-module/README.md),
+then inspect its exact contract:
 
 ```sh
-./rklings run L00
+./rklings info L00
+```
+
+Complete the declared TODOs, then use both execution paths:
+
+```sh
+./rklings run L00       # enter the disposable guest and operate the module
+./rklings validate L00  # repeat the lifecycle proof in a clean guest
+```
+
+Every exercise follows the same operational loop:
+
+```text
+read the mission -> inspect the executable contract -> perform declared work
+                 -> run and observe -> prove the advertised behavior
+```
+
+The exercise page must identify anything supplied by the course.
+If a command, file, service, or mechanism was neither taught earlier nor
+identified as supplied, that is a course defect rather than something you are
+expected to guess.
+
+Follow the ordered route shown by `./rklings list`.
+
+```sh
+./rklings info L00
 ./rklings validate L00
-./rklings status
+./rklings list
 ```
 
 `setup` also generates the root `compile_commands.json` from the pinned kernel
@@ -66,8 +107,8 @@ verification, and teardown.
 ## Learning path
 
 ```text
-L00–L04  Foundation
-   |     module lifecycle · owned state · procfs
+L00–L04  Kernel foundation
+   |     host/guest boundary · module lifecycle · owned state · procfs
    v
 L05–L07  Escalation
    |     mkdir interception · credentials · PID targeting
@@ -86,7 +127,7 @@ D00      Deployment lab
    |     initial access · privilege escalation · deployment
    v
 L14–L16  Userspace split
-   |     usermode helper · mTLS agent · kernel bridge
+   |     usermode helper · G00 framed Go I/O · mTLS agent · kernel bridge
    v
 L17–L19  Remote operations
    |     dispatch · shell · file transfer
@@ -98,7 +139,7 @@ L20–L24  Tradecraft
    +--> M03  Integrated ghost agent
               |
               v
-           P00  Complete system
+           P00  Operate and verify the complete system
 ```
 
 Progression:
@@ -176,12 +217,14 @@ Deployment remains explicit inside the guest.
 | ------------------- | ---------------------------------------------------- |
 | `setup`             | Prepare dependencies, images, keys, and certificates |
 | `list`              | Show the ordered course catalog                      |
+| `info EXERCISE`     | Show work, supplied artifacts, knowledge, and proofs |
 | `build EXERCISE`    | Build the artifacts declared by the exercise         |
 | `run EXERCISE`      | Boot a guest and apply its explicit run contract     |
 | `serve EXERCISE`    | Start its independent host server or operator        |
 | `validate EXERCISE` | Verify in a clean guest, then tear it down           |
+| `complete D00`      | Record active-guest deployment evidence              |
 | `status`            | Show course progress                                 |
-| `solution EXERCISE` | Show an unlocked reference solution                  |
+| `solution EXERCISE` | Show the reference solution                          |
 | `reset EXERCISE`    | Restore its declared learner files                   |
 
 Validation checks editable files before building.

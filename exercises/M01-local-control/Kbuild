@@ -1,4 +1,3 @@
 ccflags-y := -I$(src)/include
 obj-m += rklings.o
-rklings-y := core/init.o core/dispatch.o core/escalation.o \
-             core/module.o core/target.o core/filter.o
+rklings-y := core/init.o core/dispatch.o core/escalation.o core/module.o core/target.o core/filter.o

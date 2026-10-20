@@ -1,16 +1,19 @@
-# P00: Complete Rootkit
+# P00: Operate and Verify the Complete System
+
+## Mission
 
 M03 proved that the integrated agent can deploy from memory, conceal selected
 traces, and remain controllable.
-P00 turns that integration into the complete product: a modular agent, durable
+P00 operates that integration as the complete product: a modular agent, durable
 startup, reconnect and singleton handling, and the full multi-target operator
 with terminal and browser interfaces.
 
-The task is operational.
+The workspace is intentionally complete.
+This is an operational final, not an implementation capstone.
 Start each side independently, observe the callback, use the real controls, and
 prove persistence and removal with reboots.
 
-## What P00 adds to M03
+## What you will observe
 
 | M03 integration lesson     | P00 complete product                           |
 | -------------------------- | ---------------------------------------------- |
@@ -82,8 +85,12 @@ exercises/P00-complete-rootkit
 
 The operator is the completed host product in `product/operator`; it is not
 duplicated in the learner workspace.
+Every file shown above is a supplied, read-only product artifact.
+Your work is to operate it, gather evidence across the kernel/agent/operator
+boundaries, exercise reboot persistence, and prove complete removal.
+No implementation is expected to appear during P00.
 
-## Run it
+## Test it
 
 Use three terminals so every boundary stays visible.
 
@@ -216,3 +223,10 @@ objects remain functional, reboots with persistence enabled, verifies the
 reconnect, removes persistence, reboots again, and verifies absence.
 
 P00 is complete when the manual runbook and automated lifecycle both pass.
+
+## Next
+
+P00 is the end of the required route.
+The resulting evidence covers the full kernel, agent, operator, persistence,
+reboot, and removal lifecycle; further work should extend a declared mechanism
+rather than introduce an unverified hidden component.

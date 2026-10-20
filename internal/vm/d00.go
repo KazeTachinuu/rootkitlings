@@ -45,6 +45,11 @@ after=$(dmesg | grep -c 'rklings: pong' || true)
 rmdir /tmp/rklings.ping
 check test "$after" -gt "$before"
 check sh -c "! lsmod | grep -q '^rklings '"
+if [ "$failed" -eq 0 ]; then
+    install -d -m 0700 /var/lib/rklings
+    printf 'root=%s\nmodule=operational\nconcealed=yes\n' "$(id -u)" > /var/lib/rklings/d00-complete
+    chmod 0600 /var/lib/rklings/d00-complete
+fi
 exit "$failed"
 `
 

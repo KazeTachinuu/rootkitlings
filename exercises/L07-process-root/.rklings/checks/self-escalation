@@ -1,0 +1,30 @@
+#!/bin/sh
+# shellcheck disable=SC2016 # The quoted script expands inside the student shell.
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Self-escalation via mkdir rklings.e"
+
+load rklings.ko
+assert_loaded rklings
+
+result=$(su student -s /bin/sh -c '
+    cd /home/student || exit 1
+    before=$(id -u)
+    mkdir rklings.e
+    mkdir_status=$?
+    after=$(id -u)
+    if [ -e rklings.e ]; then present=yes; else present=no; fi
+    printf "%s %s %s %s\n" "$before" "$mkdir_status" "$after" "$present"
+')
+if [ "$result" = "1000 0 0 no" ]; then
+    _ok "command elevated its calling shell and created no directory"
+else
+    _fail "expected '1000 0 0 no', got '$result'"
+fi
+
+assert_log "rklings: escalated pid"
+
+unload rklings
+
+summary

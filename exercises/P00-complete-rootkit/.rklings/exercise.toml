@@ -1,13 +1,13 @@
 schema_version = 2
 id = "complete-rootkit"
-title = "Assemble and verify the complete rootkit"
+title = "Operate and verify the complete system"
 stage = "project"
 kind = "final-project"
 vm_user = "root"
 tradecraft = ["control", "network", "crypto", "concealment", "persistence", "privilege"]
 difficulty = "advanced"
 prerequisites = ["ghost"]
-teaches = ["full-system-integration", "verification-methodology"]
+teaches = ["full-system-operation", "verification-methodology"]
 requires = []
 
 [workspace]
@@ -33,24 +33,7 @@ files = [
     "agent/singleton.go",
     "agent/operator.go",
 ]
-editable = [
-    "kernel/include/rootkit.h",
-    "kernel/core/init.c",
-    "kernel/core/dispatch.c",
-    "kernel/core/escalation.c",
-    "kernel/core/module.c",
-    "kernel/core/target.c",
-    "kernel/core/filter.c",
-    "agent/main.go",
-    "agent/transport.go",
-    "agent/dispatch.go",
-    "agent/handlers.go",
-    "agent/evasion.go",
-    "agent/hidden.go",
-    "agent/persistence.go",
-    "agent/singleton.go",
-    "agent/operator.go",
-]
+editable = []
 build = "."
 
 [build]

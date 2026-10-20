@@ -1,0 +1,12 @@
+RKLINGS_FAIL_POINT ?= 0
+
+obj-m += rklings.o
+rklings-y := main.o rklings_command.o
+
+ifeq ($(RKLINGS_FAIL_POINT),0)
+ccflags-y += -DRK_MKDIRAT_SYMBOL='"__x64_sys_mkdirat"'
+else ifeq ($(RKLINGS_FAIL_POINT),1)
+ccflags-y += -DRK_MKDIRAT_SYMBOL='"__rklings_missing_mkdirat"'
+else
+$(error unknown RKLINGS_FAIL_POINT)
+endif

@@ -1,8 +1,8 @@
 #!/bin/sh
-# shellcheck disable=SC3043 # BusyBox ash provides local; checks run under ash.
-# Assertion library sourced by exercise checks inside the BusyBox guest.
+# shellcheck disable=SC3043 # Validation guests provide local in /bin/sh.
+# Assertion library sourced by exercise checks inside validation guests.
 
-# shellcheck source=scripts/lib/ui.sh
+# shellcheck source=vm/ui.sh
 . "${RKLINGS_UI:-/vm/ui.sh}"
 
 if [ -f /vm/checks/server-addr ]; then

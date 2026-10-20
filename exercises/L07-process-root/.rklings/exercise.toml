@@ -1,0 +1,62 @@
+schema_version = 2
+id = "process-root"
+title = "Give a selected process root"
+stage = "escalation"
+kind = "lesson"
+vm_user = "student"
+tradecraft = ["privilege", "control"]
+difficulty = "standard"
+prerequisites = ["shell-root"]
+teaches = [
+  "task-lookup-and-reference-lifetime",
+  "credential-replacement-lifetime",
+  "pid-targeting",
+]
+requires = [
+  "mkdir-interception",
+  "parent-process-targeting",
+  "privilege-escalation",
+  "errno-propagation",
+  "c-pointers-and-structs",
+]
+supplied = [
+  "mkdir and mkdirat syscall interception",
+  "safe userspace pathname copy and command-boundary matching",
+  "parent and numeric PID command parsing",
+  "target selection, command suppression, and escalation logging",
+  "hook registration and teardown",
+]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c", "rklings_hook.h"]
+editable = ["main.c"]
+build = "."
+
+[run]
+stage = ["kernel"]
+load = ["kernel"]
+
+
+[verification]
+load_kernel = true
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "self-escalation"
+label = "mkdir rklings.e grants root to the calling shell"
+expect_build = "pass"
+check = "exercises/L07-process-root/.rklings/checks/self-escalation"
+
+[[verification.cases]]
+id = "pid-targeting"
+label = "mkdir rklings.e.PID immediately elevates the target"
+expect_build = "pass"
+check = "exercises/L07-process-root/.rklings/checks/pid-targeting"
+
+[[verification.cases]]
+id = "command-boundary"
+label = "Malformed commands fail and ordinary names remain ordinary"
+expect_build = "pass"
+check = "exercises/L07-process-root/.rklings/checks/command-boundary"

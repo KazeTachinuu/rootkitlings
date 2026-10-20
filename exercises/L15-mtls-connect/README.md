@@ -1,11 +1,24 @@
 # L15: mTLS Callback
 
+## Mission
+
 Build the first userspace agent.
 It must authenticate the server, present its own certificate, receive one real
 message, and exit.
 
 L14 showed the kernel launching a userspace binary.
-Now you build that binary: a Go agent that phones home over mTLS.
+G00 already proved that you can build a Go process, handle errors, and exchange
+framed data over a TCP stream.
+Now keep that operational model and add identity: a Go agent that phones home
+over mTLS.
+
+## What you will observe
+
+The agent rejects an unauthenticated server, presents its embedded client
+certificate to the course server, completes TLS 1.3, receives the framed
+message, and exits.
+The server records the verified client identity rather than trusting a name sent
+inside the connection.
 
 ## Workspace
 
@@ -80,7 +93,7 @@ The agent's TLS configuration needs three things:
 pool := x509.NewCertPool()
 pool.AppendCertsFromPEM(caCert)
 
-cert, err := tls.X509KeyPair(clientCert, clientKey)
+cert, err := tls.X509KeyPair(agentCert, agentKey)
 
 cfg := &tls.Config{
     RootCAs:      pool,
@@ -113,7 +126,7 @@ Complete `main.go`:
 - tls.Dial to 10.0.2.2:8443
 - Read one line, print it, close
 
-## Useful interfaces
+### Interfaces used here
 
 ```go
 import (
@@ -131,7 +144,7 @@ pool := x509.NewCertPool()
 ok := pool.AppendCertsFromPEM(caCert)
 
 // Client certificate (present to server)
-cert, err := tls.X509KeyPair(clientCert, clientKey)
+cert, err := tls.X509KeyPair(agentCert, agentKey)
 
 // TLS config
 cfg := &tls.Config{

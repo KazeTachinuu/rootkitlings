@@ -24,6 +24,8 @@ stage = ["agent"]
 agent = "background"
 remove_artifact = true
 
+[serve]
+commands = ["PING", "STATUS", "SHELL id", "DEPLOY"]
 
 [verification]
 timeout_seconds = 180

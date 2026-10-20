@@ -1,5 +1,7 @@
 # L23: Process Masquerade
 
+## Mission
+
 L22 routes browsers to the decoy page, but the agent still exposes its process
 name and regular callback interval.
 This exercise changes the process name, disables core dumps, and adds callback

@@ -52,6 +52,8 @@ type Exercise struct {
 	WorkspaceBuild       string
 	Teaches              []string
 	Requires             []string
+	CompletionProofs     []string
+	Supplied             []string
 	AgentLDFlags         string
 	ModuleFrom           string
 	RunStage             []string
@@ -75,10 +77,11 @@ type Check struct {
 }
 
 type Catalog struct {
-	Root         string
-	Exercises    []Exercise
-	ByID         map[string]*Exercise
-	ToolBinaries map[string]string // tool ID -> binary path relative to repo root
+	Root          string
+	Exercises     []Exercise
+	ByID          map[string]*Exercise
+	ToolBinaries  map[string]string // tool ID -> binary path relative to repo root
+	ConceptLabels map[string]string
 }
 
 func (ex *Exercise) Stages(kind string) bool {
@@ -105,9 +108,15 @@ func contains(values []string, value string) bool {
 func (ex *Exercise) Loads(kind string) bool { return contains(ex.RunLoad, kind) }
 
 type courseToml struct {
-	ExerciseRoots []string   `toml:"exercise_roots"`
-	RequiredRoute []string   `toml:"required_route"`
-	Tools         []toolToml `toml:"tools"`
+	ExerciseRoots []string      `toml:"exercise_roots"`
+	RequiredRoute []string      `toml:"required_route"`
+	Tools         []toolToml    `toml:"tools"`
+	Concepts      []conceptToml `toml:"concepts"`
+}
+
+type conceptToml struct {
+	ID    string `toml:"id"`
+	Label string `toml:"label"`
 }
 
 type toolToml struct {
@@ -126,6 +135,7 @@ type exerciseToml struct {
 	Prerequisites []string `toml:"prerequisites"`
 	Teaches       []string `toml:"teaches"`
 	Requires      []string `toml:"requires"`
+	Supplied      []string `toml:"supplied"`
 	VMUser        string   `toml:"vm_user"`
 	Workspace     struct {
 		Files    []string `toml:"files"`
@@ -181,6 +191,9 @@ type exerciseToml struct {
 			Prepare             string            `toml:"prepare"`
 		} `toml:"cases"`
 	} `toml:"verification"`
+	Completion struct {
+		Proofs []string `toml:"proofs"`
+	} `toml:"completion"`
 }
 
 func Load(root string) (*Catalog, error) {
@@ -191,12 +204,16 @@ func Load(root string) (*Catalog, error) {
 	}
 
 	cat := &Catalog{
-		Root:         root,
-		ByID:         make(map[string]*Exercise),
-		ToolBinaries: make(map[string]string),
+		Root:          root,
+		ByID:          make(map[string]*Exercise),
+		ToolBinaries:  make(map[string]string),
+		ConceptLabels: make(map[string]string),
 	}
 	for _, t := range course.Tools {
 		cat.ToolBinaries[t.ID] = t.Binary
+	}
+	for _, concept := range course.Concepts {
+		cat.ConceptLabels[concept.ID] = concept.Label
 	}
 
 	found := make(map[string]*Exercise)
@@ -267,6 +284,8 @@ func Load(root string) (*Catalog, error) {
 				WorkspaceBuild:       et.Workspace.Build,
 				Teaches:              et.Teaches,
 				Requires:             et.Requires,
+				CompletionProofs:     et.Completion.Proofs,
+				Supplied:             et.Supplied,
 				AgentLDFlags:         et.Build.AgentLDFlags,
 				ModuleFrom:           et.Build.ModuleFrom,
 				RunStage:             et.Run.Stage,
@@ -340,6 +359,12 @@ func Load(root string) (*Catalog, error) {
 }
 
 func validateExercise(ex *Exercise, tools map[string]string) error {
+	if ex.Kind == "deployment" && len(ex.CompletionProofs) == 0 {
+		return fmt.Errorf("%s: deployment must declare active-lab completion proofs", ex.ID)
+	}
+	if ex.Kind == "deployment" && len(ex.Supplied) == 0 {
+		return fmt.Errorf("%s: deployment must declare supplied black boxes", ex.ID)
+	}
 	if len(ex.RunStage) == 0 {
 		return fmt.Errorf("%s: run.stage must declare at least one artifact", ex.ID)
 	}
@@ -445,7 +470,7 @@ func (c *Catalog) Find(name string) *Exercise {
 	if ex, ok := c.ByID[name]; ok {
 		return ex
 	}
-	// Try matching by directory prefix (e.g., "L00" matches "L00-module-build-lifecycle").
+	// Try matching by directory prefix (e.g., "L00" matches "L00-kernel-module").
 	// The directory name format is "<PREFIX>-<slug>", so we check whether the
 	// base name starts with <name> followed by a hyphen (case-insensitive).
 	for i := range c.Exercises {

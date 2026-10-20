@@ -1,5 +1,7 @@
 # M03: Integrate the Deployment Path
 
+## Mission
+
 L20 through L24 implemented individual deployment controls.
 M03 combines them into one agent and makes their dependencies explicit.
 
@@ -40,8 +42,10 @@ exercises/M03-ghost
 
 The build embeds the completed M01 module and the course certificates into the
 agent.
-Complete the deployment TODOs in `main.go`; no standalone module is staged in
-the guest.
+Implementations from L20–L24 are supplied in `main.go`; read their contracts,
+but do not rewrite them.
+Your work is the `deploy` orchestration function.
+No standalone module is staged in the guest.
 
 ## Follow the two process images
 
@@ -73,7 +77,14 @@ The second image starts at `main` again.
 Check `/proc/self/exe` for `memfd` before loading or re-executing; without that
 guard, the agent loops forever.
 
-## Implement the deployment in dependency order
+## Implement it
+
+Compose the deployment in dependency order.
+
+Each helper below was already implemented and validated in its focused lesson.
+Call them in the required order, guard the two process images, and wrap errors
+at the phase boundary that produced them.
+The milestone assesses composition, repeat safety, and preservation of control.
 
 ### 1. Require the deployment privilege
 
@@ -164,7 +175,7 @@ port.
 This supports debugging; validation still checks the victim directly rather than
 trusting that response.
 
-## Test the complete transition
+## Test it
 
 Run the complete transition against a disposable target:
 
@@ -190,6 +201,8 @@ PONG
 ```
 
 The second `PING` proves that repeating deployment preserved the session.
+
+## Validate
 
 The validator observes the victim rather than trusting agent status fields:
 

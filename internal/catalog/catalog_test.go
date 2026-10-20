@@ -1,8 +1,10 @@
 package catalog
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -20,7 +22,7 @@ func TestCourseCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := len(cat.Exercises), 31; got != want {
+	if got, want := len(cat.Exercises), 32; got != want {
 		t.Fatalf("exercise count = %d, want %d", got, want)
 	}
 	seen := make(map[string]bool)
@@ -31,6 +33,96 @@ func TestCourseCatalog(t *testing.T) {
 			}
 		}
 		seen[exercise.ID] = true
+	}
+}
+
+func TestRequiredKnowledgeWasTaughtEarlier(t *testing.T) {
+	cat, err := Load(repositoryRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	taught := make(map[string]bool)
+	for _, exercise := range cat.Exercises {
+		for _, concept := range exercise.Requires {
+			if !taught[concept] {
+				t.Errorf("%s requires %s before the route teaches it", exercise.ID, concept)
+			}
+		}
+		for _, concept := range exercise.Teaches {
+			taught[concept] = true
+		}
+	}
+}
+
+func TestEveryExerciseHasExecutableLearningContract(t *testing.T) {
+	cat, err := Load(repositoryRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, exercise := range cat.Exercises {
+		if len(exercise.Teaches) == 0 {
+			t.Errorf("%s declares no new knowledge", exercise.ID)
+		}
+		if len(exercise.Checks) == 0 {
+			t.Errorf("%s declares no behavioral proof", exercise.ID)
+		}
+		operational := exercise.Kind == "deployment" || exercise.ID == "complete-rootkit"
+		if !operational && len(exercise.EditableFiles) == 0 {
+			t.Errorf("%s declares no student-owned work", exercise.ID)
+		}
+		if operational && len(exercise.EditableFiles) != 0 {
+			t.Errorf("%s is operational but declares implementation work", exercise.ID)
+		}
+		if !operational {
+			unfinished := false
+			for _, relative := range exercise.EditableFiles {
+				data, readErr := os.ReadFile(filepath.Join(exercise.Source, relative))
+				if readErr != nil {
+					t.Errorf("%s: read editable %s: %v", exercise.ID, relative, readErr)
+					continue
+				}
+				unfinished = unfinished || strings.Contains(string(data), "TODO")
+			}
+			if !unfinished {
+				t.Errorf("%s has no explicit unfinished work in its editable files", exercise.ID)
+			}
+		}
+	}
+}
+
+func TestEveryExerciseCheckIsManifestDeclared(t *testing.T) {
+	root := repositoryRoot(t)
+	cat, err := Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	declared := make(map[string]bool)
+	for _, exercise := range cat.Exercises {
+		for _, check := range exercise.Checks {
+			if check.Script != "" {
+				declared[filepath.Clean(check.Script)] = true
+			}
+		}
+	}
+
+	for _, exercise := range cat.Exercises {
+		checksDir := filepath.Join(exercise.Source, ".rklings", "checks")
+		err := filepath.WalkDir(checksDir, func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if !entry.Type().IsRegular() {
+				return nil
+			}
+			if !declared[filepath.Clean(path)] {
+				t.Errorf("undeclared exercise check: %s", path)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Errorf("walk checks for %s: %v", exercise.ID, err)
+		}
 	}
 }
 

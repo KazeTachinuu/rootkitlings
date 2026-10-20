@@ -1,5 +1,7 @@
 # L24: Anti-Forensics
 
+## Mission
+
 L23 changes the process name and prevents core dumps, but deployment still
 changes timestamps, login records, shell history, and the system journal.
 This exercise identifies and modifies those specific local records.
@@ -121,7 +123,7 @@ Complete `main.go`:
 The agent connects over mTLS, receives a CLEANUP command, and runs all
 anti-forensics routines.
 
-## Useful interfaces
+### Interfaces used here
 
 ```go
 // Timestomping

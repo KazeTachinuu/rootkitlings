@@ -1,0 +1,32 @@
+schema_version = 2
+id = "agent-qualification"
+title = "Make TCP messages survive the stream"
+stage = "split"
+kind = "qualification"
+vm_user = "student"
+tradecraft = ["network"]
+difficulty = "standard"
+prerequisites = ["usermode-helper"]
+teaches = ["go-errors", "tcp-streams", "length-framing", "complete-io"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["go.mod", "main.go"]
+editable = ["main.go"]
+build = "."
+
+[run]
+stage = ["agent"]
+agent = "once"
+
+[verification]
+timeout_seconds = 120
+tools = []
+runtime = "once"
+
+[[verification.cases]]
+id = "framed-exchange"
+label = "Length-framed exchange survives stream boundaries"
+expect_build = "pass"
+check = "exercises/G00-agent-qualification/.rklings/checks/framed-exchange"

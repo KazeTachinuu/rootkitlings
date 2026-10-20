@@ -24,6 +24,8 @@ stage = ["kernel", "agent"]
 load = ["kernel"]
 agent = "background"
 
+[serve]
+commands = ["PING", "STATUS", "CLEANUP root", "TIMESTOMP /tmp/target /tmp/reference"]
 
 [verification]
 load_kernel = true

@@ -19,13 +19,51 @@ Three components with separate kernel, target, and operator responsibilities:
    It defaults to :8443 with the dashboard on 127.0.0.1:8080; deployments may
    explicitly select :443.
 
-## Curriculum: 31 exercises
+## Curriculum: 32 exercises
 
-25 lings + 1 deployment + 4 modules + 1 project.
-Every exercise teaches ONE concept.
+25 lings + 1 agent qualification + 1 deployment + 4 milestones + 1 operational
+final.
+Every lesson introduces one bounded mechanism; milestones assess composition.
 Every transition is grounded: "we just did X, now we need Y because Z."
 
-### Phase 1: Foundation (L00-L04, C)
+## Lesson voice and contract
+
+Use a restrained field-instructor voice: direct objectives, exact boundaries,
+observable evidence, and explicit limitations.
+Avoid lore, motivational filler, and generic language tutorials.
+
+Every learner README uses this operational spine, in order:
+
+1. `Mission`: one outcome and the concrete limitation from the previous stage.
+2. `What you will observe`: evidence the learner can reproduce, not claims.
+3. `Workspace`: exact editable and supplied boundaries.
+4. Mechanism sections: only the model and APIs needed by this implementation.
+5. `TODOs`: numbered edits in dependency order, with exact source locations.
+6. `Test it`: commands, execution boundary, and expected evidence.
+7. `Validate`: the behavior independently proved by the runner.
+8. `Next`: the remaining limitation that creates the next exercise.
+
+D00 and P00 are operational and omit `Implement it`.
+Do not add generated contract blocks, internal concept slugs, generic failure
+clinics, standalone API catalogs, repeated course history, or completed
+solutions to learner pages.
+Technical detail stays when it directly supports a TODO, invariant, command, or
+observation; otherwise remove it.
+
+`exercise.toml` is the executable contract.
+For every exercise it must declare:
+
+- prerequisites and previously taught requirements;
+- only the new knowledge introduced here;
+- editable learner files versus supplied black boxes; and
+- behavioral validation cases.
+
+`./rklings info <exercise>` renders that contract.
+A mechanism used by learner work must be taught here, taught on the prerequisite
+path, or declared as a supplied artifact.
+There is no implicit fourth category.
+
+### Phase 1: Kernel foundation (L00-L04, C)
 
 "Before you can hide, you need to exist in the kernel."
 
@@ -76,7 +114,8 @@ But ls, ps, cat, and procfs TCP tables still can."
 "Assemble everything. 16 mkdir commands.
 A complete local rootkit."
 
-- Assemble all kretprobes + target lists + escalation. 16 mkdir commands.
+- Integrate supplied, previously validated subsystems through one ordered init,
+  rollback, and teardown boundary. 16 mkdir commands.
 
 ### D00: Deploy
 
@@ -99,13 +138,14 @@ exercise.
   type every command by hand.
   Phase 5 fixes all of that."
 
-### Phase 5: The Split (L14 C, L15-L16 Go)
+### Phase 5: The Split (L14 C, G00 and L15-L16 Go)
 
 "D00 was manual and loud.
 The kernel can launch programs.
 Let's make it launch an agent that phones home."
 
 - L14: call_usermodehelper to launch agent binary from kernel
+- G00: complete length-framed TCP I/O and practical Go error handling
 - L15: Go agent with mTLS (crypto/tls, x509.CertPool, tls.Dial, go:embed certs).
   ~60 lines.
 - L16: os.Mkdir bridge.
@@ -129,10 +169,9 @@ Browser operator plus terminal fallback. tcpdump sees HTTPS to a normal-looking
 server.
 All commands work remotely."
 
-- Full operator dashboard.
-  The terminal fallback keeps the protocol transparent. tcpdump shows TLS
-  application data.
-  All commands work remotely.
+- Supplied terminal and browser operator surfaces.
+- Student-owned seams: server-side mTLS, serialized protocol exchange, and PTY
+  lifecycle. tcpdump shows TLS application data.
 
 ### Phase 7: Tradecraft (L20-L24, Go)
 
@@ -161,11 +200,13 @@ An analyst would find you in minutes."
 
 ### M03: Ghost
 
-Integrate L20 through L24 in dependency order.
+Compose the supplied L20 through L24 mechanisms in dependency order through the
+single student-owned deployment function.
 Verify each claimed observation path directly and state the remaining limits.
 
-### P00: Complete Rootkit
+### P00: Operate and Verify the Complete System
 
+- Complete, read-only product workspace; this is not an implementation capstone.
 - Manifest-driven build properties: `go build -ldflags="-s -w" -trimpath`.
 - Direct TLS listener with a user-controlled DNS name in the course certificate.
 - Full test: deploy against a clean VM and verify the implemented controls,
@@ -331,7 +372,7 @@ Platform detection: runtime.GOOS for install instructions.
 ```
 rootkitlings/
   exercises/                    # STUDENT WORKSPACE (visible)
-    L00-module-build-lifecycle/
+    L00-kernel-module/
       README.md
       Kbuild
       core/
@@ -368,7 +409,7 @@ rootkitlings/
   Editable-file TODOs fail during preflight before any build or boot.
   Failed guest checks print concise diagnostics and save the full transcript
   under `.rklings/logs/`.
-- `rklings status` - show exercise progress (reads .rklings/progress.json)
+- `rklings list` - show the ordered route, progress, and next exercise
 - `rklings solution <exercise>` - print reference solution (requires prior
   validation pass)
 - `rklings reset <exercise>` - restore the declared learner files from Git
@@ -434,18 +475,33 @@ Dispatch progression:
 
 ### Workspace TODO Style
 
-One TODO per concept, one line, says WHAT not HOW:
+One numbered TODO per coherent student decision.
+Keep the source comment to one line and say what must be completed, not how to
+implement it:
 
 ```c
-// TODO: rk_dispatch (longest-prefix match, call handler)
+// TODO 3: dispatch the longest matching command
 ```
 
 Never leak the implementation recipe:
 
 ```c
-// BAD: TODO: use strncmp to compare suffix with each registry[i].key,
+// BAD: TODO 3: use strncmp to compare suffix with each registry[i].key,
 //      track longest match, then call best->handler(arg)
 ```
+
+TODO numbers are local to one exercise and start at 1. Their order follows the
+implementation dependency, not alphabetical filenames.
+The README TODO map, source comment, explanation heading, reference solution,
+and validator must all describe the same work.
+
+### Exercise audit protocol
+
+`REVIEW.md` is the canonical, mandatory procedure for every exercise review.
+Read it completely before changing an exercise.
+Do not perform a prose-only pass: audit intent, knowledge, starter code, README,
+reference solution, validation, and curriculum transitions as one learner
+experience.
 
 ## Exercise Chain
 
@@ -487,8 +543,8 @@ Every check verifies the actual mechanism:
 Exercise progress stored in .rklings/progress.json.
 
 - `rklings validate` writes {exercise: timestamp} on pass
-- `rklings solution` checks this file before revealing solution
-- `rklings status` reads this file to show progress
+- `rklings solution` is always available; viewing it does not change progress
+- `rklings list` reads this file to show progress and the next exercise
 - `rklings reset` removes the exercise entry
 
 ## Naming Conventions
@@ -499,29 +555,29 @@ Exercise progress stored in .rklings/progress.json.
   filter_dir(), target_add(), is_hidden()
 - Agent packages by capability (Sliver): transport.go, mkdir.go, dispatch.go,
   handlers/, evasion/
-- Exercise dirs: L00-module-build-lifecycle/, uppercase prefix, hyphenated,
-  describes technique
+- Exercise dirs: L00-kernel-module/, uppercase prefix, hyphenated, describes
+  technique
 - No invented terminology.
   Names from kernel source, Go docs, or MITRE ATT&CK only.
 
 ## README Format
 
 ```
-# L15: mTLS Callback
-[ASCII diagram]
-## You write
-[file, function, ~line count]
-## API
-[exact signatures + key calls]
+# L15: Concrete Outcome
+## Mission
+## What you will observe
+## Workspace
+[only mechanism sections required by this exercise]
+## TODOs
+[numbered coordinate map, then one explanation per TODO]
 ## Test it
-[exact commands + expected output]
 ## Validate
-[rklings validate output]
 ## Next
-[one sentence]
 ```
 
-Optional "The trap" for hard exercises.
+D00 and P00 omit `TODOs` because they are operational verification exercises.
+Use diagrams only when they make a lifecycle, boundary, or data flow materially
+clearer than prose.
 No hints system.
 
 ## Lab Servers

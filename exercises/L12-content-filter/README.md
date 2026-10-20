@@ -1,5 +1,7 @@
 # L12: Content Line Filter
 
+## Mission
+
 L11 removed directory entries before userspace could inspect them.
 L12 applies the same return-path idea to text reads: remove every returned line
 that contains a selected string while leaving the underlying file unchanged.
@@ -32,7 +34,7 @@ grep backdoor /etc/passwd
 Your implementation must remove that line from returned output without rewriting
 the file.
 
-## What is already provided
+## Workspace
 
 Open `exercises/L12-content-filter/main.c`.
 The workspace already contains:
@@ -152,7 +154,7 @@ not delivered.
 
 ### 4. Register and release the probes
 
-Initialize the target-list lock, then register these probes in order:
+Initialize the target-list lock, then register:
 
 1. `read_probe`
 2. `rk_mkdir_probe`

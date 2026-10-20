@@ -9,6 +9,21 @@ difficulty = "advanced"
 prerequisites = ["local-control"]
 teaches = ["initial-access", "privilege-escalation", "deployment"]
 requires = []
+supplied = [
+    "isolated vulnerable HTTP target and pinned guest kernel",
+    "copy_fail_exp.py privilege-escalation black box",
+    "the learner's completed M01 module built for the target kernel",
+    "d00-check operational verifier",
+]
+
+[completion]
+proofs = [
+    "HTTP injection produced the initial student execution",
+    "the supplied escalation path produced effective UID 0",
+    "rklings.ko was transferred only after access",
+    "the deployed module answered its control command",
+    "the operational module was absent from lsmod",
+]
 
 [workspace]
 mode = "project"

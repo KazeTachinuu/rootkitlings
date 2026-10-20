@@ -1,0 +1,52 @@
+schema_version = 2
+id = "hide-targets"
+title = "Remember names to hide"
+stage = "concealment"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["concealment"]
+difficulty = "standard"
+prerequisites = ["command-routing"]
+teaches = ["spinlock", "irq-safe-locking", "fixed-array-storage"]
+requires = ["component-ownership", "errno-propagation", "c-pointers-and-structs"]
+supplied = ["target-list initialization", "consistent diagnostic snapshot", "bounded procfs command adapter", "procfs publication and lifecycle"]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c", "rklings_target.c", "rklings_target.h"]
+editable = ["rklings_target.c"]
+build = "."
+
+[run]
+stage = ["kernel"]
+load = ["kernel"]
+
+
+[verification]
+load_kernel = true
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "add-and-read"
+label = "Add targets and read them back"
+expect_build = "pass"
+check = "exercises/L10-hide-targets/.rklings/checks/add-and-read"
+
+[[verification.cases]]
+id = "remove-target"
+label = "Remove a target by exact value"
+expect_build = "pass"
+check = "exercises/L10-hide-targets/.rklings/checks/remove-target"
+
+[[verification.cases]]
+id = "match-target"
+label = "Match returns true for listed names"
+expect_build = "pass"
+check = "exercises/L10-hide-targets/.rklings/checks/match-target"
+
+[[verification.cases]]
+id = "overflow-rejected"
+label = "Adding beyond RK_TARGET_MAX is rejected"
+expect_build = "pass"
+check = "exercises/L10-hide-targets/.rklings/checks/overflow-rejected"

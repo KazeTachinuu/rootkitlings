@@ -1,0 +1,32 @@
+#!/bin/sh
+# shellcheck disable=SC2016 # The quoted scripts expand inside the student shell.
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Command boundary"
+
+load rklings.ko
+assert_loaded rklings
+
+if su student -s /bin/sh -c '
+    cd /home/student || exit 1
+    mkdir rklings.other && test -d rklings.other && test "$(id -u)" = 1000
+'; then
+    _ok "ordinary name creates a directory without escalation"
+else
+    _fail "ordinary name did not retain normal mkdir behavior"
+fi
+
+if su student -s /bin/sh -c '
+    cd /home/student || exit 1
+    ! mkdir rklings.e.nope 2>/dev/null &&
+        test ! -e rklings.e.nope && test "$(id -u)" = 1000
+'; then
+    _ok "non-numeric PID is rejected without escalation"
+else
+    _fail "non-numeric PID changed state or credentials"
+fi
+
+rmdir /home/student/rklings.other
+unload rklings
+summary

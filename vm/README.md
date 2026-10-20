@@ -1,62 +1,53 @@
-# Minimal kernel VM
+# Exercise virtual machines
 
-This directory contains shared course tooling.
-The VM boots the pinned course kernel in QEMU with a small BusyBox initramfs.
-`vm/kernel.toml` identifies the verified source archive.
-The `scripts/kernel ensure` command builds the image and external-module tree.
-The host kernel and host kernel headers are not used.
-It has no disk or network device unless networking is requested explicitly.
+The supported VM interface is the `rklings` CLI.
+It boots prepared Ubuntu cloud images through the Go implementation in
+`internal/vm`; there is no standalone shell boot script.
 
-Read [`boot`](boot) and [`init`](init) before using them.
-The scripts print the important commands they run.
+Prepare the images, SSH key, certificates, and build toolchains once:
 
-## Boot
-
-```sh
-./vm/boot
+```console
+$ ./rklings setup
 ```
 
-Inspect the guest:
+Build an exercise, create an isolated overlay, stage its declared artifacts, and
+open an interactive guest:
 
-```sh
-uname -a
-cat /proc/cmdline
-cat /proc/1/status
-mount
+```console
+$ ./rklings run L02
 ```
 
-Exit the shell to power off the guest.
+Run the exercise's manifest-declared proof in a fresh guest:
 
-The default guest has only loopback.
-For an experiment that must reach QEMU's user-network services, request the
-optional capability explicitly:
-
-```sh
-./rklings run --cap network L19
+```console
+$ ./rklings validate L02
 ```
 
-The guest then uses `10.0.2.15`; the host-side QEMU alias is `10.0.2.2`.
+Use `--reference` with either command to run the reference workspace.
 
-## Add a module
+## Runtime model
 
-```sh
-./vm/boot path/to/module.ko
-```
+Each run creates a temporary qcow2 overlay on top of the cached course image.
+Cloud-init installs the course SSH key, QEMU forwards a random host port to
+guest SSH, and the CLI waits for the guest before staging files.
+Closing the exercise shell tears down QEMU and removes the overlay.
 
-The shell opens in `/rklings`, which contains only the module you built.
-The script does not load it for you.
+`rklings run` boots as root for staging, then opens the interactive shell as the
+exercise's declared VM user.
+While the lab is running, the CLI prints the command for opening another student
+or root shell with `rklings ssh`.
 
-## Add guest tools
+D00 uses its separate Ubuntu 24.04 image and provisions the pinned deployment
+kernel.
+Other exercises use the Ubuntu 26.04 course image.
 
-Request only the tools an exercise needs.
-The option is repeatable.
-It accepts an executable filename or a repository-relative path under
-`vm/tools/`:
+## Files retained here
 
-```sh
-./vm/boot --tool module_load_test path/to/module.ko
-```
+- `checks/` — shared guest-side validation library and checks.
+- `tools/` — focused binaries staged only when a manifest requests them.
+- `fixtures/fileless-agent/` — build fixture used by fileless execution tests.
+- `ui.sh` — output helpers sourced by guest checks.
 
-Requested tools are built first and copied to `/bin` in the guest.
-Unknown, non-executable, symlinked, or escaping paths are rejected.
-Other host tools are not included.
+Exercise manifests decide which checks, tools, artifacts, users, and runtime
+actions are staged.
+Files in this directory are not discovered implicitly.

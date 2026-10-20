@@ -11,7 +11,7 @@ GUEST_TOOL_NAMES := \
 	proc_read_test \
 	secure_agent_fixture
 GUEST_TOOLS := $(addprefix $(TOOL_OUT)/,$(GUEST_TOOL_NAMES))
-READMES := README.md CLAUDE.md DEPENDENCIES.md $(shell find exercises lib product vm \
+READMES := README.md CLAUDE.md DEPENDENCIES.md REVIEW.md $(shell find exercises lib product vm \
 	-path '*/node_modules' -prune \
 	-o -name README.md -type f -print | sort)
 WEB_STAMP := lib/webapp/node_modules/.package-lock.json
@@ -71,6 +71,7 @@ format-docs: $(DOCS_STAMP)
 lint-docs: $(DOCS_STAMP)
 	npm run check:docs -- $(READMES)
 	npx --yes markdownlint-cli2@0.23.3 $(READMES)
+	node scripts/check-exercise-readmes.mjs $(READMES)
 	node scripts/workspace-trees.mjs --check $(READMES)
 	node --test scripts/check-diagrams.test.mjs
 	node scripts/check-diagrams.mjs $(READMES)

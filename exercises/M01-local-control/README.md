@@ -1,6 +1,10 @@
 # M01: Covert Local Control
 
-M01 combines the local control mechanisms from L00 through L14.
+## Mission
+
+M01 combines the local control mechanisms from L00 through L13, plus the
+persistence and module-concealment work from M00.
+L14 begins the later userspace split and is not part of this milestone.
 Each mechanism works alone; integration adds shared state, registration order,
 partial-init rollback, and reverse-order cleanup.
 A failure in one subsystem must not leave commands or probes owned by another
@@ -37,7 +41,11 @@ exercises/M01-local-control
 ```
 
 The header and `Kbuild` define the shared contract.
-Complete the TODOs in the six `core` files, following the ownership order below.
+The focused mechanisms from L00–L13 and M00 are supplied as complete subsystem
+implementations.
+Read their exported contracts, then complete only `core/init.c`: ownership
+initialization, command-provider ordering, dependency loading, probe
+registration, rollback, and teardown.
 
 ## Architecture
 
@@ -109,6 +117,11 @@ No file reaches into another subsystem's business:
 
 ## Implement it
 
+Do not rewrite the supplied dispatcher, escalation, persistence, target, or
+filter components.
+M01 assesses whether you can compose already-proven mechanisms into one
+lifecycle without leaking a partial registration.
+
 Seven files compose the module; the workspace provides the shared
 infrastructure:
 
@@ -133,7 +146,7 @@ The dispatcher owns command routing, while each subsystem owns its state and
 registration table.
 That boundary keeps command syntax separate from the hook that implements it.
 
-## Useful interfaces
+### Interfaces used here
 
 ```c
 // Command dispatch (dispatch.c)
