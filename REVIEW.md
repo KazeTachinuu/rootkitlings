@@ -14,6 +14,17 @@ implementation -> validation -> next lesson
 
 An exercise is finished only when that entire path is coherent and proven.
 
+## Current review state
+
+L00 through L10 define the reference format and learning flow.
+Their structure is the baseline for the remaining course, not a template to copy
+blindly: each later exercise must still tell its own practical story and teach
+only what its outcome requires.
+
+The next review starts at L11.
+Continue in curriculum order so every lesson can rely honestly on the one before
+it.
+
 ## Quality bar
 
 Every exercise must have one clear operational outcome.
@@ -475,3 +486,45 @@ An exercise is ready only when all of the following are true:
 - The review record has no unresolved concern.
 
 If any item fails, the exercise is still under review.
+
+## Remaining review queue
+
+Review each exercise with the complete procedure above.
+Checking an item means its starter, solution, README, manifest, checks, manual
+test, and transitions have all passed—not merely that its prose was edited.
+
+### Learning exercises
+
+- [ ] L11 — Hide files and PIDs from directory listings
+- [ ] L12 — Remove matching lines from file reads
+- [ ] L13 — Hide a listening port from procfs TCP tables
+- [ ] L14 — Launch a userspace program from the kernel
+- [ ] L15 — Go agent with mTLS callback
+- [ ] L16 — Bridge server commands to the kernel via `os.Mkdir`
+- [ ] L17 — Command dispatch over mTLS
+- [ ] L18 — Remote shell execution over mTLS
+- [ ] L19 — File transfer over mTLS
+- [ ] L20 — Load a kernel module without touching disk
+- [ ] L21 — Execute a binary without writing it to disk
+- [ ] L22 — Route agents to C2 and browsers to a decoy site
+- [ ] L23 — Masquerade as a kernel thread with jitter and auto-hide
+- [ ] L24 — Scrub timestamps, logins, and history
+
+### Milestones
+
+- [ ] M00 — Persist across reboot and hide from `lsmod`
+- [ ] M01 — One `.ko` with full local rootkit control
+- [ ] M02 — Integrated remote operator and mTLS agent
+- [ ] M03 — Integrate and verify deployment controls
+
+### Final integration
+
+- [ ] P00 — Operate and verify the complete system
+
+### Whole-course acceptance
+
+- [ ] Verify every TODO against its starter, solution, and validation.
+- [ ] Complete every exercise in order from clean student workspaces.
+- [ ] Confirm that every new idea is introduced before the learner must use it.
+- [ ] Remove obsolete files, commands, terminology, and test-only details.
+- [ ] Run all exercise validations and repository checks.
