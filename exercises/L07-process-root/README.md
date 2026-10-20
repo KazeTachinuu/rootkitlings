@@ -109,7 +109,7 @@ elevate its parent shell or another PID.
 TODO 1  main.c:11:1  replace one userspace task's credentials
 ```
 
-### TODO 1 — `main.c:11:1` — Replace one task's credentials
+### TODO 1 -- `main.c:11:1` -- Replace one task's credentials
 
 Implement `rk_escalate_pid` in this order:
 

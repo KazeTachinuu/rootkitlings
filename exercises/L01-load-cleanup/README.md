@@ -116,7 +116,7 @@ TODO 1  core/main.c:49:2  create both channels or clean up the first
 TODO 2  core/main.c:55:2  destroy both channels in reverse order
 ```
 
-### TODO 1 — `core/main.c:49:2` — Complete initialization or undo it
+### TODO 1 -- `core/main.c:49:2` -- Complete initialization or undo it
 
 ```text
 success  -> keep channels A and B, return 0
@@ -136,7 +136,7 @@ failure  -> keep no channels, return the exact error
 
 Never pass an error pointer to `rk_channel_destroy`.
 
-### TODO 2 — `core/main.c:55:2` — Destroy both channels
+### TODO 2 -- `core/main.c:55:2` -- Destroy both channels
 
 1. Log `rklings: unloaded`.
 2. Destroy channel B, then clear `chan_b`.

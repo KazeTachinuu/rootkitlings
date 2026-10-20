@@ -113,18 +113,18 @@ TODO 4  rklings_command.c:37:1  map names to handlers
 TODO 5  rklings_command.c:41:1  split and dispatch one command
 ```
 
-### TODO 1 — `rklings_command.c:12:1` — Implement `ping`
+### TODO 1 -- `rklings_command.c:12:1` -- Implement `ping`
 
 Reject an argument with `-EINVAL`.
 Otherwise log `rklings: pong\n` and return `0`.
 
-### TODO 2 — `rklings_command.c:18:1` — Implement `status`
+### TODO 2 -- `rklings_command.c:18:1` -- Implement `status`
 
 Reject an argument with `-EINVAL`.
 Otherwise log `rklings: alive, escalations=%d\n` with `rk_escalation_count()`,
 then return `0`.
 
-### TODO 3 — `rklings_command.c:24:1` — Preserve escalation
+### TODO 3 -- `rklings_command.c:24:1` -- Preserve escalation
 
 | `arg`        | Target                       |
 | ------------ | ---------------------------- |
@@ -135,7 +135,7 @@ then return `0`.
 
 Pass the selected PID to `rk_escalate_pid` and return its result.
 
-### TODO 4 — `rklings_command.c:37:1` — Build the command table
+### TODO 4 -- `rklings_command.c:37:1` -- Build the command table
 
 Add exactly these entries to `rk_commands`:
 
@@ -145,7 +145,7 @@ ping    rk_cmd_ping
 status  rk_cmd_status
 ```
 
-### TODO 5 — `rklings_command.c:41:1` — Dispatch one command
+### TODO 5 -- `rklings_command.c:41:1` -- Dispatch one command
 
 1. Skip the `rklings.` prefix.
 2. Find the first `.` with `strchr`.

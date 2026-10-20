@@ -93,13 +93,13 @@ TODO 5  core/main.c:24:2   create state or reject the load
 TODO 6  core/main.c:31:2   destroy state during unload
 ```
 
-### TODO 1 — `core/state.c:16:1` — Define the private state
+### TODO 1 -- `core/state.c:16:1` -- Define the private state
 
 Define `struct rk_state` with one `bool active` field.
 Keeping the definition in `state.c` prevents `main.c` from reading or changing
 the field directly.
 
-### TODO 2 — `core/state.c:20:2` — Create initialized state
+### TODO 2 -- `core/state.c:20:2` -- Create initialized state
 
 ```text
 allocation succeeds  initialized state pointer
@@ -113,19 +113,19 @@ allocation fails     ERR_PTR(-ENOMEM)
 
 `sizeof(*state)` stays correct if the structure changes.
 
-### TODO 3 — `core/state.c:26:2` — Read the stored active value
+### TODO 3 -- `core/state.c:26:2` -- Read the stored active value
 
 Return `state->active`.
 This function lets `main.c` read the value without accessing the field directly.
 
-### TODO 4 — `core/state.c:32:2` — Destroy the state
+### TODO 4 -- `core/state.c:32:2` -- Destroy the state
 
 1. Release the allocation with `kfree(state)`.
 2. Log `rklings: released state\n`.
 
 After `kfree`, no code may access the object through that pointer.
 
-### TODO 5 — `core/main.c:24:2` — Create state during load
+### TODO 5 -- `core/main.c:24:2` -- Create state during load
 
 ```text
 state pointer  -> keep it, log active, return 0
@@ -140,7 +140,7 @@ error pointer  -> clear state, return the stored error
 
 Log success only after the state exists.
 
-### TODO 6 — `core/main.c:31:2` — Destroy state during unload
+### TODO 6 -- `core/main.c:31:2` -- Destroy state during unload
 
 1. Log `rklings: unloaded\n`.
 2. Call `rk_state_destroy(state)`.

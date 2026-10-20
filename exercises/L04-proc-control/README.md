@@ -90,7 +90,7 @@ kernel memory.
 TODO 1  interface/proc.c:28:2  copy one command byte and update active state
 ```
 
-### TODO 1 — `interface/proc.c:28:2` — Handle one control write
+### TODO 1 -- `interface/proc.c:28:2` -- Handle one control write
 
 Use one `char command`.
 Copy one byte with `copy_from_user(&command, ubuf, 1)` only after confirming

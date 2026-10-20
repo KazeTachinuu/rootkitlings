@@ -163,7 +163,7 @@ TODO 5  rklings_hook.h:50:2  register both probes or roll back
 TODO 6  rklings_hook.h:56:2  unregister both probes in reverse order
 ```
 
-### TODO 1 — `rklings_hook.h:20:1` — Intercept one pathname
+### TODO 1 -- `rklings_hook.h:20:1` -- Intercept one pathname
 
 1. Set `call->intercepted` to `false`.
 2. Copy `pathname` into a `RK_PATH_MAX` buffer with `strncpy_from_user`.
@@ -173,7 +173,7 @@ TODO 6  rklings_hook.h:56:2  unregister both probes in reverse order
 6. Replace `pathname[0]` with `'\0'` using `put_user`; return `0` if it fails.
 7. Set `intercepted` to `true` and store `rk_handle_mkdir(base)` in `result`.
 
-### TODO 2 — `rklings_hook.h:27:1` — Extract both pathname arguments
+### TODO 2 -- `rklings_hook.h:27:1` -- Extract both pathname arguments
 
 For each entry handler:
 
@@ -183,7 +183,7 @@ For each entry handler:
 4. Cast it to `const char __user *` and pass it with `(void *)instance->data` to
    `rk_do_intercept`.
 
-### TODO 3 — `rklings_hook.h:40:1` — Return the command result
+### TODO 3 -- `rklings_hook.h:40:1` -- Return the command result
 
 1. Read `struct rk_call` from `(void *)instance->data`.
 2. If `intercepted` is true, pass the saved result to `regs_set_return_value` as
@@ -192,7 +192,7 @@ For each entry handler:
 
 The cast preserves negative error values.
 
-### TODO 4 — `rklings_hook.h:46:1` — Describe both kretprobes
+### TODO 4 -- `rklings_hook.h:46:1` -- Describe both kretprobes
 
 Declare two static `struct kretprobe` values:
 
@@ -204,14 +204,14 @@ Declare two static `struct kretprobe` values:
 For both probes, use `rk_return` as the return handler, `sizeof(struct rk_call)`
 as `data_size`, and `8` as `maxactive`.
 
-### TODO 5 — `rklings_hook.h:50:2` — Register both probes or roll back
+### TODO 5 -- `rklings_hook.h:50:2` -- Register both probes or roll back
 
 1. Register the `mkdir` probe; return its exact error on failure.
 2. Register the `mkdirat` probe.
 3. If step 2 fails, unregister `mkdir` and return the second error.
 4. Return `0` after both registrations succeed.
 
-### TODO 6 — `rklings_hook.h:56:2` — Unregister both probes
+### TODO 6 -- `rklings_hook.h:56:2` -- Unregister both probes
 
 Unregister `mkdirat` first, then `mkdir`.
 This reverses the successful registration order.

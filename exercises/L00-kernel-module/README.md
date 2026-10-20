@@ -146,14 +146,14 @@ TODO 3  core/main.c:14:2 log a clean unload
 TODO 4  core/main.c:17:1 register both lifecycle callbacks
 ```
 
-### TODO 1 — `Kbuild:1:1` — Build the module
+### TODO 1 -- `Kbuild:1:1` -- Build the module
 
 Create the complete build path from `core/main.c` to `rklings.ko`:
 
 1. Add `rklings.o` to `obj-m` so Kbuild produces a loadable module.
 2. Assign `core/main.o` to `rklings-y` as its only linked object.
 
-### TODO 2 — `core/main.c:8:2` — Complete module entry
+### TODO 2 -- `core/main.c:8:2` -- Complete module entry
 
 Complete `rk_init` in this order:
 
@@ -163,12 +163,12 @@ Complete `rk_init` in this order:
 The message makes entry observable.
 The return value tells `insmod` that initialization succeeded.
 
-### TODO 3 — `core/main.c:14:2` — Complete module exit
+### TODO 3 -- `core/main.c:14:2` -- Complete module exit
 
 Log the exact message `rklings: unloaded\n` with `pr_info`; `rk_exit` returns
 nothing because a module cannot reject its unload at this point.
 
-### TODO 4 — `core/main.c:17:1` — Register the callbacks
+### TODO 4 -- `core/main.c:17:1` -- Register the callbacks
 
 Connect the two functions to the module:
 

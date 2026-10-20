@@ -43,10 +43,10 @@ Other exercises use the Ubuntu 26.04 course image.
 
 ## Files retained here
 
-- `checks/` — shared guest-side validation library and checks.
-- `tools/` — focused binaries staged only when a manifest requests them.
-- `fixtures/fileless-agent/` — build fixture used by fileless execution tests.
-- `ui.sh` — output helpers sourced by guest checks.
+- `checks/` -- shared guest-side validation library and checks.
+- `tools/` -- focused binaries staged only when a manifest requests them.
+- `fixtures/fileless-agent/` -- build fixture used by fileless execution tests.
+- `ui.sh` -- output helpers sourced by guest checks.
 
 Exercise manifests decide which checks, tools, artifacts, users, and runtime
 actions are staged.

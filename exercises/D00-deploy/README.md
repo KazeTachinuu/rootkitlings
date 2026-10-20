@@ -135,7 +135,7 @@ curl 'http://127.0.0.1:8088/?host=localhost'
 ```
 
 The response proves that the deliberately vulnerable service is reachable.
-Use that service—not learner SSH—to complete the three operational steps above.
+Use that service, not learner SSH, to complete the three operational steps above.
 
 ## Validate
 

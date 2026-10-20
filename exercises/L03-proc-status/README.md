@@ -115,7 +115,7 @@ TODO 4  core/main.c:32:2       publish after state creation or roll state back
 TODO 5  core/main.c:39:2       remove the interface before destroying state
 ```
 
-### TODO 1 — `interface/proc.c:14:2` — Report the stored active state
+### TODO 1 -- `interface/proc.c:14:2` -- Report the stored active state
 
 1. Write `active=%u\n` to `output` with `seq_printf`.
 2. Use `rk_state_is_active(proc_state) ? 1U : 0U` for the value.
@@ -123,7 +123,7 @@ TODO 5  core/main.c:39:2       remove the interface before destroying state
 
 Read the value from `proc_state`; do not keep a second copy.
 
-### TODO 2 — `interface/proc.c:27:2` — Publish one state object
+### TODO 2 -- `interface/proc.c:27:2` -- Publish one state object
 
 ```text
 valid state, no entry  -> create the entry, return 0
@@ -140,7 +140,7 @@ creation fails         -> clear proc_state, return -ENOMEM
 
 Store `proc_state` before the entry becomes readable.
 
-### TODO 3 — `interface/proc.c:33:2` — Remove the proc entry
+### TODO 3 -- `interface/proc.c:33:2` -- Remove the proc entry
 
 1. Call `proc_remove(proc_entry)`.
 2. Set `proc_entry` to `NULL`.
@@ -149,7 +149,7 @@ Store `proc_state` before the entry becomes readable.
 
 Remove the entry first so no new read can use the state.
 
-### TODO 4 — `core/main.c:32:2` — Add publication to initialization
+### TODO 4 -- `core/main.c:32:2` -- Add publication to initialization
 
 1. Call `rk_proc_publish(state)` after state creation.
 2. If it returns an error, jump to one cleanup label.
@@ -159,7 +159,7 @@ Remove the entry first so no new read can use the state.
 
 Log success only after both the state and proc entry exist.
 
-### TODO 5 — `core/main.c:39:2` — Tear down in dependency order
+### TODO 5 -- `core/main.c:39:2` -- Tear down in dependency order
 
 1. Log `rklings: unloaded\n`.
 2. Call `rk_proc_unpublish()`.

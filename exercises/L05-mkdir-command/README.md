@@ -103,7 +103,7 @@ command contract.
 TODO 1  main.c:13:2  recognize the command prefix and log its suffix
 ```
 
-### TODO 1 — `main.c:13:2` — Recognize the command prefix
+### TODO 1 -- `main.c:13:2` -- Recognize the command prefix
 
 | Basename                 | Log                                 | Return  |
 | ------------------------ | ----------------------------------- | ------- |

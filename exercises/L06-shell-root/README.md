@@ -100,7 +100,7 @@ The kernel log still makes the trigger visible.
 TODO 1  main.c:11:2  give root credentials to the shell that sent the exact command
 ```
 
-### TODO 1 — `main.c:11:2` — Elevate the calling shell
+### TODO 1 -- `main.c:11:2` -- Elevate the calling shell
 
 ```text
 rklings.e  -> elevate its parent shell; create no directory

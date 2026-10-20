@@ -105,7 +105,7 @@ TODO 2  rklings_target.c:18:1  remove one exact name
 TODO 3  rklings_target.c:24:1  answer whether one exact name is stored
 ```
 
-### TODO 1 — `rklings_target.c:12:1` — Add one target
+### TODO 1 -- `rklings_target.c:12:1` -- Add one target
 
 Reject a missing or empty name with `-EINVAL`.
 
@@ -118,7 +118,7 @@ While holding the lock:
 
 Return the error from `strscpy` when the name does not fit.
 
-### TODO 2 — `rklings_target.c:18:1` — Remove one target
+### TODO 2 -- `rklings_target.c:18:1` -- Remove one target
 
 ```text
 missing or empty  -> -EINVAL
@@ -138,7 +138,7 @@ remove:              hidden_dir
 after:   secret.txt  notes
 ```
 
-### TODO 3 — `rklings_target.c:24:1` — Match one target
+### TODO 3 -- `rklings_target.c:24:1` -- Match one target
 
 While holding the lock:
 

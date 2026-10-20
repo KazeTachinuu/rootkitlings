@@ -302,7 +302,7 @@ TODO 2  core/main.c:39:2  release the owned state
 Then give each TODO a matching heading:
 
 ```markdown
-### TODO 1 — `core/main.c:24:2` — Acquire state or reject the load
+### TODO 1 -- `core/main.c:24:2` -- Acquire state or reject the load
 ```
 
 Under the heading, use the smallest explanation that lets a prepared learner act
@@ -406,7 +406,7 @@ All synchronization and proof requirements still apply.
 Produce this record for every exercise:
 
 ```markdown
-### LXX — Title
+### LXX -- Title
 
 Core outcome: Remaining limitation:
 
@@ -491,35 +491,35 @@ If any item fails, the exercise is still under review.
 
 Review each exercise with the complete procedure above.
 Checking an item means its starter, solution, README, manifest, checks, manual
-test, and transitions have all passed—not merely that its prose was edited.
+test, and transitions have all passed, not merely that its prose was edited.
 
 ### Learning exercises
 
-- [ ] L11 — Hide files and PIDs from directory listings
-- [ ] L12 — Remove matching lines from file reads
-- [ ] L13 — Hide a listening port from procfs TCP tables
-- [ ] L14 — Launch a userspace program from the kernel
-- [ ] L15 — Go agent with mTLS callback
-- [ ] L16 — Bridge server commands to the kernel via `os.Mkdir`
-- [ ] L17 — Command dispatch over mTLS
-- [ ] L18 — Remote shell execution over mTLS
-- [ ] L19 — File transfer over mTLS
-- [ ] L20 — Load a kernel module without touching disk
-- [ ] L21 — Execute a binary without writing it to disk
-- [ ] L22 — Route agents to C2 and browsers to a decoy site
-- [ ] L23 — Masquerade as a kernel thread with jitter and auto-hide
-- [ ] L24 — Scrub timestamps, logins, and history
+- [ ] L11 -- Hide files and PIDs from directory listings
+- [ ] L12 -- Remove matching lines from file reads
+- [ ] L13 -- Hide a listening port from procfs TCP tables
+- [ ] L14 -- Launch a userspace program from the kernel
+- [ ] L15 -- Go agent with mTLS callback
+- [ ] L16 -- Bridge server commands to the kernel via `os.Mkdir`
+- [ ] L17 -- Command dispatch over mTLS
+- [ ] L18 -- Remote shell execution over mTLS
+- [ ] L19 -- File transfer over mTLS
+- [ ] L20 -- Load a kernel module without touching disk
+- [ ] L21 -- Execute a binary without writing it to disk
+- [ ] L22 -- Route agents to C2 and browsers to a decoy site
+- [ ] L23 -- Masquerade as a kernel thread with jitter and auto-hide
+- [ ] L24 -- Scrub timestamps, logins, and history
 
 ### Milestones
 
-- [ ] M00 — Persist across reboot and hide from `lsmod`
-- [ ] M01 — One `.ko` with full local rootkit control
-- [ ] M02 — Integrated remote operator and mTLS agent
-- [ ] M03 — Integrate and verify deployment controls
+- [ ] M00 -- Persist across reboot and hide from `lsmod`
+- [ ] M01 -- One `.ko` with full local rootkit control
+- [ ] M02 -- Integrated remote operator and mTLS agent
+- [ ] M03 -- Integrate and verify deployment controls
 
 ### Final integration
 
-- [ ] P00 — Operate and verify the complete system
+- [ ] P00 -- Operate and verify the complete system
 
 ### Whole-course acceptance
 
