@@ -2,9 +2,9 @@
 
 ## Mission
 
-L09 runs a command and immediately forgets it.
-A hide command must remember its target so later directory listings can decide
-whether to show that name.
+M00 made the module survive reboot and disappear from `lsmod`, but a hide
+command must remember its target so later directory listings can decide whether
+to show that name.
 
 Build the three operations behind that decision:
 

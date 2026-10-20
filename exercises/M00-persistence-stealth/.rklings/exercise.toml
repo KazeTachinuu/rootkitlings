@@ -7,8 +7,14 @@ vm_user = "root"
 tradecraft = ["persistence", "concealment"]
 difficulty = "standard"
 prerequisites = ["command-routing"]
-teaches = ["module-persistence", "module-cloaking", "filp-kernel-write"]
-requires = []
+teaches = ["module-persistence", "module-cloaking", "filp-kernel-write", "kernel-list-manipulation"]
+requires = ["errno-propagation", "command-registration", "command-dispatch"]
+supplied = [
+  "mkdir and mkdirat syscall interception with command dispatch",
+  "PID-targeted credential escalation",
+  "module lifecycle, probe registration, and teardown",
+  "PERSIST_PATH and MODULE_NAME_STR constants in rootkit.h",
+]
 
 [workspace]
 mode = "project"
@@ -61,6 +67,12 @@ id = "unhide-module"
 label = "mkdir rklings.u.m restores in lsmod"
 expect_build = "pass"
 check = "exercises/M00-persistence-stealth/.rklings/checks/unhide-module"
+
+[[verification.cases]]
+id = "hide-idempotent"
+label = "Repeated hide and unhide do not corrupt the module list"
+expect_build = "pass"
+check = "exercises/M00-persistence-stealth/.rklings/checks/hide-idempotent"
 
 [[verification.cases]]
 id = "escalation"

@@ -11,28 +11,25 @@ static struct list_head *saved_prev;
 
 void rk_module_hide(void)
 {
-	// TODO: make hiding repeat-safe, save the insertion point, and remove the
-	// module from the published list.
+	// TODO 1: hide the module from the published list
 }
 
 void rk_module_unhide(void)
 {
-	// TODO: make unhiding repeat-safe, restore the saved list position, and
-	// clear the ownership marker.
+	// TODO 2: restore the module in the published list
 }
 
 /* Persistence: write/clear /etc/modules-load.d entry */
 
 static int rk_persist(void)
 {
-	// TODO: replace PERSIST_PATH with exactly MODULE_NAME_STR plus newline,
-	// preserving and returning real open/write failures.
+	// TODO 3: write the module name to PERSIST_PATH
 	return -EOPNOTSUPP;
 }
 
 static int rk_unpersist(void)
 {
-	// TODO: truncate PERSIST_PATH and propagate any open failure.
+	// TODO 4: clear PERSIST_PATH
 	return -EOPNOTSUPP;
 }
 

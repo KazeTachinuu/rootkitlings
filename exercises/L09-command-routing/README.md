@@ -190,6 +190,6 @@ command directories, and clean unload.
 
 ## Next
 
-Commands can now trigger several immediate actions.
-L10 adds persistent target lists that later conceal selected files, processes,
-and ports.
+Commands can now trigger several immediate actions, but the module disappears on
+reboot and anyone can find it in `lsmod`.
+M00 adds boot persistence and module-list hiding.
