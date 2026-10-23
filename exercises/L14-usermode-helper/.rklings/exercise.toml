@@ -1,0 +1,43 @@
+schema_version = 2
+id = "usermode-helper"
+title = "Launch a userspace program from the kernel"
+stage = "split"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["execution", "control"]
+difficulty = "standard"
+prerequisites = ["deploy"]
+teaches = ["call-usermodehelper", "kernel-exec"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "include/rootkit.h", "core/init.c", "core/dispatch.c", "core/escalation.c", "core/module.c", "core/target.c", "core/filter.c", "core/launch.c"]
+editable = ["core/launch.c"]
+build = "."
+
+[run]
+stage = ["kernel"]
+
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test", "mkdir-escalation-test"]
+
+[[verification.cases]]
+id = "launch"
+label = "mkdir rklings.launch launches a process"
+expect_build = "pass"
+check = "exercises/L14-usermode-helper/.rklings/checks/launch"
+
+[[verification.cases]]
+id = "launch-with-path"
+label = "mkdir rklings.launch./bin/echo launches the binary"
+expect_build = "pass"
+check = "exercises/L14-usermode-helper/.rklings/checks/launch-with-path"
+
+[[verification.cases]]
+id = "dispatcher-intact"
+label = "ping and escalation commands still work"
+expect_build = "pass"
+check = "exercises/L14-usermode-helper/.rklings/checks/dispatcher-intact"

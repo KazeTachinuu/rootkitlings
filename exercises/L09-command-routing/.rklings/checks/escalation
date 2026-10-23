@@ -1,0 +1,27 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Escalation through the command table"
+
+load rklings.ko
+assert_loaded rklings
+
+# shellcheck disable=SC2016
+result=$(su student -s /bin/sh -c '
+    cd /home/student || exit 1
+    mkdir rklings.e || exit 1
+    printf "%s" "$(id -u)"
+')
+if [ "$result" = "0" ]; then
+    _ok "e command succeeded and elevated the parent shell"
+else
+    _fail "e command did not elevate the parent shell: $result"
+fi
+assert_absent /home/student/rklings.e
+
+mkdir rklings.status
+assert_log "rklings: alive, escalations=1"
+
+unload rklings
+summary

@@ -1,0 +1,36 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Server decrypts and responds"
+
+# Run the agent and capture output.
+timeout 10 /rklings/agent > /tmp/agent_resp_output 2>&1
+ret=$?
+
+if [ "$ret" -eq 0 ]; then
+    _ok "agent completed AEAD exchange"
+else
+    _fail "agent failed (exit $ret), likely key derivation or encryption error"
+fi
+
+# The output should be valid JSON (the decrypted server response).
+if [ -s /tmp/agent_resp_output ]; then
+    output=$(cat /tmp/agent_resp_output)
+    # Check that it looks like JSON (starts with { or [).
+    case "$output" in
+        '{'*|'['*)
+            _ok "received decrypted JSON response from server"
+            ;;
+        *)
+            _fail "output is not JSON: $output"
+            ;;
+    esac
+else
+    _fail "no server response (decryption may have failed)"
+fi
+
+# Cleanup
+rm -f /tmp/agent_resp_output
+
+summary

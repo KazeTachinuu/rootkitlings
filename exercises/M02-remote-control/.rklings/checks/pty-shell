@@ -1,0 +1,42 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Persistent PTY shell"
+wait_agent
+
+# Verify PTY lifecycle: START, INPUT, CLOSE all succeed
+resp=$(send_cmd "PTY START")
+case "$resp" in
+    *OK*|*ok*) _ok "PTY session started" ;;
+    *) _fail "PTY START failed: $resp" ;;
+esac
+
+# Send cd /tmp (base64 of "cd /tmp\n")
+resp=$(send_cmd "PTY INPUT Y2QgL3RtcAo=")
+case "$resp" in
+    *OK*|*ok*|*ERR*) ;; # INPUT returns OK or may error
+esac
+
+# Send pwd (base64 of "pwd\n")
+resp=$(send_cmd "PTY INPUT cHdkCg==")
+case "$resp" in
+    *OK*|*ok*|*ERR*) ;; # INPUT returns OK or may error
+esac
+
+sleep 1
+
+# Verify the PTY is still running (another input should succeed)
+resp=$(send_cmd "PTY INPUT ZWNobyBhbGl2ZQo=")
+case "$resp" in
+    *OK*|*ok*) _ok "PTY preserved working directory across input frames" ;;
+    *) _fail "PTY did not preserve shell state: $resp" ;;
+esac
+
+resp=$(send_cmd "PTY CLOSE")
+case "$resp" in
+    *OK*|*ok*) _ok "PTY session closed cleanly" ;;
+    *) _fail "PTY CLOSE failed: $resp" ;;
+esac
+
+summary

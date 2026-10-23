@@ -1,0 +1,45 @@
+schema_version = 2
+id = "port-filter"
+title = "Hide a listening port from procfs TCP tables"
+stage = "concealment"
+kind = "lesson"
+vm_user = "student"
+tradecraft = ["concealment"]
+difficulty = "standard"
+prerequisites = ["command-routing", "hide-targets"]
+teaches = ["seq-file-interception", "tcp-port-hiding"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+
+[run]
+stage = ["kernel"]
+load = ["kernel"]
+
+
+[verification]
+load_kernel = true
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "hide-port"
+label = "Hidden port vanishes from netstat output"
+expect_build = "pass"
+check = "exercises/L13-port-filter/.rklings/checks/hide-port"
+
+[[verification.cases]]
+id = "unhide-port"
+label = "Unhidden port reappears in netstat output"
+expect_build = "pass"
+check = "exercises/L13-port-filter/.rklings/checks/unhide-port"
+
+[[verification.cases]]
+id = "other-ports-visible"
+label = "Non-targeted ports remain visible"
+expect_build = "pass"
+check = "exercises/L13-port-filter/.rklings/checks/other-ports-visible"

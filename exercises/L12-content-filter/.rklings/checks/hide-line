@@ -1,0 +1,60 @@
+#!/bin/sh
+# Check: content filter removes matching lines from read output.
+# The filter intercepts ksys_read, so this script avoids the literal
+# target string to prevent the filter from breaking the script itself.
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Matching line removed from read output"
+
+TESTFILE="/tmp/rk_content_test"
+
+# Build the target string from halves so the filter cannot match it
+# inside this script's source.
+_A="secre"
+_B="t_token"
+TOKEN="${_A}${_B}"
+
+printf "line one: apples\nline two: %s\nline three: bananas\nline four: another %s here\nline five: cherries\n" "$TOKEN" "$TOKEN" > "$TESTFILE"
+
+count_before=$(wc -l < "$TESTFILE")
+if [ "$count_before" -eq 5 ]; then
+  _ok "test file has 5 lines before module load"
+else
+  _fail "test file should have 5 lines, got $count_before"
+fi
+
+load rklings.ko
+
+mkdir "rklings.h.c.${TOKEN}"
+
+output=$(cat "$TESTFILE")
+
+if echo "$output" | grep -q "$TOKEN"; then
+  _fail "target lines still visible after hiding"
+else
+  _ok "target lines are filtered from read output"
+fi
+
+if echo "$output" | grep -q "apples"; then
+  _ok "non-matching line 'apples' still visible"
+else
+  _fail "non-matching line 'apples' was incorrectly filtered"
+fi
+
+if echo "$output" | grep -q "bananas"; then
+  _ok "non-matching line 'bananas' still visible"
+else
+  _fail "non-matching line 'bananas' was incorrectly filtered"
+fi
+
+if echo "$output" | grep -q "cherries"; then
+  _ok "non-matching line 'cherries' still visible"
+else
+  _fail "non-matching line 'cherries' was incorrectly filtered"
+fi
+
+unload rklings
+rm -f "$TESTFILE"
+
+summary

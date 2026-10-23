@@ -1,0 +1,29 @@
+#!/bin/sh
+# Check: find shows no agent binary on disk
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "No binary on disk"
+
+wait_agent
+
+# Search for agent binary and .ko file via the agent itself
+resp=$(send_cmd "SHELL find / -name agent -o -name ghost -o -name rklings.ko 2>/dev/null | grep -v proc | wc -l")
+count=$(echo "$resp" | tr -dc '0-9')
+if [ "${count:-0}" -eq 0 ]; then
+    _ok "no agent binary or .ko found on disk"
+else
+    _fail "found $count files that should not exist"
+fi
+
+# Resolve the exact agent PID; /proc/self inside SHELL would inspect readlink.
+status=$(send_cmd "STATUS")
+pid=$(printf '%s\n' "$status" | sed -n 's/.*PID=\([0-9][0-9]*\).*/\1/p')
+resp=$(send_cmd "SHELL readlink /proc/$pid/exe")
+if echo "$resp" | grep -q "memfd\|deleted"; then
+    _ok "agent running from memory (memfd or deleted binary)"
+else
+    _fail "agent is not running from anonymous/deleted memory: $resp"
+fi
+
+summary

@@ -1,0 +1,40 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+# shellcheck disable=SC2154
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "POST with bad payload receives decoy page"
+
+export RKLINGS_LISTEN_ADDR=":8443"
+
+TEST_KEY="$(openssl rand -hex 32)"
+export RKLINGS_TEST_KEY="$TEST_KEY"
+
+start_server ./server
+wait_for_port 8443
+
+# POST with garbage form data
+body=$(curl -s -X POST \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "q=dGhpcyBpcyBub3QgdmFsaWQ" \
+    http://127.0.0.1:8443/ 2>/dev/null)
+
+if echo "$body" | grep -qi "heroic administrator"; then
+    _ok "bad POST received decoy page"
+else
+    _fail "expected decoy page for bad POST, got: $body"
+fi
+
+# POST with no body
+body2=$(curl -s -X POST http://127.0.0.1:8443/ 2>/dev/null)
+
+if echo "$body2" | grep -qi "heroic administrator"; then
+    _ok "empty POST received decoy page"
+else
+    _fail "expected decoy page for empty POST, got: $body2"
+fi
+
+kill "$_server_pid" 2>/dev/null
+wait "$_server_pid" 2>/dev/null
+
+summary

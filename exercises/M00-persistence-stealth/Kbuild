@@ -1,0 +1,3 @@
+ccflags-y := -I$(src)/include
+obj-m += rklings.o
+rklings-y := core/init.o core/dispatch.o core/cred.o core/module.o

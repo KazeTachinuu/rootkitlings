@@ -1,0 +1,61 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Direct mkdir kretprobe lifecycle"
+
+probe_count() {
+    grep -Ec "[[:space:]]$1\\+" /sys/kernel/debug/kprobes/list || true
+}
+
+mkdir_before=$(probe_count __x64_sys_mkdir)
+mkdirat_before=$(probe_count __x64_sys_mkdirat)
+
+load rklings.ko
+assert_loaded rklings
+
+if [ "$(probe_count __x64_sys_mkdir)" -eq $((mkdir_before + 1)) ] &&
+   [ "$(probe_count __x64_sys_mkdirat)" -eq $((mkdirat_before + 1)) ]; then
+    _ok "both mkdir probes are registered"
+else
+    _fail "expected one new mkdir probe and one new mkdirat probe"
+fi
+
+# shellcheck disable=SC2016
+ordinary=$(su student -s /bin/sh -c '
+    cd /home/student || exit 1
+    mkdir ordinary || exit 1
+    uid=$(id -u)
+    rmdir ordinary || exit 1
+    printf "%s" "$uid"
+')
+if [ "$ordinary" = "1000" ]; then
+    _ok "ordinary mkdir creates a directory without escalation"
+else
+    _fail "ordinary mkdir changed behavior or credentials"
+fi
+
+# shellcheck disable=SC2016
+result=$(su student -s /bin/sh -c '
+    cd /home/student || exit 1
+    mkdir rklings.e >/dev/null 2>&1
+    status=$?
+    printf "%s:%s" "$status" "$(id -u)"
+')
+case "$result" in
+    0:0) _ok "rklings.e reported success and escalated the parent shell" ;;
+    0:*) _fail "rklings.e reported success without escalating: $result" ;;
+    *:0) _fail "rklings.e escalated but reported failure: $result" ;;
+    *) _fail "rklings.e did not escalate the parent shell: $result" ;;
+esac
+assert_absent /home/student/rklings.e
+
+unload rklings
+if [ "$(probe_count __x64_sys_mkdir)" -eq "$mkdir_before" ] &&
+   [ "$(probe_count __x64_sys_mkdirat)" -eq "$mkdirat_before" ]; then
+    _ok "unload removed both probes"
+else
+    _fail "a mkdir probe remained after unload"
+fi
+
+summary

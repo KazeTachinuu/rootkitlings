@@ -1,0 +1,51 @@
+schema_version = 2
+id = "dirent-filter"
+title = "Hide files and PIDs from directory listings"
+stage = "concealment"
+kind = "lesson"
+vm_user = "student"
+tradecraft = ["concealment"]
+difficulty = "standard"
+prerequisites = ["command-routing", "hide-targets"]
+teaches = ["getdents-interception", "dirent-buffer-parsing", "in-place-filtering"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c"]
+editable = ["main.c"]
+build = "."
+
+[run]
+stage = ["kernel"]
+load = ["kernel"]
+
+
+[verification]
+load_kernel = true
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "hide-file"
+label = "Hidden file vanishes from ls"
+expect_build = "pass"
+check = "exercises/L11-dirent-filter/.rklings/checks/hide-file"
+
+[[verification.cases]]
+id = "unhide-file"
+label = "Unhidden file reappears"
+expect_build = "pass"
+check = "exercises/L11-dirent-filter/.rklings/checks/unhide-file"
+
+[[verification.cases]]
+id = "hide-pid"
+label = "Hidden PID vanishes from ps"
+expect_build = "pass"
+check = "exercises/L11-dirent-filter/.rklings/checks/hide-pid"
+
+[[verification.cases]]
+id = "unhide-pid"
+label = "Unhidden PID reappears"
+expect_build = "pass"
+check = "exercises/L11-dirent-filter/.rklings/checks/unhide-pid"

@@ -1,0 +1,24 @@
+#!/bin/sh
+# Check: ping and status commands work through the dispatcher
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Dispatcher: ping and status commands"
+
+load rklings.ko
+assert_loaded rklings
+
+dmesg -c > /dev/null 2>&1
+
+mkdir rklings.ping 2>/dev/null
+assert_log "rklings: pong"
+
+dmesg -c > /dev/null 2>&1
+
+mkdir rklings.status 2>/dev/null
+assert_log "rklings: alive"
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

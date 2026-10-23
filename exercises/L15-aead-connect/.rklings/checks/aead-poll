@@ -1,0 +1,27 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Agent sends encrypted poll to server"
+
+# Run the agent (server must be running on host).
+timeout 10 /rklings/agent > /tmp/agent_output 2>&1
+ret=$?
+
+if [ "$ret" -eq 0 ]; then
+    _ok "agent exited cleanly"
+else
+    _fail "agent exited with code $ret"
+fi
+
+# If the agent produced output, the server accepted and decrypted the poll.
+if [ -s /tmp/agent_output ]; then
+    _ok "agent received data from server"
+else
+    _fail "agent produced no output, encrypted poll likely failed"
+fi
+
+# Cleanup
+rm -f /tmp/agent_output
+
+summary

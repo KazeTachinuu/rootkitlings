@@ -1,0 +1,44 @@
+schema_version = 2
+id = "aead-connect"
+title = "Go agent with AEAD connect"
+stage = "split"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["communication", "encryption"]
+difficulty = "standard"
+prerequisites = ["agent-qualification"]
+teaches = ["x25519-ecdh", "aes-gcm", "aead-handshake", "websocket", "go-embed"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["go.mod", "main.go"]
+editable = ["main.go"]
+build = "."
+
+
+[run]
+stage = ["agent"]
+agent = "background"
+
+[serve]
+kind = "lab"
+handshake_only = true
+
+[verification]
+timeout_seconds = 120
+tools = []
+runtime = "checks"
+harness = true
+
+[[verification.cases]]
+id = "aead-poll"
+label = "Agent sends encrypted hello to server"
+expect_build = "pass"
+check = "exercises/L15-aead-connect/.rklings/checks/aead-poll"
+
+[[verification.cases]]
+id = "aead-response"
+label = "Server decrypts and responds"
+expect_build = "pass"
+check = "exercises/L15-aead-connect/.rklings/checks/aead-response"

@@ -1,0 +1,25 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Enable durable agent persistence"
+wait_agent
+
+before=$(send_connections)
+printf '%s\n' "$before" > /root/p00-connections-before-reboot
+
+resp=$(send_cmd "PERSIST")
+case "$resp" in
+    OK*) _ok "PERSIST installed durable mode" ;;
+    *) _fail "PERSIST failed: $resp" ;;
+esac
+
+assert_exists /usr/libexec/systemd-kerneld
+assert_exists /etc/systemd/system/systemd-kerneld.service
+if systemctl is-enabled --quiet systemd-kerneld.service; then
+    _ok "agent service enabled for boot"
+else
+    _fail "agent service is not enabled"
+fi
+
+summary

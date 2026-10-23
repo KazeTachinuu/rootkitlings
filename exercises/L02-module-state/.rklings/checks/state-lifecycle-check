@@ -1,0 +1,49 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Owned state lifetime"
+dmesg -C
+
+check_active()
+{
+	expected_param=$1
+	expected_state=$2
+	actual=$(cat /sys/module/rklings/parameters/active)
+	if [ "$actual" = "$expected_param" ]; then
+		_ok "active parameter is $expected_param"
+	else
+		_fail "active parameter is $actual, expected $expected_param"
+	fi
+	if dmesg | grep -Fq "rklings: loaded, active=$expected_state"; then
+		_ok "state reports active=$expected_state"
+	else
+		_fail "state did not report active=$expected_state"
+	fi
+}
+
+check_release()
+{
+	if dmesg | grep -Fq "rklings: released state"; then
+		_ok "owned state was released"
+	else
+		_fail "owned state release was not observed"
+	fi
+}
+
+load rklings.ko
+assert_loaded rklings
+check_active Y 1
+unload rklings
+assert_absent /sys/module/rklings
+check_release
+
+dmesg -C
+load rklings.ko active=0
+assert_loaded rklings
+check_active N 0
+unload rklings
+assert_absent /sys/module/rklings
+check_release
+
+summary

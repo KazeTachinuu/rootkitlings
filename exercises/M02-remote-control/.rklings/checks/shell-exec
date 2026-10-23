@@ -1,0 +1,38 @@
+#!/bin/sh
+# Check: remote shell execution returns correct output
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Remote shell execution"
+
+wait_agent
+
+# Execute a known command via relay
+resp=$(send_cmd "SHELL uname -r")
+
+# Response may be JSON {"exit_code":0,"stdout":"..."} or plain text
+kernel=$(printf '%s' "$resp" | sed -n 's/.*"stdout"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | tr -d '\\n')
+if [ -z "$kernel" ]; then
+    kernel="$resp"
+fi
+
+if echo "$kernel" | grep -qE "^[0-9]+\.[0-9]+"; then
+    _ok "SHELL uname -r returned kernel version: $(echo "$kernel" | head -1)"
+else
+    _fail "SHELL did not return kernel version: $resp"
+fi
+
+# Execute id to verify it runs in the agent's context
+resp=$(send_cmd "SHELL id")
+uid_info=$(printf '%s' "$resp" | sed -n 's/.*"stdout"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+if [ -z "$uid_info" ]; then
+    uid_info="$resp"
+fi
+
+if echo "$uid_info" | grep -q "uid="; then
+    _ok "SHELL id returned uid info"
+else
+    _fail "SHELL id failed: $resp"
+fi
+
+summary

@@ -1,0 +1,25 @@
+#!/bin/sh
+# Check: mkdir rklings.e grants root credentials
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Credential escalation"
+
+load rklings.ko
+assert_loaded rklings
+
+# The helper makes the syscall and observes credentials in the same process.
+uid=$(cd /tmp && su student -c 'mkdir rklings.e 2>/dev/null; id -u')
+if [ "$uid" = "0" ]; then
+	_ok "student process has uid 0 after escalation"
+else
+	_fail "student process remained uid $uid after escalation"
+fi
+
+# Cleanup
+rm -rf rklings.e 2>/dev/null
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

@@ -1,0 +1,17 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Verify no agent binary on disk"
+
+# The dropper should have been deleted or never written.
+# Search common locations for any agent or dropper binary.
+found=$(find /home /tmp /root /var -name 'agent' -type f 2>/dev/null || true)
+
+if [ -z "$found" ]; then
+    _ok "no agent binary found on disk"
+else
+    _fail "agent binary found on disk: $found"
+fi
+
+summary

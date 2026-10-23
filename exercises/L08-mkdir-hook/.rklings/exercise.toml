@@ -1,0 +1,85 @@
+schema_version = 2
+id = "mkdir-hook"
+title = "Build the mkdir hook"
+stage = "interception"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["interception", "privilege"]
+difficulty = "standard"
+prerequisites = ["process-root"]
+teaches = [
+  "kretprobe-registration",
+  "kretprobe-entry-and-return",
+  "per-instance-probe-data",
+  "syscall-wrapper-registers",
+  "userspace-pathname-copy",
+]
+requires = [
+  "module-lifecycle",
+  "errno-propagation",
+  "mkdir-interception",
+  "pid-targeting",
+]
+supplied = [
+  "parent and numeric PID command parsing",
+  "PID lookup and credential replacement",
+  "compile-time second-registration failure injection",
+]
+
+[workspace]
+mode = "project"
+files = [
+  "Kbuild",
+  "main.c",
+  "rklings_command.c",
+  "rklings_command.h",
+  "rklings_hook.h",
+]
+editable = ["rklings_hook.h"]
+build = "."
+
+[run]
+stage = ["kernel"]
+load = ["kernel"]
+
+[verification]
+base_case = "interception"
+load_kernel = true
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "interception"
+label = "Both probes preserve successful escalation and ordinary mkdir"
+expect_build = "pass"
+check = "exercises/L08-mkdir-hook/.rklings/checks/interception"
+
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "pid-targeting"
+label = "The direct probes preserve explicit PID targeting"
+expect_build = "pass"
+check = "exercises/L08-mkdir-hook/.rklings/checks/pid-targeting"
+
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "registration-rollback"
+label = "Second-probe failure rolls back the first probe"
+expect_build = "pass"
+check = "exercises/L08-mkdir-hook/.rklings/checks/registration-rollback"
+
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "1"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+build_output_contains = "unknown RKLINGS_FAIL_POINT"
+
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "99"

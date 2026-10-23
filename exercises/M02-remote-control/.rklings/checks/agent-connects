@@ -1,0 +1,19 @@
+#!/bin/sh
+# Check: agent polls operator and responds to commands
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Agent HTTP+AEAD connection"
+
+# Wait for agent to connect via relay
+wait_agent
+
+# Verify agent responds to commands
+resp=$(send_cmd "PING")
+if echo "$resp" | grep -q "PONG"; then
+    _ok "agent connected and responding over HTTP+AEAD"
+else
+    _fail "expected PONG, got: $resp"
+fi
+
+summary

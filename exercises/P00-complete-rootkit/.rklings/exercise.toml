@@ -1,0 +1,116 @@
+schema_version = 2
+id = "complete-rootkit"
+title = "Operate and verify the complete system"
+stage = "project"
+kind = "final-project"
+vm_user = "root"
+tradecraft = ["control", "network", "crypto", "concealment", "persistence", "privilege"]
+difficulty = "advanced"
+prerequisites = ["ghost"]
+teaches = ["full-system-operation", "verification-methodology"]
+requires = []
+
+[workspace]
+mode = "project"
+files = [
+    "kernel/Kbuild",
+    "kernel/include/rootkit.h",
+    "kernel/core/init.c",
+    "kernel/core/dispatch.c",
+    "kernel/core/escalation.c",
+    "kernel/core/module.c",
+    "kernel/core/target.c",
+    "kernel/core/filter.c",
+    "agent/go.mod",
+    "agent/go.sum",
+    "agent/crypto.go",
+    "agent/main.go",
+    "agent/transport.go",
+    "agent/dispatch.go",
+    "agent/handlers.go",
+    "agent/evasion.go",
+    "agent/hidden.go",
+    "agent/persistence.go",
+    "agent/singleton.go",
+    "agent/operator.go",
+]
+editable = []
+build = "."
+
+[build]
+kernel_dir = "kernel"
+agent_dir = "agent"
+embed_kernel = true
+agent_ldflags = "-s -w"
+server_path = "product/operator"
+
+[run]
+stage = ["agent"]
+agent = "manual"
+artifact_path = "/rklings/rklings_agent"
+
+
+[serve]
+kind = "operator"
+commands = ["PING", "STATUS", "INFO", "PTY", "ESCALATE", "HIDE", "UNHIDE", "PERSIST", "UNPERSIST", "SHELL", "DOWNLOAD", "UPLOAD"]
+transfer = true
+
+[verification]
+timeout_seconds = 180
+tools = ["module-load-test", "mkdir-escalation-test"]
+runtime = "background"
+harness = true
+remove_artifact = true
+artifact_path = "/rklings/rklings_agent"
+
+[[verification.cases]]
+id = "named-unhide"
+label = "Targets are restored with the same value used to hide them"
+expect_build = "pass"
+check = "exercises/P00-complete-rootkit/.rklings/checks/named-unhide"
+
+[[verification.cases]]
+id = "escalate-parent"
+label = "mkdir escalation elevates its parent shell"
+expect_build = "pass"
+check = "exercises/P00-complete-rootkit/.rklings/checks/escalate-parent"
+
+[[verification.cases]]
+id = "pid-control"
+label = "PID concealment and targeted escalation work by value"
+expect_build = "pass"
+check = "exercises/P00-complete-rootkit/.rklings/checks/pid-control"
+
+[[verification.cases]]
+id = "content-stream-safety"
+label = "Content filtering preserves SSH, terminal, and pipe streams"
+expect_build = "pass"
+check = "exercises/P00-complete-rootkit/.rklings/checks/content-stream-safety"
+
+[[verification.cases]]
+id = "complete-rootkit"
+label = "Complete rootkit loads, operates, and unloads cleanly"
+expect_build = "pass"
+check = "exercises/P00-complete-rootkit/.rklings/checks/complete-rootkit"
+prepare = "rm -f /root/p00-default-content-verified; rk=rklin$(printf gs); printf '%s\\nvisible\\n' \"$rk\" > /tmp/p00-default-content; ! grep -q \"$rk\" /tmp/p00-default-content; mkdir \"${rk}.u.c.${rk}\"; touch /root/p00-default-content-verified"
+
+[[verification.cases]]
+id = "enable-persistence"
+label = "Durable agent and boot service are installed"
+expect_build = "pass"
+check = "exercises/P00-complete-rootkit/.rklings/checks/enable-persistence"
+reboot_after = true
+
+[[verification.cases]]
+id = "persistence-after-reboot"
+label = "Agent and callback return after a real reboot"
+expect_build = "pass"
+check = "exercises/P00-complete-rootkit/.rklings/checks/persistence-after-reboot"
+prepare = "rk=rklin$(printf gs); mkdir \"${rk}.u.c.${rk}\""
+reboot_after = true
+
+[[verification.cases]]
+id = "unpersist-after-reboot"
+label = "Agent remains absent after unpersist and reboot"
+expect_build = "pass"
+check = "exercises/P00-complete-rootkit/.rklings/checks/unpersist-after-reboot"

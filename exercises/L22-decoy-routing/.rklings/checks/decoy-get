@@ -1,0 +1,28 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+# shellcheck disable=SC2154
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "GET request receives decoy page"
+
+export RKLINGS_LISTEN_ADDR=":8443"
+
+# Generate a test key so the server can start with a registered agent
+TEST_KEY="$(openssl rand -hex 32)"
+export RKLINGS_TEST_KEY="$TEST_KEY"
+
+start_server ./server
+wait_for_port 8443
+
+body=$(curl -s http://127.0.0.1:8443/ 2>/dev/null)
+
+if echo "$body" | grep -qi "heroic administrator"; then
+    _ok "GET request received decoy page"
+else
+    _fail "expected decoy page, got: $body"
+fi
+
+kill "$_server_pid" 2>/dev/null
+wait "$_server_pid" 2>/dev/null
+
+summary

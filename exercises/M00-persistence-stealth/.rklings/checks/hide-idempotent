@@ -1,0 +1,49 @@
+#!/bin/sh
+# Check: repeated hide/unhide does not corrupt the module list
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Hide and unhide are repeat-safe"
+
+# Load unless already present from a prior check
+if ! grep -q '^rklings ' /proc/modules; then
+    load rklings.ko
+fi
+assert_loaded rklings
+
+# Double hide must not corrupt the list
+mkdir rklings.h.m 2>/dev/null
+mkdir rklings.h.m 2>/dev/null
+
+if grep -q '^rklings ' /proc/modules; then
+    _fail "module visible in /proc/modules after double hide"
+else
+    _ok "module hidden from /proc/modules after double hide"
+fi
+
+if test -d /sys/module/rklings; then
+    _fail "module visible in /sys/module after double hide"
+else
+    _ok "module hidden from /sys/module after double hide"
+fi
+
+# Double unhide must not corrupt the list
+mkdir rklings.u.m 2>/dev/null
+mkdir rklings.u.m 2>/dev/null
+
+if grep -q '^rklings ' /proc/modules; then
+    _ok "module visible in /proc/modules after double unhide"
+else
+    _fail "module still hidden in /proc/modules after double unhide"
+fi
+
+# Unhide when already visible must be harmless
+mkdir rklings.u.m 2>/dev/null
+
+if grep -q '^rklings ' /proc/modules; then
+    _ok "module still visible in /proc/modules after extra unhide"
+else
+    _fail "extra unhide corrupted /proc/modules list"
+fi
+
+summary

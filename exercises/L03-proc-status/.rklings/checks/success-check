@@ -1,0 +1,59 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Procfs publication lifetime"
+
+assert_not_loaded()
+{
+	assert_absent /sys/module/rklings
+	assert_absent /proc/rklings
+	if grep -q '^rklings ' /proc/modules; then
+		_fail "rklings appears in /proc/modules"
+	else
+		_ok "rklings is absent from /proc/modules"
+	fi
+}
+
+check_loaded()
+{
+	expected=$1
+	assert_loaded rklings
+	assert_exists /proc/rklings
+	mode=$(stat -c '%a' /proc/rklings)
+	if [ "$mode" = 444 ]; then
+		_ok "/proc/rklings mode is 0444"
+	else
+		_fail "/proc/rklings mode: expected 0444, got $mode"
+	fi
+	assert_read /proc/rklings "active=$expected"
+	if grep -q '^rklings ' /proc/modules; then
+		_ok "rklings appears in /proc/modules"
+	else
+		_fail "rklings is absent from /proc/modules"
+	fi
+}
+
+assert_not_loaded
+run_cycle()
+{
+	expected=$1
+	shift
+	dmesg -C
+	load rklings.ko "$@"
+	check_loaded "$expected"
+	unload rklings
+	assert_not_loaded
+	order=$(dmesg | sed -n \
+		-e '/rklings: unpublished proc entry/s/.*/proc/p' \
+		-e '/rklings: released state/s/.*/state/p' | tr '\n' ' ')
+	if [ "$order" = "proc state " ]; then
+		_ok "proc entry was removed before state was released"
+	else
+		_fail "teardown order was '$order', expected 'proc state'"
+	fi
+}
+run_cycle 1
+run_cycle 0 active=0
+
+summary

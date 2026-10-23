@@ -1,0 +1,38 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+# shellcheck disable=SC2154
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "WebSocket with valid agent crypto reaches C2"
+
+export RKLINGS_LISTEN_ADDR=":8443"
+
+TEST_KEY="$(openssl rand -hex 32)"
+export RKLINGS_TEST_KEY="$TEST_KEY"
+
+start_server ./server
+wait_for_port 8443
+
+# Test 1: verify WS upgrade is accepted (not decoy)
+# A proper WebSocket upgrade request should get 101, not 200 with HTML.
+ws_resp=$(curl -sf -o /dev/null -w '%{http_code}' --max-time 3 \
+    -H 'Upgrade: websocket' \
+    -H 'Connection: Upgrade' \
+    -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
+    -H 'Sec-WebSocket-Version: 13' \
+    "http://127.0.0.1:8443/" 2>/dev/null)
+
+# curl gets 0 or empty when the server upgrades (switches protocol)
+# because curl doesn't speak WS. A decoy would return 200.
+if [ "$ws_resp" = "200" ]; then
+    _fail "WS upgrade got decoy page (HTTP 200) instead of protocol switch"
+elif [ "$ws_resp" = "000" ] || [ "$ws_resp" = "" ] || [ "$ws_resp" = "101" ]; then
+    _ok "valid agent WS upgrade accepted (not decoy)"
+else
+    _fail "unexpected HTTP status: $ws_resp"
+fi
+
+kill "$_server_pid" 2>/dev/null
+wait "$_server_pid" 2>/dev/null
+
+summary

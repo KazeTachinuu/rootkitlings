@@ -1,0 +1,35 @@
+#!/bin/sh
+# Check: ps shows no agent process (masqueraded as kworker)
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Process invisible to ps"
+
+wait_agent
+
+# Resolve the exact live agent PID, then inspect that process rather than
+# assuming its original executable name.
+status=$(send_cmd "STATUS")
+pid=$(printf '%s\n' "$status" | sed -n 's/.*PID=\([0-9][0-9]*\).*/\1/p')
+comm=$(send_cmd "SHELL cat /proc/$pid/comm")
+if echo "$comm" | grep -q '^\[kworker/'; then
+    _ok "agent PID $pid is masquerading as $comm"
+else
+    _fail "agent PID $pid has unexpected process name: $comm"
+fi
+visible=$(send_cmd "SHELL ps -p $pid -o pid= >/dev/null 2>&1; echo \$?")
+if [ "$(printf '%s\n' "$visible" | awk '/^[0-9]+$/{n=$1} END{print n+0}')" -ne 0 ]; then
+    _ok "agent PID $pid is absent from ps enumeration"
+else
+    _fail "agent PID $pid remains visible in ps"
+fi
+
+# Verify the agent is still running by sending a command
+resp=$(send_cmd "PING")
+if echo "$resp" | grep -q "PONG"; then
+    _ok "masqueraded agent remains operational"
+else
+    _fail "agent not responding: $resp"
+fi
+
+summary

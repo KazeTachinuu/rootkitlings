@@ -1,0 +1,804 @@
+schema_version = 2
+revision = "2026.10-operational-milestones"
+default_module_artifact = "rklings.ko"
+exercise_roots = ["exercises"]
+
+required_route = [
+  # Phase 1: Kernel foundation (L00-L04)
+  "kernel-module",
+  "load-cleanup",
+  "module-state",
+  "proc-status",
+  "proc-control",
+
+  # Phase 2: Escalation (L05-L07)
+  "mkdir-command",
+  "shell-root",
+  "process-root",
+
+  # Phase 3: Interception (L08-L09)
+  "mkdir-hook",
+  "command-routing",
+
+  # M00: Persistence + Stealth
+  "persistence-stealth",
+
+  # Phase 4: Concealment (L10-L13)
+  "hide-targets",
+  "dirent-filter",
+  "content-filter",
+  "port-filter",
+
+  # M01: Covert Local Control
+  "local-control",
+
+  # D00: Deployment
+  "deploy",
+
+  # Phase 5: The Split (L14-L16)
+  "usermode-helper",
+  "agent-qualification",
+  "aead-connect",
+  "mkdir-bridge",
+
+  # Phase 6: Remote Operations (L17-L19)
+  "command-dispatch",
+  "remote-shell",
+  "file-transfer",
+
+  # M02: Remote Control
+  "remote-control",
+
+  # Phase 7: Tradecraft (L20-L24)
+  "fileless-module",
+  "fileless-exec",
+  "decoy-routing",
+  "process-masquerade",
+  "anti-forensics",
+
+  # M03: Ghost
+  "ghost",
+
+  # P00: Complete Rootkit
+  "complete-rootkit",
+]
+
+[[tradecraft_tags]]
+id = "lifecycle"
+label = "Lifecycle"
+
+[[tradecraft_tags]]
+id = "control"
+label = "Control"
+
+[[tradecraft_tags]]
+id = "privilege"
+label = "Privilege"
+
+[[tradecraft_tags]]
+id = "interception"
+label = "Interception"
+
+[[tradecraft_tags]]
+id = "concealment"
+label = "Concealment"
+
+[[tradecraft_tags]]
+id = "network"
+label = "Network"
+
+[[tradecraft_tags]]
+id = "persistence"
+label = "Persistence"
+
+[[tradecraft_tags]]
+id = "crypto"
+label = "Crypto"
+
+[[tradecraft_tags]]
+id = "detection"
+label = "Detection"
+
+[[tools]]
+id = "module-load-test"
+binary = "vm/tools/module_load_test"
+source = "vm/tools/module_load_test.c"
+
+[[tools]]
+id = "proc-read-test"
+binary = "vm/tools/proc_read_test"
+source = "vm/tools/proc_read_test.c"
+
+[[tools]]
+id = "mkdir-escalation-test"
+binary = "vm/tools/mkdir_escalation_test"
+source = "vm/tools/mkdir_escalation_test.c"
+
+[[tools]]
+id = "secure-agent-fixture"
+binary = "vm/tools/secure_agent_fixture"
+source = "vm/tools/secure_agent_fixture.c"
+
+[[sections]]
+id = "module-core"
+label = "Kernel foundation: module lifecycle and procfs"
+
+[[sections]]
+id = "control-execution"
+label = "Procfs read contract"
+
+[[sections]]
+id = "escalation"
+label = "Mkdir hooks and privilege escalation"
+
+[[sections]]
+id = "interception"
+label = "Kprobes and command dispatch"
+
+[[sections]]
+id = "persistence"
+label = "Persistence and module cloak"
+
+[[sections]]
+id = "concealment"
+label = "Target lists and concealment filters"
+
+[[sections]]
+id = "network"
+label = "Kernel sockets, threads, reverse shell"
+
+[[sections]]
+id = "crypto"
+label = "Framing, AEAD, envelope, keys"
+
+[[sections]]
+id = "protocol"
+label = "Timeouts, download, command parser"
+
+[[sections]]
+id = "operations"
+label = "Full protocol and auto-OPSEC"
+
+[[sections]]
+id = "reflection"
+label = "Integration milestones"
+
+[[sections]]
+id = "project"
+label = "Complete rootkit"
+
+[[concepts]]
+id = "aead-encryption"
+label = "AEAD Encryption"
+
+[[concepts]]
+id = "agent-loop"
+label = "Agent Loop"
+
+[[concepts]]
+id = "atomic-flag"
+label = "Atomic Flag"
+
+[[concepts]]
+id = "auto-targeting"
+label = "Auto Targeting"
+
+[[concepts]]
+id = "bounded-read-contract"
+label = "Bounded Read Contract"
+
+[[concepts]]
+id = "build-time-failure-injection"
+label = "Build Time Failure Injection"
+
+[[concepts]]
+id = "c-functions-and-errors"
+label = "C Functions And Errors"
+
+[[concepts]]
+id = "c-pointers-and-structs"
+label = "C Pointers And Structs"
+
+[[concepts]]
+id = "c-preprocessor"
+label = "C Preprocessor"
+
+[[concepts]]
+id = "callback-shell-integration"
+label = "Callback Shell Integration"
+
+[[concepts]]
+id = "chunked-transfer"
+label = "Chunked Transfer"
+
+[[concepts]]
+id = "command-dispatch"
+label = "Command Dispatch"
+
+[[concepts]]
+id = "command-protocol"
+label = "Command Protocol"
+
+[[concepts]]
+id = "component-ownership"
+label = "Component Ownership"
+
+[[concepts]]
+id = "credential-replacement"
+label = "Credential Replacement"
+
+[[concepts]]
+id = "deferred-execution"
+label = "Deferred Execution"
+
+[[concepts]]
+id = "delayed-work"
+label = "Delayed Work"
+
+[[concepts]]
+id = "dirent-buffer-parsing"
+label = "Dirent Buffer Parsing"
+
+[[concepts]]
+id = "entry-return-probe"
+label = "Entry Return Probe"
+
+[[concepts]]
+id = "errno-propagation"
+label = "Errno Propagation"
+
+[[concepts]]
+id = "error-pointers"
+label = "Error Pointers"
+
+[[concepts]]
+id = "exec-slot"
+label = "Exec Slot"
+
+[[concepts]]
+id = "fd-redirection"
+label = "FD Redirection"
+
+[[concepts]]
+id = "filp-kernel-write"
+label = "Filp Kernel Write"
+
+[[concepts]]
+id = "fixed-array-storage"
+label = "Fixed Array Storage"
+
+[[concepts]]
+id = "full-command-wiring"
+label = "Full Command Wiring"
+
+[[concepts]]
+id = "full-operations-integration"
+label = "Full Operations Integration"
+
+[[concepts]]
+id = "full-system-integration"
+label = "Full System Integration"
+
+[[concepts]]
+id = "getdents-interception"
+label = "Getdents Interception"
+
+[[concepts]]
+id = "host-guest-kernel-boundary"
+label = "Host Guest Kernel Boundary"
+
+[[concepts]]
+id = "in-place-filtering"
+label = "In Place Filtering"
+
+[[concepts]]
+id = "inactivity-timeout"
+label = "Inactivity Timeout"
+
+[[concepts]]
+id = "init-failure"
+label = "Init Failure"
+
+[[concepts]]
+id = "initialization-rollback"
+label = "Initialization Rollback"
+
+[[concepts]]
+id = "irq-safe-locking"
+label = "IRQ Safe Locking"
+
+[[concepts]]
+id = "jittered-backoff"
+label = "Jittered Backoff"
+
+[[concepts]]
+id = "kernel-allocation"
+label = "Kernel Allocation"
+
+[[concepts]]
+id = "kernel-crypto-api"
+label = "Kernel Crypto API"
+
+[[concepts]]
+id = "kernel-file-read"
+label = "Kernel File Read"
+
+[[concepts]]
+id = "kernel-socket-api"
+label = "Kernel Socket API"
+
+[[concepts]]
+id = "kernel-threading"
+label = "Kernel Threading"
+
+[[concepts]]
+id = "kernel-userspace-spawn"
+label = "Kernel Userspace Spawn"
+
+[[concepts]]
+id = "key-provisioning"
+label = "Key Provisioning"
+
+[[concepts]]
+id = "key-rotation"
+label = "Key Rotation"
+
+[[concepts]]
+id = "key-zeroization"
+label = "Key Zeroization"
+
+[[concepts]]
+id = "kprobe-registration"
+label = "Kprobe Registration"
+
+[[concepts]]
+id = "kretprobe-pattern"
+label = "Kretprobe Pattern"
+
+[[concepts]]
+id = "kvec-msghdr"
+label = "KVEC MSGHDR"
+
+[[concepts]]
+id = "length-prefix-protocol"
+label = "Length Prefix Protocol"
+
+[[concepts]]
+id = "message-framing"
+label = "Message Framing"
+
+[[concepts]]
+id = "mkdir-interception"
+label = "Mkdir Interception"
+
+[[concepts]]
+id = "module-build"
+label = "Module Build"
+
+[[concepts]]
+id = "module-cloaking"
+label = "Module Cloaking"
+
+[[concepts]]
+id = "module-inspection"
+label = "Module Inspection"
+
+[[concepts]]
+id = "module-lifecycle"
+label = "Module Lifecycle"
+
+[[concepts]]
+id = "module-persistence"
+label = "Module Persistence"
+
+[[concepts]]
+id = "multi-file-modules"
+label = "Multi File Modules"
+
+[[concepts]]
+id = "multi-probe-integration"
+label = "Multi Probe Integration"
+
+[[concepts]]
+id = "nonce-construction"
+label = "Nonce Construction"
+
+[[concepts]]
+id = "opsec-automation"
+label = "Opsec Automation"
+
+[[concepts]]
+id = "pid-targeting"
+label = "PID Targeting"
+
+[[concepts]]
+id = "pointer-invalidation"
+label = "Pointer Invalidation"
+
+[[concepts]]
+id = "pre-handler"
+label = "Pre Handler"
+
+[[concepts]]
+id = "privilege-escalation"
+label = "Privilege Escalation"
+
+[[concepts]]
+id = "proc-entry"
+label = "Proc Entry"
+
+[[concepts]]
+id = "proc-publication-lifetime"
+label = "Proc Publication Lifetime"
+
+[[concepts]]
+id = "proc-read"
+label = "Proc Read"
+
+[[concepts]]
+id = "protocol-composition"
+label = "Protocol Composition"
+
+[[concepts]]
+id = "protocol-parity"
+label = "Protocol Parity"
+
+[[concepts]]
+id = "pt-regs-extraction"
+label = "PT Regs Extraction"
+
+[[concepts]]
+id = "reactive-hook"
+label = "Reactive Hook"
+
+[[concepts]]
+id = "read-interception"
+label = "Read Interception"
+
+[[concepts]]
+id = "remote-command-dispatch"
+label = "Remote Command Dispatch"
+
+[[concepts]]
+id = "remote-protocol-integration"
+label = "Remote Protocol Integration"
+
+[[concepts]]
+id = "replay-protection"
+label = "Replay Protection"
+
+[[concepts]]
+id = "resource-ownership"
+label = "Resource Ownership"
+
+[[concepts]]
+id = "scatterlist"
+label = "Scatterlist"
+
+[[concepts]]
+id = "secure-channel-integration"
+label = "Secure Channel Integration"
+
+[[concepts]]
+id = "seq-file-interception"
+label = "Seq File Interception"
+
+[[concepts]]
+id = "shell-slot"
+label = "Shell Slot"
+
+[[concepts]]
+id = "short-write-handling"
+label = "Short Write Handling"
+
+[[concepts]]
+id = "socket-to-file"
+label = "Socket To File"
+
+[[concepts]]
+id = "spinlock"
+label = "Spinlock"
+
+[[concepts]]
+id = "tcp-port-hiding"
+label = "TCP Port Hiding"
+
+[[concepts]]
+id = "text-buffer-filtering"
+label = "Text Buffer Filtering"
+
+[[concepts]]
+id = "text-parsing"
+label = "Text Parsing"
+
+[[concepts]]
+id = "unified-rollback"
+label = "Unified Rollback"
+
+[[concepts]]
+id = "usermodehelper"
+label = "Usermodehelper"
+
+[[concepts]]
+id = "verification-methodology"
+label = "Verification Methodology"
+
+[[concepts]]
+id = "wait-queue"
+label = "Wait Queue"
+
+[[concepts]]
+id = "ipv4-packet-basics"
+label = "IPv4 Packet Basics"
+
+[[concepts]]
+id = "linux-file-permission-basics"
+label = "Linux File Permission Basics"
+
+[[concepts]]
+id = "linux-identity-basics"
+label = "Linux Identity Basics"
+
+[[concepts]]
+id = "linux-process-basics"
+label = "Linux Process Basics"
+
+[[concepts]]
+id = "transport-endpoint-basics"
+label = "Transport Endpoint Basics"
+
+[[concepts]]
+id = "proc-write"
+label = "Proc Write"
+
+[[concepts]]
+id = "bounded-user-copy"
+label = "Bounded User Copy"
+
+[[concepts]]
+id = "state-control"
+label = "State Control"
+
+[[concepts]]
+id = "kernel-list-manipulation"
+label = "Kernel List Manipulation"
+
+[[concepts]]
+id = "kobject-hiding"
+label = "Kobject Hiding"
+
+[[concepts]]
+id = "command-handler-interface"
+label = "Command Handler Interface"
+
+[[concepts]]
+id = "function-pointer-command-table"
+label = "Function Pointer Command Table"
+
+[[concepts]]
+id = "exact-command-dispatch"
+label = "Exact Command Dispatch"
+
+[[concepts]]
+id = "task-lookup-and-reference-lifetime"
+label = "Task Lookup And Reference Lifetime"
+
+[[concepts]]
+id = "credential-replacement-lifetime"
+label = "Credential Replacement Lifetime"
+
+[[concepts]]
+id = "kretprobe-registration"
+label = "Kretprobe Registration"
+
+[[concepts]]
+id = "kretprobe-entry-and-return"
+label = "Kretprobe Entry And Return"
+
+[[concepts]]
+id = "per-instance-probe-data"
+label = "Per Instance Probe Data"
+
+[[concepts]]
+id = "syscall-wrapper-registers"
+label = "Syscall Wrapper Registers"
+
+[[concepts]]
+id = "userspace-pathname-copy"
+label = "Userspace Pathname Copy"
+
+[[concepts]]
+id = "auto-concealment"
+label = "Auto Concealment"
+
+[[concepts]]
+id = "bufio-scanner"
+label = "Bufio Scanner"
+
+[[concepts]]
+id = "callback-jitter"
+label = "Callback Jitter"
+
+[[concepts]]
+id = "call-usermodehelper"
+label = "Call Usermodehelper"
+
+[[concepts]]
+id = "certificate-verification"
+label = "Certificate Verification"
+
+[[concepts]]
+id = "combined-output"
+label = "Combined Output"
+
+[[concepts]]
+id = "command-bridge"
+label = "Command Bridge"
+
+[[concepts]]
+id = "complete-io"
+label = "Complete IO"
+
+[[concepts]]
+id = "decoy-routing"
+label = "Decoy Routing"
+
+[[concepts]]
+id = "deployment"
+label = "Deployment"
+
+[[concepts]]
+id = "deployment-order"
+label = "Deployment Order"
+
+[[concepts]]
+id = "exec-command"
+label = "Exec Command"
+
+[[concepts]]
+id = "file-io"
+label = "File IO"
+
+[[concepts]]
+id = "fileless-execution"
+label = "Fileless Execution"
+
+[[concepts]]
+id = "fileless-loading"
+label = "Fileless Loading"
+
+[[concepts]]
+id = "finit-module"
+label = "Finit Module"
+
+[[concepts]]
+id = "full-system-operation"
+label = "Full System Operation"
+
+[[concepts]]
+id = "go-embed"
+label = "Go Embed"
+
+[[concepts]]
+id = "go-errors"
+label = "Go Errors"
+
+[[concepts]]
+id = "handler-map"
+label = "Handler Map"
+
+[[concepts]]
+id = "history-clearing"
+label = "History Clearing"
+
+[[concepts]]
+id = "initial-access"
+label = "Initial Access"
+
+[[concepts]]
+id = "in-memory-state-query"
+label = "In Memory State Query"
+
+[[concepts]]
+id = "io-limitreader"
+label = "IO LimitReader"
+
+[[concepts]]
+id = "journal-tampering"
+label = "Journal Tampering"
+
+[[concepts]]
+id = "kernel-exec"
+label = "Kernel Exec"
+
+[[concepts]]
+id = "length-framing"
+label = "Length Framing"
+
+[[concepts]]
+id = "memfd-create"
+label = "Memfd Create"
+
+[[concepts]]
+id = "memfd-exec"
+label = "Memfd Exec"
+
+[[concepts]]
+id = "aead-handshake"
+label = "AEAD Key Derivation"
+
+[[concepts]]
+id = "operator-relay"
+label = "Operator Relay"
+
+[[concepts]]
+id = "os-mkdir-dispatch"
+label = "OS Mkdir Dispatch"
+
+[[concepts]]
+id = "parent-process-targeting"
+label = "Parent Process Targeting"
+
+[[concepts]]
+id = "prctl-set-name"
+label = "Prctl Set Name"
+
+[[concepts]]
+id = "process-masquerade"
+label = "Process Masquerade"
+
+[[concepts]]
+id = "proc-self-fd"
+label = "Proc Self FD"
+
+[[concepts]]
+id = "pty-lifecycle"
+label = "PTY Lifecycle"
+
+[[concepts]]
+id = "serialized-exchange"
+label = "Serialized Exchange"
+
+[[concepts]]
+id = "server-aead"
+label = "Server AEAD"
+
+[[concepts]]
+id = "shell-wrapping"
+label = "Shell Wrapping"
+
+[[concepts]]
+id = "size-then-bytes"
+label = "Size Then Bytes"
+
+[[concepts]]
+id = "tcp-streams"
+label = "TCP Streams"
+
+[[concepts]]
+id = "text-protocol"
+label = "Text Protocol"
+
+[[concepts]]
+id = "timestomping"
+label = "Timestomping"
+
+[[concepts]]
+id = "crypto-routing"
+label = "TLS Client Auth"
+
+[[concepts]]
+id = "tls-config"
+label = "TLS Config"
+
+[[concepts]]
+id = "tradecraft-integration"
+label = "Tradecraft Integration"
+
+[[concepts]]
+id = "utmp-scrubbing"
+label = "UTMP Scrubbing"
+
+[[concepts]]
+id = "verification"
+label = "Verification"

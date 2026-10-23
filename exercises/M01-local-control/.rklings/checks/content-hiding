@@ -1,0 +1,50 @@
+#!/bin/sh
+# Check: mkdir rklings.h.c.<string> hides lines containing that string from read()
+# Uses split-variable construction to prevent the content filter from
+# breaking this script when it intercepts ksys_read.
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Content-line hiding via read filter"
+
+TESTFILE=/tmp/rk_content_test.txt
+
+_A="SECRE"
+_B="T_DATA"
+TOKEN="${_A}${_B}"
+
+printf "normal line one\n%s hidden payload\nnormal line two\nanother %s line\nfinal line\n" "$TOKEN" "$TOKEN" > "$TESTFILE"
+
+load rklings.ko
+assert_loaded rklings
+
+before=$(cat "$TESTFILE" | grep -c "$TOKEN")
+if [ "$before" -eq 2 ]; then
+    _ok "target lines visible before hiding ($before lines)"
+else
+    _fail "expected 2 target lines before hiding, got $before"
+fi
+
+mkdir "rklings.h.c.${TOKEN}" 2>/dev/null
+
+after=$(cat "$TESTFILE" | grep -c "$TOKEN")
+if [ "$after" -eq 0 ]; then
+    _ok "target lines filtered from read output"
+else
+    _fail "target lines still visible after hiding ($after remain)"
+fi
+
+normal=$(cat "$TESTFILE" | grep -c 'normal line')
+if [ "$normal" -ge 2 ]; then
+    _ok "non-matching lines still readable ($normal lines)"
+else
+    _fail "non-matching lines also affected ($normal remain)"
+fi
+
+rmdir "rklings.h.c.${TOKEN}" 2>/dev/null
+rm -f "$TESTFILE"
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

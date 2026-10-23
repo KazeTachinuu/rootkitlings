@@ -1,0 +1,69 @@
+schema_version = 2
+id = "local-control"
+title = "One .ko with full local rootkit control"
+stage = "reflection"
+kind = "milestone"
+vm_user = "student"
+tradecraft = ["control", "privilege", "concealment", "persistence"]
+difficulty = "standard"
+prerequisites = ["persistence-stealth", "dirent-filter", "content-filter", "port-filter"]
+teaches = ["multi-probe-integration", "unified-rollback"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "include/rootkit.h", "core/init.c", "core/target.c", "core/escalation.c", "core/dispatch.c", "core/module.c", "core/filter.c"]
+editable = ["core/init.c"]
+build = "."
+
+[run]
+stage = ["kernel"]
+load = ["kernel"]
+
+
+[verification]
+load_kernel = true
+timeout_seconds = 120
+tools = ["module-load-test", "mkdir-escalation-test"]
+
+[[verification.cases]]
+id = "all-probes-registered"
+label = "All seven kretprobes register successfully"
+expect_build = "pass"
+check = "exercises/M01-local-control/.rklings/checks/all-probes-registered"
+
+[[verification.cases]]
+id = "escalation"
+label = "mkdir rklings.e grants root"
+expect_build = "pass"
+check = "exercises/M01-local-control/.rklings/checks/escalation"
+
+[[verification.cases]]
+id = "file-hiding"
+label = "mkdir rklings.h.f hides files"
+expect_build = "pass"
+check = "exercises/M01-local-control/.rklings/checks/file-hiding"
+
+[[verification.cases]]
+id = "pid-hiding"
+label = "mkdir rklings.h.i hides PIDs"
+expect_build = "pass"
+check = "exercises/M01-local-control/.rklings/checks/pid-hiding"
+
+[[verification.cases]]
+id = "content-hiding"
+label = "mkdir rklings.h.c hides content lines"
+expect_build = "pass"
+check = "exercises/M01-local-control/.rklings/checks/content-hiding"
+
+[[verification.cases]]
+id = "port-hiding"
+label = "mkdir rklings.h.p hides ports"
+expect_build = "pass"
+check = "exercises/M01-local-control/.rklings/checks/port-hiding"
+
+[[verification.cases]]
+id = "clean-unload"
+label = "Module unloads without errors"
+expect_build = "pass"
+check = "exercises/M01-local-control/.rklings/checks/clean-unload"

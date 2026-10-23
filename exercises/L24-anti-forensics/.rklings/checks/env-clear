@@ -1,0 +1,26 @@
+#!/bin/sh
+# Check: agent environment is cleared after cleanup
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Environment clearing"
+
+wait_agent
+
+# Send CLEANUP, which should clear the agent's env
+resp=$(send_cmd "CLEANUP student")
+if echo "$resp" | grep -qi "ok\|done"; then
+    _ok "CLEANUP accepted"
+else
+    _fail "CLEANUP failed: $resp"
+fi
+
+# Query the agent process itself; a child shell would get a different environment.
+resp=$(send_cmd "STATUS")
+if echo "$resp" | grep -q "ENV=0"; then
+    _ok "agent environment is empty after Clearenv"
+else
+    _fail "agent environment was not cleared: $resp"
+fi
+
+summary

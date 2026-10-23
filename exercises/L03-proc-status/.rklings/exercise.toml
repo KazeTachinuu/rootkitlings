@@ -1,0 +1,67 @@
+schema_version = 2
+id = "proc-status"
+title = "Expose module state in /proc"
+stage = "module-core"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["lifecycle", "control", "detection"]
+difficulty = "standard"
+prerequisites = ["module-state"]
+teaches = ["initialization-rollback", "proc-entry", "proc-publication-lifetime", "proc-read"]
+requires = ["init-failure", "errno-propagation", "component-ownership", "kernel-allocation", "error-pointers", "pointer-invalidation"]
+supplied = [
+  "active state inherited from L02",
+  "proc operation signatures",
+  "allocation and publication failure injection",
+]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "core/main.c", "core/state.c", "include/rootkit.h", "interface/proc.c"]
+editable = ["core/main.c", "interface/proc.c"]
+build = "."
+
+[run]
+stage = ["kernel"]
+
+
+[verification]
+base_case = "normal-publication"
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "normal-publication"
+label = "Normal procfs lifetime"
+expect_build = "pass"
+check = "exercises/L03-proc-status/.rklings/checks/success-check"
+
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "0"
+
+[[verification.cases]]
+id = "allocation-rejection"
+label = "State allocation rejection"
+expect_build = "pass"
+check = "exercises/L03-proc-status/.rklings/checks/failure-enomem-check"
+
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "1"
+
+[[verification.cases]]
+id = "publication-rollback"
+label = "Publication rollback"
+expect_build = "pass"
+check = "exercises/L03-proc-status/.rklings/checks/failure-after-state-check"
+
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "2"
+
+[[verification.cases]]
+id = "unknown-failure-point"
+label = "Reject unknown failure point"
+expect_build = "fail"
+build_output_contains = "unknown RKLINGS_FAIL_POINT"
+
+[verification.cases.build_variables]
+RKLINGS_FAIL_POINT = "99"

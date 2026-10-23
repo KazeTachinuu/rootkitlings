@@ -1,0 +1,49 @@
+schema_version = 2
+id = "decoy-routing"
+title = "Route agents to C2 and browsers to a decoy site"
+stage = "tradecraft"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["evasion", "network"]
+difficulty = "standard"
+prerequisites = ["fileless-exec"]
+teaches = ["crypto-routing", "aead-authentication", "decoy-serving"]
+requires = ["aes-gcm"]
+
+[workspace]
+mode = "project"
+files = ["main.go", "go.mod"]
+editable = ["main.go"]
+build = "."
+
+[run]
+stage = ["agent"]
+agent = "manual"
+artifact_path = "/root/server"
+
+[serve]
+kind = "standalone"
+
+[verification]
+timeout_seconds = 120
+tools = []
+runtime = "checks"
+artifact_path = "/root/server"
+
+[[verification.cases]]
+id = "decoy-get"
+label = "GET request receives decoy page"
+expect_build = "pass"
+check = "exercises/L22-decoy-routing/.rklings/checks/decoy-get"
+
+[[verification.cases]]
+id = "decoy-bad-post"
+label = "POST with bad payload receives decoy page"
+expect_build = "pass"
+check = "exercises/L22-decoy-routing/.rklings/checks/decoy-bad-post"
+
+[[verification.cases]]
+id = "c2-valid-agent"
+label = "POST with valid agent crypto reaches C2"
+expect_build = "pass"
+check = "exercises/L22-decoy-routing/.rklings/checks/c2-valid-agent"

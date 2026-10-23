@@ -1,0 +1,63 @@
+# Kernel module build artifacts
+*.o
+*.ko
+*.mod
+!go.mod
+!**/go.mod
+*.mod.c
+*.mod.o
+*.symvers
+.*.cmd
+.tmp_versions/
+Module.symvers
+modules.order
+compile_commands.json
+.build/
+.cache/
+__pycache__/
+*.pyc
+
+# Go build output
+/bin/
+/rklings
+
+# Editor/OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
+
+# Go binaries in exercise directories (name matches dir, so use exact paths)
+exercises/*/agent
+exercises/*/.rklings/solution/agent
+exercises/*/server
+exercises/*/.rklings/solution/server
+exercises/*/ghost
+exercises/*/.rklings/solution/ghost
+exercises/*/decoy-routing
+exercises/*/.rklings/solution/decoy-routing
+exercises/*/process-masquerade
+exercises/*/.rklings/solution/process-masquerade
+exercises/*/anti-forensics
+exercises/*/.rklings/solution/anti-forensics
+exercises/L17-command-dispatch/L17-command-dispatch
+exercises/L17-command-dispatch/.rklings/solution/L17-command-dispatch
+exercises/L18-remote-shell/L18-remote-shell
+exercises/L18-remote-shell/.rklings/solution/L18-remote-shell
+exercises/L19-file-transfer/L19-file-transfer
+exercises/L19-file-transfer/.rklings/solution/L19-file-transfer
+exercises/P00-complete-rootkit/agent/agent
+exercises/P00-complete-rootkit/.rklings/solution/agent/agent
+
+# Learner state and workspaces
+/.rklings/
+/work/
+
+# Tool artifacts
+node_modules/
+lib/webapp/dist/
+.playwright-mcp/
+.superpowers/
+docs/superpowers/
+product/operator/server

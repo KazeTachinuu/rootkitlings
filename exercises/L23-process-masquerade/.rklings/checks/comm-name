@@ -1,0 +1,35 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Process comm is [kworker/0:1]"
+
+assert_loaded rklings
+
+# Start agent in background (connects to nothing, we just test the name)
+RKLINGS_SERVER_ADDR=127.0.0.1:1 ./agent &
+agent_pid=$!
+sleep 2
+
+# Check /proc/pid/comm for the masqueraded name.
+# Note: ps -p won't find the process because the agent auto-hides its
+# PID from procfs, but direct /proc reads still work.
+comm=$(cat "/proc/$agent_pid/comm" 2>/dev/null)
+
+if [ "$comm" = "[kworker/0:1]" ]; then
+    _ok "process comm is [kworker/0:1]"
+else
+    _fail "expected [kworker/0:1] in /proc/pid/comm, got: $comm"
+fi
+
+# Verify the name matches a real kernel thread pattern (brackets = kthread)
+if echo "$comm" | grep -qE '^\[.*\]$'; then
+    _ok "comm uses kernel thread bracket convention"
+else
+    _fail "comm does not look like a kernel thread name: $comm"
+fi
+
+kill "$agent_pid" 2>/dev/null
+wait "$agent_pid" 2>/dev/null
+
+summary

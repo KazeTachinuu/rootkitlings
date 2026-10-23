@@ -1,0 +1,28 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "UPLOAD writes file with correct contents"
+
+wait_agent
+
+# Upload a test file
+payload="rootkitlings-test-marker"
+send_upload "/tmp/upload_test.txt" "$payload"
+
+# Verify the file was written correctly
+if [ -f /tmp/upload_test.txt ]; then
+    contents=$(cat /tmp/upload_test.txt)
+    if [ "$contents" = "$payload" ]; then
+        _ok "uploaded file has correct contents"
+    else
+        _fail "expected '$payload', got '$contents'"
+    fi
+else
+    _fail "/tmp/upload_test.txt not created"
+fi
+
+# Cleanup
+rm -f /tmp/upload_test.txt
+
+summary

@@ -1,0 +1,83 @@
+schema_version = 2
+id = "ghost"
+title = "Integrate and verify deployment controls"
+stage = "tradecraft"
+kind = "milestone"
+vm_user = "root"
+tradecraft = ["concealment", "anti-forensics", "evasion", "persistence"]
+difficulty = "advanced"
+prerequisites = ["anti-forensics"]
+teaches = ["tradecraft-integration", "deployment-order", "verification"]
+requires = []
+
+[workspace]
+mode = "project"
+files = ["main.go", "go.mod", "go.sum"]
+editable = ["main.go"]
+build = "."
+
+[build]
+embed_module_from = "local-control"
+
+[run]
+stage = ["agent"]
+agent = "background"
+remove_artifact = true
+
+[serve]
+commands = ["PING", "STATUS", "SHELL id", "DEPLOY"]
+
+[verification]
+timeout_seconds = 180
+tools = ["module-load-test"]
+runtime = "background"
+harness = true
+remove_artifact = true
+
+[[verification.cases]]
+id = "no-module-visible"
+label = "lsmod shows no rootkit module"
+expect_build = "pass"
+check = "exercises/M03-ghost/.rklings/checks/no-module-visible"
+
+[[verification.cases]]
+id = "no-process-visible"
+label = "ps shows no agent process"
+expect_build = "pass"
+check = "exercises/M03-ghost/.rklings/checks/no-process-visible"
+
+[[verification.cases]]
+id = "no-port-visible"
+label = "procfs and ss show no agent port"
+expect_build = "pass"
+check = "exercises/M03-ghost/.rklings/checks/no-port-visible"
+
+[[verification.cases]]
+id = "no-file-visible"
+label = "find shows no agent binary on disk"
+expect_build = "pass"
+check = "exercises/M03-ghost/.rklings/checks/no-file-visible"
+
+[[verification.cases]]
+id = "no-login-record"
+label = "last shows no login for session"
+expect_build = "pass"
+check = "exercises/M03-ghost/.rklings/checks/no-login-record"
+
+[[verification.cases]]
+id = "no-core-dump"
+label = "Agent is not dumpable"
+expect_build = "pass"
+check = "exercises/M03-ghost/.rklings/checks/no-core-dump"
+
+[[verification.cases]]
+id = "timestamps-clean"
+label = "No recent timestamps on dropped files"
+expect_build = "pass"
+check = "exercises/M03-ghost/.rklings/checks/timestamps-clean"
+
+[[verification.cases]]
+id = "agent-operational"
+label = "Agent still responds to commands"
+expect_build = "pass"
+check = "exercises/M03-ghost/.rklings/checks/agent-operational"

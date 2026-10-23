@@ -1,0 +1,5 @@
+#!/bin/sh
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+begin "Framed Go exchange"
+assert_file_contains /tmp/g00-proof 'PING->PONG'
+summary

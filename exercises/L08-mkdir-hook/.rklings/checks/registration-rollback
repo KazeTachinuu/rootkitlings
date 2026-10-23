@@ -1,0 +1,26 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Second-probe registration rollback"
+
+probe_count() {
+    grep -Ec "[[:space:]]$1\\+" /sys/kernel/debug/kprobes/list || true
+}
+
+mkdir_before=$(probe_count __x64_sys_mkdir)
+load_fail rklings.ko
+
+if [ ! -d /sys/module/rklings ]; then
+    _ok "failed initialization left no loaded module"
+else
+    _fail "module remained loaded after initialization failed"
+fi
+
+if [ "$(probe_count __x64_sys_mkdir)" -eq "$mkdir_before" ]; then
+    _ok "failed mkdirat registration rolled back the mkdir probe"
+else
+    _fail "mkdir probe remained after mkdirat registration failed"
+fi
+
+summary

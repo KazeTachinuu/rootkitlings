@@ -1,0 +1,48 @@
+#!/bin/sh
+# Check: mkdir rklings.h.i.<pid> hides PIDs from /proc listing
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "PID hiding via getdents filter"
+
+load rklings.ko
+assert_loaded rklings
+
+# Start a background process to hide
+sleep 999 &
+BGPID=$!
+
+# Verify the PID directory exists
+if [ -d "/proc/$BGPID" ]; then
+    _ok "PID $BGPID visible in /proc before hiding"
+else
+    _fail "PID $BGPID not found in /proc"
+fi
+
+# Add PID to hide list
+mkdir "rklings.h.i.$BGPID" 2>/dev/null
+
+# The PID directory should be hidden from /proc listing
+found=$(find /proc -maxdepth 1 -name "$BGPID" 2>/dev/null)
+if [ -n "$found" ]; then
+    _fail "PID $BGPID still visible in /proc listing after hide"
+else
+    _ok "PID $BGPID hidden from /proc listing"
+fi
+
+# Also check ps output (reads /proc to enumerate processes)
+if ps -p "$BGPID" -o pid= | grep -q '[0-9]'; then
+    _fail "PID $BGPID still visible in ps after hide"
+else
+    _ok "PID $BGPID hidden from ps"
+fi
+
+# Cleanup
+kill "$BGPID" 2>/dev/null
+wait "$BGPID" 2>/dev/null
+rmdir "rklings.h.i.$BGPID" 2>/dev/null
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

@@ -1,0 +1,33 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Agent auto-hides PID and port on connect"
+
+assert_loaded rklings
+
+# Start agent in background
+./agent &
+agent_pid=$!
+sleep 4
+
+# After connect, agent should have issued mkdir to hide its PID
+# Check that ps does not list the agent PID
+ps_out=$(ps -e -o pid= 2>/dev/null)
+if echo "$ps_out" | grep -qw "$agent_pid"; then
+    _fail "agent PID $agent_pid still visible in ps"
+else
+    _ok "agent PID hidden from ps"
+fi
+
+# Verify the process is still running (kill -0 checks existence)
+if kill -0 "$agent_pid" 2>/dev/null; then
+    _ok "agent process still alive despite being hidden"
+else
+    _fail "agent process not running"
+fi
+
+kill "$agent_pid" 2>/dev/null
+wait "$agent_pid" 2>/dev/null
+
+summary

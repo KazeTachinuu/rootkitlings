@@ -1,0 +1,35 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Exact target matching"
+
+load rklings.ko
+printf 'add secret.txt' > /proc/rklings
+printf 'add .hidden' > /proc/rklings
+
+if printf 'match secret.txt' > /proc/rklings; then
+    _ok "exact stored name matches"
+else
+    _fail "stored name did not match"
+fi
+if printf 'match secret' > /proc/rklings 2>/dev/null; then
+    _fail "prefix unexpectedly matched"
+else
+    _ok "prefix does not match"
+fi
+if printf 'match absent' > /proc/rklings 2>/dev/null; then
+    _fail "absent name unexpectedly matched"
+else
+    _ok "absent name does not match"
+fi
+
+unload rklings
+load rklings.ko
+if [ -z "$(cat /proc/rklings)" ]; then
+    _ok "reload starts with an empty list"
+else
+    _fail "reload retained stale targets"
+fi
+unload rklings
+summary

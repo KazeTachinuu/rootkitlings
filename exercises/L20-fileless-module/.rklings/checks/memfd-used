@@ -1,0 +1,32 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Verify module was loaded via memfd (no file path in /proc)"
+
+# /proc/modules shows the module name but no source path for memfd-loaded modules.
+# A module loaded via insmod from a file would have a path in modinfo or
+# the kernel would record the source. With finit_module from a memfd,
+# there is no filesystem path to record.
+if grep -q '^rklings ' /proc/modules; then
+    # modinfo srcversion exists but no filename for in-tree path
+    # The key test: the module is loaded but there is no .ko file anywhere
+    srcpath=$(modinfo -F filename rklings 2>/dev/null || true)
+    case "$srcpath" in
+        ""|"(builtin)")
+            _ok "module has no file path (loaded from memfd)"
+            ;;
+        *)
+            # If modinfo returns a path, check if it actually exists
+            if [ -e "$srcpath" ]; then
+                _fail "module has a real file path: $srcpath"
+            else
+                _ok "module path reported but file does not exist (memfd load)"
+            fi
+            ;;
+    esac
+else
+    _fail "rklings module is not loaded"
+fi
+
+summary

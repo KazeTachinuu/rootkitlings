@@ -1,0 +1,57 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Callback interval varies between connections"
+
+assert_loaded rklings
+
+# Point the agent at a dead port so each dial fails instantly and it
+# retries with jitter. Count lines in the log to detect each attempt.
+logfile=$(mktemp)
+RKLINGS_SERVER_ADDR=127.0.0.1:1 RKLINGS_BASE_DELAY=1s RKLINGS_JITTER_MAX=2s \
+    ./agent 2>"$logfile" &
+agent_pid=$!
+
+# Record wall-clock milliseconds when each new log line appears.
+timestamps=""
+prev_count=0
+for _ in $(seq 1 200); do
+    cur=$(wc -l < "$logfile")
+    if [ "$cur" -gt "$prev_count" ]; then
+        ms=$(date +%s%3N)
+        timestamps="$timestamps $ms"
+        prev_count=$cur
+        n=$(echo "$timestamps" | wc -w)
+        [ "$n" -ge 4 ] && break
+    fi
+    sleep 0.1
+done
+
+kill "$agent_pid" 2>/dev/null
+wait "$agent_pid" 2>/dev/null
+rm -f "$logfile"
+
+n=$(echo "$timestamps" | wc -w)
+if [ "$n" -lt 4 ]; then
+    _fail "did not see 4 reconnect attempts within timeout (got $n)"
+    summary
+fi
+
+# Compute intervals between attempts 2-3 and 3-4 (skip first, it's instant)
+t2=$(echo "$timestamps" | awk '{print $2}')
+t3=$(echo "$timestamps" | awk '{print $3}')
+t4=$(echo "$timestamps" | awk '{print $4}')
+
+d1=$((t3 - t2))
+d2=$((t4 - t3))
+
+# With jitter, at least one pair of consecutive intervals should differ
+# (at millisecond resolution this is virtually guaranteed)
+if [ "$d1" -eq "$d2" ]; then
+    _fail "intervals are identical (${d1}ms), jitter not working"
+else
+    _ok "intervals differ (${d1}ms vs ${d2}ms), jitter active"
+fi
+
+summary

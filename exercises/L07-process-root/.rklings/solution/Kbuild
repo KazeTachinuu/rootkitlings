@@ -1,0 +1,3 @@
+ccflags-y := -I$(src)
+obj-m += rklings.o
+rklings-y := main.o

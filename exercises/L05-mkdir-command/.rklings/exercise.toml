@@ -1,0 +1,42 @@
+schema_version = 2
+id = "mkdir-command"
+title = "Turn mkdir into a command trigger"
+stage = "escalation"
+kind = "lesson"
+vm_user = "root"
+tradecraft = ["interception"]
+difficulty = "standard"
+prerequisites = ["proc-control"]
+teaches = ["mkdir-interception", "reactive-hook"]
+requires = ["module-lifecycle", "c-pointers-and-structs"]
+supplied = [
+  "mkdir and mkdirat syscall interception",
+  "safe userspace pathname copy",
+  "hook registration and teardown",
+]
+
+[workspace]
+mode = "project"
+files = ["Kbuild", "main.c", "rklings_hook.h"]
+editable = ["main.c"]
+build = "."
+
+[run]
+stage = ["kernel"]
+
+
+[verification]
+timeout_seconds = 120
+tools = ["module-load-test"]
+
+[[verification.cases]]
+id = "intercept-matching"
+label = "mkdir rklings.hello succeeds without creating a directory"
+expect_build = "pass"
+check = "exercises/L05-mkdir-command/.rklings/checks/intercept-matching"
+
+[[verification.cases]]
+id = "ignore-non-matching"
+label = "Non-matching mkdir is ignored"
+expect_build = "pass"
+check = "exercises/L05-mkdir-command/.rklings/checks/ignore-non-matching"

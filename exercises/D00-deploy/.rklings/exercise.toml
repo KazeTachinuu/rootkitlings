@@ -1,0 +1,48 @@
+schema_version = 2
+id = "deploy"
+title = "Deploy a rootkit against a live target"
+stage = "deployment"
+kind = "deployment"
+vm_user = "student"
+tradecraft = ["lifecycle", "privilege", "persistence"]
+difficulty = "advanced"
+prerequisites = ["local-control"]
+teaches = ["initial-access", "privilege-escalation", "deployment"]
+requires = []
+supplied = [
+    "isolated vulnerable HTTP target and pinned guest kernel",
+    "copy_fail_exp.py privilege-escalation black box",
+    "the learner's completed M01 module built for the target kernel",
+]
+
+[completion]
+proofs = [
+    "HTTP injection produced the initial student execution",
+    "the supplied escalation path produced effective UID 0",
+    "rklings.ko was transferred only after access",
+    "the deployed module answered its control command",
+    "the operational module was absent from lsmod",
+]
+
+[workspace]
+mode = "project"
+files = []
+editable = []
+build = "."
+
+[build]
+module_from = "local-control"
+
+[run]
+stage = ["kernel"]
+
+
+[verification]
+timeout_seconds = 180
+tools = []
+
+[[verification.cases]]
+id = "lab-provisioned"
+label = "Deployment target is provisioned"
+expect_build = "pass"
+check = "exercises/D00-deploy/.rklings/checks/lab-provisioned"

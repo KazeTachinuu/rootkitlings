@@ -1,0 +1,16 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Verify durable mode remains removed after reboot"
+
+assert_absent /usr/libexec/systemd-kerneld
+assert_absent /etc/systemd/system/systemd-kerneld.service
+assert_absent /sys/module/rklings
+if systemctl is-enabled --quiet systemd-kerneld.service 2>/dev/null; then
+    _fail "agent service remains enabled"
+else
+    _ok "agent service remains disabled"
+fi
+
+summary

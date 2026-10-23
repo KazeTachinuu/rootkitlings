@@ -1,0 +1,18 @@
+ARG BASE
+FROM ${BASE}
+
+ARG KERNEL
+ARG SOURCES
+
+RUN if [ -n "${SOURCES}" ]; then \
+      apt-get update && \
+      apt-get install -y --no-install-recommends ca-certificates && \
+      printf '%b' "${SOURCES}" > /etc/apt/sources.list && \
+      rm -f /etc/apt/sources.list.d/*; \
+    fi && \
+    apt-get -o Acquire::Check-Valid-Until=false update && \
+    apt-get install -y --no-install-recommends \
+      gcc \
+      linux-headers-${KERNEL} \
+      make && \
+    rm -rf /var/lib/apt/lists/*

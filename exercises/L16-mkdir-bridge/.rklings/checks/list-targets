@@ -1,0 +1,18 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "INFO returns the kernel's in-memory target ledger"
+
+assert_loaded rklings
+
+wait_agent
+send_cmd "HIDE FILE state-probe" >/dev/null
+resp=$(send_cmd "INFO")
+if echo "$resp" | grep -q "file=state-probe"; then
+    _ok "INFO returned the live file target"
+else
+    _fail "INFO omitted the live file target: $resp"
+fi
+
+summary

@@ -1,0 +1,48 @@
+#!/bin/sh
+# Check: file download and upload work over HTTP+AEAD
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "File transfer"
+
+wait_agent
+
+# Create a test file on the VM (agent runs there)
+echo "rootkitlings-transfer-test" > /tmp/rk_xfer_test
+
+# Download it via relay
+resp=$(send_download "/tmp/rk_xfer_test")
+if echo "$resp" | grep -q "rootkitlings-transfer-test"; then
+    _ok "DOWNLOAD returned correct file content"
+else
+    _fail "DOWNLOAD content mismatch: $resp"
+fi
+
+# Verify size via relay
+size=$(send_download_size "/tmp/rk_xfer_test")
+if [ "${size:-0}" -gt 0 ] 2>/dev/null; then
+    _ok "size header present ($size bytes)"
+else
+    _fail "invalid size: $size"
+fi
+
+# Upload test
+payload="rootkitlings-upload-marker"
+send_upload "/tmp/rk_upload_test.txt" "$payload"
+sleep 1
+
+if [ -f /tmp/rk_upload_test.txt ]; then
+    contents=$(cat /tmp/rk_upload_test.txt)
+    if [ "$contents" = "$payload" ]; then
+        _ok "uploaded file has correct contents"
+    else
+        _fail "expected '$payload', got '$contents'"
+    fi
+else
+    _fail "/tmp/rk_upload_test.txt not created"
+fi
+
+# Cleanup
+rm -f /tmp/rk_xfer_test /tmp/rk_upload_test.txt
+
+summary

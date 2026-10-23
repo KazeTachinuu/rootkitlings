@@ -1,0 +1,28 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Matching mkdir is consumed"
+
+load rklings.ko
+
+if mkdir rklings.hello; then
+    _ok "matching mkdir reported success"
+else
+    _fail "matching mkdir reported failure"
+fi
+assert_absent rklings.hello
+assert_log "rklings: intercepted mkdir: hello"
+
+dmesg -c > /dev/null 2>&1
+if mkdir rklings.world; then
+    _ok "second matching mkdir reported success"
+else
+    _fail "second matching mkdir reported failure"
+fi
+assert_absent rklings.world
+assert_log "rklings: intercepted mkdir: world"
+
+unload rklings
+assert_absent /sys/module/rklings
+summary

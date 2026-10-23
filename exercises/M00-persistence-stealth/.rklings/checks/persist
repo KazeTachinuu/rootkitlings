@@ -1,0 +1,32 @@
+#!/bin/sh
+# Check: mkdir rklings.persist creates /etc/modules-load.d/rklings.conf
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Persistence via mkdir command"
+
+# Install the built artifact where systemd-modules-load can resolve it.
+rm -f /etc/modules-load.d/rklings.conf
+install -D -m 0600 /rklings/rklings.ko \
+    "/lib/modules/$(uname -r)/extra/rklings.ko"
+depmod -a
+
+load rklings.ko
+assert_loaded rklings
+
+# Issue persist command
+mkdir rklings.persist 2>/dev/null
+
+if [ -f /etc/modules-load.d/rklings.conf ]; then
+    _ok "rklings.conf created"
+else
+    _fail "rklings.conf not created after mkdir rklings.persist"
+fi
+
+if [ "$(cat /etc/modules-load.d/rklings.conf 2>/dev/null)" = "rklings" ]; then
+    _ok "rklings.conf contains exactly the module name"
+else
+    _fail "rklings.conf content is not exactly 'rklings'"
+fi
+
+summary

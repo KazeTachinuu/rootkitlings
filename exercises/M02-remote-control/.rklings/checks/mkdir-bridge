@@ -1,0 +1,37 @@
+#!/bin/sh
+# Check: HIDE commands from server trigger mkdir in the VM
+# shellcheck source=/dev/null
+# shellcheck disable=SC2010 # ls output is the behavior under test.
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "mkdir bridge for kernel commands"
+
+assert_loaded rklings
+
+wait_agent
+
+# Create a test file to hide
+touch /tmp/rk_bridge_test
+
+# Send HIDE FILE command through the relay
+send_cmd "HIDE FILE rk_bridge_test" >/dev/null
+sleep 2
+
+# Verify the file is now hidden from directory listing
+if ls /tmp/ | grep -q "rk_bridge_test"; then
+    _fail "rk_bridge_test still visible after HIDE FILE"
+else
+    _ok "file hidden from ls after HIDE FILE command"
+fi
+
+# Verify the file still exists via direct path
+if test -e /tmp/rk_bridge_test; then
+    _ok "file still accessible via direct path"
+else
+    _fail "hidden file is no longer accessible by direct path"
+fi
+
+# Cleanup
+rm -f /tmp/rk_bridge_test
+
+summary

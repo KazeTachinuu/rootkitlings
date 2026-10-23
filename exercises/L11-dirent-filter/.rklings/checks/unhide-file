@@ -1,0 +1,77 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Unhidden file reappears"
+
+# Set up test directory
+rm -rf /tmp/testdir
+mkdir -p /tmp/testdir
+touch /tmp/testdir/visible1
+touch /tmp/testdir/secret
+touch /tmp/testdir/visible2
+
+load rklings.ko
+
+# Hide the file
+mkdir rklings.h.f.secret 2>/dev/null
+
+listing=$(ls /tmp/testdir)
+case "$listing" in
+    *secret*) _fail "secret should be hidden" ;;
+    *) _ok "secret is hidden" ;;
+esac
+
+# Restore the same value that was concealed.
+mkdir rklings.u.f.secret 2>/dev/null
+
+listing=$(ls /tmp/testdir)
+case "$listing" in
+    *secret*) _ok "secret reappears after unhide" ;;
+    *) _fail "secret still hidden after unhide" ;;
+esac
+case "$listing" in
+    *visible1*) _ok "visible1 still present" ;;
+    *) _fail "visible1 missing" ;;
+esac
+case "$listing" in
+    *visible2*) _ok "visible2 still present" ;;
+    *) _fail "visible2 missing" ;;
+esac
+
+# Test hide/unhide cycle with multiple files
+mkdir rklings.h.f.visible1 2>/dev/null
+mkdir rklings.h.f.visible2 2>/dev/null
+
+listing=$(ls /tmp/testdir)
+case "$listing" in
+    *visible1*) _fail "visible1 should be hidden" ;;
+    *) _ok "visible1 hidden" ;;
+esac
+case "$listing" in
+    *visible2*) _fail "visible2 should be hidden" ;;
+    *) _ok "visible2 hidden" ;;
+esac
+case "$listing" in
+    *secret*) _ok "secret still visible (not in targets)" ;;
+    *) _fail "secret unexpectedly hidden" ;;
+esac
+
+# Restore both by the same values used to conceal them.
+mkdir rklings.u.f.visible1 2>/dev/null
+mkdir rklings.u.f.visible2 2>/dev/null
+
+listing=$(ls /tmp/testdir)
+case "$listing" in
+    *visible1*) _ok "visible1 reappears" ;;
+    *) _fail "visible1 still hidden" ;;
+esac
+case "$listing" in
+    *visible2*) _ok "visible2 reappears" ;;
+    *) _fail "visible2 still hidden" ;;
+esac
+
+unload rklings
+rm -rf /tmp/testdir
+
+summary

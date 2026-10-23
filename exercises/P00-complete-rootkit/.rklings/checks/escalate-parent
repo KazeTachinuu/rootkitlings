@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -eu
+
+rk="rklin$(printf gs)"
+export RK="$rk"
+output=$(su -s /bin/sh student -c '
+	before=$(id -u)
+	mkdir ${RK}.e
+	after=$(id -u)
+	if [ -d ${RK}.e ]; then intercepted=no; else intercepted=yes; fi
+	printf "%s:%s:%s\n" "$before" "$after" "$intercepted"
+')
+
+if [ "$output" != "1000:0:yes" ]; then
+	printf 'expected mkdir caller shell to change from uid 1000 to 0; got %s\n' \
+		"$output" >&2
+	exit 1
+fi
+
+printf 'mkdir escalation elevates its parent shell\n'

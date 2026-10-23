@@ -1,0 +1,42 @@
+#!/bin/sh
+# Check: mkdir rklings.h.p.<port> hides ports from procfs and sock_diag
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Port hiding via tcp seq_show filter"
+
+ip link set lo up 2>/dev/null
+
+load rklings.ko
+assert_loaded rklings
+
+nc -l -p 9999 > /dev/null 2>&1 &
+NC_PID=$!
+sleep 0.3
+
+# 9999 = 0x270F
+if grep -qi ":270F " /proc/net/tcp; then
+    _ok "port 9999 visible in /proc/net/tcp before hiding"
+else
+    _fail "port 9999 not visible in /proc/net/tcp (listener may have failed)"
+fi
+mkdir rklings.h.p.9999 2>/dev/null
+
+if grep -qi ":270F " /proc/net/tcp; then
+    _fail "port 9999 still visible in /proc/net/tcp after hiding"
+else
+    _ok "port 9999 hidden from /proc/net/tcp"
+fi
+if ss -ltnH 'sport = :9999' | grep -q .; then
+    _fail "port 9999 still visible through sock_diag after hiding"
+else
+    _ok "port 9999 hidden from ss"
+fi
+
+kill "$NC_PID" 2>/dev/null
+wait "$NC_PID" 2>/dev/null
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

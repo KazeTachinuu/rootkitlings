@@ -1,0 +1,15 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Module remains absent after unpersist and reboot"
+
+assert_absent /sys/module/rklings
+assert_absent "/lib/modules/$(uname -r)/extra/rklings.ko"
+if grep -qx rklings /etc/modules-load.d/rklings.conf 2>/dev/null; then
+    _fail "autoload configuration still names rklings"
+else
+    _ok "autoload configuration is inactive"
+fi
+
+summary

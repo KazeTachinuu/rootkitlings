@@ -1,0 +1,23 @@
+CompileFlags:
+  Remove:
+    - -fconserve-stack
+    - -fdiagnostics-show-context=*
+    - -fmin-function-alignment=*
+    - -fno-allow-store-data-races
+    - -fno-stack-clash-protection
+    - -fpatchable-function-entry=*
+    - -fstrict-flex-arrays=*
+    - -ftrivial-auto-var-init=*
+    - -fzero-call-used-regs=*
+    - -fzero-init-padding-bits=*
+    - -mfentry
+    - -mfunction-return=*
+    - -mharden-sls=*
+    - -mindirect-branch-cs-prefix
+    - -mindirect-branch-register
+    - -mindirect-branch=*
+    - -mpreferred-stack-boundary=*
+    - -mrecord-mcount
+    - -mskip-rax-setup
+    - -mstack-protector-guard-reg=*
+    - -mstack-protector-guard-symbol=*

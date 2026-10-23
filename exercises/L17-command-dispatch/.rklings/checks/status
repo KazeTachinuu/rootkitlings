@@ -1,0 +1,22 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Server sends STATUS, agent responds with state"
+
+wait_agent
+
+resp=$(send_cmd "STATUS")
+if echo "$resp" | grep -q '"pid"'; then
+    _ok "STATUS returned agent state"
+else
+    _fail "expected JSON with pid, got: $resp"
+fi
+
+if echo "$resp" | grep -q '"uid"'; then
+    _ok "STATUS includes uid"
+else
+    _fail "expected uid in response, got: $resp"
+fi
+
+summary

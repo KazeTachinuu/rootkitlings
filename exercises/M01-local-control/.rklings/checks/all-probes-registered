@@ -1,0 +1,80 @@
+#!/bin/sh
+# Check: All seven kretprobes register successfully on load
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "All kretprobes register"
+
+load rklings.ko
+assert_loaded rklings
+
+# Exercise every probe through its externally observable behaviour. This is
+# stronger and less kernel-version-dependent than parsing debugfs internals.
+mkdir rklings.ping 2>/dev/null
+assert_log "rklings: pong"
+
+touch /tmp/probe-secret
+mkdir rklings.h.f.probe-secret 2>/dev/null
+if find /tmp -maxdepth 1 -name probe-secret | grep -q .; then
+	_fail "getdents64 probe did not hide its target"
+else
+	_ok "getdents64 probe is active"
+fi
+
+printf 'ordinary\nPROBE_TOKEN hidden\n' >/tmp/probe-read
+mkdir rklings.h.c.PROBE_TOKEN 2>/dev/null
+if cat /tmp/probe-read | grep -q PROBE_TOKEN; then
+	_fail "read probe did not filter its target"
+else
+	_ok "read probe is active"
+fi
+
+ip link set lo up 2>/dev/null
+nc -l -p 9988 >/dev/null 2>&1 &
+listener=$!
+sleep 0.2
+if grep -qi ':2704 ' /proc/net/tcp; then
+	_ok "control listener is visible before filtering"
+else
+	_fail "control listener did not start"
+fi
+mkdir rklings.h.p.9988 2>/dev/null
+if grep -qi ':2704 ' /proc/net/tcp; then
+	_fail "tcp4 probe did not hide its target"
+else
+	_ok "tcp4 probe is active"
+fi
+if ss -ltnH 'sport = :9988' | grep -q .; then
+	_fail "sock_diag probe did not hide its target"
+else
+	_ok "sock_diag probe is active"
+fi
+kill "$listener" 2>/dev/null
+wait "$listener" 2>/dev/null
+
+nc -6 -l -p 9987 >/dev/null 2>&1 &
+listener6=$!
+sleep 0.2
+if grep -qi ':2703 ' /proc/net/tcp6; then
+	_ok "IPv6 control listener is visible before filtering"
+else
+	_fail "IPv6 control listener did not start"
+fi
+mkdir rklings.h.p.9987 2>/dev/null
+if grep -qi ':2703 ' /proc/net/tcp6; then
+	_fail "tcp6 probe did not hide its target"
+else
+	_ok "tcp6 probe is active"
+fi
+kill "$listener6" 2>/dev/null
+wait "$listener6" 2>/dev/null
+
+rm -f /tmp/probe-secret /tmp/probe-read
+rmdir rklings.ping rklings.h.f.probe-secret \
+	rklings.h.c.PROBE_TOKEN rklings.h.p.9988 2>/dev/null || true
+rmdir rklings.h.p.9987 2>/dev/null || true
+
+unload rklings
+assert_absent /sys/module/rklings
+
+summary

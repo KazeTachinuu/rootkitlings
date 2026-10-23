@@ -1,0 +1,38 @@
+#!/bin/sh
+# Check: systemd journal vacuumed
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Journal tampering"
+
+wait_agent
+
+# Create a marker entry in the journal
+logger -t rk_forensic_test "MARKER_BEFORE_CLEANUP"
+
+# Verify the marker exists
+if journalctl -t rk_forensic_test --no-pager 2>/dev/null | grep -q "MARKER_BEFORE_CLEANUP"; then
+    _ok "marker visible in journal before cleanup"
+else
+    _fail "journal marker was not recorded; test precondition failed"
+fi
+
+# The implementation intentionally retains entries newer than one second.
+sleep 2
+
+# Send CLEANUP to trigger journal tampering
+resp=$(send_cmd "CLEANUP student")
+if echo "$resp" | grep -qi "ok\|done"; then
+    _ok "CLEANUP accepted"
+else
+    _fail "CLEANUP failed: $resp"
+fi
+
+# The unique record is the observable contract; disk usage alone proves nothing.
+if journalctl -t rk_forensic_test --no-pager 2>/dev/null | grep -q "MARKER_BEFORE_CLEANUP"; then
+    _fail "journal marker remains after rotate and vacuum"
+else
+    _ok "journal marker removed by rotate and vacuum"
+fi
+
+summary

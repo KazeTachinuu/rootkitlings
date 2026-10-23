@@ -1,0 +1,34 @@
+#!/bin/sh
+# Check: no plaintext commands visible in captured traffic (AEAD encrypted)
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Encrypted traffic verification"
+
+wait_agent
+
+# Capture packets for a few seconds while generating traffic
+PCAP="/tmp/rk_tls_check.pcap"
+timeout 5 tcpdump -i eth0 port 8443 -w "$PCAP" -c 20 2>/dev/null &
+tcpdump_pid=$!
+
+# Generate some traffic via relay
+send_cmd "PING" > /dev/null
+send_cmd "SHELL echo traffic-test" > /dev/null
+
+sleep 3
+kill "$tcpdump_pid" 2>/dev/null
+wait "$tcpdump_pid" 2>/dev/null
+
+# Check captured packets for plaintext leaks
+plaintext=$(strings "$PCAP" 2>/dev/null | grep -c -E 'PING|PONG|SHELL|traffic-test')
+
+if [ "${plaintext:-0}" -eq 0 ]; then
+    _ok "no plaintext commands in captured traffic"
+else
+    _fail "found $plaintext plaintext strings in traffic capture"
+fi
+
+rm -f "$PCAP"
+
+summary

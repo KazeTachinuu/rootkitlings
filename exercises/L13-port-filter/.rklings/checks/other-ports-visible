@@ -1,0 +1,50 @@
+#!/bin/sh
+# shellcheck source=/dev/null
+. "${RKLINGS_LIB:-/vm/checks/lib.sh}"
+
+begin "Non-targeted ports remain visible"
+
+ip link set lo up
+
+# 31337 = 0x7A69, 31338 = 0x7A6A
+nc -l -p 31337 &
+NC1_PID=$!
+nc -l -p 31338 &
+NC2_PID=$!
+sleep 1
+
+if grep -qi ":7A69 " /proc/net/tcp; then
+  _ok "port 31337 visible before module load"
+else
+  _fail "port 31337 not visible (listener failed)"
+fi
+
+if grep -qi ":7A6A " /proc/net/tcp; then
+  _ok "port 31338 visible before module load"
+else
+  _fail "port 31338 not visible (listener failed)"
+fi
+
+load rklings.ko
+
+mkdir rklings.h.p.31337
+
+if grep -qi ":7A69 " /proc/net/tcp; then
+  _fail "port 31337 still visible after hide command"
+else
+  _ok "port 31337 is hidden as expected"
+fi
+
+if grep -qi ":7A6A " /proc/net/tcp; then
+  _ok "non-targeted port 31338 remains visible"
+else
+  _fail "non-targeted port 31338 was incorrectly hidden"
+fi
+
+kill $NC1_PID 2>/dev/null
+kill $NC2_PID 2>/dev/null
+wait $NC1_PID 2>/dev/null
+wait $NC2_PID 2>/dev/null
+unload rklings
+
+summary
