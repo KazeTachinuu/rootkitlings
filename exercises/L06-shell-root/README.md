@@ -41,8 +41,8 @@ exercises/L06-shell-root
 └── rklings_hook.h
 ```
 
-Only `main.c` is editable.
-You connect `rklings.e` to the shell that ran `mkdir`.
+Only `main.c` is editable. You connect `rklings.e` to the shell that ran
+`mkdir`.
 
 Supplied files:
 
@@ -52,12 +52,11 @@ Supplied files:
 ## Follow the parent and child
 
 Credentials are the kernel state that records a process's user and group
-identity and permissions.
-Giving the shell root credentials makes later permission checks treat it as
-root.
+identity and permissions. Giving the shell root credentials makes later
+permission checks treat it as root.
 
-The shell does not create the directory itself.
-It starts a child process that runs `mkdir`:
+The shell does not create the directory itself. It starts a child process that
+runs `mkdir`:
 
 ```text
 shell
@@ -77,9 +76,9 @@ PID 1200, UID 1000
 ```
 
 Inside the hook, `current` is the `mkdir` child. `task_ppid_nr(current)` returns
-its parent PID, which identifies the shell.
-Changing the child would be useless because it exits as soon as `mkdir`
-finishes; changing the parent leaves the interactive shell running as root.
+its parent PID, which identifies the shell. Changing the child would be useless
+because it exits as soon as `mkdir` finishes; changing the parent leaves the
+interactive shell running as root.
 
 ## Turn the command into privilege
 
@@ -130,6 +129,5 @@ $ ./rklings validate L06
 
 ## Next
 
-L06 always targets the parent shell.
-L07 opens the credential helper and extends the command with an explicit PID so
-it can target another running process.
+L06 always targets the parent shell. L07 opens the credential helper and extends
+the command with an explicit PID so it can target another running process.

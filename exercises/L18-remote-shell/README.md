@@ -5,9 +5,8 @@
 Add a `SHELL` handler that runs one command and returns its output as a
 structured JSON result over the encrypted WebSocket channel.
 
-L17 dispatches commands that map to mkdir calls, but an operator needs to
-run arbitrary shell commands on the target. One new handler adds remote
-execution.
+L17 dispatches commands that map to mkdir calls, but an operator needs to run
+arbitrary shell commands on the target. One new handler adds remote execution.
 
 ## What you will observe
 
@@ -25,13 +24,12 @@ exercises/L18-remote-shell
 ```
 
 The crypto, transport, WebSocket session loop, and existing handlers are all
-provided.
-Only add `handleShellCmd` and register it in the execute() switch.
+provided. Only add `handleShellCmd` and register it in the execute() switch.
 
 ## exec.Command
 
-Go's `os/exec` package runs external programs. `exec.Command("/bin/sh", "-c", arg)`
-passes the entire argument string to `sh`, which handles pipes, redirects,
+Go's `os/exec` package runs external programs. `exec.Command("/bin/sh", "-c",
+arg)` passes the entire argument string to `sh`, which handles pipes, redirects,
 globs, and everything else the shell provides.
 
 `CombinedOutput()` runs the command, waits for it to finish, and returns stdout
@@ -39,9 +37,9 @@ and stderr together as a byte slice.
 
 ## Structured results
 
-Each handler returns a Go value.
-The transport encrypts the result as JSON and sends it back to the operator
-over the WebSocket. For SHELL, the result is a map with two fields:
+Each handler returns a Go value. The transport encrypts the result as JSON and
+sends it back to the operator over the WebSocket. For SHELL, the result is a map
+with two fields:
 
 ```json
 {
@@ -100,8 +98,7 @@ so the dispatch routes SHELL commands to your handler.
 ## Test it
 
 `rklings serve L18` starts this exercise's live one-shot execution panel at
-`http://127.0.0.1:8080`.
-Output shown there is returned by the guest agent.
+`http://127.0.0.1:8080`. Output shown there is returned by the guest agent.
 
 ```console
 $ ./rklings serve L18
@@ -113,9 +110,8 @@ In another host terminal:
 $ ./rklings run L18
 ```
 
-Open `http://127.0.0.1:8080`.
-Enter a command in the shell field.
-The output and exit code shown by the panel come from the guest process.
+Open `http://127.0.0.1:8080`. Enter a command in the shell field. The output and
+exit code shown by the panel come from the guest process.
 
 ```text
 server> SHELL id
@@ -144,6 +140,5 @@ $ ./rklings validate L18
 ## Next
 
 You can execute commands remotely, but moving a binary or retrieving a file is
-still awkward.
-L19 adds file transfer: chunked binary downloads streamed over the encrypted
-channel, and JSON-based uploads.
+still awkward. L19 adds file transfer: chunked binary downloads streamed over
+the encrypted channel, and JSON-based uploads.

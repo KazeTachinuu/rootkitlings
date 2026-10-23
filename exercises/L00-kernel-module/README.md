@@ -35,9 +35,9 @@ Each command observes a different part of the lifecycle:
 | `lsmod`  | List modules currently loaded in the kernel.          |
 | `rmmod`  | Ask the kernel to remove a loaded module by its name. |
 
-`insmod` does not merely start `rklings.ko` as a process.
-It copies the module into kernel memory and calls its initialization function.
-If that function returns `0`, the module stays loaded until `rmmod` removes it.
+`insmod` does not merely start `rklings.ko` as a process. It copies the module
+into kernel memory and calls its initialization function. If that function
+returns `0`, the module stays loaded until `rmmod` removes it.
 
 ```text
 HOST                               DISPOSABLE VM
@@ -54,9 +54,9 @@ HOST                               DISPOSABLE VM
                                    +----------------------------+
 ```
 
-A mistake in a userspace program normally crashes that process.
-A mistake in kernel code can crash the whole operating system, so the runner
-uses a disposable QEMU guest rather than your host kernel.
+A mistake in a userspace program normally crashes that process. A mistake in
+kernel code can crash the whole operating system, so the runner uses a
+disposable QEMU guest rather than your host kernel.
 
 ## Workspace
 
@@ -74,9 +74,8 @@ Edit both files:
 
 ## Build the module
 
-The kernel build system is called Kbuild.
-Lines beginning with `#` in `Kbuild` are comments.
-Read its build path from top to bottom:
+The kernel build system is called Kbuild. Lines beginning with `#` in `Kbuild`
+are comments. Read its build path from top to bottom:
 
 ```text
 core/main.c
@@ -88,15 +87,14 @@ core/main.o
 rklings.ko
 ```
 
-The TODO below introduces the two Kbuild variables that declare this path.
-Later exercises add more objects to the same module.
+The TODO below introduces the two Kbuild variables that declare this path. Later
+exercises add more objects to the same module.
 
 ## Define its lifetime
 
 The kernel calls one function when the module enters and another when it leaves.
 These functions are called callbacks because you register them now and the
-kernel calls them later.
-Registering a callback does not call it immediately.
+kernel calls them later. Registering a callback does not call it immediately.
 
 In C, braces delimit a function's body and `return 0` reports success.
 
@@ -119,15 +117,14 @@ rmmod rklings
 ```
 
 `__init` marks code used only during load, while `__exit` marks code used only
-during unload.
-In the diagram, `-errno` means a negative kernel error code; L01 handles that
-failure path directly.
+during unload. In the diagram, `-errno` means a negative kernel error code; L01
+handles that failure path directly.
 
 ## Write to the kernel log
 
 Kernel code cannot use the C library or `printf`; `pr_info` writes to the kernel
-log, and `dmesg` reads that log from the shell.
-An explicit newline completes each message.
+log, and `dmesg` reads that log from the shell. An explicit newline completes
+each message.
 
 ## TODOs
 
@@ -152,8 +149,8 @@ Complete `rk_init` in this order:
 1. Log the exact message `rklings: loaded\n` with `pr_info`.
 2. Return `0` to accept the load.
 
-The message makes entry observable.
-The return value tells `insmod` that initialization succeeded.
+The message makes entry observable. The return value tells `insmod` that
+initialization succeeded.
 
 ### TODO 3 -- `core/main.c:14:2` -- Complete module exit
 
@@ -167,8 +164,8 @@ Connect the two functions to the module:
 1. Register `rk_init` with `module_init`.
 2. Register `rk_exit` with `module_exit`.
 
-Registration gives the kernel its entry and exit points.
-The license and description below the TODO are supplied metadata.
+Registration gives the kernel its entry and exit points. The license and
+description below the TODO are supplied metadata.
 
 ## Test it
 
@@ -191,11 +188,11 @@ coresize  holders  initsize  initstate  notes
 refcnt  sections  srcversion  taint  uevent
 ```
 
-The size shown by `lsmod` may vary.
-The important result is that the `rklings` entry exists.
+The size shown by `lsmod` may vary. The important result is that the `rklings`
+entry exists.
 
-`rmmod` asks the kernel to run the exit callback and remove the module.
-Unload it and check that the log and both module listings changed:
+`rmmod` asks the kernel to run the exit callback and remove the module. Unload
+it and check that the log and both module listings changed:
 
 ```console
 root@victim:~# rmmod rklings
@@ -206,8 +203,8 @@ root@victim:~# ls /sys/module/rklings
 ls: cannot access '/sys/module/rklings': No such file or directory
 ```
 
-An empty `grep` result is expected after unload.
-Load and unload it once more to catch lifecycle state that was not cleaned up.
+An empty `grep` result is expected after unload. Load and unload it once more to
+catch lifecycle state that was not cleaned up.
 
 ## Validate
 
@@ -221,6 +218,6 @@ $ ./rklings validate L00
 
 ## Next
 
-The module can enter and leave the kernel when initialization succeeds.
-L01 forces initialization to fail at controlled points and makes each partial
-setup clean up only the resources it already owns.
+The module can enter and leave the kernel when initialization succeeds. L01
+forces initialization to fail at controlled points and makes each partial setup
+clean up only the resources it already owns.

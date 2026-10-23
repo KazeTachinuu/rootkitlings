@@ -44,8 +44,8 @@ The state code, shared header, and build rules are supplied.
 
 ## Read live kernel data
 
-In L00, `lsmod` showed that `rklings` was loaded.
-It gets that information from the kernel, including through `/proc/modules`:
+In L00, `lsmod` showed that `rklings` was loaded. It gets that information from
+the kernel, including through `/proc/modules`:
 
 ```console
 root@victim:~# lsmod | grep '^rklings '
@@ -66,8 +66,8 @@ root@victim:~# cat /proc/uptime
 186.08 726.14
 ```
 
-Each `cat` asks the kernel for the current value.
-This exercise adds `/proc/rklings` in the same way.
+Each `cat` asks the kernel for the current value. This exercise adds
+`/proc/rklings` in the same way.
 
 ## Generate a virtual file
 
@@ -106,8 +106,8 @@ publish proc entry                  destroy state
 ```
 
 If publication fails after state creation, initialization must destroy the state
-and return the publication error.
-A failed load must leave neither the module nor `/proc/rklings` behind.
+and return the publication error. A failed load must leave neither the module
+nor `/proc/rklings` behind.
 
 ## TODOs
 
@@ -209,6 +209,6 @@ $ ./rklings validate L03
 
 ## Next
 
-Userspace can read live module state but cannot change it.
-L04 adds one bounded write callback that accepts `0` or `1` and updates state
-safely across the userspace/kernel boundary.
+Userspace can read live module state but cannot change it. L04 adds one bounded
+write callback that accepts `0` or `1` and updates state safely across the
+userspace/kernel boundary.

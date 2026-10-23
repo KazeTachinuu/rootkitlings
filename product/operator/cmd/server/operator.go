@@ -216,7 +216,7 @@ func (o *Operator) SendDownload(id, path string) ([]byte, error) {
 
 func (o *Operator) PublishEvent(e Event) {
 	o.Events.Publish(e)
-	if o.Store != nil {
+	if o.Store != nil && e.Kind != "agent.info" {
 		_ = o.Store.InsertAudit(e.Kind, e.Agent, e.Message, e.Data)
 	}
 }

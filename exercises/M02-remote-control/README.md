@@ -18,9 +18,9 @@ M02 assembles them into one remote-control system:
 
 ## What you will observe
 
-Start the target and operator independently.
-The agent connects via WebSocket, and commands sent from the operator cross the
-encrypted channel and return the target's real output immediately:
+Start the target and operator independently. The agent connects via WebSocket,
+and commands sent from the operator cross the encrypted channel and return the
+target's real output immediately:
 
 ```console
 rklings> shell id
@@ -42,15 +42,13 @@ exercises/M02-remote-control
 └── go.sum
 ```
 
-The starter and reference use the same protocol, dependencies, PTY package,
-and browser dashboard. `tui.go` and `web.go` are complete course-supplied
-operator surfaces: read them to understand their calls, but do not recreate
-them.
-The editable integration seams are `cmd/agent/main.go` and `cmd/server/main.go`.
+The starter and reference use the same protocol, dependencies, PTY package, and
+browser dashboard. `tui.go` and `web.go` are complete course-supplied operator
+surfaces: read them to understand their calls, but do not recreate them. The
+editable integration seams are `cmd/agent/main.go` and `cmd/server/main.go`.
 
-Complete both ends of the protocol.
-The agent owns target-side execution; the server owns crypto routing, session
-management, and the two operator views.
+Complete both ends of the protocol. The agent owns target-side execution; the
+server owns crypto routing, session management, and the two operator views.
 
 ## Architecture
 
@@ -81,8 +79,8 @@ management, and the two operator views.
 
 ### Key Material
 
-The agent embeds at compile time two 32-byte X25519 keys:
-`keys/agent.key` (private) and `keys/operator.pub` (public).
+The agent embeds at compile time two 32-byte X25519 keys: `keys/agent.key`
+(private) and `keys/operator.pub` (public).
 
 The server loads the operator private key and the agent public key from files
 given as command-line arguments.
@@ -104,9 +102,9 @@ is the hello, which authenticates the agent:
 agent_public_key (32 bytes) || AES_GCM_Seal({"t":"hello"})
 ```
 
-The server compares the first 32 bytes against the known agent public key,
-then decrypts the remainder with the shared key.
-On success the connection is authenticated.
+The server compares the first 32 bytes against the known agent public key, then
+decrypts the remainder with the shared key. On success the connection is
+authenticated.
 
 All subsequent frames in both directions are standalone AEAD ciphertext:
 
@@ -180,8 +178,8 @@ The same process provides two surfaces:
 - A browser dashboard at `127.0.0.1:8080`
 
 Both send commands over the agent's WebSocket session and receive results
-immediately. The terminal writes downloaded files to disk; the browser
-provides a preview and save action.
+immediately. The terminal writes downloaded files to disk; the browser provides
+a preview and save action.
 
 ## TODOs
 
@@ -191,8 +189,8 @@ TODO 2  cmd/server/main.go   implement command send and response wait
 TODO 3  cmd/agent/main.go    implement the PTY lifecycle
 ```
 
-M02 is an integration milestone, not a rewrite of L15-L19.
-Complete exactly three seams.
+M02 is an integration milestone, not a rewrite of L15-L19. Complete exactly
+three seams.
 
 Already supplied and declared as black boxes:
 
@@ -204,26 +202,25 @@ Already supplied and declared as black boxes:
 - upload relay, snapshots, and event history.
 
 The milestone asks you to connect these components without corrupting their
-shared protocol.
-It does not ask you to reproduce the product operator.
+shared protocol. It does not ask you to reproduce the product operator.
 
 ### TODO 1: Implement WebSocket agent authentication
 
 1. Check if the request is a WebSocket upgrade; if not, serve the decoy page
 2. Upgrade the connection
 3. Read the first binary frame
-4. Extract the 32-byte agent public key prefix and verify it matches the
-   known agent public key
+4. Extract the 32-byte agent public key prefix and verify it matches the known
+   agent public key
 5. Decrypt the remaining ciphertext with `openAEAD`
 6. If any step fails, close the connection
 
 On success:
 
-1. Create an `agentSession` with the connection, shared key, a buffered
-   response channel, and a done channel
+1. Create an `agentSession` with the connection, shared key, a buffered response
+   channel, and a done channel
 2. Register the session
-3. Enter the read pump: decrypt each frame and route PTY output to
-   subscribers or command responses to the response channel
+3. Enter the read pump: decrypt each frame and route PTY output to subscribers
+   or command responses to the response channel
 
 ### TODO 2: Implement command send and response wait
 
@@ -233,13 +230,12 @@ connection (holding the write mutex), and wait on the response channel with a
 
 ### TODO 3: Implement the PTY lifecycle
 
-Handle START, INPUT, RESIZE, and CLOSE against `shellPTY`.
-Encode all binary I/O as base64.
-Protect shared PTY state with its mutex.
+Handle START, INPUT, RESIZE, and CLOSE against `shellPTY`. Encode all binary I/O
+as base64. Protect shared PTY state with its mutex.
 
-- **START**: allocate a PTY shell with `pty.StartWithSize`, store the fd,
-  start a goroutine that reads PTY output and sends `{"pty":"<base64>"}`
-  frames via `wsSend`. Return "OK".
+- **START**: allocate a PTY shell with `pty.StartWithSize`, store the fd, start
+  a goroutine that reads PTY output and sends `{"pty":"<base64>"}` frames via
+  `wsSend`. Return "OK".
 - **INPUT**: decode the base64 payload and write it to the PTY. Return "OK".
 - **RESIZE**: parse columns and rows, call `pty.Setsize`. Return "OK".
 - **CLOSE**: close the PTY file and clear the state. Return "OK".
@@ -285,8 +281,8 @@ Commands execute and return results immediately over the persistent connection.
 
 ### Browser dashboard
 
-Open `http://127.0.0.1:8080` in a browser.
-The connected agent appears in the target list.
+Open `http://127.0.0.1:8080` in a browser. The connected agent appears in the
+target list.
 
 The dashboard provides:
 
@@ -319,5 +315,5 @@ $ ./rklings validate M02
 ## Next
 
 The operator can control the target remotely, but the deployed files, process,
-and local activity remain easy to inspect.
-L20 through L24 reduce each of those visible deployment traces in turn.
+and local activity remain easy to inspect. L20 through L24 reduce each of those
+visible deployment traces in turn.

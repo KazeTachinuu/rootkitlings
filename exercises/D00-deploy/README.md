@@ -13,9 +13,9 @@ Deploying a rootkit means chaining several stages:
 4. Transfer the payload.
 5. Load it through whatever access you earned at each step.
 
-D00 puts you through this kill chain against a live target.
-You start with nothing but HTTP access to a service and end with a concealed,
-operational rootkit.
+D00 puts you through this kill chain against a live target. You start with
+nothing but HTTP access to a service and end with a concealed, operational
+rootkit.
 
 ## Target
 
@@ -30,12 +30,12 @@ HOST                                    TARGET VM
          +----------------------------------------->|
 ```
 
-The target runs Ubuntu 24.04 with kernel **6.8.0-101-generic**.
-This kernel version was chosen because it is vulnerable to CVE-2026-31431.
+The target runs Ubuntu 24.04 with kernel **6.8.0-101-generic**. This kernel
+version was chosen because it is vulnerable to CVE-2026-31431.
 
-The HTTP service is forwarded to `http://127.0.0.1:8088` on the host.
-It runs as `student` (uid 1000) with no sudo privileges.
-There is no learner SSH access to the guest.
+The HTTP service is forwarded to `http://127.0.0.1:8088` on the host. It runs as
+`student` (uid 1000) with no sudo privileges. There is no learner SSH access to
+the guest.
 
 `10.0.2.2` is the QEMU user-network address of the host, reachable from the
 guest.
@@ -53,8 +53,7 @@ Their path is printed at startup.
 
 ## CVE-2026-31431: Copy Fail
 
-The 6.8.0-101 kernel has a page cache corruption bug in the AF_ALG splice
-path:
+The 6.8.0-101 kernel has a page cache corruption bug in the AF_ALG splice path:
 
 - Userspace splices data through an AEAD crypto socket
 - The kernel skips a copy-on-write check on the destination page
@@ -67,8 +66,8 @@ The supplied exploit:
 - Leaves the binary on disk unchanged
 - The corruption lives in the page cache until the next reboot
 
-Same class of bug as CVE-2022-0847 (Dirty Pipe), applied to a different
-splice path.
+Same class of bug as CVE-2022-0847 (Dirty Pipe), applied to a different splice
+path.
 
 ## Phase 1: Initial access
 
@@ -83,8 +82,8 @@ result = subprocess.run(
 )
 ```
 
-The `host` parameter is interpolated directly into a shell command.
-A semicolon terminates `getent` and starts a new command.
+The `host` parameter is interpolated directly into a shell command. A semicolon
+terminates `getent` and starts a new command.
 
 Open `http://127.0.0.1:8088` in a browser. Type `;id` in the host field and
 submit:
@@ -95,9 +94,9 @@ uid=1000(student) gid=1000(student) groups=1000(student)
 
 That proves code execution as `student`.
 
-One-shot HTTP responses are awkward for multi-step work.
-A callback shell gives you a persistent interactive session: the target
-connects back to a listener you run on the host.
+One-shot HTTP responses are awkward for multi-step work. A callback shell gives
+you a persistent interactive session: the target connects back to a listener you
+run on the host.
 
 Start a listener on the host:
 
@@ -121,9 +120,8 @@ uid=1000(student) gid=1000(student) groups=1000(student)
 
 ## Phase 2: Serve the assets
 
-The exploit and the module are on the host. The target can reach the host
-at `10.0.2.2`. Serve the staged directory over HTTP from a second host
-terminal:
+The exploit and the module are on the host. The target can reach the host at
+`10.0.2.2`. Serve the staged directory over HTTP from a second host terminal:
 
 ```console
 host:~$ python3 -m http.server 9000 --directory .rklings/build/local-control-deployment
@@ -143,8 +141,8 @@ root@target:/tmp# id
 uid=0(root) gid=0(root) groups=0(root)
 ```
 
-The exploit patched `/usr/bin/su` in the page cache. Running `su` drops to
-root without a password.
+The exploit patched `/usr/bin/su` in the page cache. Running `su` drops to root
+without a password.
 
 ## Phase 4: Deploy and conceal
 
@@ -194,9 +192,7 @@ host:~$ rklings validate D00
 
 ## Next
 
-You deployed by hand:
-injection, callback, escalation, transfer, load, hide.
+You deployed by hand: injection, callback, escalation, transfer, load, hide.
 
-L14 starts automating this.
-The kernel module launches a userspace agent on its own, so the operator
-never needs a manual shell session on the target.
+L14 starts automating this. The kernel module launches a userspace agent on its
+own, so the operator never needs a manual shell session on the target.

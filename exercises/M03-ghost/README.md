@@ -26,9 +26,9 @@ STATUS -> agent info         launcher absent from the filesystem
                              /proc/PID/exe reports a deleted memfd
 ```
 
-These are narrow controls over named observation paths.
-They do not prevent kernel memory inspection, remote logging, traffic analysis,
-or independent integrity monitoring.
+These are narrow controls over named observation paths. They do not prevent
+kernel memory inspection, remote logging, traffic analysis, or independent
+integrity monitoring.
 
 ## Workspace
 
@@ -39,20 +39,19 @@ exercises/M03-ghost
 └── main.go
 ```
 
-The build embeds the completed M01 module and the agent's X25519 keys into
-the agent binary.
+The build embeds the completed M01 module and the agent's X25519 keys into the
+agent binary.
 
-- Implementations from L20-L24 are supplied in `main.go`; read their
-  contracts, but do not rewrite them
+- Implementations from L20-L24 are supplied in `main.go`; read their contracts,
+  but do not rewrite them
 - Your work is the `deploy` orchestration function
 - No standalone module is staged in the guest
 
 ## Follow the two process images
 
-`unix.Exec` does not start a child process.
-It replaces the program running in the current PID.
-Successful execution therefore divides deployment into two passes through
-`main`:
+`unix.Exec` does not start a child process. It replaces the program running in
+the current PID. Successful execution therefore divides deployment into two
+passes through `main`:
 
 ```text
 FIRST PROCESS IMAGE                    MEMFD PROCESS IMAGE
@@ -73,9 +72,8 @@ FIRST PROCESS IMAGE                    MEMFD PROCESS IMAGE
                                                                 v
 ```
 
-The second image starts at `main` again.
-Check `/proc/self/exe` for `memfd` before loading or re-executing; without that
-guard, the agent loops forever.
+The second image starts at `main` again. Check `/proc/self/exe` for `memfd`
+before loading or re-executing; without that guard, the agent loops forever.
 
 ## TODOs
 
@@ -94,13 +92,12 @@ Each helper below was already implemented and validated in its focused lesson:
 - Guard the two process images
 - Wrap errors at the phase boundary that produced them
 
-The milestone assesses composition, repeat safety, and preservation of
-control.
+The milestone assesses composition, repeat safety, and preservation of control.
 
 ### TODO 1 -- Reject deployment without root
 
-`finit_module` requires privilege, and the module that provides `rklings.e`
-is not loaded yet. M03 therefore runs the agent as root.
+`finit_module` requires privilege, and the module that provides `rklings.e` is
+not loaded yet. M03 therefore runs the agent as root.
 
 Check the effective UID and return an error if that precondition is not met.
 
@@ -117,8 +114,8 @@ On the disk-backed first image:
 3. Call `reexecFromMemory()` to copy the binary into a second memfd (without
    `MFD_CLOEXEC`) and `unix.Exec` into it.
 
-`unix.Exec` replaces the process image and does not return on success.
-Wrap each call so failures identify the broken boundary.
+`unix.Exec` replaces the process image and does not return on success. Wrap each
+call so failures identify the broken boundary.
 
 ### TODO 3 -- Masquerade as a kernel thread
 
@@ -136,8 +133,7 @@ already disguised when its entry disappears from `ps`.
 ### TODO 4 -- Hide PID and scrub traces
 
 1. Call `hideAll()` to send `rklings.h.i.<pid>`
-2. Call `scrubAll()` to compose the L24 record-cleaning operations into one
-   pass
+2. Call `scrubAll()` to compose the L24 record-cleaning operations into one pass
 3. Wrap errors so each phase is identifiable
 
 ### Supplied steps
@@ -156,9 +152,8 @@ Two terminals.
 $ ./rklings run M03
 ```
 
-The VM boots and stages the agent binary.
-The agent starts in the background, retrying the WebSocket connection until an operator
-exists.
+The VM boots and stages the agent binary. The agent starts in the background,
+retrying the WebSocket connection until an operator exists.
 
 ### 2. Start the operator
 
@@ -198,9 +193,8 @@ root@victim:~# cat /proc/$(pgrep -f kworker/0:1 | tail -1)/comm
 [kworker/0:1]
 ```
 
-Every query returns empty.
-The module runs, the agent responds, but no standard observation tool reveals
-them.
+Every query returns empty. The module runs, the agent responds, but no standard
+observation tool reveals them.
 
 ## Validate
 
@@ -219,7 +213,7 @@ PASS
 
 ## Next
 
-M03 proves one integrated deployment against a real command channel.
-P00 keeps these mechanisms and adds the complete multi-target operator,
-reconnect and singleton handling, durable boot lifecycle, browser workflow, and
-final end-to-end verification.
+M03 proves one integrated deployment against a real command channel. P00 keeps
+these mechanisms and adds the complete multi-target operator, reconnect and
+singleton handling, durable boot lifecycle, browser workflow, and final
+end-to-end verification.

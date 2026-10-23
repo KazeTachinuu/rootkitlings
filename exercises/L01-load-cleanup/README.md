@@ -6,21 +6,19 @@ A rootkit that crashes on partial init draws attention. Silent failure is the
 baseline.
 
 L00 loads a module that cannot fail. Real initialization acquires multiple
-resources, and any step can fail after
-earlier steps already committed.
+resources, and any step can fail after earlier steps already committed.
 
 Create two channels and make every failure path release only what was already
 created, so a failed load never leaves pieces behind in the kernel.
 
 ## What you will observe
 
-`ENOMEM` is the kernel's "out of memory" error.
-A failure point is a supplied test setting that makes one chosen allocation
-return that error.
+`ENOMEM` is the kernel's "out of memory" error. A failure point is a supplied
+test setting that makes one chosen allocation return that error.
 
 After either rejected load, the module is absent from both `/sys/module` and
-`/proc/modules`.
-This is the proof that failed initialization left no loaded module behind.
+`/proc/modules`. This is the proof that failed initialization left no loaded
+module behind.
 
 The correct cleanup depends on how far initialization progressed:
 
@@ -33,9 +31,9 @@ while creating B    A                     free A, return error
 no failure          A and B               keep both until module exit
 ```
 
-Returning immediately after B fails would leak A.
-Destroying B would be wrong: B was never created.
-The table shows exactly what must be cleaned up at each point.
+Returning immediately after B fails would leak A. Destroying B would be wrong: B
+was never created. The table shows exactly what must be cleaned up at each
+point.
 
 ## Workspace
 
@@ -48,14 +46,13 @@ exercises/L01-load-cleanup
 
 Only `core/main.c` is editable.
 
-Supplied code creates and destroys the two channels.
-Each destruction logs the channel ID so you can see the cleanup happen.
+Supplied code creates and destroys the two channels. Each destruction logs the
+channel ID so you can see the cleanup happen.
 
 ## Understand kernel error pointers
 
 `rk_channel_create` returns either a channel pointer or the exact reason it
-failed.
-Kernel code can store a small negative error number in a pointer value:
+failed. Kernel code can store a small negative error number in a pointer value:
 
 ```text
 successful result                     failed result
@@ -89,9 +86,8 @@ Do not test an error pointer with only `if (!pointer)` because
 `ERR_PTR(-ENOMEM)` is not `NULL`.
 
 The supplied allocator injects `-ENOMEM` at channel A or B when validation
-requests it.
-Your initialization code handles those results exactly like a real allocation
-failure; you do not implement or configure the injector.
+requests it. Your initialization code handles those results exactly like a real
+allocation failure; you do not implement or configure the injector.
 
 A cleanup label names a later line that `goto` can jump to, letting several
 failures share one cleanup path:
@@ -122,14 +118,13 @@ success  -> keep channels A and B, return 0
 failure  -> keep no channels, return the exact error
 ```
 
-Create channel A, then channel B.
-If either creation returns an error pointer, extract its error with `PTR_ERR`,
-clear the pointer, and ensure everything already created is destroyed before
-returning.
+Create channel A, then channel B. If either creation returns an error pointer,
+extract its error with `PTR_ERR`, clear the pointer, and ensure everything
+already created is destroyed before returning.
 
 Use a `goto` cleanup label so B's failure path destroys A without duplicating
-the release code.
-Log `rklings: loaded` and return `0` only after both channels exist.
+the release code. Log `rklings: loaded` and return `0` only after both channels
+exist.
 
 Never pass an error pointer to `rk_channel_destroy`.
 
@@ -158,8 +153,8 @@ rklings: loaded
 root@victim:~# rmmod rklings
 ```
 
-This manual test covers the successful path.
-The validator builds and tests the failure variants separately.
+This manual test covers the successful path. The validator builds and tests the
+failure variants separately.
 
 ## Validate
 
@@ -175,6 +170,5 @@ $ ./rklings validate L01
 
 ## Next
 
-Module loading can now fail without leaving created resources behind.
-L02 turns the first owned resource into module state that remains available
-until unload.
+Module loading can now fail without leaving created resources behind. L02 turns
+the first owned resource into module state that remains available until unload.

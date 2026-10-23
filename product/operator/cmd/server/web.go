@@ -256,9 +256,10 @@ func (o *Operator) statePayload() map[string]any {
 		events = make([]map[string]string, 0, len(entries))
 		for _, e := range entries {
 			events = append(events, map[string]string{
-				"time": e.Time,
-				"type": e.Kind,
-				"msg":  e.Message,
+				"time":  e.Time,
+				"type":  e.Kind,
+				"msg":   e.Message,
+				"agent": e.Agent,
 			})
 		}
 	}

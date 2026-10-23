@@ -3,8 +3,8 @@
 ## Mission
 
 Turn the encrypted transport into a multi-command agent. The operator sends
-commands over the persistent WebSocket connection; the agent
-dispatches each one to a handler and sends the result back immediately.
+commands over the persistent WebSocket connection; the agent dispatches each one
+to a handler and sends the result back immediately.
 
 L15 proved the agent can reach the operator over WebSocket with AEAD encryption.
 
@@ -69,9 +69,9 @@ type Command struct {
 }
 ```
 
-Each command arrives as an individual encrypted WebSocket frame.
-The agent decrypts, dispatches, and sends the result as another encrypted
-frame. No batching, no polling, no IDs needed.
+Each command arrives as an individual encrypted WebSocket frame. The agent
+decrypts, dispatches, and sends the result as another encrypted frame. No
+batching, no polling, no IDs needed.
 
 ## Handler pattern
 
@@ -130,9 +130,8 @@ The crypto, transport, and helpers are supplied. You write the command routing.
 
 ### TODO 1 -- Handler type and map
 
-Define a `handler` function type: `func(arg string) any`.
-Create a `handlers` map from Op string to handler.
-Implement each handler function:
+Define a `handler` function type: `func(arg string) any`. Create a `handlers`
+map from Op string to handler. Implement each handler function:
 
 - PING: return `"PONG"`
 - STATUS: return `map[string]int{"pid": os.Getpid(), "uid": os.Getuid()}`
@@ -151,9 +150,8 @@ Call `wsLoop()` from `main()` after `initTransport()`.
 ## Test it
 
 `rklings serve L17` starts this exercise's live server and scoped command panel
-at `http://127.0.0.1:8080`.
-Every log entry is traffic exchanged with the agent running in the disposable
-guest.
+at `http://127.0.0.1:8080`. Every log entry is traffic exchanged with the agent
+running in the disposable guest.
 
 ```console
 $ ./rklings serve L17
@@ -165,10 +163,9 @@ In another host terminal:
 $ ./rklings run L17
 ```
 
-Open `http://127.0.0.1:8080`.
-The panel sends only the commands introduced by this exercise, and its log shows
-the real replies from the guest agent.
-Create `secret.txt` in the guest before sending the hide command.
+Open `http://127.0.0.1:8080`. The panel sends only the commands introduced by
+this exercise, and its log shows the real replies from the guest agent. Create
+`secret.txt` in the guest before sending the hide command.
 
 ```text
 server> PING
@@ -202,5 +199,4 @@ $ ./rklings validate L17
 ## Next
 
 The operator can invoke the built-in controls, but cannot run an arbitrary
-command on the target.
-L18 adds remote command execution and returns its output.
+command on the target. L18 adds remote command execution and returns its output.

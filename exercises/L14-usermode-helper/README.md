@@ -17,9 +17,9 @@ binary, you never need to type another command.
 ## What you will observe
 
 Creating `rklings.launch.<absolute-path>` returns through the intercepted mkdir
-call while a kernel work item starts that path as a separate root process.
-The proof file appears only when the userspace program actually executes;
-existing ping and escalation controls must continue to work.
+call while a kernel work item starts that path as a separate root process. The
+proof file appears only when the userspace program actually executes; existing
+ping and escalation controls must continue to work.
 
 ## Workspace
 
@@ -40,13 +40,13 @@ exercises/L14-usermode-helper
 └── Kbuild
 ```
 
-The dispatcher and existing controls are provided.
-Implement only the launch handler and its registration.
+The dispatcher and existing controls are provided. Implement only the launch
+handler and its registration.
 
 ## call_usermodehelper
 
-The kernel uses `call_usermodehelper` to run userspace programs.
-It is the same mechanism the kernel uses to load firmware and run modprobe.
+The kernel uses `call_usermodehelper` to run userspace programs. It is the same
+mechanism the kernel uses to load firmware and run modprobe.
 
 You control the binary path, arguments, and environment.
 
@@ -76,20 +76,19 @@ int call_usermodehelper(const char *path,
 
 `wait` controls blocking behavior:
 
-- `UMH_WAIT_EXEC`: return after exec (not after the process exits).
-  The process runs in the background.
-- `UMH_WAIT_PROC`: block until the process exits.
-  Never use this in a syscall handler: it deadlocks.
-- `UMH_NO_WAIT`: fire and forget.
-  No error reporting if exec fails.
+- `UMH_WAIT_EXEC`: return after exec (not after the process exits). The process
+  runs in the background.
+- `UMH_WAIT_PROC`: block until the process exits. Never use this in a syscall
+  handler: it deadlocks.
+- `UMH_NO_WAIT`: fire and forget. No error reporting if exec fails.
 
-`UMH_WAIT_EXEC` is the right choice.
-It confirms the binary exists and is executable, then returns.
+`UMH_WAIT_EXEC` is the right choice. It confirms the binary exists and is
+executable, then returns.
 
 ## argv and envp
 
-Both are NULL-terminated string arrays, just like execve.
-The first element of argv is the program name (convention: same as path).
+Both are NULL-terminated string arrays, just like execve. The first element of
+argv is the program name (convention: same as path).
 
 ```c
 char *argv[] = { "/tmp/agent", NULL };
@@ -121,8 +120,8 @@ TODO 2  core/launch.c:13:1  build argv and envp, launch the binary
 
 ### TODO 1 -- `core/launch.c:12:1` -- Validate the path argument
 
-Reject the call if `arg` is NULL or does not start with `"/"`.
-Return `-EINVAL` for an invalid path.
+Reject the call if `arg` is NULL or does not start with `"/"`. Return `-EINVAL`
+for an invalid path.
 
 ### TODO 2 -- `core/launch.c:13:1` -- Build argv and envp, launch the binary
 
@@ -149,8 +148,8 @@ rklings: launch: /tmp/test.sh (ret=0)
 
 - The process runs as root (kernel context)
 - Its parent is kthreadd (PID 2), not the shell
-- A short script like this exits instantly; you will see it in dmesg,
-  not in `ps`
+- A short script like this exits instantly; you will see it in dmesg, not in
+  `ps`
 
 ## Validate
 
@@ -167,7 +166,6 @@ $ ./rklings validate L14
 ## Next
 
 The module can start a userspace program, but that program cannot reach an
-operator yet.
-G00 qualifies the Go and stream-I/O mechanics used by that program.
-L15 then builds an authenticated callback so the target can connect to your
-server.
+operator yet. G00 qualifies the Go and stream-I/O mechanics used by that
+program. L15 then builds an authenticated callback so the target can connect to
+your server.

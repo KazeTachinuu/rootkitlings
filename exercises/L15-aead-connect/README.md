@@ -21,7 +21,8 @@ The agent:
 
 1. Derives a shared key from embedded X25519 keys.
 2. Opens a WebSocket connection to the operator.
-3. Encrypts a hello frame with AES-256-GCM and sends it as the first binary message.
+3. Encrypts a hello frame with AES-256-GCM and sends it as the first binary
+   message.
 4. Receives an encrypted response, decrypts it, and prints the result.
 
 ## Workspace
@@ -32,8 +33,8 @@ exercises/L15-aead-connect
 └── main.go
 ```
 
-Only `main.go` is editable. `rklings build` injects the generated key files
-into the temporary build context, so key files do not appear beside your source.
+Only `main.go` is editable. `rklings build` injects the generated key files into
+the temporary build context, so key files do not appear beside your source.
 
 ## X25519 ECDH Key Agreement
 
@@ -58,8 +59,8 @@ The agent and server share a symmetric key without any runtime handshake:
                     32-byte AES key
 ```
 
-No certificate authority, no handshake messages, no session negotiation.
-The keys are baked into the binary; the shared key is computed once at startup.
+No certificate authority, no handshake messages, no session negotiation. The
+keys are baked into the binary; the shared key is computed once at startup.
 
 The agent's 32-byte X25519 public key is sent in the hello frame. The server
 uses it to derive the shared key and identify which agent is calling.
@@ -86,9 +87,9 @@ frame is the hello message, which authenticates the agent:
 agent_pub (32 bytes) || AES_GCM_Seal({"t":"hello"})
 ```
 
-The server extracts the 32-byte public key, derives the shared key via ECDH,
-and decrypts the rest. If decryption succeeds, the agent is authenticated and
-the connection stays open for bidirectional encrypted frames.
+The server extracts the 32-byte public key, derives the shared key via ECDH, and
+decrypts the rest. If decryption succeeds, the agent is authenticated and the
+connection stays open for bidirectional encrypted frames.
 
 After the hello, every frame in both directions is a standalone AEAD ciphertext
 (nonce + sealed payload). No form encoding, no base64 wrapping, just raw binary
@@ -99,8 +100,8 @@ connection silently.
 
 ## go:embed
 
-Go's `embed` directive bakes files into the binary at compile time.
-No file I/O at runtime. The binary IS the credential.
+Go's `embed` directive bakes files into the binary at compile time. No file I/O
+at runtime. The binary IS the credential.
 
 ```go
 import _ "embed"
@@ -112,8 +113,8 @@ var agentPrivKey []byte
 var operatorPubKey []byte
 ```
 
-The `//go:embed` comment must appear directly above the variable.
-No blank line between the directive and the var declaration.
+The `//go:embed` comment must appear directly above the variable. No blank line
+between the directive and the var declaration.
 
 ## TODOs
 
@@ -169,9 +170,9 @@ conn.Write(ctx, websocket.MessageBinary, frame)
 
 ### TODO 4 -- Read one server message and decrypt it
 
-Call `conn.Read(ctx)` to receive the server's first binary frame.
-Split the message into nonce and ciphertext, call `gcm.Open`, and print
-the decrypted JSON.
+Call `conn.Read(ctx)` to receive the server's first binary frame. Split the
+message into nonce and ciphertext, call `gcm.Open`, and print the decrypted
+JSON.
 
 Remove the placeholder lines at the bottom of `run()` once the real
 implementation is in place.
@@ -190,8 +191,8 @@ In another, build and boot the target:
 $ ./rklings run L15
 ```
 
-`run` builds the agent with embedded keys, stages it in the VM, and starts
-it in the background. Open `http://127.0.0.1:8080`.
+`run` builds the agent with embedded keys, stages it in the VM, and starts it in
+the background. Open `http://127.0.0.1:8080`.
 
 The panel reports live values from the agent connection:
 
@@ -213,6 +214,5 @@ $ ./rklings validate L15
 ## Next
 
 The target and server now share an encrypted channel, but the agent sends one
-hello and exits.
-L16 bridges server commands to the kernel through `os.Mkdir`, giving the
-operator remote control over the rootkit.
+hello and exits. L16 bridges server commands to the kernel through `os.Mkdir`,
+giving the operator remote control over the rootkit.

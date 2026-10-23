@@ -2,13 +2,12 @@
 
 ## Mission
 
-L04 sends commands through `/proc/rklings`, an obvious control file.
-`mkdir` is a normal filesystem operation that leaves no trace in logs. No
-monitoring tool flags directory creation as suspicious.
+L04 sends commands through `/proc/rklings`, an obvious control file. `mkdir` is
+a normal filesystem operation that leaves no trace in logs. No monitoring tool
+flags directory creation as suspicious.
 
 Carry a command through an ordinary `mkdir` call. Treat names beginning with
-`rklings.` as commands and leave every other
-directory request unchanged.
+`rklings.` as commands and leave every other directory request unchanged.
 
 ## What you will observe
 
@@ -40,8 +39,7 @@ exercises/L05-mkdir-command
 └── rklings_hook.h
 ```
 
-Only `main.c` is editable.
-You decide whether one directory name is a command.
+Only `main.c` is editable. You decide whether one directory name is a command.
 
 `rklings_hook.h` supplies the code that intercepts `mkdir` and checks the
 prefix.
@@ -64,14 +62,14 @@ mkdir rklings.hello
                                   RK_ON_MKDIR("rklings.hello")
 ```
 
-Your callback never reads the userspace pathname directly.
-It receives a safe kernel copy of the name.
+Your callback never reads the userspace pathname directly. It receives a safe
+kernel copy of the name.
 
 ## Split the prefix from the suffix
 
 `strncmp(name, RK_PREFIX, RK_PREFIX_LEN)` compares only the first eight bytes of
-`name` with `rklings.`.
-It returns `0` when those bytes match and a nonzero value otherwise.
+`name` with `rklings.`. It returns `0` when those bytes match and a nonzero
+value otherwise.
 
 After a match, `name + RK_PREFIX_LEN` points at the first byte after the prefix:
 
@@ -116,8 +114,8 @@ TODO 1  main.c:13:2  recognize the command prefix and log its suffix
 
 1. Compare `name` with `RK_PREFIX` for exactly `RK_PREFIX_LEN` bytes.
 2. Return `false` immediately when the prefix does not match.
-3. For a match, log `rklings: intercepted mkdir: %s\n` with
-   `name + RK_PREFIX_LEN` as the `%s` argument.
+3. For a match, log `rklings: intercepted mkdir: %s\n` with `name +
+   RK_PREFIX_LEN` as the `%s` argument.
 4. Return `true` so the call succeeds without creating the matching directory.
 
 ## Test it
@@ -153,5 +151,5 @@ $ ./rklings validate L05
 
 ## Next
 
-The intercepted name currently produces only a log entry.
-L06 maps the exact name `rklings.e` to a credential change in the parent shell.
+The intercepted name currently produces only a log entry. L06 maps the exact
+name `rklings.e` to a credential change in the parent shell.

@@ -23,8 +23,8 @@ insmod rklings.ko active=0   loaded with active=0
 injected allocation failure  ENOMEM; module remains absent
 ```
 
-`active=0` is a load-time setting passed to `insmod`.
-The supplied declaration makes it available as the boolean variable `active`.
+`active=0` is a load-time setting passed to `insmod`. The supplied declaration
+makes it available as the boolean variable `active`.
 
 The module remembers the chosen value until it unloads.
 
@@ -74,9 +74,8 @@ struct rk_state *state             struct rk_state {
         └── rk_state_destroy() -------> free the allocation
 ```
 
-`rk_state_create` may fail.
-The supplied `__must_check` annotation warns if code ignores its result.
-Handle its error pointer exactly as you did in L01.
+`rk_state_create` may fail. The supplied `__must_check` annotation warns if code
+ignores its result. Handle its error pointer exactly as you did in L01.
 
 The supplied `rk_state_alloc` function reserves kernel memory for the object.
 `kfree` gives that memory back:
@@ -98,9 +97,8 @@ TODO 6  core/main.c:31:2   destroy state during unload
 
 ### TODO 1 -- `core/state.c:16:1` -- Define the private state
 
-Define `struct rk_state` with one `bool active` field.
-Keeping the definition in `state.c` prevents `main.c` from reading or changing
-the field directly.
+Define `struct rk_state` with one `bool active` field. Keeping the definition in
+`state.c` prevents `main.c` from reading or changing the field directly.
 
 ### TODO 2 -- `core/state.c:20:2` -- Create initialized state
 
@@ -118,8 +116,8 @@ allocation fails     ERR_PTR(-ENOMEM)
 
 ### TODO 3 -- `core/state.c:26:2` -- Read the stored active value
 
-Return `state->active`.
-This function lets `main.c` read the value without accessing the field directly.
+Return `state->active`. This function lets `main.c` read the value without
+accessing the field directly.
 
 ### TODO 4 -- `core/state.c:32:2` -- Destroy the state
 
@@ -188,6 +186,6 @@ $ ./rklings validate L02
 
 ## Next
 
-The module now remembers private state, but the shell cannot read it.
-L03 publishes a read-only `/proc/rklings` entry and ties that entry's lifetime
-to the state it reads.
+The module now remembers private state, but the shell cannot read it. L03
+publishes a read-only `/proc/rklings` entry and ties that entry's lifetime to
+the state it reads.

@@ -33,8 +33,8 @@ root@victim:~# cat /proc/rklings
 hidden_dir
 ```
 
-Nothing is hidden yet.
-The output proves only that the module remembers the right names.
+Nothing is hidden yet. The output proves only that the module remembers the
+right names.
 
 ## Workspace
 
@@ -46,8 +46,8 @@ exercises/L10-hide-targets
 └── rklings_target.h
 ```
 
-Only `rklings_target.c` is editable.
-You implement adding, removing, and matching names.
+Only `rklings_target.c` is editable. You implement adding, removing, and
+matching names.
 
 The other files initialize the list and expose it through `/proc/rklings` for
 testing.
@@ -76,14 +76,14 @@ targets    0: "secret.txt"    1: "hidden_dir"    2..31: unused
 - Match compares a candidate with the stored names.
 - Remove closes the gap and decreases `count`.
 
-Names are exact targets: `secret` must not match `secret.txt`.
-Adding the same name twice must not create a duplicate.
+Names are exact targets: `secret` must not match `secret.txt`. Adding the same
+name twice must not create a duplicate.
 
 ## Keep each decision consistent
 
-A command may change the list while a hook is checking it on another CPU.
-Each operation must therefore hold `list->lock` from its first access to its
-final decision:
+A command may change the list while a hook is checking it on another CPU. Each
+operation must therefore hold `list->lock` from its first access to its final
+decision:
 
 ```c
 unsigned long flags;
@@ -93,9 +93,8 @@ spin_lock_irqsave(&list->lock, flags);
 spin_unlock_irqrestore(&list->lock, flags);
 ```
 
-Do only the short array operation while locked.
-The supplied diagnostic reader takes its own locked copy before printing through
-procfs.
+Do only the short array operation while locked. The supplied diagnostic reader
+takes its own locked copy before printing through procfs.
 
 ## TODOs
 
@@ -169,8 +168,7 @@ root@victim:~# printf 'match hidden' > /proc/rklings
 bash: echo: write error: No such file or directory
 ```
 
-The first command succeeds silently.
-The prefix fails because matching is exact.
+The first command succeeds silently. The prefix fails because matching is exact.
 
 ## Validate
 
@@ -188,6 +186,5 @@ $ ./rklings validate L10
 ## Next
 
 The module can now remember a name and answer whether it is targeted, but it
-still changes no listing.
-L11 removes matching file names and PIDs from directory results without deleting
-the underlying objects.
+still changes no listing. L11 removes matching file names and PIDs from
+directory results without deleting the underlying objects.

