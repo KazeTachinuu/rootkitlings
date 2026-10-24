@@ -1,13 +1,13 @@
 [[toolchain]]
 id = "course"
 kernel = "7.0.0-38-generic"
-image = "rklings-build:7.0.0-38-generic"
+image = "rklings-build:7.0.0-38-generic-v2"
 base = "ubuntu:26.04@sha256:88a381d5b5eeb2b35d3ad70925a362c37ce569daf43ede89ff818ec20e4d3794"
 
 [[toolchain]]
 id = "deployment"
 kernel = "6.8.0-101-generic"
-image = "rklings-build:6.8.0-101-generic"
+image = "rklings-build:6.8.0-101-generic-v2"
 base = "ubuntu:24.04@sha256:a2d43bffc46670d7108bb3c0468c67c5557c4c92e83e1e34cbff1322ad1b94dc"
 sources = """
 deb [trusted=yes] https://snapshot.ubuntu.com/ubuntu/20260301T000000Z noble main universe
