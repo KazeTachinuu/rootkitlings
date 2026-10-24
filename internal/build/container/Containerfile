@@ -13,6 +13,7 @@ RUN if [ -n "${SOURCES}" ]; then \
     apt-get -o Acquire::Check-Valid-Until=false update && \
     apt-get install -y --no-install-recommends \
       gcc \
+      libc-dev \
       linux-headers-${KERNEL} \
       make && \
     rm -rf /var/lib/apt/lists/*
