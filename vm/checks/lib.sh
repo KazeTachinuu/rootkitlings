@@ -164,7 +164,8 @@ summary() {
     log=$(dmesg)
     case "$log" in
         *"BUG: kernel"*|*"WARNING: CPU:"*|*"Oops:"*|*"KASAN:"*|*"UBSAN:"*|\
-        *"general protection fault"*|*"kernel NULL pointer dereference"*)
+        *"general protection fault"*|*"kernel NULL pointer dereference"*|\
+        *"BUG: scheduling while atomic"*)
             _fail "kernel reported a bug or warning"
             ;;
         *)

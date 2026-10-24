@@ -125,7 +125,7 @@ static int getdents_return(struct kretprobe_instance *ri,
 	if (total <= 0)
 		return 0;
 
-	kbuf = kmalloc(total, GFP_KERNEL);
+	kbuf = kmalloc(total, GFP_ATOMIC);
 	if (!kbuf)
 		return 0;
 

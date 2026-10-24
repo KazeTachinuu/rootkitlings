@@ -109,7 +109,7 @@ static int read_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 	if (content_targets.count == 0)
 		return 0;
 
-	kbuf = kmalloc(total, GFP_KERNEL);
+	kbuf = kmalloc(total, GFP_ATOMIC);
 	if (!kbuf)
 		return 0;
 

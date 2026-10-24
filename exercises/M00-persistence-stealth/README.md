@@ -97,6 +97,32 @@ filp_close    release the open file
 decoded with `PTR_ERR`. `kernel_write` returns a negative error or the number of
 bytes written.
 
+### Why the file I/O is deferred
+
+`filp_open` and `kernel_write` can sleep (they take mutexes internally).
+The mkdir command handlers run from a kretprobe entry path, where preemption
+is disabled. Sleeping in that context is undefined behavior: on kernels
+compiled with full preemption (`CONFIG_PREEMPT`), it corrupts the return path
+and crashes the calling process. On voluntary-preemption kernels, it appears
+to work by accident but can deadlock under memory pressure.
+
+The starter code defers the file operations to the system workqueue with
+`schedule_work`. `schedule_work` is safe to call from atomic context (it only
+touches IRQ-safe spinlocks internally). The work callback runs later in a
+kworker thread, which is ordinary process context where sleeping is allowed.
+
+```text
+kretprobe entry (atomic)          kworker thread (process context)
+  cmd_persist                       do_persist
+    schedule_work(&persist_work)      filp_open   -- can sleep here
+    return 0                          kernel_write
+                                      filp_close
+```
+
+`DECLARE_WORK` creates a static `work_struct`. If the work is already queued,
+`schedule_work` is a no-op, which is safe here because writing the same
+configuration file twice produces the same result.
+
 ## Hide from both kernel inventories
 
 The kernel exposes loaded modules through two surfaces:
@@ -151,13 +177,13 @@ Unhide the module before unloading it so the normal module tools can find it.
 ## TODOs
 
 ```text
-TODO 1  core/module.c:16:2  hide the module from both inventories
-TODO 2  core/module.c:21:2  restore the module to both inventories
-TODO 3  core/module.c:28:2  write the boot configuration
-TODO 4  core/module.c:34:2  clear the boot configuration
+TODO 1  core/module.c:17:2  hide the module from both inventories
+TODO 2  core/module.c:22:2  restore the module to both inventories
+TODO 3  core/module.c:35:2  write the boot configuration
+TODO 4  core/module.c:40:2  clear the boot configuration
 ```
 
-### TODO 1 -- `core/module.c:16:2` -- Hide the module from both inventories
+### TODO 1 -- `core/module.c:17:2` -- Hide the module from both inventories
 
 If `saved_prev` is already set, return without changing anything.
 Otherwise:
@@ -168,7 +194,7 @@ Otherwise:
    `saved_parent`.
 4. Remove the sysfs entry with `kobject_del`.
 
-### TODO 2 -- `core/module.c:21:2` -- Restore the module to both inventories
+### TODO 2 -- `core/module.c:22:2` -- Restore the module to both inventories
 
 If `saved_prev` is `NULL`, there is nothing to restore.
 Otherwise:
@@ -181,27 +207,28 @@ Otherwise:
 
 Restore sysfs before the list so both surfaces return together.
 
-### TODO 3 -- `core/module.c:28:2` -- Write the boot configuration
+### TODO 3 -- `core/module.c:35:2` -- Write the boot configuration
+
+This runs in the `do_persist` work callback (process context, sleeping allowed).
 
 Open `PERSIST_PATH` with `O_WRONLY | O_CREAT | O_TRUNC` and mode `0644`.
-Return `PTR_ERR(file)` if `filp_open` returns an error pointer.
+Return early if `filp_open` returns an error pointer.
 
-Write `MODULE_NAME_STR "\n"` from offset zero, then close the file on every
-write outcome.
-Return the write error, return `-EIO` for a short write, or return `0` after the
-complete write.
+Write `MODULE_NAME_STR "\n"` from offset zero, then close the file.
 
 `MODULE_NAME_STR` is `"rklings"` (7 characters). `sizeof` includes the null
 terminator, giving 8. The appended `"\n"` replaces that terminator, so the total
 remains 8 bytes.
 
-### TODO 4 -- `core/module.c:34:2` -- Clear the boot configuration
+### TODO 4 -- `core/module.c:40:2` -- Clear the boot configuration
+
+This runs in the `do_unpersist` work callback (process context).
 
 Open `PERSIST_PATH` with the same flags and mode. `O_TRUNC` makes the existing
 file empty, so no write is needed.
 
-Return the decoded open error on failure.
-Otherwise close the file and return `0`.
+Return early on failure.
+Otherwise close the file.
 
 ## Test it
 

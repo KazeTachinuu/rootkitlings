@@ -7,7 +7,8 @@ begin "Unpersist via mkdir command"
 
 assert_loaded rklings
 
-# Now unpersist
+# Now unpersist (file I/O runs on a workqueue, not inline,
+# but completes before the shell reaches the next line in practice)
 mkdir rklings.unpersist 2>/dev/null
 
 # The solution truncates to empty rather than removing

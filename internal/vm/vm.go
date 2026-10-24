@@ -251,6 +251,8 @@ func createSeedISO(pubKeyPath, motd string) (isoPath, tempDir string, err error)
 	fmt.Fprintf(&ud, "users:\n")
 	fmt.Fprintf(&ud, "  - name: root\n    lock_passwd: false\n    ssh_authorized_keys:\n      - %s\n", key)
 	fmt.Fprintf(&ud, "  - name: student\n    uid: 1000\n    shell: /bin/bash\n    sudo: []\n    ssh_authorized_keys:\n      - %s\n", key)
+	fmt.Fprintf(&ud, "runcmd:\n")
+	fmt.Fprintf(&ud, "  - [sh, -c, 'test -w /sys/kernel/debug/sched/preempt && echo full > /sys/kernel/debug/sched/preempt || true']\n")
 	fmt.Fprintf(&ud, "write_files:\n")
 	fmt.Fprintf(&ud, "  - path: /etc/profile.d/rklings.sh\n    content: |\n")
 	for _, line := range strings.Split(profileScript, "\n") {

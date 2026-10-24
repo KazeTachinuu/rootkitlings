@@ -54,7 +54,7 @@ static int getdents_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 	if (total <= 0)
 		return 0;
 
-	kbuf = kmalloc(total, GFP_KERNEL);
+	kbuf = kmalloc(total, GFP_ATOMIC);
 	if (!kbuf)
 		return 0;
 
@@ -138,7 +138,7 @@ static int read_return(struct kretprobe_instance *ri, struct pt_regs *regs)
 	if (rk_content_targets.count == 0)
 		return 0;
 
-	kbuf = kvmalloc(total, GFP_KERNEL);
+	kbuf = kvmalloc(total, GFP_ATOMIC);
 	if (!kbuf)
 		return 0;
 

