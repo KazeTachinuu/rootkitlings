@@ -96,8 +96,16 @@ func Boot(opts BootOpts) (*VM, error) {
 	}
 	if _, err := os.Stat("/dev/kvm"); err == nil {
 		qemuArgs = append([]string{"-enable-kvm", "-cpu", "host"}, qemuArgs...)
-	} else if runtime.GOOS == "darwin" {
+	} else if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
+		// HVF only accelerates guests matching the host architecture.
 		qemuArgs = append([]string{"-accel", "hvf", "-cpu", "host"}, qemuArgs...)
+	} else if runtime.GOOS == "darwin" {
+		// ARM Mac running an x86_64 guest: use software emulation.
+		// thread=multi gives each vCPU its own host thread for better
+		// SMP performance.  QEMU warns about the guest expecting TSO
+		// while the ARM host is weakly ordered, but it inserts the
+		// necessary barriers.
+		qemuArgs = append([]string{"-accel", "tcg,thread=multi", "-cpu", "max"}, qemuArgs...)
 	}
 
 	cmd := exec.Command("qemu-system-x86_64", qemuArgs...)
@@ -133,6 +141,11 @@ func Boot(opts BootOpts) (*VM, error) {
 	timeout := opts.BootTimeout
 	if timeout == 0 {
 		timeout = 90 * time.Second
+		// Software emulation (TCG) on a cross-architecture host is much
+		// slower than hardware-accelerated virtualization.
+		if runtime.GOOS == "darwin" && runtime.GOARCH != "amd64" {
+			timeout = 4 * time.Minute
+		}
 	}
 	if err := v.waitSSH(timeout); err != nil {
 		v.Close()

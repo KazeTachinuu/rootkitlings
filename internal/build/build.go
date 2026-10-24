@@ -92,7 +92,7 @@ func EnsureGuestTools(root string) error {
 	if err != nil {
 		return err
 	}
-	args := []string{"run", "--rm"}
+	args := []string{"run", "--rm", "--platform", "linux/amd64"}
 	// Rootless Podman maps container root to the invoking host user. Passing
 	// the host UID again selects a subordinate UID that cannot write this mount.
 	// Docker does not perform that mapping, so run it as the host user.
@@ -144,11 +144,21 @@ func ensureBuildImage(runtime string, tc toolchain) error {
 		return fmt.Errorf("stage Containerfile: %w", err)
 	}
 
-	cmd = exec.Command(runtime, "build",
+	// The target VM is always x86_64; build the container for that platform
+	// so compiled tools and kernel modules match the guest.
+	buildArgs := []string{"build", "--platform", "linux/amd64"}
+	// Podman supports --pull=missing; Docker buildx does not (treats --pull
+	// as boolean).  Omitting the flag on Docker is equivalent: buildx only
+	// pulls when the image is absent from the local cache.
+	if runtime == "podman" {
+		buildArgs = append(buildArgs, "--pull=missing")
+	}
+	buildArgs = append(buildArgs,
 		"--build-arg", "BASE="+tc.Base,
 		"--build-arg", "KERNEL="+tc.Kernel,
 		"--build-arg", "SOURCES="+tc.Sources,
 		"-t", tc.Image, "-f", filepath.Join(dir, "Containerfile"), dir)
+	cmd = exec.Command(runtime, buildArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -261,7 +271,7 @@ func buildKernel(ex *catalog.Exercise, kernel, image string, ensure func(string)
 		kernel,
 	)
 
-	args := []string{"run", "--rm"}
+	args := []string{"run", "--rm", "--platform", "linux/amd64"}
 	keys := make([]string, 0, len(variables))
 	for key := range variables {
 		keys = append(keys, key)

@@ -220,6 +220,13 @@ func printInstallInstructions(deps []dep) {
 				"sudo apt install qemu-system-x86",
 				"sudo pacman -S qemu-full",
 			)
+		case "ISO builder":
+			fmt.Println("  ISO builder (xorriso):")
+			printPerPlatform(
+				"brew install xorriso",
+				"sudo apt install xorriso",
+				"sudo pacman -S xorriso",
+			)
 		default:
 			fmt.Printf("  %s: install it with your system package manager.\n\n", d.name)
 		}
