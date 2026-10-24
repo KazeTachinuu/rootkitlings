@@ -3,7 +3,8 @@
 ## Mission
 
 M01 combines the local control mechanisms from L00 through L13, plus the
-persistence and module-concealment work from M00. Each mechanism works alone.
+persistence and module-concealment work from M00.
+Each mechanism works alone.
 Integration adds:
 
 - Shared state across subsystems
@@ -92,8 +93,9 @@ ls shows everything except "secret"
 loads the `inet_diag` module, then registers probes (loop over array).
 
 The `inet_diag` module provides the `inet_sk_diag_fill` function that `ss` uses
-to report sockets via netlink. Calling `request_module("inet_diag")` before
-registering the kretprobe ensures the symbol is available for the probe to hook:
+to report sockets via netlink.
+Calling `request_module("inet_diag")` before registering the kretprobe ensures
+the symbol is available for the probe to hook:
 
 ```c
 static struct kretprobe *probes[] = {
@@ -130,8 +132,8 @@ Exit reverses: unhide the module and unregister probes in reverse.
 
 ## Subsystem ownership
 
-Each file registers only its own commands. No file reaches into another
-subsystem's state:
+Each file registers only its own commands.
+No file reaches into another subsystem's state:
 
 | Owner        | Commands                                       |
 | ------------ | ---------------------------------------------- |
@@ -153,11 +155,12 @@ TODO 2  core/init.c:64:2  clean teardown in reverse
 2. Register command providers in order: `init_cmds`, then `rk_escalate_init`,
    `rk_module_cmds_init`, and `rk_filter_init`.
 3. Call `request_module("inet_diag")` so the netlink probe symbol exists.
-4. Loop over the `probes` array, calling `register_kretprobe` for each. Track
-   `nr_probes` so a failure unwinds only the successfully registered prefix.
+4. Loop over the `probes` array, calling `register_kretprobe` for each.
+   Track `nr_probes` so a failure unwinds only the successfully registered
+   prefix.
 
-If any step fails, return the error. A probe failure must unregister only the
-probes that succeeded, in reverse.
+If any step fails, return the error.
+A probe failure must unregister only the probes that succeeded, in reverse.
 
 ### TODO 2 -- `core/init.c:64:2` -- Clean teardown in reverse
 
@@ -194,7 +197,8 @@ Boot the target:
 $ ./rklings run M01
 ```
 
-The VM boots as `student`. Walk each subsystem in order.
+The VM boots as `student`.
+Walk each subsystem in order.
 
 ### Escalation
 
@@ -296,7 +300,6 @@ root@victim:~# mkdir rklings.ping
 
 ## Validate
 
-
 ```console
 $ ./rklings validate M01
   [+] All seven kretprobes register successfully
@@ -309,9 +312,8 @@ $ ./rklings validate M01
   PASS
 ```
 
-
 ## Next
 
-The complete local module works when it is already inside a VM. D00 starts
-outside a fresh target and makes you gain access, become root, transfer the
-module, and deploy it yourself.
+The complete local module works when it is already inside a VM.
+D00 starts outside a fresh target and makes you gain access, become root,
+transfer the module, and deploy it yourself.

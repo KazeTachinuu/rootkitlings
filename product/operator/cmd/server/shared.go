@@ -92,4 +92,3 @@ func protocolCommand(name, arg string) (string, error) {
 		return "", fmt.Errorf("unknown command %q", name)
 	}
 }
-

@@ -51,7 +51,7 @@ lint-format:
 
 lint-shell:
 	@find exercises vm -type f \( -path '*/checks/*' -o -name '*.sh' \) \
-		-exec sh -n {} \;
+		! -name '*.py' -exec sh -n {} \;
 
 $(DOCS_STAMP): package.json package-lock.json
 	npm ci

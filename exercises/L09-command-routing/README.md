@@ -2,8 +2,9 @@
 
 ## Mission
 
-L08 can carry one command through `mkdir`. Now the rootkit needs several
-commands without one growing chain of special cases.
+L08 can carry one command through `mkdir`.
+Now the rootkit needs several commands without one growing chain of special
+cases.
 
 Route `ping`, `status`, and `e` to separate handlers through one command table.
 
@@ -43,16 +44,17 @@ exercises/L09-command-routing
 └── rklings_hook.h
 ```
 
-Only `rklings_command.c` is editable. You split one command name and route it to
-the correct handler.
+Only `rklings_command.c` is editable.
+You split one command name and route it to the correct handler.
 
 Supplied files intercept `mkdir`, change process credentials, and start and stop
 the module.
 
 ## Read one command
 
-The hook passes the complete name to `rk_dispatch`. The dispatcher removes
-`rklings.`, then splits the remaining text at its first dot:
+The hook passes the complete name to `rk_dispatch`.
+The dispatcher removes `rklings.`, then splits the remaining text at its first
+dot:
 
 ```text
 rklings.ping        command="ping"    argument=NULL
@@ -61,8 +63,9 @@ rklings.e           command="e"       argument=NULL
 rklings.e.1234      command="e"       argument="1234"
 ```
 
-`strchr(command, '.')` finds the separator. The bytes before it identify the
-command; the bytes after it are the optional argument.
+`strchr(command, '.')` finds the separator.
+The bytes before it identify the command; the bytes after it are the optional
+argument.
 
 ## Route through a table
 
@@ -88,8 +91,8 @@ struct rk_cmd_entry {
 };
 ```
 
-The dispatcher compares both the command length and its bytes. That prevents
-`e`, `extra`, and `e.1234` from being confused:
+The dispatcher compares both the command length and its bytes.
+That prevents `e`, `extra`, and `e.1234` from being confused:
 
 ```text
 e       -> handler e, no argument
@@ -112,13 +115,14 @@ TODO 5  rklings_command.c:41:1  split and dispatch one command
 
 ### TODO 1 -- `rklings_command.c:12:1` -- Implement `ping`
 
-Reject an argument with `-EINVAL`. Otherwise log `rklings: pong\n` and return
-`0`.
+Reject an argument with `-EINVAL`.
+Otherwise log `rklings: pong\n` and return `0`.
 
 ### TODO 2 -- `rklings_command.c:18:1` -- Implement `status`
 
-Reject an argument with `-EINVAL`. Otherwise log `rklings: alive,
-escalations=%d\n` with `rk_escalation_count()`, then return `0`.
+Reject an argument with `-EINVAL`.
+Otherwise log `rklings: alive, escalations=%d\n` with `rk_escalation_count()`,
+then return `0`.
 
 ### TODO 3 -- `rklings_command.c:24:1` -- Preserve escalation
 
@@ -171,7 +175,6 @@ uid=0(root) gid=0(root) groups=0(root)
 
 ## Validate
 
-
 ```console
 $ ./rklings validate L09
   [+] Ping and status commands succeed without directories
@@ -180,9 +183,9 @@ $ ./rklings validate L09
   PASS
 ```
 
-
 ## Next
 
 Commands can now trigger several immediate actions, but the module disappears at
-reboot and remains visible in `lsmod`. M00 adds persistence and controls that
-visibility before L10 begins the concealment data path.
+reboot and remains visible in `lsmod`.
+M00 adds persistence and controls that visibility before L10 begins the
+concealment data path.

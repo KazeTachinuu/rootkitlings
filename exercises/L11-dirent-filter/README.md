@@ -6,8 +6,9 @@ L10 gave the module a target list, but adding a name changes nothing visible.
 This exercise makes a file and a running process disappear from ordinary
 listings.
 
-Neither target is deleted or stopped. You will change only the directory entries
-returned to programs such as `ls` and `ps`.
+Neither target is deleted or stopped.
+You will change only the directory entries returned to programs such as `ls` and
+`ps`.
 
 ## What you will observe
 
@@ -40,8 +41,8 @@ still here
 root@victim:~# kill -0 1234
 ```
 
-An empty `grep` result means the name is hidden. Successful `cat` and `kill -0`
-commands prove the targets still exist.
+An empty `grep` result means the name is hidden.
+Successful `cat` and `kill -0` commands prove the targets still exist.
 
 ## Workspace
 
@@ -51,8 +52,8 @@ exercises/L11-dirent-filter
 └── main.c
 ```
 
-`main.c` is the only editable file. It already intercepts `mkdir` and recognizes
-four commands:
+`main.c` is the only editable file.
+It already intercepts `mkdir` and recognizes four commands:
 
 | Command              | Effect                     |
 | -------------------- | -------------------------- |
@@ -62,12 +63,13 @@ four commands:
 | `rklings.u.i.<pid>`  | Show that process ID again |
 
 It also declares the file and PID target lists and the `__x64_sys_getdents64`
-kretprobe. The TODOs connect those pieces.
+kretprobe.
+The TODOs connect those pieces.
 
 ## One filter handles both targets
 
-`getdents64` is the system call that returns the contents of a directory. It
-gives the caller one buffer containing `struct linux_dirent64` records placed
+`getdents64` is the system call that returns the contents of a directory.
+It gives the caller one buffer containing `struct linux_dirent64` records placed
 back to back.
 
 Each record contains these fields:
@@ -90,15 +92,15 @@ alignment padding.
 getdents64 buffer
 
 offset 0                         offset 24
-   │                                |
+   |                                |
    v                                v
 +----------------------------+--------------------------------+
 | record 1: 24 bytes         | record 2: 32 bytes             |
 | d_ino | d_type | d_reclen  | d_ino | d_type | d_reclen      |
 | d_name="notes"             | d_name="secret"                |
 +----------------------------+--------------------------------+
-   │                                |
-   └── next offset = 0 + 24         └── next offset = 24 + 32
+   |                                |
+   +-- next offset = 0 + 24         +-- next offset = 24 + 32
 
 Advance by d_reclen, not by sizeof(struct linux_dirent64).
 ```
@@ -111,25 +113,25 @@ smaller byte count:
 ```text
 before filtering                     after filtering
 +----------+----------+----------+   +----------+----------+
-| notes    | secret   | report   │   | notes    | report   |
+| notes    | secret   | report   |   | notes    | report   |
 +----------+----------+----------+   +----------+----------+
-                  └── remove ----------------^
+                  +-- remove ----------------^
 ```
 
-Linux exposes each running process as a numbered directory under `/proc`. The
-same name filter therefore handles files and processes:
+Linux exposes each running process as a numbered directory under `/proc`.
+The same name filter therefore handles files and processes:
 
 ```text
 filesystem listing                   process listing
 
 ls /tmp                              ps
-   │                                  | reads /proc
+   |                                  | reads /proc
    v                                  v
 getdents64("/tmp")                   getdents64("/proc")
-   │                                  |
-   ├── notes                          ├── 1
-   ├── secret  -- remove              ├── 1234  -- remove
-   └── report                         └── 1402
+   |                                  |
+   +-- notes                          +-- 1
+   +-- secret  -- remove              +-- 1234  -- remove
+   +-- report                         +-- 1402
                                       |
    v                                  v
 notes, report                        PID 1234 is omitted
@@ -137,8 +139,8 @@ notes, report                        PID 1234 is omitted
 cat /tmp/secret prints "still here"  kill -0 1234 still succeeds
 ```
 
-Only discovery through the directory listing changes. The file and process
-continue to exist.
+Only discovery through the directory listing changes.
+The file and process continue to exist.
 
 ## TODOs
 
@@ -164,8 +166,9 @@ Implement `rk_target_add`, `rk_target_remove`, `rk_target_match`, and
 
 Both add and remove must leave the list unchanged when they fail.
 
-`should_hide_dirent` checks the record name against both target lists. File
-names and PID strings use exact matching. Hiding `12` must not hide `123`.
+`should_hide_dirent` checks the record name against both target lists.
+File names and PID strings use exact matching.
+Hiding `12` must not hide `123`.
 
 ### TODO 2 -- `main.c:48:2` -- Save the caller's output buffer
 
@@ -196,9 +199,9 @@ userspace calls getdents64(fd, buffer, capacity)
 
 Same register pattern as L08: recover the inner `pt_regs` with
 `regs_get_kernel_argument(regs, 0)`, read `si` (the userspace buffer address),
-and store it in `ri->data`. The return handler reads the byte count with
-`regs_return_value` and accesses the saved buffer through `copy_from_user` and
-`copy_to_user`.
+and store it in `ri->data`.
+The return handler reads the byte count with `regs_return_value` and accesses
+the saved buffer through `copy_from_user` and `copy_to_user`.
 
 ### TODO 3 -- `main.c:54:2` -- Remove matching records
 
@@ -225,9 +228,9 @@ has moved into that position.
 
 ### TODO 4 -- `main.c:201:2` -- Register probes with rollback
 
-Initialize both spinlocks before registering probes. Register the directory
-probe and the two supplied `mkdir` probes with rollback for every partial
-failure.
+Initialize both spinlocks before registering probes.
+Register the directory probe and the two supplied `mkdir` probes with rollback
+for every partial failure.
 
 ### TODO 5 -- `main.c:208:2` -- Unregister probes in reverse
 
@@ -274,11 +277,10 @@ root@victim:~# ps -p 1234
 root@victim:~# kill 1234
 ```
 
-The filter affects directory listings only. It does not block direct access to a
-known path or PID.
+The filter affects directory listings only.
+It does not block direct access to a known path or PID.
 
 ## Validate
-
 
 ```console
 $ ./rklings validate L11
@@ -289,9 +291,9 @@ $ ./rklings validate L11
   PASS
 ```
 
-
 ## Next
 
 Files and processes can disappear from listings, but sensitive records inside a
-visible file still give you away. L12 hides selected lines from tools such as
-`cat` and `grep` while leaving the file in place.
+visible file still give you away.
+L12 hides selected lines from tools such as `cat` and `grep` while leaving the
+file in place.

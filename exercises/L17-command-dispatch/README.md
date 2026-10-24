@@ -2,9 +2,9 @@
 
 ## Mission
 
-Turn the encrypted transport into a multi-command agent. The operator sends
-commands over the persistent WebSocket connection; the agent dispatches each one
-to a handler and sends the result back immediately.
+Turn the encrypted transport into a multi-command agent.
+The operator sends commands over the persistent WebSocket connection; the agent
+dispatches each one to a handler and sends the result back immediately.
 
 L15 proved the agent can reach the operator over WebSocket with AEAD encryption.
 
@@ -25,6 +25,7 @@ The agent holds an open WebSocket to the operator:
 ```text
 exercises/L17-command-dispatch
 ├── go.mod
+├── go.sum
 └── main.go
 ```
 
@@ -69,14 +70,15 @@ type Command struct {
 }
 ```
 
-Each command arrives as an individual encrypted WebSocket frame. The agent
-decrypts, dispatches, and sends the result as another encrypted frame. No
-batching, no polling, no IDs needed.
+Each command arrives as an individual encrypted WebSocket frame.
+The agent decrypts, dispatches, and sends the result as another encrypted frame.
+No batching, no polling, no IDs needed.
 
 ## Handler pattern
 
 A handler is a function that takes the command's argument string and returns a
-value. A map routes Op strings to handlers.
+value.
+A map routes Op strings to handlers.
 
 ```go
 type handler func(arg string) any
@@ -91,21 +93,21 @@ var handlers = map[string]handler{
 ```
 
 Each handler does its work (mkdir for kernel-module commands, or just returns a
-value for PING/STATUS) and returns the result directly. No connection object, no
-writing to a stream.
+value for PING/STATUS) and returns the result directly.
+No connection object, no writing to a stream.
 
 ## Commands
 
-| Command        | Argument   | Side effect            | Returns                  |
-| -------------- | ---------- | ---------------------- | ------------------------ |
-| PING           | (none)     | (none)                 | "PONG"                   |
-| STATUS         | (none)     | (none)                 | {"pid": N, "uid": N}     |
-| HIDE FILE name | FILE name  | mkdir rklings.h.f.name | "OK"                     |
-| HIDE PID pid   | PID pid    | mkdir rklings.h.i.pid  | "OK"                     |
-| HIDE PORT port | PORT port  | mkdir rklings.h.p.port | "OK"                     |
-| PERSIST        | (none)     | mkdir rklings.persist  | "OK"                     |
-| ESCALATE       | (none)     | mkdir rklings.e        | "OK"                     |
-| (unknown)      |            | (none)                 | {"error": "unknown ..."} |
+| Command        | Argument  | Side effect            | Returns                |
+| -------------- | --------- | ---------------------- | ---------------------- |
+| PING           | (none)    | (none)                 | "PONG"                 |
+| STATUS         | (none)    | (none)                 | {"pid": N, "uid": N}   |
+| HIDE FILE name | FILE name | mkdir rklings.h.f.name | "OK"                   |
+| HIDE PID pid   | PID pid   | mkdir rklings.h.i.pid  | "OK"                   |
+| HIDE PORT port | PORT port | mkdir rklings.h.p.port | "OK"                   |
+| PERSIST        | (none)    | mkdir rklings.persist  | "OK"                   |
+| ESCALATE       | (none)    | mkdir rklings.e        | "OK"                   |
+| (unknown)      |           | (none)                 | {"error": "unknown.."} |
 
 HIDE takes a subcommand (FILE, PID, PORT) as its first argument word.
 
@@ -117,7 +119,8 @@ loop: each incoming frame is decrypted, unmarshalled into a `Command`, passed to
 `execute()`, and the result is encrypted and sent back with `wsSend()`.
 
 Your job is `execute()`: look up the handler by `cmd.Op`, call it, and return
-the result. Unknown ops return an error map.
+the result.
+Unknown ops return an error map.
 
 ## TODOs
 
@@ -126,12 +129,14 @@ TODO 1  main.go   define handler type, build handler map, implement handlers
 TODO 2  main.go   implement execute(cmd Command) any
 ```
 
-The crypto, transport, and helpers are supplied. You write the command routing.
+The crypto, transport, and helpers are supplied.
+You write the command routing.
 
 ### TODO 1 -- Handler type and map
 
-Define a `handler` function type: `func(arg string) any`. Create a `handlers`
-map from Op string to handler. Implement each handler function:
+Define a `handler` function type: `func(arg string) any`.
+Create a `handlers` map from Op string to handler.
+Implement each handler function:
 
 - PING: return `"PONG"`
 - STATUS: return `map[string]int{"pid": os.Getpid(), "uid": os.Getuid()}`
@@ -142,16 +147,17 @@ map from Op string to handler. Implement each handler function:
 ### TODO 2 -- Implement execute
 
 Write an `execute(cmd Command) any` function that looks up `cmd.Op` in the
-handler map and calls the matching handler with `cmd.Arg`. Return an error map
-for unknown ops.
+handler map and calls the matching handler with `cmd.Arg`.
+Return an error map for unknown ops.
 
 Call `wsLoop()` from `main()` after `initTransport()`.
 
 ## Test it
 
 `rklings serve L17` starts this exercise's live server and scoped command panel
-at `http://127.0.0.1:8080`. Every log entry is traffic exchanged with the agent
-running in the disposable guest.
+at `http://127.0.0.1:8080`.
+Every log entry is traffic exchanged with the agent running in the disposable
+guest.
 
 ```console
 $ ./rklings serve L17
@@ -163,9 +169,10 @@ In another host terminal:
 $ ./rklings run L17
 ```
 
-Open `http://127.0.0.1:8080`. The panel sends only the commands introduced by
-this exercise, and its log shows the real replies from the guest agent. Create
-`secret.txt` in the guest before sending the hide command.
+Open `http://127.0.0.1:8080`.
+The panel sends only the commands introduced by this exercise, and its log shows
+the real replies from the guest agent.
+Create `secret.txt` in the guest before sending the hide command.
 
 ```text
 server> PING
@@ -199,4 +206,5 @@ $ ./rklings validate L17
 ## Next
 
 The operator can invoke the built-in controls, but cannot run an arbitrary
-command on the target. L18 adds remote command execution and returns its output.
+command on the target.
+L18 adds remote command execution and returns its output.

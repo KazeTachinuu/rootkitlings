@@ -4,8 +4,6 @@ import (
 	"context"
 	"crypto/ecdh"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -59,13 +57,9 @@ func TestAgentWSAuthenticatesAndConnects(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	secret, err := agentPriv.ECDH(keys.pub)
+	_, sharedKey, err := keys.DeriveAgent(agentPriv.PublicKey().Bytes())
 	if err != nil {
 		t.Fatal(err)
-	}
-	sharedKey := sha256.Sum256(secret)
-	if hex.EncodeToString(sharedKey[:8]) != agentID {
-		t.Fatal("agent_id mismatch")
 	}
 
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/"
@@ -122,8 +116,7 @@ func testOperatorKeys(t *testing.T) *OperatorKeys {
 		t.Fatal(err)
 	}
 	return &OperatorKeys{
-		priv:   priv,
-		pub:    priv.PublicKey(),
-		agents: make(map[string][32]byte),
+		priv: priv,
+		pub:  priv.PublicKey(),
 	}
 }

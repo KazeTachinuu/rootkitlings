@@ -3,8 +3,8 @@
 ## Mission
 
 L06 gives root privileges to the calling shell, but the code that performs the
-change is supplied. Implement that operation and make it work for any selected
-process ID.
+change is supplied.
+Implement that operation and make it work for any selected process ID.
 
 The supplied command layer selects the target:
 
@@ -27,8 +27,8 @@ student@victim:~$ grep '^Uid:' /proc/482/status
 Uid:    0       0       0       0
 ```
 
-No `rklings.e.482` directory is created. The original `mkdir rklings.e` command
-still elevates its parent shell.
+No `rklings.e.482` directory is created.
+The original `mkdir rklings.e` command still elevates its parent shell.
 
 ## Workspace
 
@@ -39,8 +39,8 @@ exercises/L07-process-root
 └── rklings_hook.h
 ```
 
-Only `main.c` is editable. You implement the function that gives root privileges
-to one process ID.
+Only `main.c` is editable.
+You implement the function that gives root privileges to one process ID.
 
 `rklings_hook.h` supplies command parsing and `mkdir` interception.
 
@@ -53,8 +53,9 @@ kernel object:
 1234 -> find_vpid -> pid_task -> task_struct
 ```
 
-The process can exit during lookup. RCU (Read-Copy-Update) prevents the kernel
-from freeing a data structure while any CPU is still reading it:
+The process can exit during lookup.
+RCU (Read-Copy-Update) prevents the kernel from freeing a data structure while
+any CPU is still reading it:
 
 - Between `rcu_read_lock` and `rcu_read_unlock`, the object returned by
   `pid_task` is guaranteed to exist
@@ -139,8 +140,8 @@ From the host:
 $ ./rklings run L07
 ```
 
-Inside the guest, run the commands from **What you will observe**. Then confirm
-the parent-shell form:
+Inside the guest, run the commands from **What you will observe**.
+Then confirm the parent-shell form:
 
 ```console
 student@victim:~$ mkdir rklings.e
@@ -150,7 +151,6 @@ uid=0(root) gid=0(root) groups=0(root)
 
 ## Validate
 
-
 ```console
 $ ./rklings validate L07
   [+] mkdir rklings.e grants root to the calling shell
@@ -159,9 +159,8 @@ $ ./rklings validate L07
   PASS
 ```
 
-
 ## Next
 
 Credential replacement now works, but a supplied header still owns syscall
-interception. L08 opens that header and implements its `mkdir` and `mkdirat`
-probes directly.
+interception.
+L08 opens that header and implements its `mkdir` and `mkdirat` probes directly.

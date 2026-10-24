@@ -61,7 +61,8 @@ exercises/M00-persistence-stealth
 └── Kbuild
 ```
 
-Only `core/module.c` is editable. All four TODOs live there.
+Only `core/module.c` is editable.
+All four TODOs live there.
 
 Supplied files:
 
@@ -73,16 +74,16 @@ Supplied files:
 ## Make the next boot load the module
 
 At boot, `systemd-modules-load` reads `/etc/modules-load.d/*.conf` and passes
-each listed module name to `modprobe`. For `rklings` to return after reboot,
-both of these must exist:
+each listed module name to `modprobe`.
+For `rklings` to return after reboot, both of these must exist:
 
 ```text
 /lib/modules/<kernel>/extra/rklings.ko     installed module
 /etc/modules-load.d/rklings.conf           line containing: rklings
 ```
 
-The validator installs and indexes the `.ko`. Your `persist` command owns only
-the configuration file.
+The validator installs and indexes the `.ko`.
+Your `persist` command owns only the configuration file.
 
 Kernel code does not use a userspace file descriptor:
 
@@ -106,7 +107,8 @@ The kernel exposes loaded modules through two surfaces:
 ```
 
 Removing only the linked list entry hides from `lsmod` but leaves a directory in
-`/sys/module/` that any tool or analyst can find. Both must go.
+`/sys/module/` that any tool or analyst can find.
+Both must go.
 
 ### `/proc/modules`: the module list
 
@@ -116,8 +118,9 @@ hidden:  ... <-> previous <------------> next <-> ...
                          rklings still runs
 ```
 
-`THIS_MODULE->list` is this module's node. Before `list_del` removes it, save
-the previous node so `list_add` can restore the same position later.
+`THIS_MODULE->list` is this module's node.
+Before `list_del` removes it, save the previous node so `list_add` can restore
+the same position later.
 
 ### `/sys/module/`: the sysfs entry
 
@@ -136,14 +139,14 @@ saved_prev == NULL    visible
 saved_prev != NULL    hidden
 ```
 
-Use that state to make repeated commands safe. Unhide the module before
-unloading it so the normal module tools can find it.
+Use that state to make repeated commands safe.
+Unhide the module before unloading it so the normal module tools can find it.
 
 > **Detection surfaces that remain.** Even after hiding from both inventories, a
-> loaded module leaves traces: the kernel taint flag > (`cat
-/proc/sys/kernel/tainted`), memory allocations visible to crash dumps, > and
-`journalctl -k` logs from load time. > These are addressed by later exercises,
-not here.
+> loaded module leaves traces: the kernel taint flag >
+> (`cat /proc/sys/kernel/tainted`), memory allocations visible to crash dumps, >
+> and `journalctl -k` logs from load time. > These are addressed by later
+> exercises, not here.
 
 ## TODOs
 
@@ -156,7 +159,8 @@ TODO 4  core/module.c:34:2  clear the boot configuration
 
 ### TODO 1 -- `core/module.c:16:2` -- Hide the module from both inventories
 
-If `saved_prev` is already set, return without changing anything. Otherwise:
+If `saved_prev` is already set, return without changing anything.
+Otherwise:
 
 1. Save `THIS_MODULE->list.prev` in `saved_prev`.
 2. Remove the module list entry with `list_del`.
@@ -166,7 +170,8 @@ If `saved_prev` is already set, return without changing anything. Otherwise:
 
 ### TODO 2 -- `core/module.c:21:2` -- Restore the module to both inventories
 
-If `saved_prev` is `NULL`, there is nothing to restore. Otherwise:
+If `saved_prev` is `NULL`, there is nothing to restore.
+Otherwise:
 
 1. Restore the sysfs entry with `kobject_add`, passing `saved_parent` and
    `MODULE_NAME_STR`.
@@ -178,12 +183,13 @@ Restore sysfs before the list so both surfaces return together.
 
 ### TODO 3 -- `core/module.c:28:2` -- Write the boot configuration
 
-Open `PERSIST_PATH` with `O_WRONLY | O_CREAT | O_TRUNC` and mode `0644`. Return
-`PTR_ERR(file)` if `filp_open` returns an error pointer.
+Open `PERSIST_PATH` with `O_WRONLY | O_CREAT | O_TRUNC` and mode `0644`.
+Return `PTR_ERR(file)` if `filp_open` returns an error pointer.
 
 Write `MODULE_NAME_STR "\n"` from offset zero, then close the file on every
-write outcome. Return the write error, return `-EIO` for a short write, or
-return `0` after the complete write.
+write outcome.
+Return the write error, return `-EIO` for a short write, or return `0` after the
+complete write.
 
 `MODULE_NAME_STR` is `"rklings"` (7 characters). `sizeof` includes the null
 terminator, giving 8. The appended `"\n"` replaces that terminator, so the total
@@ -194,8 +200,8 @@ remains 8 bytes.
 Open `PERSIST_PATH` with the same flags and mode. `O_TRUNC` makes the existing
 file empty, so no write is needed.
 
-Return the decoded open error on failure. Otherwise close the file and return
-`0`.
+Return the decoded open error on failure.
+Otherwise close the file and return `0`.
 
 ## Test it
 
@@ -238,7 +244,6 @@ cleans up the installed module afterward.
 
 ## Validate
 
-
 ```console
 $ ./rklings validate M00
   [+] mkdir rklings.persist creates /etc/modules-load.d/rklings.conf
@@ -251,7 +256,6 @@ $ ./rklings validate M00
   [+] Repeated hide and unhide do not corrupt the module list
   PASS
 ```
-
 
 ## Next
 

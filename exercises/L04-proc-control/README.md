@@ -3,17 +3,20 @@
 ## Mission
 
 A visible control channel is not what a deployed rootkit uses, but it proves the
-module can accept commands. L05 replaces it with mkdir, which leaves no trace.
+module can accept commands.
+L05 replaces it with mkdir, which leaves no trace.
 
 L03 lets the shell read module state, but not change it.
 
 Make `/proc/rklings` accept two commands: `0` makes the module inactive and `1`
-makes it active. Invalid commands must fail without changing its state.
+makes it active.
+Invalid commands must fail without changing its state.
 
 ## What you will observe
 
 `printf '0\n' > /proc/rklings` sends the two bytes `0` and newline to the proc
-entry. That write invokes the module's `rk_proc_write` callback.
+entry.
+That write invokes the module's `rk_proc_write` callback.
 
 ```console
 root@victim:~# cat /proc/rklings
@@ -42,8 +45,8 @@ exercises/L04-proc-control
 └── Kbuild
 ```
 
-Only `interface/proc.c` is editable. You implement the function that handles
-writes to `/proc/rklings`.
+Only `interface/proc.c` is editable.
+You implement the function that handles writes to `/proc/rklings`.
 
 The module lifecycle, stored state, and proc read path are supplied.
 
@@ -73,14 +76,16 @@ ubuf -------- unsafe to read ----------X
 ```
 
 `copy_from_user(destination, source, length)` returns the number of bytes it
-could not copy. Return `-EFAULT` unless that result is zero.
+could not copy.
+Return `-EFAULT` unless that result is zero.
 
 ## Read exactly one command byte
 
 Only the first byte selects the command, so copy exactly one byte into one
-`char`. Reject `count == 0` before copying because an empty write has no
-command. Even when userspace submits a longer string, no caller-controlled
-length reaches kernel memory.
+`char`.
+Reject `count == 0` before copying because an empty write has no command.
+Even when userspace submits a longer string, no caller-controlled length reaches
+kernel memory.
 
 ## TODOs
 
@@ -90,8 +95,9 @@ TODO 1  interface/proc.c:28:2  copy one command byte and update active state
 
 ### TODO 1 -- `interface/proc.c:28:2` -- Handle one control write
 
-Use one `char command`. Copy one byte with `copy_from_user(&command, ubuf, 1)`
-only after confirming that `count` is not zero.
+Use one `char command`.
+Copy one byte with `copy_from_user(&command, ubuf, 1)` only after confirming
+that `count` is not zero.
 
 ```text
 count is zero -> -EINVAL
@@ -125,7 +131,6 @@ root@victim:~# rmmod rklings
 
 ## Validate
 
-
 ```console
 $ ./rklings validate L04
   [+] Bounded procfs control
@@ -134,9 +139,8 @@ $ ./rklings validate L04
   PASS
 ```
 
-
 ## Next
 
-The module now accepts commands through a visible proc entry. L05 recognizes a
-command carried by an ordinary `mkdir` call and suppresses the requested
-directory instead.
+The module now accepts commands through a visible proc entry.
+L05 recognizes a command carried by an ordinary `mkdir` call and suppresses the
+requested directory instead.

@@ -706,6 +706,18 @@ func completeCmd() *cobra.Command {
 	}
 }
 
+func validD00Receipt(receipt string) bool {
+	need := map[string]string{"root": "0", "module": "operational", "concealed": "yes"}
+	for _, line := range strings.Split(receipt, "\n") {
+		k, v, ok := strings.Cut(line, "=")
+		if ok {
+			if want, exists := need[k]; exists && v == want {
+				delete(need, k)
+			}
+		}
+	}
+	return len(need) == 0
+}
 
 func validInstanceName(name string) bool {
 	if name == "" || len(name) > 64 {

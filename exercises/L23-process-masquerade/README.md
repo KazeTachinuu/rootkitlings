@@ -3,7 +3,8 @@
 ## Mission
 
 L22 routes browsers to the decoy page, but the agent still exposes its process
-name and regular reconnect interval. This exercise:
+name and regular reconnect interval.
+This exercise:
 
 - Changes the process name
 - Disables core dumps
@@ -41,9 +42,11 @@ Complete the process controls, reconnect timing, and post-connect hiding in
 ## How process masquerade works
 
 Every Linux thread has a 16-byte name stored in the kernel task structure
-(TASK_COMM_LEN). Tools like `ps`, `top`, and `/proc/pid/comm` read this name to
-identify running processes. The `prctl(PR_SET_NAME)` system call lets any
-process overwrite its own name at runtime.
+(TASK_COMM_LEN).
+Tools like `ps`, `top`, and `/proc/pid/comm` read this name to identify running
+processes.
+The `prctl(PR_SET_NAME)` system call lets any process overwrite its own name at
+runtime.
 
 Kernel worker threads appear as `[kworker/0:1]` in process listings:
 
@@ -75,13 +78,14 @@ unix.Setrlimit(unix.RLIMIT_CORE, &unix.Rlimit{Cur: 0, Max: 0})
 ```
 
 `PR_SET_DUMPABLE` set to 0 restricts ptrace-style access and sensitive procfs
-files for unprivileged peers. Combined with the core limit, a crash produces no
-dump file.
+files for unprivileged peers.
+Combined with the core limit, a crash produces no dump file.
 
 ## Vary the reconnect interval
 
 A fixed reconnect interval (e.g., every 60 seconds) creates a detectable pattern
-in network logs. Adding random jitter makes the timing irregular:
+in network logs.
+Adding random jitter makes the timing irregular:
 
 ```go
 import "crypto/rand"
@@ -133,8 +137,8 @@ TODO 5  main.go:67:1   implement jitter with crypto/rand
 ### TODO 1 -- Masquerade as a kernel thread
 
 Copy the target name into a `[16]byte` array and pass its first element to
-`unix.Prctl` with `unix.PR_SET_NAME`. The name must fit in TASK_COMM_LEN (16
-bytes including the null terminator).
+`unix.Prctl` with `unix.PR_SET_NAME`.
+The name must fit in TASK_COMM_LEN (16 bytes including the null terminator).
 
 ### TODO 2 -- Prevent /proc/pid/mem access
 
@@ -157,8 +161,8 @@ name.
 ### TODO 5 -- Implement jitter with crypto/rand
 
 Read 8 bytes from `rand.Read` (the `crypto/rand` package), decode them as a
-little-endian uint64, and take the modulus with the spread duration. Return
-`base` plus that offset.
+little-endian uint64, and take the modulus with the spread duration.
+Return `base` plus that offset.
 
 ## Test it
 
@@ -166,7 +170,8 @@ little-endian uint64, and take the modulus with the spread duration. Return
 $ ./rklings run L23
 ```
 
-`run` starts the agent in the background. Inspect it inside the guest:
+`run` starts the agent in the background.
+Inspect it inside the guest:
 
 ```console
 student@victim:~$ ps aux | grep kworker
@@ -174,8 +179,9 @@ root         7  0.0  0.0      0     0 ?  I    00:00 [kworker/0:0]
 student    412  0.0  0.1   5432  3210 ?  S    00:01 [kworker/0:1]
 ```
 
-The agent appears as `[kworker/0:1]` in `ps`. A real kworker has zero RSS and
-VSZ (it lives in kernel memory). The agent's nonzero values are a giveaway.
+The agent appears as `[kworker/0:1]` in `ps`.
+A real kworker has zero RSS and VSZ (it lives in kernel memory).
+The agent's nonzero values are a giveaway.
 
 ```console
 student@victim:~$ cat /proc/412/comm
@@ -200,5 +206,5 @@ $ ./rklings validate L23
 ## Next
 
 The process is less obvious, but the deployment still leaves timestamps, shell
-commands, login records, and journal entries. L24 identifies and clears those
-local records.
+commands, login records, and journal entries.
+L24 identifies and clears those local records.

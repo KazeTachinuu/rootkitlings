@@ -9,8 +9,8 @@ L20 loaded a kernel module without writing a .ko to disk, but:
 - Forensics finds both with a simple `find`
 
 This exercise eliminates the binary from disk entirely by writing it to
-anonymous memory and executing from there. The process runs, but there is no
-file backing it.
+anonymous memory and executing from there.
+The process runs, but there is no file backing it.
 
 ## What you will observe
 
@@ -22,8 +22,8 @@ student@victim:~$ readlink /proc/482/exe
 student@victim:~$ find / -type f -name agent 2>/dev/null
 ```
 
-`/proc/482/exe` proves that PID 482 still has executable code. The empty `find`
-result proves there is no corresponding directory entry.
+`/proc/482/exe` proves that PID 482 still has executable code.
+The empty `find` result proves there is no corresponding directory entry.
 
 ## Workspace
 
@@ -34,8 +34,8 @@ exercises/L21-fileless-exec
 └── main.go
 ```
 
-The build embeds the supplied agent in the dropper. Complete `main.go` so the
-dropper replaces itself with that embedded program.
+The build embeds the supplied agent in the dropper.
+Complete `main.go` so the dropper replaces itself with that embedded program.
 
 ## Replace the launcher from memory
 
@@ -45,32 +45,34 @@ difference: no `MFD_CLOEXEC`.
 ```text
 +----------------------------+
 | dropper process            |
-│   embedded agent bytes     |
+|   embedded agent bytes     |
 +-------------+--------------+
               | write to memfd
               v
 +----------------------------+
 | /proc/self/fd/N            |
-│   anonymous executable     |
+|   anonymous executable     |
 +-------------+--------------+
               | exec
               v
 +----------------------------+
 | same PID, new program      |
-│   /proc/PID/exe -> memfd   |
+|   /proc/PID/exe -> memfd   |
 +----------------------------+
 ```
 
 Why this exercise omits `MFD_CLOEXEC`: execution is requested through the
-`/proc/self/fd/N` pathname. Keeping the descriptor open avoids depending on the
-exact point at which that pathname is resolved relative to close-on-exec
-processing and leaves the new image with the backing descriptor. This is a
-deliberate lifetime choice, not a general rule that every executable memfd must
-survive `exec`.
+`/proc/self/fd/N` pathname.
+Keeping the descriptor open avoids depending on the exact point at which that
+pathname is resolved relative to close-on-exec processing and leaves the new
+image with the backing descriptor.
+This is a deliberate lifetime choice, not a general rule that every executable
+memfd must survive `exec`.
 
-Why `/proc/self/fd/N`: exec needs a path. A memfd has no directory entry, but
-every open fd has a symlink at `/proc/self/fd/<number>`. The kernel follows this
-symlink and reads the executable from the memfd.
+Why `/proc/self/fd/N`: exec needs a path.
+A memfd has no directory entry, but every open fd has a symlink at
+`/proc/self/fd/<number>`.
+The kernel follows this symlink and reads the executable from the memfd.
 
 ## TODOs
 
@@ -83,18 +85,18 @@ TODO 4  main.go:31:2  exec into the agent
 
 ### TODO 1 -- `main.go:25:2` -- Create the memfd
 
-Call `unix.MemfdCreate("", 0)` with no flags. Passing 0 instead of
-`unix.MFD_CLOEXEC` keeps the descriptor open across exec.
+Call `unix.MemfdCreate("", 0)` with no flags.
+Passing 0 instead of `unix.MFD_CLOEXEC` keeps the descriptor open across exec.
 
 ### TODO 2 -- `main.go:27:2` -- Write the agent bytes
 
-Write the embedded binary to the memfd with `unix.Write`. On failure, close the
-fd and return the error.
+Write the embedded binary to the memfd with `unix.Write`.
+On failure, close the fd and return the error.
 
 ### TODO 3 -- `main.go:29:2` -- Build the fd path
 
-Format `/proc/self/fd/<N>` where N is the memfd descriptor number. This is the
-only pathname the kernel can use to reach the anonymous file.
+Format `/proc/self/fd/<N>` where N is the memfd descriptor number.
+This is the only pathname the kernel can use to reach the anonymous file.
 
 ### TODO 4 -- `main.go:31:2` -- Exec into the agent
 
@@ -140,6 +142,6 @@ $ ./rklings validate L21
 ## Next
 
 The target no longer needs a module or agent file after startup, but anyone who
-connects to the server still reaches the operator endpoint. L22 shows ordinary
-visitors a decoy page while authenticated agents reach the command channel on
-the same port.
+connects to the server still reaches the operator endpoint.
+L22 shows ordinary visitors a decoy page while authenticated agents reach the
+command channel on the same port.

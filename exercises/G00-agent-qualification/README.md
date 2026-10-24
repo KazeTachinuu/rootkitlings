@@ -2,38 +2,42 @@
 
 ## Mission
 
-Up to now every exercise was kernel C. The kernel module:
+Up to now every exercise was kernel C.
+The kernel module:
 
 - Intercepts syscalls
 - Hides files
 - Escalates privileges
 
-But it cannot open a network socket or speak TLS. Those are userspace jobs, so
-the rest of the course builds a companion agent that runs alongside the module
-and connects back to the operator.
+But it cannot open a network socket or speak TLS.
+Those are userspace jobs, so the rest of the course builds a companion agent
+that runs alongside the module and connects back to the operator.
 
-The agent is written in Go. Go compiles to a single static binary with no
-runtime dependencies, which matters when the binary must be embedded,
-transferred, or executed from memory on a target that has no toolchain. Its
-standard library includes TLS, HTTP, and cross-platform syscall wrappers, so the
-agent needs no external C libraries.
+The agent is written in Go.
+Go compiles to a single static binary with no runtime dependencies, which
+matters when the binary must be embedded, transferred, or executed from memory
+on a target that has no toolchain.
+Its standard library includes TLS, HTTP, and cross-platform syscall wrappers, so
+the agent needs no external C libraries.
 
-L14 gave the kernel a way to start that agent. Before the agent can talk to an
-operator, it needs one reliable network primitive: reading and writing complete
-messages over a TCP byte stream.
+L14 gave the kernel a way to start that agent.
+Before the agent can talk to an operator, it needs one reliable network
+primitive: reading and writing complete messages over a TCP byte stream.
 
 Complete two functions in `main.go` so a client and server exchange `PING` and
 `PONG`.
 
 The supplied program deliberately fragments every read into single bytes and
-every write into pieces of at most two bytes. Your exchange passes only if it
-reconstructs the original messages exactly.
+every write into pieces of at most two bytes.
+Your exchange passes only if it reconstructs the original messages exactly.
 
 ## What you will observe
 
-TCP carries an ordered stream of bytes. It does not carry application messages.
+TCP carries an ordered stream of bytes.
+It does not carry application messages.
 If one side writes `PING`, the other side might observe four bytes at once, two
-reads of two bytes, or four reads of one byte. All are valid.
+reads of two bytes, or four reads of one byte.
+All are valid.
 
 ```text
 sender writes       receiver may read
@@ -44,11 +48,12 @@ PING                PING
 ```
 
 The same rule applies to `Write`: a successful call may accept only part of the
-slice. Code that calls `Read` or `Write` once is therefore relying on timing,
-not on the TCP contract.
+slice.
+Code that calls `Read` or `Write` once is therefore relying on timing, not on
+the TCP contract.
 
-The receiver needs an explicit boundary. In this exercise each message becomes
-one frame:
+The receiver needs an explicit boundary.
+In this exercise each message becomes one frame:
 
 ```text
 4-byte length             payload
@@ -57,8 +62,9 @@ one frame:
 +-----------------------+-------------------+
 ```
 
-The length uses big-endian byte order. Both peers read the same four bytes as
-the number `4`, then read exactly four payload bytes.
+The length uses big-endian byte order.
+Both peers read the same four bytes as the number `4`, then read exactly four
+payload bytes.
 
 ## Workspace
 
@@ -68,7 +74,8 @@ exercises/G00-agent-qualification
 └── main.go
 ```
 
-Open `main.go`. Most of the program is already complete:
+Open `main.go`.
+Most of the program is already complete:
 
 - it opens a loopback TCP listener inside the guest;
 - it starts one server connection and one client connection;
@@ -78,13 +85,15 @@ Open `main.go`. Most of the program is already complete:
   must tolerate.
 
 Your work is limited to `writeFrame` and `readFrame`. `go.mod`, connection
-setup, concurrency, and proof creation are supplied. Do not rebuild them.
+setup, concurrency, and proof creation are supplied.
+Do not rebuild them.
 
 ## Go in 60 seconds
 
 If you have not written Go before, here is enough to read the starter file.
 
-Go functions return errors explicitly. There are no exceptions.
+Go functions return errors explicitly.
+There are no exceptions.
 
 ```go
 n, err := w.Write(data)
@@ -112,10 +121,10 @@ Imports at the top of the file name standard library packages.
 32-bit integer in network byte order. `io.ReadFull` repeats reads until the
 destination slice is completely filled.
 
-The rest of the supplied code uses structs and methods. `func (w chunkWriter)
-Write(p []byte)` is a method on the `chunkWriter` type, equivalent to passing a
-struct pointer as the first argument in C. You do not need to write any methods
-in this exercise.
+The rest of the supplied code uses structs and methods.
+`func (w chunkWriter) Write(p []byte)` is a method on the `chunkWriter` type,
+equivalent to passing a struct pointer as the first argument in C.
+You do not need to write any methods in this exercise.
 
 ## TODOs
 
@@ -145,23 +154,25 @@ until none remain.
 
 ### TODO 3 -- `main.go:41:2` -- Write every payload byte
 
-Loop over the payload the same way. Each `Write` returns the number of bytes it
-accepted:
+Loop over the payload the same way.
+Each `Write` returns the number of bytes it accepted:
 
 ```go
 n, err := w.Write(remaining)
 ```
 
-Return any error. If it accepts zero bytes without returning an error, return
-`io.ErrShortWrite`, the standard sentinel for a write that made no progress.
+Return any error.
+If it accepts zero bytes without returning an error, return `io.ErrShortWrite`,
+the standard sentinel for a write that made no progress.
 Otherwise advance past the accepted prefix with `remaining = remaining[n:]`.
 
 ### TODO 4 -- `main.go:46:2` -- Read the header
 
 Create a four-byte slice and fill it with `io.ReadFull(r, header)`.
 `io.ReadFull` repeats reads until the slice is completely filled or an error
-occurs. A plain `Read` is insufficient because the supplied reader exposes only
-one byte at a time.
+occurs.
+A plain `Read` is insufficient because the supplied reader exposes only one byte
+at a time.
 
 ### TODO 5 -- `main.go:47:2` -- Decode and validate the size
 
@@ -169,14 +180,15 @@ one byte at a time.
 size := binary.BigEndian.Uint32(header)
 ```
 
-Reject `size` above `maxFrame` **before** allocating memory. A peer controls
-this number; trusting it would let a four-byte header request an arbitrarily
-large allocation.
+Reject `size` above `maxFrame` **before** allocating memory.
+A peer controls this number; trusting it would let a four-byte header request an
+arbitrarily large allocation.
 
 ### TODO 6 -- `main.go:48:2` -- Read the payload
 
 Allocate exactly `size` bytes with `make([]byte, size)` and fill them with
-`io.ReadFull`. Return the payload only when it is complete.
+`io.ReadFull`.
+Return the payload only when it is complete.
 
 ## Test it
 
@@ -186,8 +198,8 @@ From the repository root:
 $ ./rklings run G00
 ```
 
-The program executes once in the disposable guest. A successful run is quiet, so
-inspect its proof:
+The program executes once in the disposable guest.
+A successful run is quiet, so inspect its proof:
 
 ```console
 student@victim:~$ cat /tmp/g00-proof
@@ -196,17 +208,15 @@ PING->PONG
 
 ## Validate
 
-
 ```console
 $ ./rklings validate G00
   [+] Length-framed exchange survives stream boundaries
   PASS
 ```
 
-
 ## Next
 
-You now have one trustworthy message boundary over TCP. L15 keeps this framing
-model and changes the transport: the agent will derive a shared key via X25519,
-encrypt every message with AES-256-GCM, and connect to the operator over
-WebSocket.
+You now have one trustworthy message boundary over TCP.
+L15 keeps this framing model and changes the transport: the agent will derive a
+shared key via X25519, encrypt every message with AES-256-GCM, and connect to
+the operator over WebSocket.

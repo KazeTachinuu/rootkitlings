@@ -3,15 +3,16 @@
 ## Mission
 
 L21 made the agent binary fileless, but the server still has a visible command
-channel. An administrator or scanner who connects may notice unusual behavior.
+channel.
+An administrator or scanner who connects may notice unusual behavior.
 
 This exercise hides the C2 channel inside ordinary HTTP traffic using symmetric
 cryptography as the routing layer.
 
 ## What you will observe
 
-Every HTTP request to the server returns the same innocent HTML page. The
-agent's WebSocket connection is the only path that reaches the C2 handler:
+Every HTTP request to the server returns the same innocent HTML page.
+The agent's WebSocket connection is the only path that reaches the C2 handler:
 
 ```console
 $ curl -s http://127.0.0.1:8080/ | head -1
@@ -20,14 +21,15 @@ $ curl -s http://127.0.0.1:8080/secret | head -1
 <!DOCTYPE html>
 ```
 
-No 404, no 403, no path-based routing. An observer sees a normal website.
+No 404, no 403, no path-based routing.
+An observer sees a normal website.
 
 ## Concept
 
 Every request to the server, regardless of method, path, or headers, receives a
-200 OK with a plausible HTML page. There is no special endpoint, no unusual
-response code, and no header that distinguishes an agent connection from a
-browser visit.
+200 OK with a plausible HTML page.
+There is no special endpoint, no unusual response code, and no header that
+distinguishes an agent connection from a browser visit.
 
 The routing decision happens entirely in the crypto layer:
 
@@ -61,21 +63,24 @@ AES-GCM decrypt hello with the derived shared key
 ```
 
 A network observer sees only HTTP requests and 200 OK responses for regular
-visitors. Agent connections upgrade to WebSocket, which looks like any other
-WebSocket application (chat, notifications, dashboards).
+visitors.
+Agent connections upgrade to WebSocket, which looks like any other WebSocket
+application (chat, notifications, dashboards).
 
 ## Wire format
 
-The agent opens a WebSocket connection. The first binary frame is:
+The agent opens a WebSocket connection.
+The first binary frame is:
 
 ```text
 agent_pub (32 bytes) || AES_GCM_Seal({"t":"hello"})
 ```
 
 The server extracts the 32-byte X25519 public key, derives the shared key via
-ECDH, and tries decryption. On success, the connection is authenticated and
-stays open for encrypted command frames. On any failure, the connection is
-closed.
+ECDH, and tries decryption.
+On success, the connection is authenticated and stays open for encrypted command
+frames.
+On any failure, the connection is closed.
 
 Non-WebSocket requests always receive the decoy page.
 
@@ -89,9 +94,9 @@ shared_key = HKDF(SHA-256, secret, info="rklings-aead")
 agent_id   = hex(HKDF(SHA-256, secret, info="rklings-id")[:8])
 ```
 
-The agent sends its 32-byte X25519 public key in the hello frame. The server
-holds the operator's private key and derives the shared key on each connection
-via ECDH.
+The agent sends its 32-byte X25519 public key in the hello frame.
+The server holds the operator's private key and derives the shared key on each
+connection via ECDH.
 
 For this exercise, the check harness provides the operator private key via the
 `RKLINGS_OPERATOR_KEY` environment variable (hex-encoded, 32 bytes).
@@ -105,9 +110,9 @@ exercises/L22-decoy-routing
 └── main.go
 ```
 
-Complete the HTTP handler in `main.go`. The crypto primitives (`sealAEAD`,
-`openAEAD`, `newGCM`), the key registry, the WebSocket upgrader, and the decoy
-page are provided.
+Complete the HTTP handler in `main.go`.
+The crypto primitives (`sealAEAD`, `openAEAD`, `newGCM`), the key registry, the
+WebSocket upgrader, and the decoy page are provided.
 
 ## TODOs
 
@@ -118,8 +123,8 @@ TODO 2  main.go   Decrypt hello, enter authenticated session read loop
 
 ### TODO 1: Read the hello frame and derive the key
 
-The WebSocket Accept and decoy routing are handled for you. Inside the handler,
-read the first binary message:
+The WebSocket Accept and decoy routing are handled for you.
+Inside the handler, read the first binary message:
 
 1. The decoded bytes are `agent_pub (32 bytes) || ciphertext`; you need at least
    32 + 12 + 16 bytes (pubkey + GCM nonce + GCM tag)
@@ -130,11 +135,11 @@ read the first binary message:
 ### TODO 2: Decrypt and enter the session
 
 Call `openAEAD` with the derived key and the ciphertext (everything after the
-first 32 bytes). If decryption fails, the request is not from a real agent:
-return.
+first 32 bytes).
+If decryption fails, the request is not from a real agent: return.
 
-On success, the agent is authenticated. Enter a read loop that reads and
-decrypts subsequent frames.
+On success, the agent is authenticated.
+Enter a read loop that reads and decrypts subsequent frames.
 
 The critical design point: every failure path closes the connection without
 revealing why:
@@ -172,13 +177,15 @@ $ curl -s -X POST http://127.0.0.1:8080/ | head -1
 <!DOCTYPE html>
 ```
 
-Every path, every method, same page. No 404, no 403, no fingerprint.
+Every path, every method, same page.
+No 404, no 403, no fingerprint.
 
 ### Test the agent route
 
-The agent in the VM connects via WebSocket with a valid AEAD hello. The server
-log confirms the authenticated session. Open `http://127.0.0.1:8080` in a
-browser to see the decoy page an observer would see.
+The agent in the VM connects via WebSocket with a valid AEAD hello.
+The server log confirms the authenticated session.
+Open `http://127.0.0.1:8080` in a browser to see the decoy page an observer
+would see.
 
 ## Validate
 
@@ -193,5 +200,5 @@ $ ./rklings validate L22
 ## Next
 
 The server now looks ordinary to any observer, but the target still shows an
-unfamiliar process with predictable reconnect timing. L23 changes those visible
-process signals and prevents useful core dumps.
+unfamiliar process with predictable reconnect timing.
+L23 changes those visible process signals and prevents useful core dumps.

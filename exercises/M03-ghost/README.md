@@ -2,8 +2,8 @@
 
 ## Mission
 
-L20 through L24 implemented individual deployment controls. M03 combines them
-into one agent and makes their dependencies explicit.
+L20 through L24 implemented individual deployment controls.
+M03 combines them into one agent and makes their dependencies explicit.
 
 The challenge is ordering:
 
@@ -26,9 +26,9 @@ STATUS -> agent info         launcher absent from the filesystem
                              /proc/PID/exe reports a deleted memfd
 ```
 
-These are narrow controls over named observation paths. They do not prevent
-kernel memory inspection, remote logging, traffic analysis, or independent
-integrity monitoring.
+These are narrow controls over named observation paths.
+They do not prevent kernel memory inspection, remote logging, traffic analysis,
+or independent integrity monitoring.
 
 ## Workspace
 
@@ -49,18 +49,19 @@ agent binary.
 
 ## Follow the two process images
 
-`unix.Exec` does not start a child process. It replaces the program running in
-the current PID. Successful execution therefore divides deployment into two
-passes through `main`:
+`unix.Exec` does not start a child process.
+It replaces the program running in the current PID.
+Successful execution therefore divides deployment into two passes through
+`main`:
 
 ```text
 FIRST PROCESS IMAGE                    MEMFD PROCESS IMAGE
 
 +-------------------------+           +-------------------------+
-| staged agent            │           | same PID, new program   |
-| /rklings/agent          │           | /proc/PID/exe -> memfd  |
+| staged agent            |           | same PID, new program   |
+| /rklings/agent          |           | /proc/PID/exe -> memfd  |
 +------------+------------+           +------------+------------+
-             │                                     |
+             |                                     |
              | load embedded module                | skip module load
              | hide module                         | set process controls
              | copy self to memfd                  | hide current PID
@@ -72,8 +73,9 @@ FIRST PROCESS IMAGE                    MEMFD PROCESS IMAGE
                                                                 v
 ```
 
-The second image starts at `main` again. Check `/proc/self/exe` for `memfd`
-before loading or re-executing; without that guard, the agent loops forever.
+The second image starts at `main` again.
+Check `/proc/self/exe` for `memfd` before loading or re-executing; without that
+guard, the agent loops forever.
 
 ## TODOs
 
@@ -97,7 +99,8 @@ The milestone assesses composition, repeat safety, and preservation of control.
 ### TODO 1 -- Reject deployment without root
 
 `finit_module` requires privilege, and the module that provides `rklings.e` is
-not loaded yet. M03 therefore runs the agent as root.
+not loaded yet.
+M03 therefore runs the agent as root.
 
 Check the effective UID and return an error if that precondition is not met.
 
@@ -114,8 +117,8 @@ On the disk-backed first image:
 3. Call `reexecFromMemory()` to copy the binary into a second memfd (without
    `MFD_CLOEXEC`) and `unix.Exec` into it.
 
-`unix.Exec` replaces the process image and does not return on success. Wrap each
-call so failures identify the broken boundary.
+`unix.Exec` replaces the process image and does not return on success.
+Wrap each call so failures identify the broken boundary.
 
 ### TODO 3 -- Masquerade as a kernel thread
 
@@ -152,8 +155,9 @@ Two terminals.
 $ ./rklings run M03
 ```
 
-The VM boots and stages the agent binary. The agent starts in the background,
-retrying the WebSocket connection until an operator exists.
+The VM boots and stages the agent binary.
+The agent starts in the background, retrying the WebSocket connection until an
+operator exists.
 
 ### 2. Start the operator
 
@@ -193,11 +197,11 @@ root@victim:~# cat /proc/$(pgrep -f kworker/0:1 | tail -1)/comm
 [kworker/0:1]
 ```
 
-Every query returns empty. The module runs, the agent responds, but no standard
-observation tool reveals them.
+Every query returns empty.
+The module runs, the agent responds, but no standard observation tool reveals
+them.
 
 ## Validate
-
 
 ```text
 [+] module absent from lsmod
@@ -213,7 +217,7 @@ PASS
 
 ## Next
 
-M03 proves one integrated deployment against a real command channel. P00 keeps
-these mechanisms and adds the complete multi-target operator, reconnect and
-singleton handling, durable boot lifecycle, browser workflow, and final
-end-to-end verification.
+M03 proves one integrated deployment against a real command channel.
+P00 keeps these mechanisms and adds the complete multi-target operator,
+reconnect and singleton handling, durable boot lifecycle, browser workflow, and
+final end-to-end verification.

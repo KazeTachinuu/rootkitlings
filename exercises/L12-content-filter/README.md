@@ -2,9 +2,9 @@
 
 ## Mission
 
-L11 removed directory entries before userspace could inspect them. L12 applies
-the same return-path idea to text reads: remove every returned line that
-contains a selected string while leaving the underlying file unchanged.
+L11 removed directory entries before userspace could inspect them.
+L12 applies the same return-path idea to text reads: remove every returned line
+that contains a selected string while leaving the underlying file unchanged.
 
 By the end of the exercise, these two commands are symmetric:
 
@@ -13,8 +13,8 @@ root@victim:~# mkdir rklings.h.c.secret_token
 root@victim:~# mkdir rklings.u.c.secret_token
 ```
 
-The first command hides matching lines from ordinary reads. The second removes
-the exact target and restores those lines.
+The first command hides matching lines from ordinary reads.
+The second removes the exact target and restores those lines.
 
 ## What you will observe
 
@@ -37,8 +37,8 @@ root@victim:~# mkdir rklings.h.c.backdoor
 root@victim:~# grep backdoor /etc/passwd
 ```
 
-An empty result means the line is filtered from the read buffer. The file on
-disk is unchanged.
+An empty result means the line is filtered from the read buffer.
+The file on disk is unchanged.
 
 ## Workspace
 
@@ -48,7 +48,8 @@ exercises/L12-content-filter
 └── main.c
 ```
 
-`main.c` is the only editable file. The workspace already contains:
+`main.c` is the only editable file.
+The workspace already contains:
 
 - The `mkdir` and `mkdirat` interception used by the control plane.
 - Command routing for `h.c` and `u.c`.
@@ -60,9 +61,9 @@ You implement the target-list operations, read filtering, and probe lifecycle.
 
 ## How the filter works
 
-`read(fd, buf, count)` returns file bytes in a userspace buffer. A kretprobe
-lets the module remember that buffer before `ksys_read` runs and rewrite it
-after the kernel has filled it.
+`read(fd, buf, count)` returns file bytes in a userspace buffer.
+A kretprobe lets the module remember that buffer before `ksys_read` runs and
+rewrite it after the kernel has filled it.
 
 ```text
 cat /etc/passwd
@@ -103,33 +104,34 @@ Implement `rk_target_add` and `rk_target_remove` using the spinlock already in
 - Close the array gap with `memmove`.
 - Return `-ENOENT` when the requested target is absent.
 
-Then implement `line_matches`. It must return true when any registered target
-occurs anywhere inside the bounded line. `strnstr(haystack, needle, len)`
-searches at most `len` bytes for a substring, so it works on buffers that are
-not null-terminated.
+Then implement `line_matches`.
+It must return true when any registered target occurs anywhere inside the
+bounded line. `strnstr(haystack, needle, len)` searches at most `len` bytes for
+a substring, so it works on buffers that are not null-terminated.
 
 ### TODO 2 -- `main.c:47:2` -- Capture the read buffer
 
-`ksys_read` is a regular kernel function, not a syscall wrapper. Its arguments
-are directly in the probe registers:
+`ksys_read` is a regular kernel function, not a syscall wrapper.
+Its arguments are directly in the probe registers:
 
 ```c
 data->ubuf = (void __user *)regs->si;
 data->count = (size_t)regs->dx;
 ```
 
-Do not use `regs_get_kernel_argument` here. That extra indirection was required
-for the syscall wrapper in L11, but it would treat unrelated data as registers
-in this hook.
+Do not use `regs_get_kernel_argument` here.
+That extra indirection was required for the syscall wrapper in L11, but it would
+treat unrelated data as registers in this hook.
 
 ### TODO 3 -- `main.c:53:2` -- Filter the returned bytes
 
-Start with the actual return value from `regs_return_value(regs)`. Return
-immediately when `total <= 0` or no content targets are registered.
+Start with the actual return value from `regs_return_value(regs)`.
+Return immediately when `total <= 0` or no content targets are registered.
 
 After allocating `total` bytes with `kmalloc` and `GFP_KERNEL`, copy the
-userspace bytes into the kernel buffer. Walk the returned data one line at a
-time. `memchr(ptr, '\n', remaining)` finds the next newline:
+userspace bytes into the kernel buffer.
+Walk the returned data one line at a time. `memchr(ptr, '\n', remaining)` finds
+the next newline:
 
 ```c
 nl = memchr(pos, '\n', remaining);
@@ -154,8 +156,8 @@ After the walk:
 ### TODO 4 -- `main.c:195:2` -- Register probes with rollback
 
 Initialize the target-list lock, then register `read_probe`, `rk_mkdir_probe`,
-and `rk_mkdirat_probe` in order. If registration fails, unregister only the
-probes that succeeded.
+and `rk_mkdirat_probe` in order.
+If registration fails, unregister only the probes that succeeded.
 
 ### TODO 5 -- `main.c:202:2` -- Unregister probes in reverse
 
@@ -164,9 +166,9 @@ Module exit unregisters all three in reverse order.
 ## Scope of this filter
 
 This implementation filters complete lines present in one returned read buffer.
-A line split across two separate reads may not be matched. Later integration
-exercises restrict the applicable file reads and verify that terminal, pipe,
-socket, and executable streams remain intact.
+A line split across two separate reads may not be matched.
+Later integration exercises restrict the applicable file reads and verify that
+terminal, pipe, socket, and executable streams remain intact.
 
 ## Test it
 
@@ -192,7 +194,6 @@ backdoor:x:0:0::/root:/bin/bash
 
 ## Validate
 
-
 ```console
 $ ./rklings validate L12
   [+] Matching line removed from read output
@@ -201,9 +202,8 @@ $ ./rklings validate L12
   PASS
 ```
 
-
 ## Next
 
 The account record can now disappear from ordinary inspection, but a listening
-callback still appears in the host's network tables. L13 hides a selected port
-while the service remains reachable.
+callback still appears in the host's network tables.
+L13 hides a selected port while the service remains reachable.

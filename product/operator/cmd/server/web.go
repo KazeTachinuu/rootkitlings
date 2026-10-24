@@ -318,4 +318,3 @@ func writeJSON(ws *websocket.Conn, v any) {
 	data, _ := json.Marshal(v)
 	ws.Write(context.Background(), websocket.MessageText, data)
 }
-

@@ -2,7 +2,8 @@
 
 ## Mission
 
-Build the first userspace agent. It must:
+Build the first userspace agent.
+It must:
 
 1. Derive a shared encryption key
 2. Open a WebSocket connection to the server
@@ -10,8 +11,9 @@ Build the first userspace agent. It must:
 4. Decrypt the server's first message
 5. Exit
 
-L14 showed the kernel launching a userspace binary. G00 already proved that you
-can build a Go process, handle errors, and exchange data over a network.
+L14 showed the kernel launching a userspace binary.
+G00 already proved that you can build a Go process, handle errors, and exchange
+data over a network.
 
 Now add cryptography: a Go agent that phones home over an encrypted WebSocket.
 
@@ -30,6 +32,7 @@ The agent:
 ```text
 exercises/L15-aead-connect
 ├── go.mod
+├── go.sum
 └── main.go
 ```
 
@@ -59,17 +62,18 @@ The agent and server share a symmetric key without any runtime handshake:
                     32-byte AES key
 ```
 
-No certificate authority, no handshake messages, no session negotiation. The
-keys are baked into the binary; the shared key is computed once at startup.
+No certificate authority, no handshake messages, no session negotiation.
+The keys are baked into the binary; the shared key is computed once at startup.
 
-The agent's 32-byte X25519 public key is sent in the hello frame. The server
-uses it to derive the shared key and identify which agent is calling.
+The agent's 32-byte X25519 public key is sent in the hello frame.
+The server uses it to derive the shared key and identify which agent is calling.
 
 ## AES-256-GCM Authenticated Encryption
 
-AES-GCM encrypts and authenticates in one pass. Given a 32-byte key and a
-12-byte random nonce, `Seal` produces ciphertext that is both confidential and
-tamper-proof. `Open` rejects anything that was modified in transit.
+AES-GCM encrypts and authenticates in one pass.
+Given a 32-byte key and a 12-byte random nonce, `Seal` produces ciphertext that
+is both confidential and tamper-proof. `Open` rejects anything that was modified
+in transit.
 
 The wire format prepends the nonce to the ciphertext so the receiver can split
 them apart:
@@ -80,28 +84,30 @@ nonce (12 bytes) || ciphertext+tag
 
 ## WebSocket as Transport
 
-The agent opens a WebSocket connection to the operator server. The first binary
-frame is the hello message, which authenticates the agent:
+The agent opens a WebSocket connection to the operator server.
+The first binary frame is the hello message, which authenticates the agent:
 
 ```text
 agent_pub (32 bytes) || AES_GCM_Seal({"t":"hello"})
 ```
 
 The server extracts the 32-byte public key, derives the shared key via ECDH, and
-decrypts the rest. If decryption succeeds, the agent is authenticated and the
-connection stays open for bidirectional encrypted frames.
+decrypts the rest.
+If decryption succeeds, the agent is authenticated and the connection stays open
+for bidirectional encrypted frames.
 
 After the hello, every frame in both directions is a standalone AEAD ciphertext
-(nonce + sealed payload). No form encoding, no base64 wrapping, just raw binary
-WebSocket frames.
+(nonce + sealed payload).
+No form encoding, no base64 wrapping, just raw binary WebSocket frames.
 
 If the public key is invalid or decryption fails, the server closes the
 connection silently.
 
 ## go:embed
 
-Go's `embed` directive bakes files into the binary at compile time. No file I/O
-at runtime. The binary IS the credential.
+Go's `embed` directive bakes files into the binary at compile time.
+No file I/O at runtime.
+The binary IS the credential.
 
 ```go
 import _ "embed"
@@ -113,8 +119,8 @@ var agentPrivKey []byte
 var operatorPubKey []byte
 ```
 
-The `//go:embed` comment must appear directly above the variable. No blank line
-between the directive and the var declaration.
+The `//go:embed` comment must appear directly above the variable.
+No blank line between the directive and the var declaration.
 
 ## TODOs
 
@@ -170,9 +176,9 @@ conn.Write(ctx, websocket.MessageBinary, frame)
 
 ### TODO 4 -- Read one server message and decrypt it
 
-Call `conn.Read(ctx)` to receive the server's first binary frame. Split the
-message into nonce and ciphertext, call `gcm.Open`, and print the decrypted
-JSON.
+Call `conn.Read(ctx)` to receive the server's first binary frame.
+Split the message into nonce and ciphertext, call `gcm.Open`, and print the
+decrypted JSON.
 
 Remove the placeholder lines at the bottom of `run()` once the real
 implementation is in place.
@@ -192,7 +198,8 @@ $ ./rklings run L15
 ```
 
 `run` builds the agent with embedded keys, stages it in the VM, and starts it in
-the background. Open `http://127.0.0.1:8080`.
+the background.
+Open `http://127.0.0.1:8080`.
 
 The panel reports live values from the agent connection:
 
@@ -214,5 +221,6 @@ $ ./rklings validate L15
 ## Next
 
 The target and server now share an encrypted channel, but the agent sends one
-hello and exits. L16 bridges server commands to the kernel through `os.Mkdir`,
-giving the operator remote control over the rootkit.
+hello and exits.
+L16 bridges server commands to the kernel through `os.Mkdir`, giving the
+operator remote control over the rootkit.

@@ -47,4 +47,3 @@ func TestInsertAuditRecentOrdering(t *testing.T) {
 		t.Fatalf("expected oldest msg2, got %s", entries[2].Message)
 	}
 }
-

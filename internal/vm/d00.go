@@ -30,7 +30,6 @@ Restart=always
 WantedBy=multi-user.target
 `
 
-
 // CreateD00SeedISO builds a cloud-init ISO for the D00 deployment target.
 // It installs a pre-patch kernel (6.8.0-101) vulnerable to CVE-2026-31431
 // and a command-injection HTTP service on port 8080.

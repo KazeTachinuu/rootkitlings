@@ -2,9 +2,9 @@
 
 ## Mission
 
-L19 transferred files over TLS, but the `.ko` landed on disk. This exercise
-embeds the module in the agent, places its bytes in a memory-backed file, and
-asks the kernel to load it from that descriptor.
+L19 transferred files over TLS, but the `.ko` landed on disk.
+This exercise embeds the module in the agent, places its bytes in a
+memory-backed file, and asks the kernel to load it from that descriptor.
 
 ## What you will observe
 
@@ -16,8 +16,9 @@ rklings 16384 0 - Live 0x0000000000000000
 root@victim:~# find / -name rklings.ko 2>/dev/null
 ```
 
-The empty `find` result is the point. The kernel received the same module bytes
-as before, but those bytes never occupied a named file in the guest.
+The empty `find` result is the point.
+The kernel received the same module bytes as before, but those bytes never
+occupied a named file in the guest.
 
 ## Workspace
 
@@ -28,9 +29,9 @@ exercises/L20-fileless-module
 └── main.go
 ```
 
-Complete the TODOs in `main.go`. The build embeds the reference module in the
-loader as `rklings.ko`; you implement the path from those embedded bytes to the
-kernel.
+Complete the TODOs in `main.go`.
+The build embeds the reference module in the loader as `rklings.ko`; you
+implement the path from those embedded bytes to the kernel.
 
 ## Follow the bytes into the kernel
 
@@ -40,19 +41,19 @@ without any file on disk:
 ```text
 +-----------------------------+
 | loader executable           |
-│   embedded rklings.ko bytes |
+|   embedded rklings.ko bytes |
 +--------------+--------------+
                | memfd_create
                v
 +-----------------------------+
 | anonymous RAM-backed file   |
-│   write all module bytes    |
+|   write all module bytes    |
 +--------------+--------------+
                | finit_module(fd, "", 0)
                v
 +-----------------------------+
 | running kernel              |
-│   rklings module loaded     |
+|   rklings module loaded     |
 +-----------------------------+
 ```
 
@@ -87,13 +88,15 @@ TODO 3  main.go:32:2  load the module with finit_module
 
 ### TODO 2 -- `main.go:30:2` -- Write .ko bytes to the memfd
 
-Write the full `ko` slice to the fd with `unix.Write`. Return on error.
+Write the full `ko` slice to the fd with `unix.Write`.
+Return on error.
 
 ### TODO 3 -- `main.go:32:2` -- Load the module with finit_module
 
 Call `unix.FinitModule(fd, "", 0)` to ask the kernel to load the module from the
-open descriptor. The empty string means no module parameters, and zero flags
-request the default load behavior.
+open descriptor.
+The empty string means no module parameters, and zero flags request the default
+load behavior.
 
 ## Test it
 
@@ -127,5 +130,5 @@ $ ./rklings validate L20
 ## Next
 
 The module loads without leaving a `.ko` in a directory, but the launcher still
-remains on disk. L21 removes that launcher after startup while keeping the agent
-running.
+remains on disk.
+L21 removes that launcher after startup while keeping the agent running.

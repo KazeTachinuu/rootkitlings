@@ -144,7 +144,7 @@ func ensureBuildImage(runtime string, tc toolchain) error {
 		return fmt.Errorf("stage Containerfile: %w", err)
 	}
 
-	cmd = exec.Command(runtime, "build", "--pull=missing",
+	cmd = exec.Command(runtime, "build",
 		"--build-arg", "BASE="+tc.Base,
 		"--build-arg", "KERNEL="+tc.Kernel,
 		"--build-arg", "SOURCES="+tc.Sources,

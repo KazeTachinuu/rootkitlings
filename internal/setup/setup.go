@@ -425,4 +425,3 @@ func verifyImage(path, imageURL string) error {
 	}
 	return nil
 }
-

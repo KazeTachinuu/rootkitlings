@@ -249,7 +249,9 @@ func (s *Server) handleAgentWS(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	var hello struct{ T string `json:"t"` }
+	var hello struct {
+		T string `json:"t"`
+	}
 	if json.Unmarshal(pt, &hello) != nil || hello.T != "hello" {
 		return
 	}

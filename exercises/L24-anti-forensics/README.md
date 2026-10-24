@@ -26,14 +26,15 @@ root@victim:~# stat -c %Y /tmp/testfile /etc/hostname
 ```
 
 An empty login lookup, an empty history file, and equal timestamps demonstrate
-three separate changes. None of them proves that every independent record has
-disappeared.
+three separate changes.
+None of them proves that every independent record has disappeared.
 
 ## Workspace
 
 ```text
 exercises/L24-anti-forensics
 ├── go.mod
+├── go.sum
 └── main.go
 ```
 
@@ -83,8 +84,8 @@ mtime can still detect the change.
 ## utmp/wtmp scrubbing
 
 `last` and `who` read binary records from `/var/run/utmp` (current logins) and
-`/var/log/wtmp` (login history). Each record is a 384-byte `utmp` struct in the
-course's amd64 guest.
+`/var/log/wtmp` (login history).
+Each record is a 384-byte `utmp` struct in the course's amd64 guest.
 
 To scrub:
 
@@ -107,8 +108,9 @@ The record layout (from utmpx.h):
   384     next record
 ```
 
-Walk the file in 384-byte chunks. If ut_user matches your username, zero the
-entire record. Write the modified buffer back.
+Walk the file in 384-byte chunks.
+If ut_user matches your username, zero the entire record.
+Write the modified buffer back.
 
 ## Journal tampering
 
@@ -121,9 +123,9 @@ Three journalctl flags handle the cleanup:
 - `--rotate` closes the active journal file and starts a fresh one.
 - `--vacuum-time=1s` deletes archived journal files older than one second.
 
-Run `--sync` first, then `--rotate --vacuum-time=1s` together. The rotate moves
-the current entries into an archive, and the vacuum immediately removes that
-archive.
+Run `--sync` first, then `--rotate --vacuum-time=1s` together.
+The rotate moves the current entries into an archive, and the vacuum immediately
+removes that archive.
 
 ## TODOs
 
@@ -147,9 +149,9 @@ target with `os.Chtimes`.
 
 ### TODO 2 -- Clear history
 
-Iterate over the `paths` slice and truncate each file with `os.Truncate`. Add
-`/home/<username>/.bash_history` if username is not empty. Ignore errors from
-files that do not exist.
+Iterate over the `paths` slice and truncate each file with `os.Truncate`.
+Add `/home/<username>/.bash_history` if username is not empty.
+Ignore errors from files that do not exist.
 
 ### TODO 3 -- Scrub utmp and wtmp
 
@@ -178,8 +180,8 @@ process environment with `os.Clearenv`.
 $ ./rklings run L24
 ```
 
-The agent connects and waits for commands. After sending a `CLEANUP student`
-command through the server, inspect the guest:
+The agent connects and waits for commands.
+After sending a `CLEANUP student` command through the server, inspect the guest:
 
 ```text
 root@victim:~# last | grep student
@@ -190,8 +192,8 @@ root@victim:~# journalctl --since "1 hour ago" 2>&1 | head -1
 -- No entries --
 ```
 
-An empty `last` result means the utmp/wtmp records were scrubbed. An empty
-history file and a vacuumed journal confirm the other routines.
+An empty `last` result means the utmp/wtmp records were scrubbed.
+An empty history file and a vacuumed journal confirm the other routines.
 
 ## Validate
 
@@ -207,5 +209,6 @@ $ ./rklings validate L24
 
 ## Next
 
-The cleanup controls work separately. M03 runs them as one ordered deployment
-and checks that the agent remains controllable afterward.
+The cleanup controls work separately.
+M03 runs them as one ordered deployment and checks that the agent remains
+controllable afterward.

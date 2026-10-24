@@ -39,16 +39,17 @@ exercises/L08-mkdir-hook
 └── rklings_hook.h
 ```
 
-Only `rklings_hook.h` is editable. You implement the `mkdir` hook that L05-L07
-previously supplied.
+Only `rklings_hook.h` is editable.
+You implement the `mkdir` hook that L05-L07 previously supplied.
 
 The other files start and stop the hook, parse commands, and change process
 credentials.
 
 ## Follow one `mkdir` call
 
-A kretprobe intercepts both the entry and return of a kernel function. The API
-has been stable since 2004 and works on every architecture Linux supports.
+A kretprobe intercepts both the entry and return of a kernel function.
+The API has been stable since 2004 and works on every architecture Linux
+supports.
 
 A kretprobe runs one callback when a kernel function begins and another when it
 returns:
@@ -74,18 +75,19 @@ return handler
 userspace receives success
 ```
 
-Each active call gets its own `instance->data` storage. Here that storage is a
-`struct rk_call`: `intercepted` says whether the return value must be replaced,
-and `result` holds the value to return.
+Each active call gets its own `instance->data` storage.
+Here that storage is a `struct rk_call`: `intercepted` says whether the return
+value must be replaced, and `result` holds the value to return.
 
-Both callbacks return `0`. For an entry handler, that means "track this call and
-run its return handler." For a return handler, it means "resume normal
-execution."
+Both callbacks return `0`.
+For an entry handler, that means "track this call and run its return handler."
+For a return handler, it means "resume normal execution."
 
 ## Reach the pathname
 
-This course targets x86-64 syscall wrappers. The entry callback receives a
-register frame whose first argument points to the saved syscall registers:
+This course targets x86-64 syscall wrappers.
+The entry callback receives a register frame whose first argument points to the
+saved syscall registers:
 
 ```text
 probe regs -> argument 0 -> syscall regs
@@ -111,16 +113,16 @@ kernel buffer:
 copied = strncpy_from_user(buf, pathname, sizeof(buf));
 ```
 
-Only `0 < copied < sizeof(buf)` is a complete C string. Ignore faults, empty
-strings, and truncated paths.
+Only `0 < copied < sizeof(buf)` is a complete C string.
+Ignore faults, empty strings, and truncated paths.
 
-Compare the buffer against `RK_PREFIX` with `strncmp`. Non-matching names pass
-through to the real `mkdir` untouched.
+Compare the buffer against `RK_PREFIX` with `strncmp`.
+Non-matching names pass through to the real `mkdir` untouched.
 
 When the prefix matches, the entry handler does two things:
 
-1. Zero the first userspace byte with `put_user('\0', pathname)`. The real
-   syscall then sees an empty path and creates nothing.
+1. Zero the first userspace byte with `put_user('\0', pathname)`.
+   The real syscall then sees an empty path and creates nothing.
 2. Run the command from the kernel copy and save its result.
 
 The return handler later replaces the syscall error with that saved result, so
@@ -217,8 +219,8 @@ as `data_size`, and `8` as `maxactive`.
 
 ### TODO 6 -- `rklings_hook.h:56:2` -- Unregister both probes
 
-Unregister `mkdirat` first, then `mkdir`. This reverses the successful
-registration order.
+Unregister `mkdirat` first, then `mkdir`.
+This reverses the successful registration order.
 
 ## Test it
 
@@ -240,7 +242,6 @@ An ordinary `mkdir ordinary` must still create the directory normally.
 
 ## Validate
 
-
 ```console
 $ ./rklings validate L08
   [+] Both probes preserve successful escalation and ordinary mkdir
@@ -249,8 +250,7 @@ $ ./rklings validate L08
   PASS
 ```
 
-
 ## Next
 
-The module can intercept two escalation commands directly. L09 replaces the
-fixed parser with a command table and dispatcher.
+The module can intercept two escalation commands directly.
+L09 replaces the fixed parser with a command table and dispatcher.
